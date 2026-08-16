@@ -1,0 +1,195 @@
+/*
+ * Design tokens.
+ *
+ * Light is defined on bare :root; dark is a media override guarded so an
+ * explicit [data-theme="light"] wins, plus a [data-theme="dark"] block so the
+ * toggle wins in both directions. Defining a colour ONLY inside a media query
+ * is how a theme ends up half-applied.
+ *
+ * docs/07-FRONTEND-SPEC.md §2. Phase 10 expands this into the full system.
+ */
+
+:root {
+  --bg: #fbfbfd;
+  --surface: #ffffff;
+  --border: #e3e3e8;
+  --text: #16161a;
+  --text-muted: #5c5c66;
+
+  /* BOM-type accents. Paired with a glyph everywhere — never colour alone. */
+  --sbom: #4f46e5;
+  --cbom: #b45309;
+  --qbom: #7c3aed;
+  --aibom: #0f766e;
+  --hbom: #475569;
+
+  --ok: #15803d;
+  --down: #b91c1c;
+
+  --radius: 8px;
+  --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, 'Cascadia Code', Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0e0e11;
+    --surface: #17171c;
+    --border: #2a2a33;
+    --text: #ececf1;
+    --text-muted: #a1a1ad;
+
+    --sbom: #a5b4fc;
+    --cbom: #fcd34d;
+    --qbom: #c4b5fd;
+    --aibom: #5eead4;
+    --hbom: #cbd5e1;
+
+    --ok: #4ade80;
+    --down: #fca5a5;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #0e0e11;
+  --surface: #17171c;
+  --border: #2a2a33;
+  --text: #ececf1;
+  --text-muted: #a1a1ad;
+  --sbom: #a5b4fc;
+  --cbom: #fcd34d;
+  --qbom: #c4b5fd;
+  --aibom: #5eead4;
+  --hbom: #cbd5e1;
+  --ok: #4ade80;
+  --down: #fca5a5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  line-height: 1.55;
+}
+
+/* Visible focus everywhere. Every flow must be keyboard-operable (WCAG 2.4.7). */
+:focus-visible {
+  outline: 2px solid var(--sbom);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.shell {
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.9rem;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  margin: 2.5rem 0 0.75rem;
+}
+
+.tagline {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+}
+
+.chips {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0;
+  margin: 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent, var(--border));
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.chip[data-bom='sbom'] {
+  --accent: var(--sbom);
+}
+.chip[data-bom='cbom'] {
+  --accent: var(--cbom);
+}
+.chip[data-bom='qbom'] {
+  --accent: var(--qbom);
+}
+.chip[data-bom='aibom'] {
+  --accent: var(--aibom);
+}
+.chip[data-bom='hbom'] {
+  --accent: var(--hbom);
+}
+
+.chip-note {
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.status {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.status-up {
+  border-left: 3px solid var(--ok);
+}
+.status-down {
+  border-left: 3px solid var(--down);
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+
+footer {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}

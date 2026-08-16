@@ -1,0 +1,88 @@
+[project]
+name = "encorebom-shared"
+version = "0.1.0"
+description = "Shared library for EncoreBOM scan workers"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+
+# Deliberately minimal. Every dependency added here is one more thing to keep
+# pinned across five worker images, and one more entry in EncoreBOM's own SBOM
+# — a BOM platform that cannot produce a clean BOM of itself is not credible.
+dependencies = [
+    "pydantic>=2.9",
+    "structlog>=24.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=5.0",
+    "ruff>=0.7",
+    "mypy>=1.13",
+]
+
+# Scanner adapters. Installed into the worker image, not into a developer's
+# environment. Versions are pinned by OSINT/tools.manifest.yaml, which is the
+# SSOT — these are the pip-installable subset.
+scanners = [
+    "ai-bom>=0.9",          # Trusera: code-level AI discovery (Phase 12)
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["libs/py-shared"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["libs/py-shared", "workers"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # isort
+    "N",        # pep8-naming
+    "UP",       # pyupgrade
+    "B",        # bugbear
+    "S",        # bandit — security
+    "A",        # builtin shadowing
+    "C4",       # comprehensions
+    "DTZ",      # naive datetimes  <-- see below
+    "PTH",      # pathlib over os.path
+    "RUF",
+]
+ignore = [
+    "E501",     # line length handled by the formatter
+    "S603",     # subprocess call — running scanners IS the job; the sandbox
+                # is the control, not a lint rule (docs/05-SECURITY-MODEL.md §3)
+]
+
+# DTZ is enabled deliberately and must stay on. CLAUDE.md: all timestamps are
+# UTC RFC3339 with a literal Z. A naive datetime.now() in a worker produces a
+# BOM timestamp in the container's local time, which is a compliance-artifact
+# defect that no test would catch.
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "S105", "S106"]   # asserts and fake credentials
+"**/test_*.py" = ["S101", "S105", "S106"]
+
+[tool.pytest.ini_options]
+testpaths = ["libs/py-shared", "workers"]
+python_files = ["test_*.py"]
+addopts = "-q --strict-markers"
+markers = [
+    "integration: requires the local stack (task dev)",
+    "golden: normalizer golden-file comparison",
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+# Scanner output is untyped JSON from third-party tools; adapters parse
+# defensively and cannot promise types at the boundary.
+disallow_any_expr = false

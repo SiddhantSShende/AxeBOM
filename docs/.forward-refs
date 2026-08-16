@@ -1,0 +1,13 @@
+# Forward references — paths a specification names that a later phase creates.
+#
+# `encorebom docs lint` treats these as expected-absent rather than broken.
+# Format:  <repo-relative path>  # phase N — why
+#
+# A path may stay listed after it exists; the linter only uses this to suppress
+# a not-found error, never to require absence.
+#
+# ADDING TO THIS FILE IS A DECISION, NOT A WORKAROUND. If a reference is here
+# because the target was renamed or never planned, fix the reference instead.
+
+libs/go-shared/model/certinid.go   # phase 1 — CERT-In identifier derivation
+docs/RUNBOOKS.md                   # phase 16 — expanded from 08-OPERATIONS §6

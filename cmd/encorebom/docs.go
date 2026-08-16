@@ -45,9 +45,14 @@ func runDocs(ctx context.Context, args []string) error {
 		return err
 	}
 
+	forward, err := loadForwardRefs(filepath.Join(repoRoot, "docs", ".forward-refs"))
+	if err != nil {
+		return err
+	}
+
 	type problem struct{ file, link, why string }
 	var problems []problem
-	var checked int
+	var checked, deferred int
 
 	walk := func(path string, isDir bool) error {
 		if isDir || !strings.HasSuffix(path, ".md") {
@@ -78,6 +83,11 @@ func runDocs(ctx context.Context, args []string) error {
 
 		for t := range targets {
 			checked++
+			if forward[filepath.ToSlash(t)] {
+				// A later phase creates this. Declared in docs/.forward-refs.
+				deferred++
+				continue
+			}
 			// Try: relative to the file, then relative to the repo root.
 			candidates := []string{
 				filepath.Join(filepath.Dir(path), t),
@@ -93,7 +103,8 @@ func runDocs(ctx context.Context, args []string) error {
 			}
 			if !found {
 				problems = append(problems, problem{file: rel, link: t,
-					why: "no such file relative to the document, the repo root, or docs/"})
+					why: "no such file relative to the document, the repo root, or docs/; " +
+						"if a later phase creates it, declare it in docs/.forward-refs"})
 			}
 		}
 		return nil
@@ -123,8 +134,39 @@ func runDocs(ctx context.Context, args []string) error {
 		return fmt.Errorf("%d broken reference(s) across %d checked", len(problems), checked)
 	}
 
-	fmt.Printf("docs lint: %d references checked, all resolve\n", checked)
+	fmt.Printf("docs lint: %d references checked, all resolve", checked)
+	if deferred > 0 {
+		fmt.Printf(" (%d forward refs deferred per docs/.forward-refs)", deferred)
+	}
+	fmt.Println()
 	return nil
+}
+
+// loadForwardRefs reads paths that a later phase creates.
+//
+// Without this, a specification that correctly names a file its phase will
+// produce reads as a broken link — and the obvious "fix" is to delete the
+// reference, which loses information. Declaring them explicitly keeps the
+// reference AND keeps the linter honest about everything else.
+func loadForwardRefs(path string) (map[string]bool, error) {
+	out := map[string]bool{}
+	// #nosec G304 -- fixed path under the repo root.
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return out, nil // optional file
+		}
+		return nil, err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if i := strings.Index(line, "#"); i >= 0 {
+			line = line[:i]
+		}
+		if p := strings.TrimSpace(line); p != "" {
+			out[filepath.ToSlash(p)] = true
+		}
+	}
+	return out, nil
 }
 
 // findRepoRoot walks up looking for go.mod so the command works from any

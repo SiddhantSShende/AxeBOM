@@ -1,0 +1,242 @@
+# EncoreBOM — the gate.
+#
+# Runs on windows-latest AND ubuntu-latest from Phase 0.
+#
+# Both, from day one, is deliberate (docs/00-MASTER-PLAN.md §6, risk 6):
+# development happens on Windows and production runs on Linux. Path separators,
+# line endings, case sensitivity and container behaviour all differ. Each is
+# cheap to fix the day it appears and expensive to fix in month four, when it
+# is a week of archaeology.
+
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: '1.24'
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  go:
+    name: go (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false # a Windows-only failure must not hide a Linux one
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Verify line endings survived checkout
+        shell: bash
+        run: |
+          # .gitattributes normalizes to LF and marks goldens -text. If a
+          # runner's autocrlf rewrites them, every golden test fails for a
+          # reason unrelated to the code — the exact failure mode that wasted
+          # time locally. Catch it here, not in a confusing test report.
+          if git ls-files --eol | grep -E 'w/crlf' | grep -vE '\.(ps1|bat|cmd)$'; then
+            echo "::error::CRLF found in a file that must be LF"
+            exit 1
+          fi
+          echo "line endings OK"
+
+      - run: go build ./...
+      - run: go vet ./...
+
+      # The race detector needs cgo and a C toolchain. Linux runners have one;
+      # Windows runners are inconsistent and local Windows machines usually do
+      # not. Linux always runs it, so races are caught on every PR — Windows
+      # runs the same tests without it, which still catches logic errors and
+      # platform differences.
+      - name: Test (linux, with race detector)
+        if: runner.os == 'Linux'
+        run: go test ./... -race -count=1
+
+      - name: Test (windows)
+        if: runner.os == 'Windows'
+        run: go test ./... -count=1
+
+      - name: gofmt
+        shell: bash
+        run: |
+          unformatted=$(gofmt -l . | grep -v '^frontend/' || true)
+          if [ -n "$unformatted" ]; then
+            echo "::error::not gofmt'd:"; echo "$unformatted"; exit 1
+          fi
+
+  lint:
+    name: lint + boundaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      # This step is the mechanical guard from ADR-0001 mitigation 3.
+      # A cross-service import COMPILES CLEANLY; only depguard rejects it.
+      # If this job is ever disabled, the service boundary stops existing.
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.12
+          args: --timeout=5m
+
+  generator-drift:
+    name: generator is authoritative
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      # Every service is generated, including the first (ADR-0001 mitigation 1).
+      # If a scaffold was hand-edited, regeneration produces a diff and this
+      # fails — which is the point. Hand-edited scaffolds are where drift starts.
+      - name: Regenerate and diff
+        run: |
+          go run ./tools/gen-service --all
+          if ! git diff --exit-code; then
+            echo "::error::service scaffolds differ from generator output."
+            echo "Run: go run ./tools/gen-service --all"
+            echo "Hand-edits belong in routes.go / health.go / internal/, which are preserved."
+            exit 1
+          fi
+
+  python:
+    name: python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - run: pip install -e ".[dev]"
+      - run: python -m ruff check libs/py-shared workers
+      - run: python -m ruff format --check libs/py-shared workers
+      - run: python -m pytest libs/py-shared workers -q
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run build
+
+  docs:
+    name: docs + compliance profile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      # Every phase file opens with a "Read first" list. A session that cannot
+      # resolve one of those paths starts without a contract it was told to
+      # honour, so a dangling link is a build-correctness problem.
+      - run: go run ./cmd/encorebom docs lint docs/
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # The compliance profile's expected_counts are transcription assertions
+      # against the source PDF. A mismatch means the guideline was revised or
+      # the transcription is wrong — both need a human, never a silent fix.
+      # Phase 1 replaces this with `encorebom profile lint`.
+      - name: Compliance profile counts
+        run: |
+          pip install pyyaml
+          python - <<'PY'
+          import sys, yaml
+          d = yaml.safe_load(open("docs/reference/certin-v2.0.yaml", encoding="utf-8"))
+          ca = d["crypto_asset"]["types"]
+          actual = {
+            "sbom_minimum_element_categories": len(d["sbom"]["minimum_element_categories"]),
+            "sbom_data_fields": len(d["sbom"]["data_fields"]),
+            "sbom_practices_and_processes_sub_elements":
+                len(d["sbom"]["minimum_element_categories"][2]["sub_elements"]),
+            "sbom_levels": len(d["sbom"]["levels"]),
+            "sbom_classifications": len(d["sbom"]["classifications"]),
+            "qbom_elements": len(d["qbom"]["elements"]),
+            "crypto_asset_types": len(ca),
+            "crypto_algorithms_fields": len(ca["algorithms"]["fields"]),
+            "crypto_keys_fields": len(ca["keys"]["fields"]),
+            "crypto_protocols_fields": len(ca["protocols"]["fields"]),
+            "crypto_certificates_fields": len(ca["certificates"]["fields"]),
+            "aibom_elements": len(d["aibom"]["elements"]),
+            "hbom_table11_elements": len(d["hbom"]["elements"]),
+            "hbom_additional_required_elements":
+                len(d["hbom"]["additional_required_elements"]["elements"]),
+            "hbom_total_elements": len(d["hbom"]["elements"])
+                + len(d["hbom"]["additional_required_elements"]["elements"]),
+            "vex_statuses": len(d["vex"]["statuses"]),
+            "secure_distribution_controls": len(d["secure_distribution"]["controls"]),
+          }
+          bad = [f"{k}: expected {v}, got {actual.get(k)}"
+                 for k, v in d["expected_counts"].items() if actual.get(k) != v]
+          if bad:
+              print("::error::compliance profile count mismatch")
+              for b in bad: print(" ", b)
+              sys.exit(1)
+          print(f"profile OK: {len(d['expected_counts'])} count assertions match")
+          PY
+
+  proto:
+    name: proto
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # buf breaking needs history
+      - uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+      - name: Lint
+        run: buf lint
+        working-directory: proto
+      - name: Breaking-change check
+        # Skipped until proto/ has files; the gate is wired up first so it is
+        # never retrofitted after a consumer already depends on a contract.
+        run: |
+          if compgen -G "proto/**/*.proto" > /dev/null; then
+            buf breaking --against "https://github.com/${{ github.repository }}.git#branch=main,subdir=proto"
+          else
+            echo "no .proto files yet — Phase 6 adds the scan envelopes"
+          fi
+        working-directory: .

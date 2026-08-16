@@ -1,115 +1,151 @@
 # EncoreBOM — task runner
 #
-# Why go-task and not make/bash: the primary dev machine is Windows 11 with no
-# `make`, no `task` preinstalled, and PowerShell 5.1 (no `&&`, no ternary).
-# go-task ships a single binary, runs identically on Windows/Linux/macOS, and
-# does not depend on which shell happens to be present.
+# Why go-task and not make/bash: the primary dev machine has no `make`, no
+# preinstalled `task`, and PowerShell 5.1 (no `&&`, no ternary). go-task ships a
+# single binary and runs identically everywhere, so nothing depends on which
+# shell happens to be present.
 #
-# Install:  winget install Task.Task     |     go install github.com/go-task/task/v3/cmd/task@latest
+#   winget install Task.Task    |    go install github.com/go-task/task/v3/cmd/task@latest
 #
-# Anything more complex than a few lines belongs in the `encorebom` Go CLI,
-# not here. See CLAUDE.md §Conventions — "No bash scripts".
+# Anything more complex than a few lines belongs in the `encorebom` Go CLI, not
+# here. See CLAUDE.md §Conventions — "No bash scripts".
+#
+# ---------------------------------------------------------------------------
+# TARGETS MARKED [phase N] ARE NOT IMPLEMENTED YET.
+# They fail with a clear message rather than silently passing. A check that
+# passes without checking anything is worse than no check — it reads as green.
+# ---------------------------------------------------------------------------
 
 version: '3'
 
 vars:
-  GO_SERVICES: gateway auth project scan-orchestrator report campaign comment notification
-  PY_WORKERS: sbom cbom qbom aibom hbom
   COMPOSE: docker compose -f deploy/compose/docker-compose.yml
   COMPOSE_HEAVY: docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.heavy.yml
+  # Python lives in a venv on Windows (Scripts/) and Linux (bin/).
+  PY: '{{if eq OS "windows"}}.venv/Scripts/python.exe{{else}}.venv/bin/python{{end}}'
 
 tasks:
 
   default:
     desc: List available tasks
     cmds: [task --list]
+    silent: true
 
-  # ---------------------------------------------------------------- preflight
+  # ================================================================ preflight
   preflight:
-    desc: Report what is installed and what is missing before anything else runs
+    desc: Report toolchain status and known environment gaps
     cmds:
-      - cmd: go run ./cmd/encorebom preflight
-        ignore_error: true
-    # Expected findings on the primary dev machine, and why they matter:
-    #   Java 1.8      -> Dependency-Check needs 11+, cbomkit needs 17+.
-    #                    Not a blocker: those tools are container-only by design.
-    #   Docker daemon -> may be stopped. `task dev` will fail clearly, not hang.
-    #   cosign        -> absent. Signature verification degrades to checksum-only
-    #                    WITH A LOUD WARNING. Never silently.
+      - go run ./cmd/encorebom preflight
 
-  # ------------------------------------------------------------------ the gate
+  # ================================================================== the gate
   verify:
-    desc: "The gate: fmt + lint + boundary-lint + test + build. CI runs exactly this."
-    deps: [fmt, lint, lint:boundaries, profile:lint, test, build]
+    desc: "The gate: fmt + lint + boundaries + test + build + docs. CI runs this."
+    deps:
+      - fmt:check
+      - lint
+      - lint:boundaries
+      - test
+      - build
+      - docs:lint
 
   fmt:
-    desc: Format Go, Python, TypeScript
+    desc: Format Go, Python and TypeScript
     cmds:
-      - go fmt ./...
-      - cmd: python -m ruff format libs/py-shared workers
+      - go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 fmt ./...
+      - cmd: '{{.PY}} -m ruff format libs/py-shared workers'
         ignore_error: true
       - cmd: npm --prefix frontend run format
         ignore_error: true
 
+  fmt:check:
+    desc: Fail if anything is unformatted
+    cmds:
+      - cmd: gofmt -l cmd libs services tools
+        silent: true
+      - cmd: '{{.PY}} -m ruff format --check libs/py-shared'
+        ignore_error: true
+
   lint:
-    desc: Static analysis
+    desc: Static analysis across Go, Python and TypeScript
     cmds:
       - golangci-lint run ./...
-      - cmd: python -m ruff check libs/py-shared workers
+      - cmd: '{{.PY}} -m ruff check libs/py-shared'
         ignore_error: true
       - cmd: npm --prefix frontend run lint
         ignore_error: true
 
   lint:boundaries:
-    desc: Fail if any service imports another service's internals (depguard)
-    # This is the mechanical guard that survives context loss between sessions.
+    desc: Fail if any service imports another service's internals
+    # THE mechanical guard (ADR-0001 mitigation 3). A cross-service import
+    # compiles cleanly under `go build`; only this rejects it. Verified once by
+    # deliberately introducing a violation — see docs/STATE.md.
     # Disabling it is an ADR-level decision, not a convenience.
     cmds:
       - golangci-lint run --enable-only depguard ./...
 
+  # ==================================================================== tests
   test:
     desc: Unit and contract tests
+    # The race detector requires cgo, which requires a C toolchain. Windows
+    # dev machines rarely have one, so `-race` runs where it can and CI's
+    # ubuntu job always runs it. Silently dropping it everywhere would mean
+    # nobody ever runs it; failing on Windows would block local development.
     cmds:
-      - go test ./... -race -count=1
-      - cmd: python -m pytest libs/py-shared workers -q
+      - task: test:go
+      - cmd: '{{.PY}} -m pytest libs/py-shared -q'
         ignore_error: true
 
-  test:golden:
-    desc: Normalizer golden-file diff over the fixture corpus
-    # Changing a golden requires an explicit justification in the commit
-    # message. Goldens are the guardrail against silently wrong BOM output.
+  test:go:
+    internal: true
     cmds:
-      - go test ./services/... -run TestGolden -count=1
+      - cmd: |
+          {{if eq OS "windows"}}
+          go test ./... -count=1
+          {{else}}
+          go test ./... -race -count=1
+          {{end}}
+
+  test:race:
+    desc: Force the race detector (needs cgo + a C toolchain)
+    cmds:
+      - go test ./... -race -count=1
+
+  test:golden:
+    desc: "[phase 8] Normalizer golden-file diff over the fixture corpus"
+    cmds:
+      - cmd: echo "not implemented until Phase 8 - see docs/phases/PHASE-08-normalizer.md"
+      - exit 1
 
   test:rls:
-    desc: Enumerate every tenant-scoped table and assert RLS is enabled
+    desc: "[phase 1] Assert every tenant-scoped table has RLS enabled"
     cmds:
-      - go test ./libs/go-shared/platform/db -run TestRLSCoverage -count=1
+      - cmd: echo "not implemented until Phase 1 - see docs/phases/PHASE-01-data-model-rls.md"
+      - exit 1
 
+  # ==================================================================== build
   build:
-    desc: Build all Go services and the frontend
+    desc: Build every Go service and the frontend
     cmds:
       - go build ./...
       - cmd: npm --prefix frontend run build
         ignore_error: true
 
-  # ------------------------------------------------------------------ profile
-  profile:lint:
-    desc: Validate certin-v2.0.yaml — counts, unique ids, assumed entries
-    # Counts are transcription checks against the source PDF. A mismatch means
-    # either the guideline was revised or the transcription is wrong. Both need
-    # a human decision, never a silent fix.
+  gen:services:
+    desc: Regenerate all service scaffolds (hand-edited files are preserved)
     cmds:
-      - go run ./cmd/encorebom profile lint docs/reference/certin-v2.0.yaml
+      - go run ./tools/gen-service --all
 
-  profile:gen:
-    desc: Regenerate Go structs and Python models from the compliance profile
+  # ===================================================================== docs
+  docs:lint:
+    desc: Fail on broken cross-references between specification documents
+    # Every phase file opens with a "Read first" list. A session that cannot
+    # resolve one of those paths starts without a contract it was told to obey.
     cmds:
-      - go run ./cmd/encorebom profile gen --out-go libs/go-shared/model --out-py libs/py-shared/model
+      - go run ./cmd/encorebom docs lint docs/
 
-  # ---------------------------------------------------------------- local dev
+  # ================================================================= local dev
   dev:
-    desc: Bring up the core stack (laptop-friendly - no Dependency-Track, no SonarQube)
+    desc: Bring up the core stack (laptop-friendly, ~4GB)
     deps: [preflight]
     cmds:
       - '{{.COMPOSE}} up -d'
@@ -125,64 +161,59 @@ tasks:
     cmds: ['{{.COMPOSE}} down']
 
   dev:nuke:
-    desc: Stop the stack and DELETE all volumes (destroys local data)
-    prompt: This deletes every local volume including scan artifacts. Continue?
+    desc: Stop the stack and DELETE all volumes
+    prompt: >-
+      This deletes every local volume, including depcheck-data. Losing that
+      means paying the 30-60 minute NVD sync again. Continue?
     cmds: ['{{.COMPOSE}} down -v']
 
   logs:
     desc: "Tail logs. Usage: task logs -- gateway"
     cmds: ['{{.COMPOSE}} logs -f {{.CLI_ARGS}}']
 
-  # --------------------------------------------------------------- migrations
+  # =============================================================== not yet
   db:migrate:
-    desc: Apply all pending migrations across every service schema
+    desc: "[phase 1] Apply pending migrations"
     cmds:
-      - go run ./cmd/encorebom db migrate up
+      - cmd: echo "not implemented until Phase 1"
+      - exit 1
 
   db:reset:
-    desc: Drop, recreate, migrate, seed
-    prompt: This destroys the local database. Continue?
+    desc: "[phase 1] Drop, migrate, seed"
     cmds:
-      - go run ./cmd/encorebom db reset
-      - task: db:seed
+      - cmd: echo "not implemented until Phase 1"
+      - exit 1
 
-  db:seed:
-    desc: Load development fixtures (two tenants, to exercise isolation)
+  profile:lint:
+    desc: "[phase 1] Validate certin-v2.0.yaml counts and statuses"
+    # CI runs an equivalent Python check today (.github/workflows/verify.yml).
+    # Phase 1 replaces both with `encorebom profile lint`.
     cmds:
-      - go run ./cmd/encorebom db seed
+      - cmd: echo "not implemented until Phase 1 - CI runs the equivalent check"
+      - exit 1
 
-  # -------------------------------------------------------------------- OSINT
   osint:sync:
-    desc: Download and verify every pinned scanner artifact
+    desc: "[phase 2] Download and verify pinned scanner artifacts"
     cmds:
-      - go run ./cmd/encorebom toolctl sync --manifest OSINT/tools.manifest.yaml
-
-  osint:verify:
-    desc: Probe every engine and report available/unavailable
-    cmds:
-      - go run ./cmd/encorebom toolctl verify --manifest OSINT/tools.manifest.yaml
+      - cmd: echo "not implemented until Phase 2"
+      - exit 1
 
   osint:dryrun:
-    desc: Resolve every pinned URL and digest without downloading (proves the manifest is real)
+    desc: "[phase 2] Resolve every pinned URL without downloading"
     cmds:
-      - go run ./cmd/encorebom toolctl sync --manifest OSINT/tools.manifest.yaml --dry-run
+      - cmd: echo "not implemented until Phase 2 - every version in the manifest is still TBD"
+      - exit 1
 
-  osint:contract:
-    desc: Run each pinned tool against a tiny fixture and assert its parser still works
-    # Runs nightly in CI. A failing contract test auto-marks the engine
-    # `unavailable` rather than letting it emit garbage into a compliance report.
+  proto:gen:
+    desc: "[phase 6] Generate Go and Python code from proto/"
     cmds:
-      - go test ./workers/... -run TestAdapterContract -count=1
+      - cmd: buf generate
+        dir: proto
 
-  # --------------------------------------------------------------------- docs
-  docs:lint:
-    desc: Fail on broken relative links or references to nonexistent spec sections
-    cmds:
-      - go run ./cmd/encorebom docs lint docs/
-
-  # -------------------------------------------------------------------- phases
+  # ==================================================================== phases
   phase:
     desc: "Print a phase brief. Usage: task phase -- 03"
     cmds:
       - cmd: cat docs/phases/PHASE-{{.CLI_ARGS}}-*.md
         ignore_error: true
+    silent: true

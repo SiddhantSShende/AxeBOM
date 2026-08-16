@@ -1,0 +1,30 @@
+# EncoreBOM protobuf contracts.
+#
+# proto/ is the single source of truth for anything crossing a process
+# boundary — gRPC service definitions and event envelopes alike
+# (docs/02-CONTRACTS.md).
+#
+# Phase 6 defines the real messages: ScanJobV1, ScanEventV1, ScanResultV1.
+# This file exists in Phase 0 so the toolchain and the breaking-change gate are
+# in place BEFORE there is anything to break. A compatibility check added after
+# the first consumer ships is a compatibility check that has already failed once.
+
+version: v2
+
+modules:
+  - path: .
+
+lint:
+  use:
+    - STANDARD
+  except:
+    # Our package names are versioned (encorebom.scan.v1) but the directory
+    # layout is flat; revisit if the proto tree grows nested packages.
+    - PACKAGE_DIRECTORY_MATCH
+
+breaking:
+  use:
+    - FILE
+  # WIRE_JSON would also flag JSON-name changes. Enabled once the envelopes
+  # are consumed by the frontend (Phase 10), where JSON shape becomes an
+  # external contract rather than an internal one.
