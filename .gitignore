@@ -1,0 +1,74 @@
+# --- Secrets ---------------------------------------------------------------
+# .env.example IS committed; .env never is.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+!**/testdata/**/*.key      # deliberately-fake keys used by signing tests
+secrets/
+
+# --- OSINT tool artifacts --------------------------------------------------
+# Scanner binaries and vulnerability databases are FETCHED AND VERIFIED, never
+# committed. OSINT/tools.manifest.yaml is the only committed OSINT artifact —
+# it pins versions, digests and checksums. See docs/04-OSINT-INTEGRATION.md.
+.encorebom/
+OSINT/bin/
+OSINT/src/
+OSINT/.venv/
+OSINT/cache/
+
+# --- Scan workspaces -------------------------------------------------------
+# Cloned user repositories. Untrusted content — must never reach the repo.
+workspaces/
+tmp/
+
+# --- Go --------------------------------------------------------------------
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/bin/
+/dist/
+vendor/
+
+# --- Python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# --- Node / frontend -------------------------------------------------------
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# --- Editors / OS ----------------------------------------------------------
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Local infrastructure state -------------------------------------------
+deploy/compose/.data/
+*.local.yml
+
+# --- Test / coverage output ------------------------------------------------
+coverage.out
+coverage.html
+/playwright-report/
+/test-results/
+
+# --- Generated (regenerate with `task profile:gen`) ------------------------
+libs/go-shared/model/generated_*.go
+libs/py-shared/model/generated_*.py

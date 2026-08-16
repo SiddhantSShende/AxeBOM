@@ -1,0 +1,46 @@
+# EncoreBOM — line-ending and diff policy
+#
+# WHY THIS FILE MATTERS MORE THAN USUAL: development happens on Windows, and
+# the normalizer's correctness guarantee rests on golden-file diffs. If Git
+# rewrites CRLF into a .golden file, every golden test fails for a reason that
+# has nothing to do with the code. That failure mode wastes entire sessions.
+
+# Normalize everything to LF in the repository.
+* text=auto eol=lf
+
+# --- Golden files: byte-exact, never touched, never diffed as text ----------
+# These are the guardrail against silently wrong BOM output. Any transformation
+# invalidates them.
+*.golden        -text -diff
+fixtures/**/expected/**  -text -diff
+
+# --- Generated / standards artifacts: exact bytes matter -------------------
+*.cdx.json      -text
+*.spdx.json     -text
+*.spdx          -text
+*.sarif         -text
+
+# --- Binary ----------------------------------------------------------------
+*.pdf           binary
+*.xlsx          binary
+*.png  *.jpg  *.jpeg  *.gif  *.ico  *.webp   binary
+*.zst  *.gz  *.zip  *.tar                    binary
+*.db  *.sqlite  *.sqlite3                    binary
+
+# --- Scripts that must stay LF even if checked out on Windows --------------
+*.sh            text eol=lf
+Dockerfile*     text eol=lf
+*.yml  *.yaml   text eol=lf
+
+# --- Windows-only files keep CRLF ------------------------------------------
+*.ps1           text eol=crlf
+*.bat  *.cmd    text eol=crlf
+
+# --- Language hints for diffs ----------------------------------------------
+*.go            text diff=golang
+*.py            text diff=python
+*.md            text diff=markdown
+
+# --- Lockfiles: keep out of review diffs, still versioned ------------------
+go.sum                  -diff
+frontend/package-lock.json  -diff
