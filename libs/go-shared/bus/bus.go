@@ -288,6 +288,32 @@ func (b *Bus) DeleteConsumer(ctx context.Context, stream, durable string) error 
 	return nil
 }
 
+// PurgeSubject removes every message on a subject.
+//
+// ⚠ FOR TEST ISOLATION, NOT FOR ROUTINE USE. It DESTROYS UNPROCESSED WORK.
+//
+// A WorkQueue stream retains a message until it is acked, so a run that was
+// killed mid-delivery leaves messages behind. The next run then consumes one of
+// those instead of its own, and the symptom is bizarre: a redelivery-backoff
+// test that measured 30s starts reporting 2.6ms, because the "redelivery" is
+// actually a stale message arriving first.
+//
+// Deleting the consumer is not enough — that clears the subscription, not the
+// backlog. Both are needed to claim a subject deterministically.
+func (b *Bus) PurgeSubject(ctx context.Context, stream, subject string) error {
+	s, err := b.js.Stream(ctx, stream)
+	if err != nil {
+		if errors.Is(err, jetstream.ErrStreamNotFound) {
+			return nil
+		}
+		return fmt.Errorf("bus: stream %s: %w", stream, err)
+	}
+	if err := s.Purge(ctx, jetstream.WithPurgeSubject(subject)); err != nil {
+		return fmt.Errorf("bus: purge %s on %s: %w", subject, stream, err)
+	}
+	return nil
+}
+
 // ReleaseFilterSubject deletes every consumer bound to a filter subject.
 //
 // ⚠ EXISTS BECAUSE OF THE WORKQUEUE CONSTRAINT.

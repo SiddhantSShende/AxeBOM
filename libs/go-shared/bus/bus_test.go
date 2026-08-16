@@ -64,6 +64,16 @@ func exclusiveConsumer(t *testing.T, b *bus.Bus, stream, subject, durable string
 	if err := b.DeleteConsumer(t.Context(), stream, durable); err != nil {
 		t.Fatalf("clearing a leftover consumer: %v", err)
 	}
+	// ⚠ AND THE BACKLOG, not just the subscription.
+	//
+	// A WorkQueue stream keeps a message until it is acked, so a run killed
+	// mid-delivery leaves messages on the subject. The next run consumes one of
+	// THOSE instead of its own, and the symptom is baffling: the
+	// redelivery-backoff assertion below measured 2.6ms instead of 30s, because
+	// the "redelivery" was a stale message arriving first.
+	if err := b.PurgeSubject(t.Context(), stream, subject); err != nil {
+		t.Fatalf("clearing a leftover backlog: %v", err)
+	}
 	c, err := b.EnsureConsumer(t.Context(), bus.ConsumerConfig{
 		Stream: stream, Durable: durable, FilterSubject: subject,
 	})

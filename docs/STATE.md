@@ -877,10 +877,64 @@ Unimplemented levels (`n-Level`, `Delivery`, `Transitive`) are REFUSED rather
 than silently rendered as Complete under a label the customer chose for
 something narrower.
 
+### `export` — SPDX 2.3 and CycloneDX 1.6 via protobom
+
+protobom is the serialization layer; we do not hand-roll either format. What
+this package owns is the MAPPING, which is where a wrong decision produces a
+document that validates cleanly and says something false.
+
+Three mapping rules are pinned by tests:
+
+- **`declared` and `concluded` licences stay in separate SPDX fields.** "The
+  manifest says MIT but the LICENSE file is Apache-2.0" is a finding; writing
+  the concluded value into both asserts they agreed.
+- **The CERT-In identifier is a PROPERTY, never a PURL.** `pkg:supplier/Org/Name`
+  is not resolvable, and putting it where a PURL belongs would make consumers
+  dedup on it or fail to fetch it.
+- **An unknown hash algorithm is dropped, not guessed.** A digest under the
+  wrong label makes a verifier report a mismatch on a file that is fine.
+
+#### protobom's output is not deterministic, and we require that it is
+
+Two independent causes, both measured against v0.5.8:
+
+1. The SPDX serializer stamps `creationInfo.created` from `time.Now().UTC()`
+   (`serializer_spdx23.go:171`) with no option to supply it.
+2. Identifiers and hashes are `map[int32]string` on the node, so `externalRefs`
+   and `hashes` are SHUFFLED INSIDE each component between runs.
+
+The second is the instructive one. A two-run comparison passed — the arrays
+agreed by luck often enough to look green. **A 40-run check failed on the first
+iteration.** Map-iteration order is randomized per run, so any small number of
+comparisons can agree by chance; the stress test is the one that actually holds
+the property.
+
+`stabilize()` sorts every array recursively by canonical JSON and corrects the
+timestamp to the SCAN's time rather than the render's — dating a re-render "now"
+would have the document claim to describe today, and a signature over a shuffled
+document would never verify twice.
+
+Sorting is safe because in SPDX 2.3 and CycloneDX 1.6 JSON these arrays are
+unordered collections. It would be wrong for a format where array position is
+semantic, and that is noted where a future format would be added.
+
+Golden documents are committed under `services/report/testdata/golden/`.
+
+### A Phase 6 test-isolation gap, found by running the full suite
+
+`TestRetryableFailureIsRedelivered` measured **2.6ms** where it had previously
+measured 30s. Not a regression in the backoff: a WorkQueue stream keeps a
+message until it is acked, so runs killed during this session's Docker restarts
+left messages on the subject, and the "redelivery" was a stale message arriving
+first.
+
+The helper deleted leftover CONSUMERS but not the BACKLOG. `Bus.PurgeSubject`
+now exists for that, and it carries a warning that it destroys unprocessed work.
+
 ### Not yet built in Phase 9
 
-Exporters (SPDX/CycloneDX via protobom), the PDF and XLSX renderers, Ed25519
-signing, share links, and the async render worker.
+The PDF and XLSX renderers, Ed25519 signing, share links, and the async render
+worker.
 
 ---
 
