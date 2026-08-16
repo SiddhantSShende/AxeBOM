@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.encorebom.io/scan-event-v1.schema.json",
+  "title": "ScanEventV1",
+  "description": "An ADVISORY progress event. The database is the source of truth; no event is ever required for correctness. `seq` is monotonic per job_id so consumers can reorder and DETECT gaps. `message` never contains a user path, a repository URL, or anything from the scanned code — event streams reach browsers and logs.",
+  "type": "object",
+  "properties": {
+    "engine": {
+      "type": "string"
+    },
+    "event_id": {
+      "type": "string"
+    },
+    "job_id": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "pct": {
+      "type": "integer"
+    },
+    "phase": {
+      "type": "string"
+    },
+    "scan_id": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "seq": {
+      "type": "integer"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "ts": {
+      "format": "date-time",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "scan_id",
+    "tenant_id",
+    "seq",
+    "ts",
+    "phase"
+  ],
+  "additionalProperties": true
+}

@@ -117,6 +117,7 @@ const (
 	ActionShare    Action = "share"    // mint a share link
 	ActionTriage   Action = "triage"   // set VEX status
 	ActionInvite   Action = "invite"
+	ActionCancel   Action = "cancel" // stop a running scan or campaign
 	// ActionEnableRiskyResolution turns on package-manager resolution, which
 	// EXECUTES arbitrary code from the scanned repository (npm lifecycle
 	// scripts, Gradle build files). Deliberately separate from `update`:
@@ -187,9 +188,13 @@ var matrix = map[Permission]rule{
 	{ResourceUpload, ActionRead}:   {minRole: RoleViewer},
 
 	// --- scanning ---
-	{ResourceScan, ActionRead}:   {minRole: RoleViewer},
-	{ResourceScan, ActionList}:   {minRole: RoleViewer},
-	{ResourceScan, ActionRun}:    {minRole: RoleAnalyst},
+	{ResourceScan, ActionRead}: {minRole: RoleViewer},
+	{ResourceScan, ActionList}: {minRole: RoleViewer},
+	{ResourceScan, ActionRun}:  {minRole: RoleAnalyst},
+	// Cancel matches Run, not Delete. Whoever may start a scan may stop one:
+	// requiring Admin to cancel would leave an Analyst who started a runaway
+	// scan unable to stop it, waiting for someone with more privilege.
+	{ResourceScan, ActionCancel}: {minRole: RoleAnalyst},
 	{ResourceScan, ActionDelete}: {minRole: RoleAdmin},
 
 	// Enabling package-manager resolution means running arbitrary code from

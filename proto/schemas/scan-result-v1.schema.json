@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.encorebom.io/scan-result-v1.schema.json",
+  "title": "ScanResultV1",
+  "description": "What one engine produced. `partial` is a FIRST-CLASS STATUS, not an error: 11 of 12 ecosystems covered is useful output plus a known gap, and both must survive into the report. `engine_db_version` is REQUIRED for vulnerability engines — a finding that cannot be dated is not defensible.",
+  "type": "object",
+  "properties": {
+    "artifacts": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "media_type": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer"
+          },
+          "uri": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "diagnostics": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "ecosystem": {
+            "type": "string"
+          },
+          "hint": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "ecosystems_covered": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "engine": {
+      "type": "string"
+    },
+    "engine_db_version": {
+      "type": "string"
+    },
+    "engine_version": {
+      "type": "string"
+    },
+    "error": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "invocation": {
+      "additionalProperties": true,
+      "properties": {
+        "argv_redacted": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "duration_ms": {
+          "type": "integer"
+        },
+        "exit_code": {
+          "type": "integer"
+        },
+        "finished_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "image_digest": {
+          "type": "string"
+        },
+        "started_at": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "job_id": {
+      "type": "string"
+    },
+    "scan_id": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "summary": {
+      "additionalProperties": true,
+      "properties": {
+        "components": {
+          "type": "integer"
+        },
+        "crypto_assets": {
+          "type": "integer"
+        },
+        "licenses": {
+          "type": "integer"
+        },
+        "vulnerabilities": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "tenant_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "job_id",
+    "scan_id",
+    "tenant_id",
+    "engine",
+    "engine_version",
+    "status"
+  ],
+  "additionalProperties": true
+}

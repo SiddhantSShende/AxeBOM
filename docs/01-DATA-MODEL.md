@@ -165,6 +165,7 @@ This is the commonly-missed minimum-element category. **Not a report section —
 | `triggered_by` | TEXT NOT NULL | CHECK in (`user`,`campaign`,`api`,`webhook`) |
 | `trigger_ref` | UUID NULL | user id or campaign id |
 | `status` | TEXT NOT NULL | CHECK in (`queued`,`fetching`,`running`,`normalizing`,`completed`,`completed_with_errors`,`failed`,`cancelled`) |
+| `source_kind` | TEXT NOT NULL | CHECK in (`git`,`upload`,`image`); denormalized from the project at create time — cross-schema JOINs are forbidden, and a project changing `source_type` later must not retroactively change what an old scan claims to have scanned |
 | `bom_types` | TEXT[] NOT NULL | requested families |
 | `report_levels` | TEXT[] NOT NULL | |
 | `standards` | TEXT[] NOT NULL | `SPDX`, `CycloneDX` |
@@ -201,7 +202,8 @@ One row per (scan, engine). This is where partial failure lives.
 | `exit_code` | INT NULL | |
 | `duration_ms` | INT NULL | |
 | `summary` | JSONB | `{components, vulnerabilities, licenses, crypto_assets}` |
-| `diagnostics` | JSONB | `[{severity, code, ecosystem, message, hint}]` |
+| `diagnostics` | JSONB | `[{severity, code, ecosystem, message, hint}]` — NON-FATAL problems; how `partial` explains itself |
+| `error_code`, `error_message` | TEXT NULL | terminal failure cause. Deliberately separate from `diagnostics`: mixing a fatal failure into non-fatal warnings makes "did this engine work?" unanswerable without reading prose |
 | `started_at`, `finished_at` | TIMESTAMPTZ | |
 
 `partial` is a **first-class status, not an error** — e.g. Grype covered 11 of 12 ecosystems because one lockfile was malformed.

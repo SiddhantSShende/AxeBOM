@@ -33,6 +33,10 @@ Every envelope carries `schema_version` as `<name>/v<N>`. Rules:
 
 `ack_wait=30m` matches the sandbox wall-clock ceiling. A job that exceeds it is redelivered, which is safe because jobs are idempotent (§4).
 
+> **A WorkQueue stream permits exactly ONE consumer per filter subject.** NATS refuses a second with `filtered consumer not unique on workqueue stream`. This dictates the deployment shape: every worker for a family shares ONE durable name and NATS distributes between them. Giving each worker instance its own durable is rejected at startup — which is the constraint surfacing early, where it should.
+
+> **Retry backoff requires `NakWithDelay`, not `Nak`.** The consumer's `BackOff` setting governs `ack_wait` EXPIRY — a worker that died silently — not an explicit nak. A bare `Nak()` redelivers immediately, so a failing job spins as fast as the consumer can loop and burns all four delivery attempts in milliseconds. Measured at 0.05s against a schedule whose first step is 30 seconds.
+
 ---
 
 ## 3. Scan lifecycle

@@ -17,8 +17,11 @@ import (
 // blip that fails liveness gets the entire fleet killed and turns a short
 // outage into a long one.
 func registerHealthChecks(c *health.Checker, d *deps) {
-	// Phase 1 adds: c.Register("postgres", db.Ping)
-	// Phase 6 adds: c.Register("nats", bus.Ping)
-	//               c.RegisterOptional("s3", blob.Ping)
-	_, _ = c, d
+	// Critical: the database is the SOURCE OF TRUTH for scan state. An
+	// instance that lost it can neither create a scan nor report on one.
+	c.Register("postgres", d.pool.Ping)
+
+	// Critical: without NATS this service accepts scans it can never dispatch,
+	// which is worse than refusing them.
+	c.Register("nats", d.bus.Ping)
 }

@@ -1,0 +1,198 @@
+package orchestr
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/nats-io/nats.go/jetstream"
+
+	"github.com/encorebom/encorebom/libs/go-shared/bus"
+	"github.com/encorebom/encorebom/libs/go-shared/events"
+)
+
+// The result consumer: the loop that turns worker output into scan state.
+//
+// TWO KINDS OF RESULT ARRIVE HERE, and they do different things:
+//
+//	FETCH   pins commit_sha and the archive, then FANS OUT one job per engine.
+//	        Every engine then reads the same bytes (ADR-0008).
+//	ENGINE  upserts one engine_runs row and recomputes the scan status
+//	        mechanically.
+//
+// Both are IDEMPOTENT, because both will be redelivered: ack_wait is 30 minutes
+// and a worker can die at any point.
+
+// ConsumeResults runs the result loop until the context is cancelled.
+func (o *Orchestrator) ConsumeResults(ctx context.Context) error {
+	for _, family := range events.AllFamilies() {
+		consumer, err := o.bus.EnsureConsumer(ctx, bus.ConsumerConfig{
+			Stream: bus.StreamResults,
+			// One durable per family, matching the one-consumer-per-filter
+			// constraint on a WorkQueue stream. Every orchestrator instance
+			// shares it, and NATS distributes between them.
+			Durable:       "orchestrator-" + string(family),
+			FilterSubject: "scan.result." + string(family),
+			MaxAckPending: 16,
+		})
+		if err != nil {
+			return fmt.Errorf("result consumer for %s: %w", family, err)
+		}
+
+		fam := family
+		go func() {
+			dlq := "scan.dlq." + string(fam)
+			if err := o.bus.Consume(ctx, consumer, dlq, o.handleResultMessage); err != nil {
+				o.log.Error("result consumer stopped", "family", fam, "cause", err.Error())
+			}
+		}()
+	}
+
+	<-ctx.Done()
+	return nil
+}
+
+// handleResultMessage routes one result.
+func (o *Orchestrator) handleResultMessage(ctx context.Context, msg jetstream.Msg) error {
+	var result events.ScanResultV1
+	if err := events.Decode(msg.Data(), &result); err != nil {
+		// Undecodable now, undecodable on retry. A permanent error terminates
+		// to the DLQ rather than burning four delivery attempts.
+		return fmt.Errorf("undecodable result: %w", err)
+	}
+
+	if result.Engine == "fetcher" {
+		return o.handleFetchResult(ctx, result)
+	}
+	return o.HandleResult(ctx, result)
+}
+
+// handleFetchResult pins the source and fans out.
+//
+// ⚠ THE ORDER MATTERS AND IS NOT INTERCHANGEABLE.
+//
+// commit_sha is recorded FIRST, and only then are engine jobs published. A
+// fan-out before the pin would hand engines a job whose source_meta.commit_sha
+// is empty — and a report that cannot name the commit it describes is not
+// evidence of anything.
+func (o *Orchestrator) handleFetchResult(ctx context.Context, result events.ScanResultV1) error {
+	if result.Status == events.StatusFailed || result.Status == events.StatusTimeout {
+		// Nothing to scan. Mark every engine run and the scan itself failed:
+		// leaving them queued would make the reaper report a timeout in half an
+		// hour rather than the real cause now.
+		o.log.Error("fetch failed; the scan cannot proceed",
+			"scan_id", result.ScanID, "status", result.Status)
+
+		if err := o.failAllRuns(ctx, result); err != nil {
+			return fmt.Errorf("%w: failing runs after a failed fetch: %w", bus.ErrRetry, err)
+		}
+		return o.RecomputeScanStatus(ctx, result.TenantID, result.ScanID)
+	}
+
+	archiveRef, archiveSHA := archiveFrom(result)
+	if archiveRef == "" {
+		return fmt.Errorf("fetch result for scan %s carries no source archive", result.ScanID)
+	}
+
+	// Idempotent by construction: a redelivered fetch result writes nothing and
+	// reports that it wrote nothing, which is success rather than a conflict.
+	wrote, err := o.store.SetSourceOnce(ctx, result.TenantID, result.ScanID,
+		result.EngineDBVersion, archiveRef, archiveSHA)
+	if err != nil {
+		return fmt.Errorf("%w: pinning source: %w", bus.ErrRetry, err)
+	}
+	if !wrote {
+		o.log.Info("fetch result redelivered; source already pinned",
+			"scan_id", result.ScanID)
+	}
+
+	published, err := o.FanOut(ctx, result.TenantID, result.ScanID)
+	if err != nil {
+		return fmt.Errorf("%w: fanning out: %w", bus.ErrRetry, err)
+	}
+	o.log.Info("fanned out engine jobs", "scan_id", result.ScanID, "jobs", published)
+	return nil
+}
+
+// archiveFrom extracts the source archive from a fetch result.
+func archiveFrom(result events.ScanResultV1) (uri, sha string) {
+	for _, a := range result.Artifacts {
+		if a.Role == "source_archive" {
+			return a.URI, a.SHA256
+		}
+	}
+	// Fall back to the first artifact: a fetcher that produced exactly one
+	// thing produced the archive.
+	if len(result.Artifacts) == 1 {
+		return result.Artifacts[0].URI, result.Artifacts[0].SHA256
+	}
+	return "", ""
+}
+
+// failAllRuns marks every queued run failed after an unrecoverable fetch.
+func (o *Orchestrator) failAllRuns(ctx context.Context, result events.ScanResultV1) error {
+	_, runs, err := o.store.GetScan(ctx, result.TenantID, result.ScanID)
+	if err != nil {
+		return err
+	}
+
+	code, message := "SCAN_SOURCE_UNREACHABLE", "the source could not be fetched"
+	if result.Error != nil {
+		code, message = result.Error.Code, result.Error.Message
+	}
+
+	now := time.Now().UTC()
+	for _, run := range runs {
+		if run.Status != statusQueued {
+			continue
+		}
+		run.Status = events.StatusFailed
+		run.FinishedAt = &now
+		run.ErrorCode = code
+		run.ErrorMessage = message
+		if err := o.store.UpsertEngineRun(ctx, run); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Test and operational helper
+// ---------------------------------------------------------------------------
+
+// PublishFetchResult publishes a fetch result.
+//
+// Used by the mock fetcher and by the end-to-end check. The real fetcher
+// publishes the same envelope from inside the sandbox — this exists so the
+// orchestration can be exercised without one, NOT as a second code path for
+// production.
+func (o *Orchestrator) PublishFetchResult(ctx context.Context, scanID, tenantID,
+	commitSHA, archiveURI, archiveSHA string,
+) error {
+	result := events.ScanResultV1{
+		SchemaVersion: events.SchemaScanResultV1,
+		JobID:         "fetch-" + scanID,
+		ScanID:        scanID, TenantID: tenantID,
+		Engine: "fetcher", EngineVersion: "internal",
+		// The fetcher reports the pinned commit here; it is the one piece of
+		// provenance every engine job inherits.
+		EngineDBVersion: commitSHA,
+		Status:          events.StatusSucceeded,
+		Artifacts: []events.Artifact{{
+			Role: "source_archive", URI: archiveURI,
+			MediaType: "application/zstd", SHA256: archiveSHA,
+		}},
+		Invocation: events.Invocation{
+			ArgvRedacted: []string{"fetcher"},
+			StartedAt:    time.Now().UTC(), FinishedAt: time.Now().UTC(),
+		},
+	}
+
+	payload, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	return o.bus.Publish(ctx, "scan.result.fetch", result.JobID, payload)
+}

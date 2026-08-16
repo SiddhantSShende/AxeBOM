@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.encorebom.io/scan-job-v1.schema.json",
+  "title": "ScanJobV1",
+  "description": "One unit of scan work: exactly ONE engine against ONE content-addressed archive (ADR-0004). There is no credential field and there never will be — engine containers receive an archive and nothing else (ADR-0008).",
+  "type": "object",
+  "properties": {
+    "attempt": {
+      "type": "integer"
+    },
+    "deadline_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "engine": {
+      "type": "string"
+    },
+    "engine_config": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "engine_version_constraint": {
+      "type": "string"
+    },
+    "family": {
+      "type": "string"
+    },
+    "issued_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "job_id": {
+      "type": "string"
+    },
+    "limits": {
+      "additionalProperties": true,
+      "properties": {
+        "cpu_millis": {
+          "type": "integer"
+        },
+        "disk_mb": {
+          "type": "integer"
+        },
+        "max_output_bytes": {
+          "type": "integer"
+        },
+        "memory_mb": {
+          "type": "integer"
+        },
+        "pids_max": {
+          "type": "integer"
+        },
+        "wall_clock_sec": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "properties": {
+        "prefix": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "scan_id": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "source_meta": {
+      "additionalProperties": true,
+      "properties": {
+        "commit_sha": {
+          "type": "string"
+        },
+        "image_digest": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "trace": {
+      "additionalProperties": true,
+      "properties": {
+        "correlation_id": {
+          "type": "string"
+        },
+        "traceparent": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "workspace": {
+      "additionalProperties": true,
+      "properties": {
+        "artifact_uri": {
+          "type": "string"
+        },
+        "root_subpath": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "job_id",
+    "scan_id",
+    "tenant_id",
+    "project_id",
+    "family",
+    "engine",
+    "attempt",
+    "deadline_at",
+    "output"
+  ],
+  "additionalProperties": true
+}

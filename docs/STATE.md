@@ -7,8 +7,8 @@ A session that writes code but does not update this file has failed — the next
 ---
 
 **Last updated:** 2026-08-16
-**Current phase:** Phase 5 — ✅ **complete**
-**Next action:** `Implement Phase 6 of EncoreBOM. Read docs/phases/PHASE-06-scan-orchestration.md.`
+**Current phase:** Phase 6 — ✅ **complete**
+**Next action:** `Implement Phase 7 of EncoreBOM. Read docs/phases/PHASE-07-sbom-adapters.md.`
 
 > The Phase 1/2 disk blocker is **resolved** — 18 GB free. `task verify` completes end to end (exit 0), including the frontend build. Docker Desktop's daemon still stops between sessions; start it before running the DB-backed tests, which otherwise **skip** rather than fail.
 
@@ -33,6 +33,8 @@ A session that writes code but does not update this file has failed — the next
 | **Object storage** | ✅ MinIO; content-addressed, capped, **never extracted** |
 | **Sandbox** | ✅ **Docker; 12-case escape suite green against a real daemon** |
 | **Fetcher** | ✅ **connection-time SSRF defence, hardened clone, content-addressed tar.zst** |
+| **Orchestration** | ✅ **envelopes frozen, JetStream topology, fan-out, reaper, WS progress** |
+| **Envelope schemas** | ✅ `proto/schemas/*.json`, **generated from the Go types** |
 | Frontend | 🟡 projects module real (list, 3-step wizard, detail); **Phase 10 replaces the shell** |
 | **Database** | ✅ **9 schemas, 43 tables + 32 partitions, migrated** |
 | **RLS tenancy** | ✅ **36 protected, 7 exempt, 0 gaps — and proven to fail on a gap** |
@@ -501,7 +503,97 @@ Stated plainly, because a known gap is manageable and an undocumented one is not
 
 ---
 
+## What Phase 6 built
+
+### The envelopes are frozen, and their schemas are generated
+
+`ScanJobV1`, `ScanEventV1`, `ScanResultV1` in `libs/go-shared/events`, with
+JSON Schemas written to `proto/schemas/` by `encorebom schema gen`.
+
+**Generated from the Go types, not hand-written.** A hand-written schema is a
+second definition that drifts the moment somebody adds a field. The Python
+workers consume these; without a published schema that agreement lives in prose,
+and prose does not fail a build.
+
+Two rules are enforced in code rather than documented:
+
+- **`ScanJobV1` has no credential field**, and `Validate` refuses one smuggled
+  into `engine_config` — the other way in, where a token looks like ordinary
+  configuration (ADR-0008).
+- **Unknown fields are ignored, never fatal**, the deliberate opposite of the
+  HTTP handlers' `DisallowUnknownFields`. A typo'd field in a user's request is a
+  mistake to report; an unrecognized field in a queue message is a newer
+  publisher, and rejecting it would mean no schema can ever gain a field without
+  a synchronised deploy of thirteen services.
+
+### Status derivation is mechanical, and the `partial`-only case is the sharp one
+
+A scan where EVERY engine returned `partial` is `completed_with_errors` — not
+`completed`, because the gaps are real, and not `failed`, because the output is
+real. `partial` counts as succeeded for "did anything work?" and as not-clean for
+"did everything work?", and the status has to say both.
+
+### Two JetStream properties that only a real server reveals
+
+| Discovered | Consequence |
+|---|---|
+| **A WorkQueue stream permits ONE consumer per filter subject** | Every worker for a family shares ONE durable name; NATS distributes between them. A per-instance durable is rejected at startup. Recorded in `02-CONTRACTS.md` §2 and encoded in `ConsumerConfig`'s doc comment. |
+| **`Nak()` redelivers IMMEDIATELY** | The consumer's `BackOff` governs `ack_wait` expiry, not an explicit nak. A failing job spun as fast as the consumer could loop — **measured at 0.05s against a 30s first step** — burning all four attempts in milliseconds. Now `NakWithDelay`, and the test asserts the elapsed time: **30.0066772s**. |
+
+### Traps hit in Phase 6
+
+| Trap | What happened |
+|---|---|
+| **The store invented columns** | `source_kind`, `families`, `requested_by`, `family` on engine_runs — none existed. The schema SSOT wins: the store was rewritten against `triggered_by`/`bom_types`/`engines_requested`, and the two genuinely-missing columns (`scans.source_kind`, `engine_runs.error_code/message`) were added by migration AND recorded in `01-DATA-MODEL.md`. |
+| **Fan-out published ZERO jobs, silently** | Dropping the non-existent `family` column left `run.Family` empty, so every job failed validation and was skipped. The scan sat at `running` until the reaper would have timed it out half an hour later. The family is now derived from the registry, and a skipped job logs at ERROR saying exactly that consequence. |
+| **The reaper could not read anything** | It used `pool.Raw()` across tenants, and RLS failed closed with `unrecognized configuration parameter` — correctly. Fixed with narrow `SECURITY DEFINER` functions (`migrations/scan/0005`), the same pattern Phase 3 established: no parameters, one status transition, ids only. |
+| **`…` is three bytes** | Event-message truncation produced 202 bytes against a 200-byte limit, because `len()` counts bytes and U+2026 encodes as three. Same class as the Phase 5 path-truncation bug. |
+| **A `continue` inside an inner range does nothing** | The reaper's "skip if still running" guard was a no-op, which would have derived a FAILED status for a scan whose engines were still working. |
+| **NOT NULL array columns** | A nil Go slice becomes SQL NULL, and a NULL insert does not use the `'{}'` default. An engine that covered no ecosystems failed the write instead of storing an empty array. |
+
+### Known debt from Phase 6
+
+- **No engine adapters yet.** The mock engine (`workers/_mock`) implements the
+  real worker contract — manifest idempotency check included — so the machinery
+  is exercised the way a real engine will exercise it. Phase 7 adds the real ones.
+- **`engine_policy` is a table with no reader.** The migration and the SSOT entry
+  exist; `Registry.Resolve` takes overrides as a parameter but nothing loads them
+  from the table yet. Per-tenant engine selection is a Phase 7 wiring task.
+- **The WebSocket has no automated test.** Snapshot-on-connect and the
+  event stream are implemented and manually exercised; a test needs a websocket
+  client harness. The property that matters — the database is authoritative and a
+  reconnect is immediately correct — is covered by the pipeline test polling
+  Postgres rather than the stream.
+- **`argv_redacted` is stored but nothing redacts it yet.** The fetcher is the
+  only component holding a credential and it does not put one in argv, so there
+  is nothing to redact today. Phase 7 must not change that.
+
+---
+
 ## Session log
+
+### 2026-08-17 (h) — Phase 6 implemented
+
+`task verify` green (exit 0), 24 packages, lint clean.
+
+Orchestration complete: the three envelopes with generated JSON Schemas, the
+JetStream topology, engine resolution with a 422 that lists **every** offending
+pair, fan-out after a single pinned fetch, mechanical status derivation, the
+advisory-lock reaper, and WebSocket progress with snapshot-on-connect.
+
+**The full pipeline is an automated test, not a manual checklist**: create scan →
+fetch result → fan-out → worker consumes → result → status derived. It runs
+against real Postgres and real NATS every time.
+
+Six defects were found by running it. The most instructive: fan-out published
+**zero jobs, silently**, because a removed column left the family empty and
+every job failed validation. Nothing errored; the scan simply sat at `running`.
+That path now logs at ERROR and names the consequence.
+
+**Next session:** Phase 7 (`docs/phases/PHASE-07-sbom-adapters.md`) — syft,
+trivy-fs, grype, osv-scanner, dependency-check. Note that `unavailable` is a
+recorded status, never a scan failure, and that a worker's FIRST action is the
+manifest HEAD.
 
 ### 2026-08-16 (g) — Phase 5 implemented
 
