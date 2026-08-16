@@ -15,7 +15,8 @@ import (
 //
 // This service's surface is defined in docs/02-CONTRACTS.md §8. Add routes as
 // the owning phase implements them; do not invent endpoints here.
-func registerRoutes(mux *http.ServeMux) {
+func registerRoutes(mux *http.ServeMux, d *deps) {
 	// Phase {{.Phase}} adds this service's real routes.
 	// Health endpoints (/healthz, /readyz) are mounted separately in main.go.
+	_, _ = mux, d
 }

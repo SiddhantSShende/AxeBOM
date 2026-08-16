@@ -36,6 +36,7 @@ type Service struct {
 	Redis    Redis
 	S3       S3
 	OTel     OTel
+	Auth     Auth
 }
 
 // Postgres carries TWO identities, and the separation is load-bearing.
@@ -112,6 +113,28 @@ type OTel struct {
 	Enabled   bool
 }
 
+// Auth configures identity. Only the auth service consumes all of it; the
+// gateway needs the JWT fields to verify tokens it forwards.
+type Auth struct {
+	// JWTSigningKey is the HMAC key. Shared by auth (signs) and gateway
+	// (verifies), which is why it lives in the common config rather than one
+	// service's. Minimum length is enforced by auth.NewIssuer, not here — a
+	// config package should not own a cryptographic rule.
+	JWTSigningKey Secret
+	JWTIssuer     string
+	AccessTTL     time.Duration
+	RefreshTTL    time.Duration
+
+	GitHubClientID     string
+	GitHubClientSecret Secret
+	GitHubRedirectURL  string
+
+	// FrontendURL is where the OAuth callback lands the browser. Empty means
+	// the callback answers with JSON instead of redirecting, which is what
+	// integration tests want.
+	FrontendURL string
+}
+
 // LoadService reads the shared configuration for a named service.
 //
 // HTTP and metrics ports default per service so `task dev` brings up all
@@ -163,6 +186,19 @@ func LoadService(name string) (*Service, error) {
 			Endpoint:  l.StringOr("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 			Namespace: l.StringOr("OTEL_SERVICE_NAMESPACE", "encorebom"),
 		},
+		Auth: Auth{
+			JWTIssuer: l.StringOr("JWT_ISSUER", "encorebom"),
+			// 15 minutes: long enough that clients are not refreshing
+			// constantly, short enough that a stolen access token is stale
+			// before it is useful. Revocation is by refresh family, so the
+			// access TTL is the real exposure window.
+			AccessTTL:  l.Duration("JWT_ACCESS_TTL", 15*time.Minute),
+			RefreshTTL: l.Duration("JWT_REFRESH_TTL", 30*24*time.Hour),
+
+			GitHubClientID:    l.StringOr("GITHUB_CLIENT_ID", ""),
+			GitHubRedirectURL: l.StringOr("GITHUB_REDIRECT_URL", ""),
+			FrontendURL:       l.StringOr("FRONTEND_URL", ""),
+		},
 	}
 	svc.OTel.Enabled = svc.OTel.Endpoint != ""
 
@@ -174,12 +210,20 @@ func LoadService(name string) (*Service, error) {
 		svc.Postgres.AppPassword = l.Secret("POSTGRES_APP_PASSWORD")
 		svc.S3.AccessKey = l.Secret("S3_ACCESS_KEY")
 		svc.S3.SecretKey = l.Secret("S3_SECRET_KEY")
+		// A default signing key in production means anyone who has read this
+		// repository can mint a token for any tenant. There is no fallback.
+		svc.Auth.JWTSigningKey = l.Secret("JWT_SIGNING_KEY")
 	} else {
 		svc.Postgres.Password = l.SecretOr("POSTGRES_PASSWORD", "encorebom")
 		svc.Postgres.AppPassword = l.SecretOr("POSTGRES_APP_PASSWORD", "encorebom_app")
 		svc.S3.AccessKey = l.SecretOr("S3_ACCESS_KEY", "minioadmin")
 		svc.S3.SecretKey = l.SecretOr("S3_SECRET_KEY", "minioadmin")
+		// The name states what it is, so a value found in a running process
+		// cannot be mistaken for a real key.
+		svc.Auth.JWTSigningKey = l.SecretOr("JWT_SIGNING_KEY",
+			"dev-only-insecure-signing-key-do-not-use-in-production")
 	}
+	svc.Auth.GitHubClientSecret = l.SecretOr("GITHUB_CLIENT_SECRET", "")
 
 	if err := l.Err(); err != nil {
 		return nil, err

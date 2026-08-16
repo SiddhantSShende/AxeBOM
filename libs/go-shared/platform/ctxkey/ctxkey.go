@@ -20,6 +20,7 @@ const (
 	tenantID
 	userID
 	role
+	sessionID
 )
 
 // WithRequestID attaches a request id.
@@ -67,6 +68,18 @@ func WithRole(ctx context.Context, r string) context.Context {
 
 // Role returns the caller's role, or "".
 func Role(ctx context.Context) string { return str(ctx, role) }
+
+// WithSessionID attaches the session the access token was minted from.
+//
+// Logout needs it: revoking "the current session" requires knowing which one
+// that is, and asking the client to name it would let any caller revoke
+// somebody else's.
+func WithSessionID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, sessionID, id)
+}
+
+// SessionID returns the session id, or "".
+func SessionID(ctx context.Context) string { return str(ctx, sessionID) }
 
 func str(ctx context.Context, k key) string {
 	if v, ok := ctx.Value(k).(string); ok {

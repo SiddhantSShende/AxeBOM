@@ -66,12 +66,25 @@ func run() error {
 
 	metrics := obs.NewMetrics(serviceName)
 
+	// Dependencies are built ONCE, here, and handed to both hooks.
+	//
+	// The alternative — each hook opening its own pool, or a package-level
+	// singleton — gives a service two connection pools and no single place
+	// where startup can fail cleanly. buildDeps returns an error so a database
+	// that is not reachable stops the process instead of producing an instance
+	// that serves 500s and passes liveness.
+	d, err := buildDeps(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("build dependencies: %w", err)
+	}
+	defer d.Close()
+
 	checker := health.New(serviceName, version)
-	registerHealthChecks(checker)
+	registerHealthChecks(checker, d)
 
 	mux := http.NewServeMux()
 	checker.Mount(mux)
-	registerRoutes(mux)
+	registerRoutes(mux, d)
 
 	// Catch-all. Without it, ServeMux answers unmatched routes with its own
 	// text/plain "404 page not found", which breaks the error contract in
@@ -79,7 +92,12 @@ func run() error {
 	// from routing 404s — an oracle for probing which ids exist.
 	mux.HandleFunc("/", httpx.NotFound)
 
-	handler := httpx.Chain(mux, httpx.Default(metrics, cfg.WriteTimeout)...)
+	// The shared chain first (request id, recovery, logging, security headers,
+	// metrics), then anything this service adds. Order matters: a middleware
+	// appended here runs INSIDE the shared ones, so a panic it causes is still
+	// recovered and its requests are still logged with a request id.
+	chain := append(httpx.Default(metrics, cfg.WriteTimeout), serviceMiddleware(d)...)
+	handler := httpx.Chain(mux, chain...)
 
 	return httpx.Run(ctx, httpx.ServerConfig{
 		Addr:          fmt.Sprintf(":%d", cfg.HTTPPort),

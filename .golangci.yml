@@ -38,19 +38,35 @@ linters:
         # ------------------------------------------------------------------
         # THE SERVICE BOUNDARY.
         #
-        # A service may import libs/** and proto/** and nothing else from this
-        # module. Cross-service communication goes through generated clients
-        # over gRPC or the event bus — never a direct Go import.
+        # A service may import libs/**, proto/**, and ITS OWN packages —
+        # nothing else from this module. Cross-service communication goes
+        # through generated clients over gRPC or the event bus, never a direct
+        # Go import.
         #
-        # Go's own `internal/` rule already blocks services/a from importing
-        # services/b/internal/... . This rule closes the remaining gap: a
-        # non-internal package under another service.
+        # ONE RULE PER SERVICE, because depguard matches import paths by prefix
+        # and has no notion of "the package I am in". Each rule scopes `files`
+        # to one service's tree, allows that service's own prefix, and denies
+        # every other service.
+        #
+        # Two defences overlap here, and both are wanted:
+        #
+        #   Go's own `internal/` rule already makes services/a/internal/...
+        #   unimportable from services/b. That is compiler-enforced and cannot
+        #   be configured away.
+        #
+        #   These rules close the remaining gap — a NON-internal package under
+        #   another service — and fail the build with an explanation rather
+        #   than a terse compiler error.
+        #
+        # tools/gen-service/boundaries_test.go asserts there is a rule for
+        # every registered service, so adding a service without its rule fails
+        # the build instead of silently losing the guard.
         # ------------------------------------------------------------------
-        service-boundaries:
+        service-boundaries-gateway:
           list-mode: lax
-          files:
-            - "**/services/**"
-          deny:
+          files: ["**/services/gateway/**"]
+          allow: [github.com/encorebom/encorebom/services/gateway]
+          deny: &cross-service-deny
             - pkg: github.com/encorebom/encorebom/services
               desc: >-
                 Services must not import each other. Cross-service calls go
@@ -58,6 +74,48 @@ linters:
                 (libs/go-shared/bus). See docs/ADR/0001 and CLAUDE.md
                 invariant 11. If you need a type from another service, it
                 belongs in libs/go-shared or proto/.
+
+        service-boundaries-auth:
+          list-mode: lax
+          files: ["**/services/auth/**"]
+          allow: [github.com/encorebom/encorebom/services/auth]
+          deny: *cross-service-deny
+
+        service-boundaries-project:
+          list-mode: lax
+          files: ["**/services/project/**"]
+          allow: [github.com/encorebom/encorebom/services/project]
+          deny: *cross-service-deny
+
+        service-boundaries-scan-orchestrator:
+          list-mode: lax
+          files: ["**/services/scan-orchestrator/**"]
+          allow: [github.com/encorebom/encorebom/services/scan-orchestrator]
+          deny: *cross-service-deny
+
+        service-boundaries-report:
+          list-mode: lax
+          files: ["**/services/report/**"]
+          allow: [github.com/encorebom/encorebom/services/report]
+          deny: *cross-service-deny
+
+        service-boundaries-campaign:
+          list-mode: lax
+          files: ["**/services/campaign/**"]
+          allow: [github.com/encorebom/encorebom/services/campaign]
+          deny: *cross-service-deny
+
+        service-boundaries-comment:
+          list-mode: lax
+          files: ["**/services/comment/**"]
+          allow: [github.com/encorebom/encorebom/services/comment]
+          deny: *cross-service-deny
+
+        service-boundaries-notification:
+          list-mode: lax
+          files: ["**/services/notification/**"]
+          allow: [github.com/encorebom/encorebom/services/notification]
+          deny: *cross-service-deny
 
         # ------------------------------------------------------------------
         # Workers are scan engines. They run untrusted code in a sandbox and

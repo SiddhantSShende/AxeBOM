@@ -16,9 +16,9 @@ import (
 // Nothing here affects /healthz. Liveness performs no I/O by design: a database
 // blip that fails liveness gets the entire fleet killed and turns a short
 // outage into a long one.
-func registerHealthChecks(c *health.Checker) {
+func registerHealthChecks(c *health.Checker, d *deps) {
 	// Phase 1 adds: c.Register("postgres", db.Ping)
 	// Phase 6 adds: c.Register("nats", bus.Ping)
 	//               c.RegisterOptional("s3", blob.Ping)
-	_ = c
+	_, _ = c, d
 }

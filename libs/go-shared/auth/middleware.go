@@ -49,6 +49,7 @@ func Authenticate(issuer *Issuer, now func() time.Time) func(http.Handler) http.
 			ctx = ctxkey.WithTenantID(ctx, claims.TenantID)
 			ctx = ctxkey.WithUserID(ctx, claims.Subject)
 			ctx = ctxkey.WithRole(ctx, string(claims.Role))
+			ctx = ctxkey.WithSessionID(ctx, claims.SessionID)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

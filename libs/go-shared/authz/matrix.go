@@ -63,6 +63,22 @@ func (r Role) rank() int {
 	}
 }
 
+// RoleAtLeast reports whether actor holds at least the privilege of want.
+//
+// This is NOT a substitute for Allow — the matrix decides permissions, and
+// privilege is deliberately not a single ladder for every action. It exists
+// for the one question a matrix cell cannot express: may this actor grant THIS
+// role to somebody else?
+//
+// Without that check an Admin invites a new Owner, signs in as them, and has
+// escalated. Any endpoint that assigns a role must call it.
+//
+// An unknown role ranks 0, so it is never "at least" anything: unparseable
+// input fails closed.
+func RoleAtLeast(actor, want Role) bool {
+	return actor.rank() >= want.rank() && actor.rank() > 0
+}
+
 // Resource is a protected noun.
 type Resource string
 

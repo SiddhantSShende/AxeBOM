@@ -81,7 +81,15 @@ tasks:
   lint:
     desc: Static analysis across Go, Python and TypeScript
     cmds:
-      - golangci-lint run ./...
+      # `go install` puts binaries in GOPATH/bin, which is on PATH in some
+      # shells and not others — PowerShell picks up the user PATH, a fresh Git
+      # Bash may not. Resolving it at run time means `task verify` behaves the
+      # same everywhere instead of failing with "executable file not found" in
+      # one terminal and passing in another.
+      #
+      # Forward slashes deliberately: task's embedded shell accepts them on
+      # Windows, and backslashes from `go env GOPATH` would be eaten as escapes.
+      - '"$(go env GOPATH)/bin/golangci-lint" run ./...'
       - cmd: '{{.PY}} -m ruff check libs/py-shared'
         ignore_error: true
       - cmd: npm --prefix frontend run lint

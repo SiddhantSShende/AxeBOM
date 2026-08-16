@@ -73,6 +73,8 @@ var files = []fileSpec{
 		dest: func(s serviceSpec) string { return filepath.Join("services", s.Name, "routes.go") }},
 	{tmpl: "health.go.tmpl", gofmt: true, preserve: true,
 		dest: func(s serviceSpec) string { return filepath.Join("services", s.Name, "health.go") }},
+	{tmpl: "deps.go.tmpl", gofmt: true, preserve: true,
+		dest: func(s serviceSpec) string { return filepath.Join("services", s.Name, "deps.go") }},
 	{tmpl: "Dockerfile.tmpl",
 		dest: func(s serviceSpec) string { return filepath.Join("deploy", "docker", "Dockerfile."+s.Name) }},
 }
