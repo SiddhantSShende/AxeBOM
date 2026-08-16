@@ -4,6 +4,10 @@
 # the normalizer's correctness guarantee rests on golden-file diffs. If Git
 # rewrites CRLF into a .golden file, every golden test fails for a reason that
 # has nothing to do with the code. That failure mode wastes entire sessions.
+#
+# NOTE: git requires ONE pattern per line. `*.png *.jpg binary` is silently
+# invalid ("not a valid attribute name") — it does not error the commit, it
+# just does not apply. Keep one pattern per line.
 
 # Normalize everything to LF in the repository.
 * text=auto eol=lf
@@ -11,8 +15,9 @@
 # --- Golden files: byte-exact, never touched, never diffed as text ----------
 # These are the guardrail against silently wrong BOM output. Any transformation
 # invalidates them.
-*.golden        -text -diff
+*.golden                 -text -diff
 fixtures/**/expected/**  -text -diff
+fixtures/**/raw/**       -text -diff
 
 # --- Generated / standards artifacts: exact bytes matter -------------------
 *.cdx.json      -text
@@ -23,24 +28,37 @@ fixtures/**/expected/**  -text -diff
 # --- Binary ----------------------------------------------------------------
 *.pdf           binary
 *.xlsx          binary
-*.png  *.jpg  *.jpeg  *.gif  *.ico  *.webp   binary
-*.zst  *.gz  *.zip  *.tar                    binary
-*.db  *.sqlite  *.sqlite3                    binary
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.webp          binary
+*.zst           binary
+*.gz            binary
+*.zip           binary
+*.tar           binary
+*.db            binary
+*.sqlite        binary
+*.sqlite3       binary
 
-# --- Scripts that must stay LF even if checked out on Windows --------------
+# --- Scripts and config that must stay LF even on Windows checkout ---------
 *.sh            text eol=lf
-Dockerfile*     text eol=lf
-*.yml  *.yaml   text eol=lf
+Dockerfile      text eol=lf
+Dockerfile.*    text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
 
 # --- Windows-only files keep CRLF ------------------------------------------
 *.ps1           text eol=crlf
-*.bat  *.cmd    text eol=crlf
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
 
 # --- Language hints for diffs ----------------------------------------------
 *.go            text diff=golang
 *.py            text diff=python
 *.md            text diff=markdown
 
-# --- Lockfiles: keep out of review diffs, still versioned ------------------
-go.sum                  -diff
+# --- Lockfiles: versioned, but kept out of review diffs --------------------
+go.sum                      -diff
 frontend/package-lock.json  -diff
