@@ -62,11 +62,13 @@ The unit is **(tool, mode)**, not tool — see `02-CONTRACTS.md §7`.
 
 | engine_id | Upstream | Mode | Role |
 |---|---|---|---|
-| `cbomkit-theia` | **`PQCA/cbomkit-theia`** | binary | **Primary CBOM discovery** — directories and container images; certs, keys, secrets, `java.security` |
-| `cbomkit` | **`PQCA/cbomkit`** | service, optional | Managed clone-and-scan with a viewer |
-| `sonar-cryptography` | **`PQCA/sonar-cryptography`** | **deferred** | Deepest Java/Python source crypto inventory — but see below |
+| `cbomkit-theia` | **`cbomkit/cbomkit-theia`** | **container only** | **Primary CBOM discovery** — directories and container images; certs, keys, secrets, `java.security` |
+| `cbomkit` | **`cbomkit/cbomkit`** | service, optional | Managed clone-and-scan with a viewer |
+| `sonar-cryptography` | **`cbomkit/sonar-cryptography`** | **deferred** | Deepest Java/Python source crypto inventory — but see below |
 
-> **The draft plan had these under a `cbomkit/` GitHub org. They are canonically under `PQCA/`** (Post-Quantum Cryptography Alliance, Linux Foundation), following IBM's donation of the toolset. Using the wrong org fails at acquisition.
+> **CORRECTION (Phase 2, verified against the network).** An earlier planning note claimed these lived under `PQCA/` following the Post-Quantum Cryptography Alliance donation. They do not. `github.com/PQCA/*` returns **HTTP 301** and redirects to `github.com/cbomkit/*`, and `ghcr.io/cbomkit/cbomkit-theia` resolves while `ghcr.io/pqca/cbomkit-theia` 404s. The canonical org is **`cbomkit`**, which is what the original draft plan said.
+>
+> **`cbomkit-theia` ships NO binary assets** — v1.1.2 is a source-only release. The container is the only distributed artifact, so container mode is not a preference for this engine, it is the only option.
 
 > **`sonar-cryptography` is a SonarQube plugin, not a CLI.** It requires a running SonarQube server — a hidden platform dependency that adds a heavyweight Java service to the stack. Deferred past MVP. `cbomkit-theia` covers directory and image discovery without it.
 

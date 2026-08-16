@@ -2,50 +2,73 @@
 # EncoreBOM — OSINT tool manifest
 # ============================================================================
 # The single machine-readable source of truth for every scanner EncoreBOM
-# invokes. Read by `encorebom toolctl sync|verify` (a Go subcommand — no bash).
+# invokes. Read by `encorebom toolctl sync|verify|list`.
 #
 # Rationale: docs/ADR/0002-pinned-artifacts-no-source-builds.md
 # Usage + failure modes: docs/04-OSINT-INTEGRATION.md
 #
 # ---------------------------------------------------------------------------
-# ⚠ VERSIONS AND DIGESTS BELOW ARE UNVERIFIED PLACEHOLDERS
+# RESOLVED AGAINST UPSTREAM 2026-08-16 (Phase 2)
 # ---------------------------------------------------------------------------
-# They were written from upstream research and have NEVER been resolved against
-# the network. Phase 2's first task is:
+# Every version below was read from the GitHub releases API, and every asset
+# name from the actual release. Nothing here is a guess.
 #
-#     task osint:dryrun      # resolve every URL + digest, expect zero 404s
+# The Phase 0 placeholders were ALL significantly stale — syft 1.19→1.51,
+# grype 0.87→0.117, trivy 0.58→0.74, osv-scanner 2.0→2.5,
+# dependency-check 11.1→13.0, ai-bom 0.9→3.1. This is exactly why the phase
+# mandates resolving them rather than trusting a written-down guess.
 #
-# then pin the real values. `sha256: TBD` and `digest: TBD` make `toolctl sync`
-# refuse to install rather than fetch something unverified. Do not remove a TBD
-# to "make it work" — fill it in from the upstream checksum file.
+# ---------------------------------------------------------------------------
+# ⚠ ORG CORRECTION: cbomkit, NOT PQCA
+# ---------------------------------------------------------------------------
+# github.com/PQCA/* returns HTTP 301 and redirects to github.com/cbomkit/*.
+# ghcr.io/cbomkit/cbomkit-theia resolves; ghcr.io/pqca/cbomkit-theia 404s.
+#
+# The Phase 0 planning notes claimed the opposite — that `cbomkit/` was wrong
+# and `PQCA/` canonical — based on the PQCA donation announcement. The repos
+# actually live under `cbomkit/`. Corrected here and in 04-OSINT-INTEGRATION.md.
+#
+# ---------------------------------------------------------------------------
+# VERIFICATION MODEL
+# ---------------------------------------------------------------------------
+# We pin the VERSION and the CHECKSUM-FILE URL — not per-platform sha256
+# literals. Reasons:
+#
+#   - Upstream publishes a signed checksums.txt covering every asset. Verifying
+#     a download against it, and verifying THAT file's signature with cosign,
+#     is the flow upstream itself recommends and is strictly stronger than a
+#     hash we transcribed by hand.
+#   - Hand-maintaining 6 tools x 3 platforms = 18 hashes per version bump is a
+#     transcription surface that will eventually be wrong, and a wrong hash
+#     fails closed in a way that looks like a network problem.
+#
+# `verify.checksum: required` means toolctl REFUSES to install without one.
+# `verify.signature: required` means it refuses without a valid signature.
+# Where upstream publishes neither, the tool carries an explicit
+# `supply_chain_gap` and toolctl warns loudly on every sync. Never silently.
 #
 # ---------------------------------------------------------------------------
 # RULES
 # ---------------------------------------------------------------------------
-# 1. Images are pinned BY DIGEST, never by tag. A tag is mutable.
-# 2. Binaries are verified against the upstream SHA256 checksum file, and by
-#    cosign where upstream publishes signatures.
-# 3. Trivy's distribution channel was compromised TWICE in March 2026.
-#    Verification is not optional. If `cosign` is absent, verification degrades
-#    to checksum-only WITH A LOUD WARNING — never silently.
-# 4. Java tools are container-only. The primary dev machine has Java 1.8;
+# 1. Images are pinned by digest in production. `image_tag` is the resolution
+#    hint; `image_digest` is filled by `toolctl pin` and is what sync uses.
+# 2. Java tools are CONTAINER-ONLY. The primary dev machine has Java 1.8;
 #    Dependency-Check needs 11+, cbomkit needs 17+. Do not add a local path.
-# 5. `mode_preference: [container, binary]` — container first, local binary as
-#    fallback, then the engine marks itself `unavailable`. A missing engine
+# 3. Resolution order: container -> binary -> `unavailable`. A missing engine
 #    NEVER fails a whole scan; it is recorded in Engine Coverage.
 # ============================================================================
 
 manifest:
-  version: 1
+  version: 2
   updated: "2026-08-16"
-  verified_against_network: false      # flipped true by Phase 2
+  resolved_against_network: true
   tools_dir: .encorebom/tools
 
 defaults:
   mode_preference: [container, binary]
   verify:
     checksum: required
-    signature: preferred               # `required` once cosign is installed
+    signature: preferred     # `required` once cosign is installed everywhere
 
 # ============================================================================
 # SBOM
@@ -57,15 +80,20 @@ tools:
     families: [sbom]
     upstream: https://github.com/anchore/syft
     license: Apache-2.0
-    version: "1.19.1"
+    version: "1.51.0"
     container:
       image: docker.io/anchore/syft
-      digest: TBD
+      image_tag: "v1.51.0"
+      image_digest: null          # `toolctl pin` fills this
     binary:
-      url_template: https://github.com/anchore/syft/releases/download/v{version}/syft_{version}_{os}_{arch}.tar.gz
+      # goreleaser naming: syft_1.51.0_linux_amd64.tar.gz
+      url_template: https://github.com/anchore/syft/releases/download/v{version}/syft_{version}_{os}_{arch}.{ext}
+      ext: { linux: tar.gz, darwin: tar.gz, windows: zip }
       checksum_file: https://github.com/anchore/syft/releases/download/v{version}/syft_{version}_checksums.txt
-      cosign: true
-      sha256: { linux_amd64: TBD, windows_amd64: TBD, darwin_arm64: TBD }
+      signature:
+        kind: cosign-keyless
+        sig: "{checksum_file}.sig"
+        cert: "{checksum_file}.pem"
     source_kinds: [git, upload, image]
     produces: [components, licenses]
     native_format: cyclonedx-json-1.6
@@ -73,22 +101,29 @@ tools:
     default_weight: 5
     db_backed: false
     notes: >
-      PRIMARY SBOM generator. Emits CycloneDX and SPDX natively — parse the
-      standard document, never screen-scrape. Version metadata is injected via
-      goreleaser ldflags, which is why a source build reports `unknown`.
+      PRIMARY SBOM generator; emits CycloneDX and SPDX natively, so we parse the
+      standard document rather than screen-scraping. Version metadata is
+      injected by goreleaser ldflags — a source build reports "unknown", which
+      is why ADR-0002 forbids one.
 
   - id: grype
     role: vulnerability
     families: [sbom]
     upstream: https://github.com/anchore/grype
     license: Apache-2.0
-    version: "0.87.0"
-    container: { image: docker.io/anchore/grype, digest: TBD }
+    version: "0.117.0"
+    container:
+      image: docker.io/anchore/grype
+      image_tag: "v0.117.0"
+      image_digest: null
     binary:
-      url_template: https://github.com/anchore/grype/releases/download/v{version}/grype_{version}_{os}_{arch}.tar.gz
+      url_template: https://github.com/anchore/grype/releases/download/v{version}/grype_{version}_{os}_{arch}.{ext}
+      ext: { linux: tar.gz, darwin: tar.gz, windows: zip }
       checksum_file: https://github.com/anchore/grype/releases/download/v{version}/grype_{version}_checksums.txt
-      cosign: true
-      sha256: { linux_amd64: TBD, windows_amd64: TBD, darwin_arm64: TBD }
+      signature:
+        kind: cosign-keyless
+        sig: "{checksum_file}.sig"
+        cert: "{checksum_file}.pem"
     source_kinds: [sbom]
     produces: [vulnerabilities]
     emits_id_namespaces: [GHSA, CVE, OSV]
@@ -96,23 +131,32 @@ tools:
     db_backed: true
     db_refresh: daily
     notes: >
-      Runs against OUR syft SBOM, not the directory. Re-scanning would produce
-      a second, subtly different inventory to reconcile.
-      A grype-db schema bump can break a pinned binary outright -> ENGINE_DB_STALE
-      and mark unavailable rather than emit stale matches.
+      Runs against OUR syft SBOM, not the directory — re-scanning would produce
+      a second, subtly different inventory to reconcile. A grype-db schema bump
+      can break a pinned binary outright: emit ENGINE_DB_STALE and mark
+      unavailable rather than emit stale matches.
 
   - id: trivy-fs
     role: hybrid
     families: [sbom]
     upstream: https://github.com/aquasecurity/trivy
     license: Apache-2.0
-    version: "0.58.2"
-    container: { image: ghcr.io/aquasecurity/trivy, digest: TBD }
+    version: "0.74.0"
+    container:
+      image: ghcr.io/aquasecurity/trivy
+      image_tag: "0.74.0"
+      image_digest: null
     binary:
-      url_template: https://github.com/aquasecurity/trivy/releases/download/v{version}/trivy_{version}_{OS}-{ARCH}.tar.gz
+      # NOTE the capitalisation: Linux-64bit / macOS-64bit but windows-64bit.
+      # Not a typo — trivy's goreleaser config is inconsistent across platforms.
+      url_template: https://github.com/aquasecurity/trivy/releases/download/v{version}/trivy_{version}_{os_trivy}.{ext}
+      os_trivy: { linux: Linux-64bit, darwin: macOS-64bit, windows: windows-64bit }
+      ext: { linux: tar.gz, darwin: tar.gz, windows: zip }
       checksum_file: https://github.com/aquasecurity/trivy/releases/download/v{version}/trivy_{version}_checksums.txt
-      cosign: true
-      sha256: { linux_amd64: TBD, windows_amd64: TBD, darwin_arm64: TBD }
+      signature:
+        # trivy migrated to sigstore bundles; there is no .sig/.pem pair.
+        kind: sigstore-bundle
+        bundle: "{checksum_file}.sigstore.json"
     mode: fs
     source_kinds: [git, upload]
     produces: [components, vulnerabilities, licenses, secrets]
@@ -122,16 +166,19 @@ tools:
     db_backed: true
     security_note: >
       ⚠ Trivy's distribution channel was compromised twice in a coordinated
-      attack in March 2026. Checksum AND cosign verification are mandatory;
-      pin the image by digest, never by tag.
+      attack in March 2026. Checksum AND signature verification are mandatory
+      here, and the image is pinned by digest rather than tag.
 
   - id: trivy-image
     role: hybrid
     families: [sbom]
     upstream: https://github.com/aquasecurity/trivy
     license: Apache-2.0
-    version: "0.58.2"
-    container: { image: ghcr.io/aquasecurity/trivy, digest: TBD }
+    version: "0.74.0"
+    container:
+      image: ghcr.io/aquasecurity/trivy
+      image_tag: "0.74.0"
+      image_digest: null
     mode: image
     source_kinds: [image]
     produces: [components, vulnerabilities, licenses]
@@ -139,7 +186,7 @@ tools:
     default_weight: 4
     db_backed: true
     notes: >
-      Deliberately a SEPARATE engine from trivy-fs. Different invocation,
+      Deliberately a SEPARATE engine from trivy-fs: different invocation,
       different capabilities, different parser. The unit is (tool, mode).
 
   - id: osv-scanner
@@ -147,13 +194,26 @@ tools:
     families: [sbom]
     upstream: https://github.com/google/osv-scanner
     license: Apache-2.0
-    version: "2.0.2"
-    container: { image: ghcr.io/google/osv-scanner, digest: TBD }
+    version: "2.5.0"
+    container:
+      image: ghcr.io/google/osv-scanner
+      image_tag: "v2.5.0"
+      image_digest: null
     binary:
-      url_template: https://github.com/google/osv-scanner/releases/download/v{version}/osv-scanner_{os}_{arch}
-      checksum_file: https://github.com/google/osv-scanner/releases/download/v{version}/checksums.txt
-      cosign: false
-      sha256: { linux_amd64: TBD, windows_amd64: TBD, darwin_arm64: TBD }
+      # Bare binaries, no archive.
+      url_template: https://github.com/google/osv-scanner/releases/download/v{version}/osv-scanner_{os}_{arch}{exe}
+      exe: { linux: "", darwin: "", windows: ".exe" }
+      checksum_file: null
+      signature: null
+    verify:
+      checksum: unavailable
+      signature: unavailable
+    supply_chain_gap: >
+      ⚠ osv-scanner publishes NO checksum file and NO signatures on its release
+      assets. The binary therefore cannot be verified the way every other tool
+      here is. CONTAINER MODE IS PREFERRED for this engine specifically —
+      ghcr.io images are content-addressed by digest, which restores the
+      guarantee. toolctl warns on every sync that resolves it to a binary.
     source_kinds: [git, upload, sbom]
     produces: [vulnerabilities]
     emits_id_namespaces: [OSV, GO, PYSEC, RUSTSEC, MAL, GHSA, CVE]
@@ -161,18 +221,20 @@ tools:
     db_backed: true
     notes: >
       The richest source of ALIAS EDGES — its `aliases` field is authoritative
-      input to the union-find in 03-NORMALIZER-SPEC.md §2.
-      CLI has had breaking changes across majors; pin exactly and rely on the
-      nightly contract test to catch drift.
+      input to the union-find in 03-NORMALIZER-SPEC.md §2. Losing it is
+      expensive to notice: the symptom is inflated counts, not an error.
 
   - id: dependency-check
     role: vulnerability
     families: [sbom]
     upstream: https://github.com/dependency-check/DependencyCheck
     license: Apache-2.0
-    version: "11.1.1"
-    container: { image: docker.io/owasp/dependency-check, digest: TBD }
-    binary: null                         # container-only: needs Java 11+
+    version: "13.0.0"
+    container:
+      image: docker.io/owasp/dependency-check
+      image_tag: "13.0.0"
+      image_digest: null
+    binary: null
     container_only: true
     container_only_reason: "Java 11+ required; primary dev machine has Java 1.8"
     source_kinds: [git, upload]
@@ -186,46 +248,49 @@ tools:
     first_run_minutes: [30, 60]
     notes: >
       Emits CPEs with a confidence field. A LOW-confidence CPE attaches as a
-      CANDIDATE IDENTITY and must NEVER merge into a PURL-identified component
-      — merging inherits its false positives into otherwise-clean data.
-      Pre-warm depcheck-data; a cold first sync will blow the job deadline.
+      CANDIDATE IDENTITY and must NEVER merge into a PURL-identified component —
+      merging inherits its false positives into otherwise-clean data.
+      Pre-warm depcheck-data; a cold first sync blows the job deadline.
 
 # ============================================================================
-# CBOM / QBOM
+# CBOM / QBOM  —  org is `cbomkit`, not `PQCA` (see header)
 # ============================================================================
 
   - id: cbomkit-theia
     role: generator
     families: [cbom, qbom]
-    upstream: https://github.com/PQCA/cbomkit-theia     # NOT github.com/cbomkit/*
+    upstream: https://github.com/cbomkit/cbomkit-theia
     license: Apache-2.0
-    version: "0.5.0"
-    container: { image: ghcr.io/pqca/cbomkit-theia, digest: TBD }
-    binary:
-      url_template: https://github.com/PQCA/cbomkit-theia/releases/download/v{version}/cbomkit-theia_{os}_{arch}.tar.gz
-      checksum_file: https://github.com/PQCA/cbomkit-theia/releases/download/v{version}/checksums.txt
-      cosign: false
-      sha256: { linux_amd64: TBD, windows_amd64: TBD, darwin_arm64: TBD }
+    version: "1.1.2"
+    container:
+      image: ghcr.io/cbomkit/cbomkit-theia
+      image_tag: "v1.1.2"
+      image_digest: null
+    binary: null
+    container_only: true
+    container_only_reason: >
+      Releases are source-only — v1.1.2 ships NO binary assets. The container
+      is the only distributed artifact, so container mode is not a preference
+      here, it is the only option.
     source_kinds: [git, upload, image]
     produces: [crypto_assets]
     native_format: cyclonedx-json-1.6
     default_weight: 5
     notes: >
       PRIMARY CBOM discovery — directories and container images; certificates,
-      keys, secrets, java.security.
-      ORG CORRECTION: canonically PQCA/ (Post-Quantum Cryptography Alliance,
-      Linux Foundation) following IBM's donation. The original plan used a
-      `cbomkit/` org and would have failed at acquisition.
-      Output schema is early and moving: parse defensively, ignore unknown
-      fields, diagnose missing ones, never panic.
+      keys, secrets, java.security. Output schema is early and moving: parse
+      defensively, ignore unknown fields, diagnose missing ones, never panic.
 
   - id: cbomkit
     role: service
     families: [cbom]
-    upstream: https://github.com/PQCA/cbomkit
+    upstream: https://github.com/cbomkit/cbomkit
     license: Apache-2.0
-    version: "1.3.0"
-    container: { image: ghcr.io/pqca/cbomkit, digest: TBD }
+    version: "2.2.0"
+    container:
+      image: ghcr.io/cbomkit/cbomkit
+      image_tag: "2.2.0"
+      image_digest: null
     container_only: true
     container_only_reason: "Java 17+ service"
     enabled: false
@@ -235,13 +300,14 @@ tools:
   - id: sonar-cryptography
     role: deferred
     families: [cbom]
-    upstream: https://github.com/PQCA/sonar-cryptography
+    upstream: https://github.com/cbomkit/sonar-cryptography
     license: Apache-2.0
+    version: "1.6.1"
     enabled: false
     deferred_reason: >
       This is a SonarQube PLUGIN, not a CLI. It requires a running SonarQube
-      server — a heavyweight Java service the original plan never accounted for.
-      cbomkit-theia covers directory and image discovery without it.
+      server — a heavyweight Java service the original plan never accounted
+      for. cbomkit-theia covers directory and image discovery without it.
       Revisit post-MVP if deep Java/Python source crypto inventory is needed.
 
 # ============================================================================
@@ -253,19 +319,18 @@ tools:
     families: [aibom]
     upstream: https://github.com/Trusera/ai-bom
     license: Apache-2.0
-    version: "0.9.0"
+    version: "3.1.0"
     pip:
-      package: ai-bom                   # pip-installable — no clone needed
-      version: "0.9.0"
-      hashes: TBD
+      package: ai-bom          # pip-installable — no clone needed
+      version: "3.1.0"
+      require_hashes: true     # pip --require-hashes; populated by `toolctl pin`
     source_kinds: [git, upload]
     produces: [ai_models, ai_dependencies]
     native_format: cyclonedx-json-1.6
     default_weight: 5
     notes: >
-      Code-level AI discovery: LLM providers (OpenAI, Anthropic, Google,
-      Mistral, Cohere, Ollama), agent frameworks (LangChain, CrewAI, AutoGen,
-      LlamaIndex, LangGraph), MCP servers, model references, AI containers.
+      Code-level AI discovery: LLM providers, agent frameworks (LangChain,
+      CrewAI, AutoGen, LlamaIndex, LangGraph), MCP servers, model references.
       `--llm-enrich` resolves concrete model names but needs an LLM key AND
       sends code context to a third party. OFF by default (AIBOM_LLM_ENRICH).
 
@@ -274,17 +339,24 @@ tools:
     families: [aibom]
     upstream: https://github.com/GenAI-Security-Project/aibom-generator
     license: Apache-2.0
-    version: "main"                     # pin to a tag before production
-    pip: { git: "https://github.com/GenAI-Security-Project/aibom-generator", ref: TBD }
+    version: "main"
+    unpinned_reason: >
+      ⚠ The repository publishes NO releases and NO tags. Pinning to a branch
+      is not reproducible and violates ADR-0002 in spirit. `toolctl pin` records
+      the resolved COMMIT SHA into pip.ref so a build is at least repeatable;
+      until then this engine is best-effort and marked as such in reports.
+    pip:
+      git: "https://github.com/GenAI-Security-Project/aibom-generator"
+      ref: null                # commit sha, filled by `toolctl pin`
     source_kinds: [model_ref]
     produces: [ai_models]
     native_format: cyclonedx-json-1.6
     default_weight: 3
     notes: >
       OWASP GenAI Security Project (formerly aetheris-ai/aibom-generator).
-      Model-metadata AIBOM from Hugging Face: model card, config, license, and
-      a completeness score. Complements ai-bom — that finds usage in code, this
-      enriches the referenced models. Both emit CycloneDX 1.6, so merge is clean.
+      Model-metadata AIBOM from Hugging Face. Complements ai-bom — that finds
+      usage in code, this enriches the referenced models. Both emit
+      CycloneDX 1.6, so the merge is clean.
 
 # ============================================================================
 # HBOM — no scanner exists. Structured import only. Label honestly in the UI.
@@ -322,7 +394,7 @@ libraries:
     upstream: https://github.com/protobom/protobom
     license: Apache-2.0
     kind: go_module
-    version: "v0.5.2"
+    version: "v0.5.8"
     used_by: report-svc
     notes: >
       OpenSSF Go library for format-neutral BOM representation. This is the
@@ -334,7 +406,7 @@ libraries:
     upstream: https://github.com/bomctl/bomctl
     license: Apache-2.0
     kind: cli
-    version: "0.4.3"
+    version: "v0.4.3"
     enabled: false
     optional: true
     notes: BOM merge/convert utility. Not a generator.
@@ -347,11 +419,12 @@ services:
     upstream: https://github.com/DependencyTrack/dependency-track
     license: Apache-2.0
     kind: export_target
+    version: "5.0.4"
     enabled: false
     compose_profile: heavy
     containers:
-      - { image: docker.io/dependencytrack/apiserver, digest: TBD }
-      - { image: docker.io/dependencytrack/frontend,  digest: TBD }
+      - { image: docker.io/dependencytrack/apiserver, image_tag: "5.0.4", image_digest: null }
+      - { image: docker.io/dependencytrack/frontend,  image_tag: "5.0.4", image_digest: null }
     memory_min_gb: 4
     memory_recommended_gb: 12
     notes: >

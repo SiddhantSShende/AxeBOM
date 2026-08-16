@@ -43,6 +43,7 @@ func init() {
 		{"docs", "Documentation tooling (lint)", 0, runDocs},
 		{"db", "Migrations, reset, seed, RLS verification", 1, runDB},
 		{"profile", "Validate and generate from the CERT-In compliance profile", 1, runProfile},
+		{"toolctl", "Fetch, verify and probe pinned scanner artifacts", 2, runToolctl},
 	}
 }
 
@@ -89,7 +90,6 @@ func usage() {
 		name, summary string
 		phase         int
 	}{
-		{"toolctl", "Fetch and verify pinned scanner artifacts", 2},
 		{"verify", "Verify a report's detached signature", 9},
 	}
 	for _, p := range pending {

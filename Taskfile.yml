@@ -241,17 +241,37 @@ tasks:
     cmds:
       - go run ./cmd/encorebom profile show {{.CLI_ARGS}}
 
-  osint:sync:
-    desc: "[phase 2] Download and verify pinned scanner artifacts"
+  # ================================================================== OSINT
+  osint:list:
+    desc: List every pinned engine, its version and how it resolves
     cmds:
-      - cmd: echo "not implemented until Phase 2"
-      - exit 1
+      - go run ./cmd/encorebom toolctl list
 
   osint:dryrun:
-    desc: "[phase 2] Resolve every pinned URL without downloading"
+    desc: Resolve every pinned URL without downloading — proves the manifest is real
+    # Container is preferred for most engines, so `--force-mode binary` is what
+    # actually exercises the URL TEMPLATES. Both run: one checks what will be
+    # used, the other checks what is declared.
     cmds:
-      - cmd: echo "not implemented until Phase 2 - every version in the manifest is still TBD"
-      - exit 1
+      - go run ./cmd/encorebom toolctl dryrun
+      - go run ./cmd/encorebom toolctl dryrun --force-mode binary
+
+  osint:sync:
+    desc: Download and verify pinned scanner binaries
+    cmds:
+      - go run ./cmd/encorebom toolctl sync
+
+  osint:verify:
+    desc: Probe every engine and report available/unavailable with reasons
+    cmds:
+      - go run ./cmd/encorebom toolctl verify
+
+  osint:licenses:
+    desc: Fail if a copyleft dependency would be linked into an EncoreBOM binary
+    # CLAUDE.md invariant 9. django-bom is GPL-3.0 and would have relicensed
+    # hbom-worker; this is the mechanical guard against that class of mistake.
+    cmds:
+      - go run ./cmd/encorebom toolctl licenses
 
   proto:gen:
     desc: "[phase 6] Generate Go and Python code from proto/"

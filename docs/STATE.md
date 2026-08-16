@@ -7,8 +7,8 @@ A session that writes code but does not update this file has failed — the next
 ---
 
 **Last updated:** 2026-08-16
-**Current phase:** Phase 1 — ✅ **complete**
-**Next action:** `Implement Phase 2 of EncoreBOM. Read docs/phases/PHASE-02-osint-supply-chain.md.`
+**Current phase:** Phase 2 — ✅ **complete**
+**Next action:** `Implement Phase 3 of EncoreBOM. Read docs/phases/PHASE-03-auth-tenancy-rbac.md.`
 
 > ⚠ **READ THE ENVIRONMENT BLOCKER AT THE BOTTOM BEFORE STARTING.** The `C:` drive is full (≈30 MB free of 280 GB). Go cannot use its build cache, and `task verify` cannot complete. This is not a code defect — every Phase 1 check passed before the disk filled — but Phase 2 downloads scanner binaries and container images and will not get far until it is resolved.
 
@@ -33,7 +33,7 @@ A session that writes code but does not update this file has failed — the next
 | Frontend | ✅ scaffold builds; **Phase 10 replaces it** |
 | Boundary lint | ✅ configured and demonstrated failing |
 | CI (dual-OS) | ✅ written, **never run** — no remote |
-| OSINT manifest | ✅ written · ⬜ never executed, all versions `TBD` |
+| OSINT manifest | ✅ resolved against upstream; every URL probes 200 |
 
 ---
 
@@ -124,6 +124,61 @@ The `ENABLE`-without-`FORCE` case is the one worth remembering: the table owner 
 
 ---
 
+## What Phase 2 built
+
+### The manifest now describes reality
+
+`encorebom toolctl dryrun` resolved every pin against upstream. **Every Phase 0
+placeholder was significantly stale** — syft 1.19→1.51, grype 0.87→0.117,
+trivy 0.58→0.74, osv-scanner 2.0→2.5, dependency-check 11.1→13.0,
+ai-bom 0.9→3.1. Nothing but a network probe would have revealed that.
+
+### ⚠ Org correction: `cbomkit`, not `PQCA`
+
+The Phase 0 planning notes told the user their draft was wrong and the CBOMkit
+repos lived under `PQCA/`. **That was itself wrong.** `github.com/PQCA/*`
+returns HTTP 301 and redirects to `github.com/cbomkit/*`;
+`ghcr.io/cbomkit/cbomkit-theia` resolves while `ghcr.io/pqca/cbomkit-theia`
+404s. The original draft was right. Corrected in the manifest and in
+`04-OSINT-INTEGRATION.md`.
+
+### Three constraints found by probing, not by reading
+
+| Finding | Consequence |
+|---|---|
+| **cbomkit-theia ships NO binary assets** (v1.1.2 is source-only) | Container is not a preference for the primary CBOM engine — it is the only option. |
+| **osv-scanner publishes NO checksum file and NO signatures** | Declared as a `supply_chain_gap`; container mode preferred because ghcr images are digest-addressed. Warned on every sync. |
+| **Trivy's asset naming is inconsistent within its own project** | `Linux-64bit` / `macOS-64bit` but `windows-64bit`. A template that assumed consistency 404s in a way that looks like a wrong version. |
+
+### Verification model
+
+Pin the VERSION and the CHECKSUM-FILE URL, not per-platform sha256 literals.
+Upstream publishes a signed `checksums.txt` covering every asset; verifying
+against it (and verifying that file's signature) is the flow upstream itself
+recommends and is stronger than a hash transcribed by hand. Six tools × three
+platforms would have been 18 hand-maintained hashes per version bump.
+
+A checksum mismatch **refuses to install and deletes the artifact** — leaving a
+failed download on disk means the next run may treat it as cached and good.
+
+### Delivered
+
+```
+libs/go-shared/toolctl/    manifest.go resolve.go fetch.go  (+17 tests)
+cmd/encorebom/toolctl.go   list | dryrun | sync | verify | licenses
+libs/py-shared/.../adapters/  base.py registry.py           (+13 tests)
+```
+
+`toolctl licenses` is the mechanical guard for CLAUDE.md invariant 9 — it fails
+if a copyleft dependency would be linked into an EncoreBOM binary.
+
+### A gap in my own tool, found and fixed
+
+The first dry run passed while proving nothing: container mode is preferred for
+almost every engine, so **no binary URL was ever probed** — the templates most
+likely to be wrong went untested. `--force-mode binary` now exercises them, and
+`task osint:dryrun` runs both passes.
+
 ## Disk pressure — hit once, since cleared
 
 During Phase 1 the `C:` drive filled to **30 MB free of 280 GB** and `go build ./...`
@@ -184,6 +239,18 @@ Stack ports: Postgres **55432** · NATS **54222**/58222 · Redis **56379** · Mi
 ---
 
 ## Session log
+
+### 2026-08-16 (d) — Phase 2 implemented
+
+`task verify` green. Manifest resolved against upstream; every URL probes 200.
+
+Corrected a Phase 0 error of my own: the CBOMkit org is `cbomkit`, not `PQCA`.
+Found three constraints that only a network probe reveals (see above), and one
+gap in the dry run itself — it was not testing the URL templates at all.
+
+**Next session:** Phase 3. Read `docs/phases/PHASE-03-auth-tenancy-rbac.md`.
+RLS already works, so auth's job is to put a verified tenant into the context
+that `db.WithTenant` consumes.
 
 ### 2026-08-16 (c) — Phase 1 implemented
 
