@@ -7,8 +7,8 @@ A session that writes code but does not update this file has failed — the next
 ---
 
 **Last updated:** 2026-08-16
-**Current phase:** Phase 4 — ✅ **complete**
-**Next action:** `Implement Phase 5 of EncoreBOM. Read docs/phases/PHASE-05-sandbox-fetcher.md.`
+**Current phase:** Phase 5 — ✅ **complete**
+**Next action:** `Implement Phase 6 of EncoreBOM. Read docs/phases/PHASE-06-scan-orchestration.md.`
 
 > The Phase 1/2 disk blocker is **resolved** — 18 GB free. `task verify` completes end to end (exit 0), including the frontend build. Docker Desktop's daemon still stops between sessions; start it before running the DB-backed tests, which otherwise **skip** rather than fail.
 
@@ -31,6 +31,8 @@ A session that writes code but does not update this file has failed — the next
 | **Rate limiting** | ✅ token bucket, separate tighter budget for credential endpoints |
 | **Credential storage** | ✅ Vault KV v2; Postgres holds a tenant-scoped path, never a token |
 | **Object storage** | ✅ MinIO; content-addressed, capped, **never extracted** |
+| **Sandbox** | ✅ **Docker; 12-case escape suite green against a real daemon** |
+| **Fetcher** | ✅ **connection-time SSRF defence, hardened clone, content-addressed tar.zst** |
 | Frontend | 🟡 projects module real (list, 3-step wizard, detail); **Phase 10 replaces the shell** |
 | **Database** | ✅ **9 schemas, 43 tables + 32 partitions, migrated** |
 | **RLS tenancy** | ✅ **36 protected, 7 exempt, 0 gaps — and proven to fail on a gap** |
@@ -410,7 +412,119 @@ sandbox or nowhere.
 
 ---
 
+## What Phase 5 built
+
+### The SSRF defence is a dialer, not a regex
+
+A parse-time IP check asks "does this hostname resolve to something public?" and
+the attacker answers truthfully — then changes the answer before the connect.
+**The gap between the two lookups IS the vulnerability**, and it cannot be
+narrowed away: the attacker controls the TTL.
+
+`SafeDialer` resolves ONCE, validates every returned address, and dials the
+resulting **IP literal** — so the second lookup the attack depends on never
+happens. `TestDialerResolvesOnceAndActsOnTheValidatedAddress` stages a resolver
+whose answer changes between calls and asserts exactly one resolution round.
+
+Two bypasses worth naming, both covered: `::ffff:169.254.169.254` — an
+IPv4-mapped IPv6 address that routes to cloud metadata and is invisible to an
+IPv6-only range check — and a multi-answer DNS response mixing one private
+address among public ones, where skipping to the "good" address would make the
+defence non-deterministic.
+
+### The bomb aborts mid-stream, and that number is measured
+
+The requirement is not "reject a bomb" but "abort mid-extraction". The test
+reports how far it got: **0.52% of a 200 MB bomb**, after roughly 1 MB.
+
+It was 32% first — the ratio check waited for 64 KB of *compressed* input, and
+gzip needs only ~200 KB to produce 200 MB. Gating on 1 MiB *written* bounds the
+damage to about that. The measurement appears in the test output on every run,
+so a regression is visible rather than theoretical.
+
+### The escape suite runs against a real daemon
+
+Twelve cases, all green: no network, read-only rootfs, noexec workspace,
+non-root, dropped capabilities, fork bomb, OOM kill, wall-clock kill, container
+removal after timeout, credential refusal by name and by value shape, clean
+engine environment, forbidden build tooling.
+
+A config that looks right and is not applied is exactly the failure this suite
+exists to catch, so each case makes the container actually attempt the thing.
+
+`fixtures/security/README.md` maps every attack to the test that exercises it.
+
+### Traps hit in Phase 5
+
+| Trap | What happened |
+|---|---|
+| **The workspace tmpfs was unwritable** | A tmpfs mounts root-owned and 0755, so a container running as uid 65534 could not write to its own workspace — every scanner would have failed on its first scratch file. The mount now carries `uid`/`gid`/`mode`. Caught only because the test asserts the workspace is USABLE as well as locked down. |
+| **`NetworkAllowlist` is not a Docker network mode** | Docker looked for a network *named* "allowlist" and failed at start. The honest fix is under gaps below — not a silent fallback to open egress. |
+| **`alpine/git` has `ENTRYPOINT ["git"]`** | An argv of `["sh","-c",…]` became `git sh -c …`. Spec now carries an explicit `Entrypoint`, and `CheckCommand` inspects entrypoint + argv together so a forbidden build tool cannot hide in an image's entrypoint. |
+| **The partial bomb file survived** | `os.Remove` ran with the file still open, which fails on Windows — leaving the partial bomb exactly where it was meant to land. Close before unlink. |
+| **`LookupIPAddr` issues TWO queries** | A and AAAA. The rebinding test counted packets and reported "2 lookups" against a correct dialer. It counts resolution rounds now. |
+| **gosec G116 flagged our own source** | `isBiDiControl` contained literal bidi characters — invisible in most editors, so the code a reviewer reads is not the code that compiles. Rewritten as `\u` escapes. The check was working. |
+
+### ⚠ What Phase 5 could NOT defend against
+
+Stated plainly, because a known gap is manageable and an undocumented one is not.
+
+1. **The git clone reaches the network directly from inside the container**, so
+   `SafeDialer` never sees it. The dialer protects HTTP downloads; the clone is
+   protected by URL validation plus `GIT_ALLOW_PROTOCOL`. A hostname that
+   resolves to an internal address at clone time is **not** blocked today.
+   **This is the most significant gap in the phase.** Fix: route the clone
+   through the egress proxy, or resolve-and-pin the address before handing the
+   URL to git.
+
+2. **The fetcher has UNRESTRICTED EGRESS.** A clone must reach the forge and the
+   egress proxy does not exist. The mode is named `NetworkEgress` — not
+   "allowlist" — so nobody reads it as filtered, and `NetworkAllowlist` is
+   **refused** without a configured `ProxyNetwork` rather than degrading into
+   open egress. Bounded by: the URL passed validation before the container
+   started, and the fetcher runs no scanner. **Fix: the egress proxy, Phase 16.**
+
+3. **Container escape itself is assumed not to happen.** Everything here bounds
+   what a process can do INSIDE a container; nothing defends against a kernel
+   bug that gets it out. `SANDBOX_RUNTIME` exists for gVisor or a microVM; only
+   `docker` is implemented. **Fix: gVisor, Phase 16.**
+
+4. **Per-container disk quota is host-dependent.** `StorageOpt` needs a storage
+   driver with quota support; on ext4-backed overlay2 it is rejected. The runner
+   retries without it and records `DiskQuotaEnforced=false` rather than assuming.
+   The workspace tmpfs limit still bounds where a scan writes. It DID apply on
+   this machine — the flag exists for hosts where it will not.
+
+5. **A pinned scanner image is trusted.** Digest pinning and signature
+   verification bound WHICH image runs; they do not help if the upstream we pin
+   to is itself compromised. Trivy's channel was compromised twice in March 2026.
+
+---
+
 ## Session log
+
+### 2026-08-16 (g) — Phase 5 implemented
+
+`task verify` green (exit 0), 20 packages, lint clean.
+
+Sandbox and fetcher complete. The escape suite runs against a real Docker
+daemon; a real repository was cloned end to end (`octocat/Hello-World` at
+`7fd1a60b…`), archived to a content-addressed `tar.zst`, and a second archive of
+the same tree deduplicated.
+
+Six defects were found by RUNNING the thing rather than reading it — an
+unwritable workspace, a network mode Docker does not have, an image entrypoint
+that mangled the command, a partial bomb file surviving on Windows, a test that
+miscounted DNS queries, and invisible characters in our own source. None would
+have been visible from the code.
+
+**Five gaps are documented above and not papered over.** The most significant:
+the git clone reaches the network directly, so the connection-time address check
+does not cover it.
+
+**Next session:** Phase 6 (`docs/phases/PHASE-06-scan-orchestration.md`) — job
+contracts, NATS JetStream, the DLQ and the deadline reaper. Note ADR-0004 (one
+engine per job) and that `partial` is a first-class status, not an error.
 
 ### 2026-08-16 (f) — Phase 4 implemented
 
