@@ -1,0 +1,161 @@
+# ============================================================================
+# EncoreBOM — core stack
+# ============================================================================
+#   task dev          -> this file        (~4 GB RAM, laptop-friendly)
+#   task dev:heavy    -> + docker-compose.heavy.yml  (~12-16 GB)
+#
+# SCOPE OF THIS FILE TODAY: infrastructure only. It is complete and works now.
+# Application services are added by Phase 0, which creates their Dockerfiles —
+# referencing build contexts that do not exist would break `docker compose up`
+# for everyone, so they are deliberately absent rather than commented-out stubs.
+#
+# Windows: requires the WSL2 backend. Both WSL2 distros idle to `Stopped`;
+# if `task dev` reports the daemon unreachable, start Docker Desktop or run
+# `wsl -d docker-desktop`.
+# ============================================================================
+
+name: encorebom
+
+x-healthcheck-defaults: &hc
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 20s
+
+services:
+
+  # ------------------------------------------------------------------ postgres
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-encorebom}
+      POSTGRES_USER: ${POSTGRES_USER:-encorebom}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-encorebom}
+      # Deterministic collation. Locale drift between machines changes index
+      # ordering, which changes keyset pagination results.
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+    command:
+      - postgres
+      - -c
+      - max_connections=200
+      - -c
+      - shared_buffers=512MB
+      # RLS is the only tenancy boundary (ADR-0006). Logging failed connections
+      # makes a misconfigured role visible immediately rather than at breach time.
+      - -c
+      - log_connections=on
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-encorebom} -d ${POSTGRES_DB:-encorebom}"]
+      <<: *hc
+
+  # ---------------------------------------------------------------------- nats
+  nats:
+    image: nats:2.10-alpine
+    restart: unless-stopped
+    command:
+      - "-js"                      # JetStream: durable work queues
+      - "-sd=/data"
+      - "-m=8222"                  # monitoring
+      - "--max_payload=8MB"        # scan results carry diagnostics inline
+    ports: ["4222:4222", "8222:8222"]
+    volumes: [natsdata:/data]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:8222/healthz"]
+      <<: *hc
+
+  # --------------------------------------------------------------------- redis
+  # Cache and rate limits ONLY. JetStream owns queueing — never put a queue here.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      <<: *hc
+
+  # --------------------------------------------------------------------- minio
+  # Raw scan artifacts are IMMUTABLE and never deleted (ADR-0003) — they are the
+  # evidence that makes reports defensible and normalization replayable.
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin}
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [miniodata:/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      <<: *hc
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio: { condition: service_healthy }
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${S3_ACCESS_KEY:-minioadmin} ${S3_SECRET_KEY:-minioadmin};
+      mc mb --ignore-existing local/${S3_BUCKET:-encorebom};
+      mc version enable local/${S3_BUCKET:-encorebom};
+      echo 'bucket ready (versioned)';
+      "
+    restart: "no"
+
+  # --------------------------------------------------------------------- vault
+  # DEV MODE — in-memory, root token, no TLS. Never a production pattern.
+  vault:
+    image: hashicorp/vault:1.18
+    restart: unless-stopped
+    cap_add: [IPC_LOCK]
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_TOKEN:-dev-root-token}
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+    ports: ["8200:8200"]
+    healthcheck:
+      test: ["CMD", "vault", "status", "-address=http://localhost:8200"]
+      <<: *hc
+
+  # ------------------------------------------------------------------- mailpit
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports: ["1025:1025", "8025:8025"]     # SMTP, web UI
+
+  # --------------------------------------------------- observability (optional)
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    restart: unless-stopped
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes: ["./otel-config.yaml:/etc/otel/config.yaml:ro"]
+    ports: ["4317:4317", "4318:4318"]
+    profiles: [observability]
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    restart: unless-stopped
+    environment: { COLLECTOR_OTLP_ENABLED: "true" }
+    ports: ["16686:16686"]
+    profiles: [observability]
+
+# ============================================================================
+# Volumes
+# ============================================================================
+volumes:
+  pgdata:
+  natsdata:
+  miniodata:
+  # NVD database cache for Dependency-Check (heavy profile).
+  # First sync takes 30-60 minutes. Declared here so `task dev:nuke` prompts
+  # before destroying it — losing this volume means paying that cost again.
+  depcheck-data:
+
+networks:
+  default:
+    name: encorebom

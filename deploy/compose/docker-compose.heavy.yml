@@ -1,0 +1,102 @@
+# ============================================================================
+# EncoreBOM — heavy profile (OPT-IN)
+# ============================================================================
+#   task dev:heavy    # = docker-compose.yml + this file
+#
+# ⚠ NEEDS ~12-16 GB RAM ON TOP OF THE CORE STACK. Do not enable casually.
+#
+# Nothing in the core product depends on anything in this file. Both services
+# here are optional integrations, and both were misclassified as scanners in
+# the original plan:
+#
+#   Dependency-Track  — a full platform with its own DB, API and UI that
+#                       duplicates a large part of EncoreBOM. Integrated as an
+#                       EXPORT TARGET for portfolio monitoring, never a scanner.
+#                       4 GB heap minimum; upstream docs recommend 8-12 GB.
+#
+#   SonarQube         — required only by sonar-cryptography, which is a
+#                       SonarQube PLUGIN, not a CLI. DEFERRED past MVP;
+#                       cbomkit-theia covers CBOM discovery without it.
+#
+# See docs/04-OSINT-INTEGRATION.md §2 and OSINT/tools.manifest.yaml.
+# ============================================================================
+
+name: encorebom
+
+services:
+
+  # ------------------------------------------------------- dependency-track db
+  dtrack-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dtrack
+      POSTGRES_USER: dtrack
+      POSTGRES_PASSWORD: ${DTRACK_DB_PASSWORD:-dtrack}
+    volumes: [dtrackdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dtrack"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  dependency-track-apiserver:
+    image: dependencytrack/apiserver:latest      # pin by digest before production
+    restart: unless-stopped
+    depends_on:
+      dtrack-postgres: { condition: service_healthy }
+    environment:
+      ALPINE_DATABASE_MODE: external
+      ALPINE_DATABASE_URL: jdbc:postgresql://dtrack-postgres:5432/dtrack
+      ALPINE_DATABASE_DRIVER: org.postgresql.Driver
+      ALPINE_DATABASE_USERNAME: dtrack
+      ALPINE_DATABASE_PASSWORD: ${DTRACK_DB_PASSWORD:-dtrack}
+      # 4 GB is the documented MINIMUM. Below this it OOMs during the initial
+      # NVD mirror — a failure that looks like a hang rather than an error.
+      EXTRA_JAVA_OPTIONS: "-Xmx4G"
+    ports: ["8081:8080"]
+    volumes: [dtrack-apiserver:/data]
+    deploy:
+      resources:
+        limits: { memory: 6G }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:8080/api/version"]
+      interval: 20s
+      timeout: 10s
+      retries: 30
+      start_period: 180s          # first boot mirrors the NVD; it is slow
+
+  dependency-track-frontend:
+    image: dependencytrack/frontend:latest
+    restart: unless-stopped
+    depends_on: [dependency-track-apiserver]
+    environment:
+      API_BASE_URL: http://localhost:8081
+    ports: ["8082:8080"]
+
+  # ------------------------------------------------------------------ sonarqube
+  # DEFERRED past MVP — present so the option is one command away, not because
+  # anything currently uses it. See tools.manifest.yaml -> sonar-cryptography.
+  sonarqube:
+    image: sonarqube:community
+    restart: unless-stopped
+    environment:
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    ports: ["9002:9000"]
+    volumes:
+      - sonar-data:/opt/sonarqube/data
+      - sonar-extensions:/opt/sonarqube/extensions
+      - sonar-logs:/opt/sonarqube/logs
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
+    deploy:
+      resources:
+        limits: { memory: 4G }
+    profiles: [sonar]              # opt-in even within the heavy profile
+
+volumes:
+  dtrackdata:
+  dtrack-apiserver:
+  sonar-data:
+  sonar-extensions:
+  sonar-logs:

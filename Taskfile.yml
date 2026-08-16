@@ -1,0 +1,188 @@
+# EncoreBOM — task runner
+#
+# Why go-task and not make/bash: the primary dev machine is Windows 11 with no
+# `make`, no `task` preinstalled, and PowerShell 5.1 (no `&&`, no ternary).
+# go-task ships a single binary, runs identically on Windows/Linux/macOS, and
+# does not depend on which shell happens to be present.
+#
+# Install:  winget install Task.Task     |     go install github.com/go-task/task/v3/cmd/task@latest
+#
+# Anything more complex than a few lines belongs in the `encorebom` Go CLI,
+# not here. See CLAUDE.md §Conventions — "No bash scripts".
+
+version: '3'
+
+vars:
+  GO_SERVICES: gateway auth project scan-orchestrator report campaign comment notification
+  PY_WORKERS: sbom cbom qbom aibom hbom
+  COMPOSE: docker compose -f deploy/compose/docker-compose.yml
+  COMPOSE_HEAVY: docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.heavy.yml
+
+tasks:
+
+  default:
+    desc: List available tasks
+    cmds: [task --list]
+
+  # ---------------------------------------------------------------- preflight
+  preflight:
+    desc: Report what is installed and what is missing before anything else runs
+    cmds:
+      - cmd: go run ./cmd/encorebom preflight
+        ignore_error: true
+    # Expected findings on the primary dev machine, and why they matter:
+    #   Java 1.8      -> Dependency-Check needs 11+, cbomkit needs 17+.
+    #                    Not a blocker: those tools are container-only by design.
+    #   Docker daemon -> may be stopped. `task dev` will fail clearly, not hang.
+    #   cosign        -> absent. Signature verification degrades to checksum-only
+    #                    WITH A LOUD WARNING. Never silently.
+
+  # ------------------------------------------------------------------ the gate
+  verify:
+    desc: "The gate: fmt + lint + boundary-lint + test + build. CI runs exactly this."
+    deps: [fmt, lint, lint:boundaries, profile:lint, test, build]
+
+  fmt:
+    desc: Format Go, Python, TypeScript
+    cmds:
+      - go fmt ./...
+      - cmd: python -m ruff format libs/py-shared workers
+        ignore_error: true
+      - cmd: npm --prefix frontend run format
+        ignore_error: true
+
+  lint:
+    desc: Static analysis
+    cmds:
+      - golangci-lint run ./...
+      - cmd: python -m ruff check libs/py-shared workers
+        ignore_error: true
+      - cmd: npm --prefix frontend run lint
+        ignore_error: true
+
+  lint:boundaries:
+    desc: Fail if any service imports another service's internals (depguard)
+    # This is the mechanical guard that survives context loss between sessions.
+    # Disabling it is an ADR-level decision, not a convenience.
+    cmds:
+      - golangci-lint run --enable-only depguard ./...
+
+  test:
+    desc: Unit and contract tests
+    cmds:
+      - go test ./... -race -count=1
+      - cmd: python -m pytest libs/py-shared workers -q
+        ignore_error: true
+
+  test:golden:
+    desc: Normalizer golden-file diff over the fixture corpus
+    # Changing a golden requires an explicit justification in the commit
+    # message. Goldens are the guardrail against silently wrong BOM output.
+    cmds:
+      - go test ./services/... -run TestGolden -count=1
+
+  test:rls:
+    desc: Enumerate every tenant-scoped table and assert RLS is enabled
+    cmds:
+      - go test ./libs/go-shared/platform/db -run TestRLSCoverage -count=1
+
+  build:
+    desc: Build all Go services and the frontend
+    cmds:
+      - go build ./...
+      - cmd: npm --prefix frontend run build
+        ignore_error: true
+
+  # ------------------------------------------------------------------ profile
+  profile:lint:
+    desc: Validate certin-v2.0.yaml — counts, unique ids, assumed entries
+    # Counts are transcription checks against the source PDF. A mismatch means
+    # either the guideline was revised or the transcription is wrong. Both need
+    # a human decision, never a silent fix.
+    cmds:
+      - go run ./cmd/encorebom profile lint docs/reference/certin-v2.0.yaml
+
+  profile:gen:
+    desc: Regenerate Go structs and Python models from the compliance profile
+    cmds:
+      - go run ./cmd/encorebom profile gen --out-go libs/go-shared/model --out-py libs/py-shared/model
+
+  # ---------------------------------------------------------------- local dev
+  dev:
+    desc: Bring up the core stack (laptop-friendly - no Dependency-Track, no SonarQube)
+    deps: [preflight]
+    cmds:
+      - '{{.COMPOSE}} up -d'
+      - '{{.COMPOSE}} ps'
+
+  dev:heavy:
+    desc: Core stack plus Dependency-Track and SonarQube (needs ~12GB free RAM)
+    cmds:
+      - '{{.COMPOSE_HEAVY}} up -d'
+
+  dev:down:
+    desc: Stop the stack, keep volumes
+    cmds: ['{{.COMPOSE}} down']
+
+  dev:nuke:
+    desc: Stop the stack and DELETE all volumes (destroys local data)
+    prompt: This deletes every local volume including scan artifacts. Continue?
+    cmds: ['{{.COMPOSE}} down -v']
+
+  logs:
+    desc: "Tail logs. Usage: task logs -- gateway"
+    cmds: ['{{.COMPOSE}} logs -f {{.CLI_ARGS}}']
+
+  # --------------------------------------------------------------- migrations
+  db:migrate:
+    desc: Apply all pending migrations across every service schema
+    cmds:
+      - go run ./cmd/encorebom db migrate up
+
+  db:reset:
+    desc: Drop, recreate, migrate, seed
+    prompt: This destroys the local database. Continue?
+    cmds:
+      - go run ./cmd/encorebom db reset
+      - task: db:seed
+
+  db:seed:
+    desc: Load development fixtures (two tenants, to exercise isolation)
+    cmds:
+      - go run ./cmd/encorebom db seed
+
+  # -------------------------------------------------------------------- OSINT
+  osint:sync:
+    desc: Download and verify every pinned scanner artifact
+    cmds:
+      - go run ./cmd/encorebom toolctl sync --manifest OSINT/tools.manifest.yaml
+
+  osint:verify:
+    desc: Probe every engine and report available/unavailable
+    cmds:
+      - go run ./cmd/encorebom toolctl verify --manifest OSINT/tools.manifest.yaml
+
+  osint:dryrun:
+    desc: Resolve every pinned URL and digest without downloading (proves the manifest is real)
+    cmds:
+      - go run ./cmd/encorebom toolctl sync --manifest OSINT/tools.manifest.yaml --dry-run
+
+  osint:contract:
+    desc: Run each pinned tool against a tiny fixture and assert its parser still works
+    # Runs nightly in CI. A failing contract test auto-marks the engine
+    # `unavailable` rather than letting it emit garbage into a compliance report.
+    cmds:
+      - go test ./workers/... -run TestAdapterContract -count=1
+
+  # --------------------------------------------------------------------- docs
+  docs:lint:
+    desc: Fail on broken relative links or references to nonexistent spec sections
+    cmds:
+      - go run ./cmd/encorebom docs lint docs/
+
+  # -------------------------------------------------------------------- phases
+  phase:
+    desc: "Print a phase brief. Usage: task phase -- 03"
+    cmds:
+      - cmd: cat docs/phases/PHASE-{{.CLI_ARGS}}-*.md
+        ignore_error: true

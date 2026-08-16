@@ -1,0 +1,159 @@
+# EncoreBOM — static analysis
+#
+# The most important thing in this file is the depguard `service-boundaries`
+# rules. See docs/ADR/0001, mitigation 3.
+#
+# WHY: the architecture is eight Go services built by an agent with fresh
+# context every session. Nothing but discipline stops session 7 from importing
+# services/auth directly into services/report — and discipline does not survive
+# a context reset. depguard does. It is mechanical, it fails the build, and it
+# does not care that the shortcut seemed reasonable at the time.
+#
+# Disabling `service-boundaries` is an ADR-level decision, not a convenience.
+
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: standard
+  enable:
+    - depguard        # ← the boundary guard. See settings below.
+    - bodyclose
+    - errorlint
+    - gosec
+    - misspell
+    - nilerr
+    - noctx
+    - revive
+    - unconvert
+    - unparam
+    - wastedassign
+
+  settings:
+    depguard:
+      rules:
+        # ------------------------------------------------------------------
+        # THE SERVICE BOUNDARY.
+        #
+        # A service may import libs/** and proto/** and nothing else from this
+        # module. Cross-service communication goes through generated clients
+        # over gRPC or the event bus — never a direct Go import.
+        #
+        # Go's own `internal/` rule already blocks services/a from importing
+        # services/b/internal/... . This rule closes the remaining gap: a
+        # non-internal package under another service.
+        # ------------------------------------------------------------------
+        service-boundaries:
+          list-mode: lax
+          files:
+            - "**/services/**"
+          deny:
+            - pkg: github.com/encorebom/encorebom/services
+              desc: >-
+                Services must not import each other. Cross-service calls go
+                through generated clients (proto/) or the event bus
+                (libs/go-shared/bus). See docs/ADR/0001 and CLAUDE.md
+                invariant 11. If you need a type from another service, it
+                belongs in libs/go-shared or proto/.
+
+        # ------------------------------------------------------------------
+        # Workers are scan engines. They run untrusted code in a sandbox and
+        # hold no credentials (ADR-0008), so they must not reach into service
+        # code where credential handling lives.
+        # ------------------------------------------------------------------
+        worker-boundaries:
+          list-mode: lax
+          files:
+            - "**/workers/**"
+          deny:
+            - pkg: github.com/encorebom/encorebom/services
+              desc: >-
+                Workers must not import services. Workers communicate only via
+                the event bus and object storage. They deliberately hold no
+                credentials — see docs/ADR/0008.
+
+        # ------------------------------------------------------------------
+        # The platform layer is the base of the dependency graph. If it imports
+        # upward, every boundary above it becomes meaningless.
+        # ------------------------------------------------------------------
+        platform-is-a-leaf:
+          list-mode: lax
+          files:
+            - "**/libs/go-shared/platform/**"
+          deny:
+            - pkg: github.com/encorebom/encorebom/services
+              desc: platform must not depend on services — it is the base layer
+            - pkg: github.com/encorebom/encorebom/workers
+              desc: platform must not depend on workers — it is the base layer
+
+        # ------------------------------------------------------------------
+        # Packages we do not want anywhere.
+        # ------------------------------------------------------------------
+        forbidden-packages:
+          list-mode: lax
+          files:
+            - "$all"
+          deny:
+            - pkg: math/rand
+              desc: >-
+                Use crypto/rand for anything security-adjacent (tokens, share
+                links, job ids). For non-security randomness use math/rand/v2
+                — but note the normalizer must be DETERMINISTIC (ADR-0003):
+                no randomness at all inside normalization.
+            - pkg: io/ioutil
+              desc: deprecated; use io and os
+            - pkg: github.com/pkg/errors
+              desc: use the standard library errors package with %w
+
+    gosec:
+      excludes:
+        # G104 duplicates errcheck, which is already in the standard set.
+        - G104
+
+    revive:
+      rules:
+        - name: exported
+          disabled: true   # too noisy pre-MVP; revisit in Phase 16
+        - name: unused-parameter
+          disabled: true   # generated scaffolds legitimately have them
+
+    errorlint:
+      errorf: true
+      asserts: true
+      comparison: true
+
+  exclusions:
+    generated: lax
+    rules:
+      # Generated service scaffolds.
+      - path: services/[^/]+/(main|routes|health)\.go
+        linters: [revive, unparam]
+
+      # Tests deliberately construct pathological inputs — hostile filenames,
+      # nil-map panics, formula-injection payloads. That is the point of them.
+      - path: _test\.go
+        linters: [gosec, errcheck, unparam, noctx]
+
+      # gosec's G101 entropy heuristic flags every error code containing the
+      # substring "TOKEN" or "CREDENTIALS" as a hardcoded credential. These are
+      # the error taxonomy from docs/02-CONTRACTS.md §9 — public, stable,
+      # deliberately descriptive identifiers.
+      - path: libs/go-shared/platform/errs/errs\.go
+        linters: [gosec]
+        text: "G101"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/encorebom/encorebom
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

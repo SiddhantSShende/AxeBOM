@@ -1,0 +1,850 @@
+# ============================================================================
+# EncoreBOM — CERT-In Compliance Profile
+# ============================================================================
+# Source of truth for EVERY field EncoreBOM must represent, score, and render.
+#
+# Derived directly from:
+#   Indian Computer Emergency Response Team (CERT-In), Ministry of Electronics
+#   and Information Technology, Government of India.
+#   "Technical Guidelines on SBOM | QBOM & CBOM | AIBOM | HBOM", Version 2.0,
+#   dated 09.07.2025.  Local copy: docs/reference/CERT-In_BOM_Guidelines_v2.0.pdf
+#
+# ---------------------------------------------------------------------------
+# HOW THIS FILE IS USED  (read this before editing anything)
+# ---------------------------------------------------------------------------
+# This file is DATA, not documentation. Four things generate from or validate
+# against it, and none of them may hardcode a field name or a field count:
+#
+#   1. Go structs        (libs/go-shared/model)      — generated
+#   2. Python models     (libs/py-shared/model)      — generated
+#   3. Report field tables (report-svc)              — rendered at runtime
+#   4. The coverage checker (normalizer)             — reads weights + required
+#
+# INVARIANT: never write "21 fields" (or any other count) in code, UI copy, or
+# a document. Render the count from this file. Hardcoding a count is exactly
+# how a product ships a false compliance claim when the guideline revises.
+#
+# ---------------------------------------------------------------------------
+# STATUS MODEL
+# ---------------------------------------------------------------------------
+#   verified — transcribed from the named page of the source PDF, which has
+#              been read directly. Every entry in this file is `verified`.
+#   assumed  — inferred from a secondary source; MUST carry a `note`.
+#              (No entries currently. If you add one, `task profile:lint`
+#              will surface it, and every report renders the assumed count.)
+#
+# ---------------------------------------------------------------------------
+# COVERAGE SEMANTICS  (see docs/03-NORMALIZER-SPEC.md §Coverage)
+# ---------------------------------------------------------------------------
+#   completeness_pct — substantive values only. "not-provided", NOASSERTION,
+#                      "unknown", "", [] all score present=0. This is the
+#                      honest compliance signal.
+#   declaration_pct  — any value including an explicit "not-provided". This is
+#                      a representation-completeness check, NOT compliance.
+#
+#   Publishing only declaration_pct and calling it "coverage" would mislead.
+#   Both appear in every report. Always.
+#
+#   `weight` drives completeness_pct: 3 = minimum-element / identity-bearing,
+#   1 = enrichment. Weights are EncoreBOM's judgement, not CERT-In's — the
+#   guideline does not rank its fields. Flagged as such in the report footer.
+# ============================================================================
+
+profile:
+  id: certin-v2.0
+  name: CERT-In Technical Guidelines on SBOM, QBOM & CBOM, AIBOM and HBOM
+  version: "2.0"
+  published: "2025-07-09"
+  authority: Indian Computer Emergency Response Team (CERT-In), MeitY, Government of India
+  source_document: docs/reference/CERT-In_BOM_Guidelines_v2.0.pdf
+  source_pages: 66
+  revision: 1
+  # Set by `task profile:lint`. If any entry is `assumed`, reports must say so.
+  all_entries_verified: true
+
+# ============================================================================
+# SECTION A — SBOM
+# ============================================================================
+# CRITICAL (Table 5, PDF p.21-22): "Minimum Elements" is THREE categories, not
+# just the 21 data fields. Most implementations ship only category 1 and claim
+# compliance. Categories 2 and 3 are product features, not report sections.
+# ============================================================================
+
+sbom:
+  minimum_element_categories:
+
+    # ------------------------------------------------------------------
+    - id: certin.sbom.cat.data_fields
+      name: Data Fields
+      source_page: 21
+      overview: Document baseline information about each component that should be tracked.
+      kind: per_component_fields
+      fields_ref: sbom.data_fields
+
+    # ------------------------------------------------------------------
+    - id: certin.sbom.cat.automation_support
+      name: Automation Support
+      source_page: 22
+      overview: >
+        Support automation, including via automatic generation and
+        machine-readability to allow for scaling across the software ecosystem.
+      kind: enum_set
+      # PDF p.28 §4.3 restates these as the two standard formats.
+      required_values: [SPDX, CycloneDX]
+      encorebom_binding: scan.standards[]
+
+    # ------------------------------------------------------------------
+    # THE COMMONLY-MISSED CATEGORY. These six are per-PROJECT settings that
+    # must be captured at project registration (Phase 4) and rendered in
+    # every report. Without them a "CERT-In compliant" claim is overstated.
+    - id: certin.sbom.cat.practices_and_processes
+      name: Practices and Processes
+      source_page: 22
+      overview: Define the operations of SBOM requests, generation and use.
+      kind: per_project_settings
+      sub_elements:
+        - id: certin.sbom.pp.frequency
+          name: Frequency
+          encorebom_binding: project.practices.frequency
+          type: string          # cron expression or human cadence; links to Campaigns
+          weight: 3
+          status: verified
+        - id: certin.sbom.pp.depth
+          name: Depth
+          encorebom_binding: project.practices.depth
+          type: enum
+          enum_ref: sbom.levels
+          weight: 3
+          status: verified
+        - id: certin.sbom.pp.known_unknowns
+          name: Known Unknowns
+          encorebom_binding: project.practices.known_unknowns
+          type: text
+          description: >
+            Declaration of what the organization knows it does NOT know about
+            its component inventory. Maps to EncoreBOM's engine-coverage gaps:
+            ecosystems detected with no available engine are auto-populated
+            here, and the user may add narrative.
+          weight: 3
+          status: verified
+        - id: certin.sbom.pp.distribution_and_delivery
+          name: Distribution and Delivery
+          encorebom_binding: project.practices.distribution
+          type: text
+          weight: 3
+          status: verified
+        - id: certin.sbom.pp.access_control
+          name: Access Control
+          encorebom_binding: project.practices.access_control
+          type: enum
+          values: [public, private]     # PDF p.32 §5.3.2 — maintain BOTH versions
+          weight: 3
+          status: verified
+        - id: certin.sbom.pp.accommodation_of_mistakes
+          name: Accommodation of Mistakes
+          encorebom_binding: project.practices.errata_policy
+          type: text
+          description: >
+            The errata/correction mechanism. PDF p.- §7.1.9: an SBOM is updated
+            when new component information appears or errors are corrected.
+            EncoreBOM implements this as re-normalization versioning.
+          weight: 3
+          status: verified
+
+  # --------------------------------------------------------------------------
+  # The 21 data fields. Names transcribed verbatim from PDF p.21 (Table 5 list)
+  # and p.22-25 (§4.2 numbered definitions). Worked examples: Table 6, p.24-26.
+  # --------------------------------------------------------------------------
+  data_fields:
+    - id: certin.sbom.01.component_name
+      ordinal: 1
+      name: Component Name
+      description: The name of the software component or library included in the SBOM.
+      canonical_path: component.name
+      cyclonedx_path: components[].name
+      spdx_path: packages[].name
+      type: string
+      weight: 3
+      required: true
+      source_page: 22
+      status: verified
+
+    - id: certin.sbom.02.component_version
+      ordinal: 2
+      name: Component Version
+      description: The version number or identifier of the software component.
+      canonical_path: component.version_raw
+      cyclonedx_path: components[].version
+      spdx_path: packages[].versionInfo
+      type: string
+      weight: 3
+      required: true
+      source_page: 22
+      note: >
+        Store version_raw verbatim. version_normalized is computed per ecosystem
+        and is NEVER the merge key. See 03-NORMALIZER-SPEC.md §Component identity.
+      status: verified
+
+    - id: certin.sbom.03.component_description
+      ordinal: 3
+      name: Component Description
+      description: A brief description or summary of the functionality and purpose of the software component.
+      canonical_path: component.description
+      cyclonedx_path: components[].description
+      spdx_path: packages[].description
+      type: text
+      weight: 1
+      required: true
+      source_page: 23
+      status: verified
+
+    - id: certin.sbom.04.component_supplier
+      ordinal: 4
+      name: Component Supplier
+      description: >
+        The entity or organization that supplied the software component, such as
+        a vendor, third-party supplier, or open-source project.
+      canonical_path: component.supplier
+      cyclonedx_path: components[].supplier.name
+      spdx_path: packages[].supplier
+      type: string
+      weight: 3
+      required: true
+      source_page: 23
+      status: verified
+
+    - id: certin.sbom.05.component_license
+      ordinal: 5
+      name: Component License
+      description: >
+        The license under which the software component is distributed, including
+        details such as the license type, terms, and restrictions.
+      canonical_path: component.license_effective
+      cyclonedx_path: components[].licenses
+      spdx_path: packages[].licenseConcluded
+      type: spdx_expression
+      weight: 3
+      required: true
+      source_page: 23
+      note: >
+        declared / concluded / observed are stored SEPARATELY and never
+        overwrite each other (SPDX requires the distinction). NONE counts as
+        present — it is a substantive assertion. NOASSERTION does NOT.
+        See 03-NORMALIZER-SPEC.md §License resolution.
+      status: verified
+
+    - id: certin.sbom.06.component_origin
+      ordinal: 6
+      name: Component Origin
+      description: >
+        The source or origin of the software component, such as whether it is
+        proprietary, open-source, or obtained from a third-party vendor.
+      canonical_path: component.origin
+      cyclonedx_path: components[].properties[encorebom:origin]
+      spdx_path: packages[].originator
+      type: enum
+      values: [proprietary, open-source, third-party-vendor, unknown]
+      weight: 3
+      required: true
+      source_page: 23
+      status: verified
+
+    - id: certin.sbom.07.component_dependencies
+      ordinal: 7
+      name: Component Dependencies
+      description: >
+        Any other software components or libraries that the current component
+        depends on, including their names and versions.
+      canonical_path: component.dependencies[]
+      cyclonedx_path: dependencies[]
+      spdx_path: relationships[DEPENDS_ON]
+      type: ref_list
+      weight: 3
+      required: true
+      source_page: 23
+      note: >
+        Graph edges are REPLACED per-ecosystem by the highest-trust engine, not
+        unioned across engines. Unioning invents phantom transitive edges and
+        corrupts the direct-vs-transitive counts a Top-Level report is built on.
+      status: verified
+
+    - id: certin.sbom.08.vulnerabilities
+      ordinal: 8
+      name: Vulnerabilities
+      description: >
+        Information about known security vulnerabilities or weaknesses associated
+        with the software component, including severity ratings and references to
+        security advisories or CVE identifiers.
+      canonical_path: component.findings[]
+      cyclonedx_path: vulnerabilities[]
+      spdx_path: relationships[HAS_ASSOCIATED_VULNERABILITY]
+      type: ref_list
+      weight: 3
+      required: true
+      source_page: 23
+      status: verified
+
+    - id: certin.sbom.09.patch_status
+      ordinal: 9
+      name: Patch Status
+      description: >
+        The patch or update status of the software component, indicating whether
+        any patches or updates are available to address known vulnerabilities.
+      canonical_path: component.patch_status
+      cyclonedx_path: components[].properties[encorebom:patch_status]
+      spdx_path: annotations[]
+      type: enum
+      values: [up-to-date, patch-available, no-fix-available, unknown]
+      weight: 3
+      required: true
+      source_page: 23
+      note: >
+        DERIVED from fixed_versions vs installed version, using an
+        ecosystem-correct comparator. If no comparator exists for the ecosystem,
+        emit `unknown` — never guess an ordering.
+      status: verified
+
+    - id: certin.sbom.10.release_date
+      ordinal: 10
+      name: Release Date
+      description: The date when the software component was released or made available for use.
+      canonical_path: component.release_date
+      cyclonedx_path: components[].properties[encorebom:release_date]
+      spdx_path: packages[].releaseDate
+      type: date
+      weight: 1
+      required: true
+      source_page: 23
+      status: verified
+
+    - id: certin.sbom.11.eol_date
+      ordinal: 11
+      name: End-of-Life (EOL) Date
+      description: >
+        The date when support or maintenance for the software component is
+        scheduled to end, indicating the end of its lifecycle.
+      canonical_path: component.eol_date
+      cyclonedx_path: components[].properties[encorebom:eol_date]
+      spdx_path: packages[].validUntilDate
+      type: date
+      weight: 1
+      required: true
+      source_page: 23
+      status: verified
+
+    - id: certin.sbom.12.criticality
+      ordinal: 12
+      name: Criticality
+      description: >
+        The criticality or importance of the software component to the overall
+        functionality or security of the application.
+      canonical_path: component.criticality
+      cyclonedx_path: components[].properties[encorebom:criticality]
+      spdx_path: annotations[]
+      type: enum
+      values: [critical, high, medium, low]   # verbatim from p.23
+      weight: 3
+      required: true
+      source_page: 23
+      status: verified
+
+    - id: certin.sbom.13.usage_restrictions
+      ordinal: 13
+      name: Usage Restrictions
+      description: >
+        Any usage restrictions or limitations associated with the software
+        component, such as export control restrictions or intellectual property rights.
+      canonical_path: component.usage_restrictions
+      cyclonedx_path: components[].properties[encorebom:usage_restrictions]
+      spdx_path: packages[].comment
+      type: text
+      weight: 1
+      required: true
+      source_page: 23
+      status: verified
+
+    - id: certin.sbom.14.checksums
+      ordinal: 14
+      name: Checksums or Hashes
+      description: >
+        Cryptographic checksums or hashes of the software component files to
+        ensure integrity and authenticity.
+      canonical_path: component.hashes[]
+      cyclonedx_path: components[].hashes[]
+      spdx_path: packages[].checksums[]
+      type: hash_list
+      weight: 3
+      required: true
+      source_page: 23
+      note: >
+        Table 6 (p.25) renders "Checksums" and "Hashes" as two separate rows
+        with SHA-256 and MD5 respectively. EncoreBOM models one typed list
+        covering both; the report renders them as the guideline presents them.
+      status: verified
+
+    - id: certin.sbom.15.comments
+      ordinal: 15
+      name: Comments or Notes
+      description: >
+        Additional comments, notes, or annotations relevant to the software
+        component or its inclusion in the SBOM.
+      canonical_path: component.comments
+      cyclonedx_path: components[].properties[encorebom:comments]
+      spdx_path: packages[].comment
+      type: text
+      weight: 1
+      required: true
+      source_page: 23
+      status: verified
+
+    - id: certin.sbom.16.author_of_sbom_data
+      ordinal: 16
+      name: Author of SBOM Data
+      description: The name of the entity that creates the SBOM data for this component.
+      canonical_path: component.provenance[].author
+      cyclonedx_path: metadata.authors[]
+      spdx_path: creationInfo.creators[]
+      type: string
+      weight: 3
+      required: true
+      source_page: 23
+      note: >
+        Populated from scan provenance: the engine id + version that observed
+        the component, plus the EncoreBOM tenant. Never left blank.
+      status: verified
+
+    - id: certin.sbom.17.timestamp
+      ordinal: 17
+      name: Timestamp
+      description: Record of the date and time of the SBOM data assembly.
+      canonical_path: bom_document.generated_at
+      cyclonedx_path: metadata.timestamp
+      spdx_path: creationInfo.created
+      type: datetime
+      weight: 3
+      required: true
+      source_page: 23
+      note: UTC RFC3339 with a literal Z. No local time anywhere in the system.
+      status: verified
+
+    - id: certin.sbom.18.executable_property
+      ordinal: 18
+      name: Executable Property
+      description: Attributes indicating whether a component within an SBOM can be executed.
+      canonical_path: component.executable_property
+      cyclonedx_path: components[].properties[encorebom:executable]
+      spdx_path: packages[].primaryPackagePurpose
+      type: tristate            # yes | no | not-provided
+      weight: 1
+      required: true
+      source_page: 24
+      status: verified
+
+    - id: certin.sbom.19.archive_property
+      ordinal: 19
+      name: Archive Property
+      description: >
+        Characteristics denoting if a component within an SBOM is stored as an
+        archive or compressed file.
+      canonical_path: component.archive_property
+      cyclonedx_path: components[].properties[encorebom:archive]
+      spdx_path: packages[].packageFileName
+      type: tristate
+      weight: 1
+      required: true
+      source_page: 24
+      status: verified
+
+    - id: certin.sbom.20.structured_property
+      ordinal: 20
+      name: Structured Property
+      description: >
+        Descriptors defining the organized format of data within a component
+        listed in an SBOM.
+      canonical_path: component.structured_property
+      cyclonedx_path: components[].properties[encorebom:structured]
+      spdx_path: annotations[]
+      type: tristate
+      weight: 1
+      required: true
+      source_page: 24
+      status: verified
+
+    # ------------------------------------------------------------------
+    # DEFECT D8 — this is NOT a standard PURL. Read the note.
+    # ------------------------------------------------------------------
+    - id: certin.sbom.21.unique_identifier
+      ordinal: 21
+      name: Unique Identifier
+      description: >
+        A unique identifier is a distinct code assigned to each software
+        component, structured as
+        "pkg:supplier/OrganizationName/ComponentName@Version?qualifiers&subpath",
+        aiding in tracking ownership changes and version updates.
+      canonical_path: component.certin_identifier
+      cyclonedx_path: components[].properties[encorebom:certin_id]
+      spdx_path: packages[].externalRefs[PACKAGE-MANAGER/purl]
+      type: string
+      weight: 3
+      required: true
+      source_page: 24
+      certin_syntax: "pkg:supplier/OrganizationName/ComponentName@Version?qualifiers&subpath"
+      certin_example: "pkg:supplier/ApacheSoftwareFoundation/ApacheTomcat@9.0.71?arch=x86_64&os=linux#server/webapps"
+      note: >
+        CRITICAL: this is NOT a standard Package URL. CERT-In uses the literal
+        type token `supplier` and an organisation name where purl-spec uses an
+        ecosystem type and namespace (pkg:maven/org.apache.tomcat/tomcat@9.0.71).
+        The guideline's own text says `&subpath` while its Table 6 example uses
+        `#subpath` — treat `#` as canonical, per purl-spec.
+
+        EncoreBOM therefore stores TWO identifiers and never conflates them:
+          component.purl              — canonical ecosystem PURL. THE MERGE KEY.
+                                        Every scanner emits this; dedup uses it.
+          component.certin_identifier — derived, render-only. NEVER a merge key.
+
+        Deriving certin_identifier from purl + supplier is a pure function
+        specified in 03-NORMALIZER-SPEC.md §CERT-In identifier derivation.
+      status: verified
+
+  # --------------------------------------------------------------------------
+  # Levels — PDF p.11 §3.1, Figure 2. All five persist; the v1 UI exposes
+  # Top-Level and Complete as report dimensions.
+  # --------------------------------------------------------------------------
+  levels:
+    - id: top_level
+      name: Top-Level SBOM
+      source_page: 11
+      ui_exposed: true
+      description: >
+        A general summary of the software elements that are either integrated or
+        directly used in a product. Component names, versions, and their
+        interactions within the software.
+      encorebom_rule: depth <= 1 from the detected root set
+    - id: n_level
+      name: n-Level SBOM
+      source_page: 11
+      ui_exposed: false
+      description: >
+        Goes beyond top-level to include deeper details. "N" represents any
+        arbitrary level of depth, at multiple tiers of granularity.
+      encorebom_rule: depth <= N, N user-supplied
+    - id: delivery
+      name: Delivery SBOM
+      source_page: 11
+      ui_exposed: false
+      description: >
+        Every part, library, and direct dependency that is part of a software
+        release or delivery package.
+    - id: transitive
+      name: Transitive SBOM
+      source_page: 11
+      ui_exposed: false
+      description: >
+        Not only the direct dependencies of a software component but also its
+        indirect or transitive dependencies.
+    - id: complete
+      name: Complete SBOM
+      source_page: 11
+      ui_exposed: true
+      description: >
+        A complete and exhaustive list of all the parts, dependencies, and
+        related metadata present in a software system.
+      encorebom_rule: all reachable components plus orphans, flagged
+
+  # --------------------------------------------------------------------------
+  # Classification — PDF p.12-13 §3.2, Figure 3. Aligned with SDLC stages.
+  # --------------------------------------------------------------------------
+  classifications:
+    - {id: design,   name: Design SBOM,   source_page: 12, description: "Captures planned components, even before they exist."}
+    - {id: source,   name: Source SBOM,   source_page: 12, description: "Reflects the development environment, including source files and dependencies."}
+    - {id: build,    name: Build SBOM,    source_page: 12, description: "Generated during the build process, incorporating source files, dependencies, and pre-built components."}
+    - {id: analyzed, name: Analyzed SBOM, source_page: 12, description: "Created by inspecting final software artifacts post-build."}
+    - {id: deployed, name: Deployed SBOM, source_page: 13, description: "Inventory of software installed and configured on a specific system, accounting for the deployment environment."}
+    - {id: runtime,  name: Runtime SBOM,  source_page: 13, description: "Created by monitoring active software components, including external interactions and dynamically loaded dependencies, during runtime execution."}
+
+# ============================================================================
+# SECTION B — QBOM  (Table 8, PDF p.44-45)
+# ============================================================================
+# HONEST LABEL: no open-source tool discovers quantum hardware. QBOM in
+# EncoreBOM = (a) crypto assets derived from CBOM discovery with
+# quantum-vulnerability rules applied, plus (b) device metadata captured by
+# form/import. Do not present this as a scanner in the UI.
+# ============================================================================
+
+qbom:
+  source_table: "Table 8: Minimum Elements of QBOM & CBOM"
+  source_pages: [44, 45]
+  elements:
+    - {id: certin.qbom.01.model_name,            name: Model Name,                 canonical_path: quantum_component.model_name,            type: string,   weight: 3, source_page: 44, status: verified, description: "Unique identifier for the quantum device or system."}
+    - {id: certin.qbom.02.version,               name: Version,                    canonical_path: quantum_component.version,               type: string,   weight: 3, source_page: 44, status: verified, description: "Version numbers and updates, including new features, security patches, and system enhancements."}
+    - {id: certin.qbom.03.vendor_origin,         name: Vendor & Origin Information, canonical_path: quantum_component.vendor_origin,        type: string,   weight: 3, source_page: 44, status: verified, description: "Manufacturer and origin of the quantum device."}
+    - {id: certin.qbom.04.license_information,   name: License Information,        canonical_path: quantum_component.license_info,          type: string,   weight: 3, source_page: 44, status: verified, description: "Licensing terms and conditions for the quantum device."}
+    - {id: certin.qbom.05.cryptographic_asset,   name: Cryptographic Asset,        canonical_path: "quantum_component.crypto_assets[]",       type: ref_list, weight: 3, source_page: 44, status: verified, description: "Minimum elements per Table 9, depending on the cryptographic asset type.", fields_ref: crypto_asset}
+    - {id: certin.qbom.06.communication_protocol, name: Communication Protocol,    canonical_path: quantum_component.communication_protocol, type: string,  weight: 3, source_page: 45, status: verified, description: "Communication protocols used by the quantum device."}
+    - {id: certin.qbom.07.hardware,              name: Hardware,                   canonical_path: quantum_component.hardware,              type: text,     weight: 3, source_page: 45, status: verified, description: "Processor, simulators, networking components, and sensors required for quantum operations."}
+    - {id: certin.qbom.08.software_dependencies, name: Software Dependencies,      canonical_path: quantum_component.software_dependencies, type: ref_list, weight: 3, source_page: 45, status: verified, description: "Libraries, APIs, SDKs, and firmware updates interacting with the quantum hardware."}
+    - {id: certin.qbom.09.environmental_impact,  name: Environmental Impact,       canonical_path: quantum_component.environmental_impact,  type: text,     weight: 1, source_page: 45, status: verified, description: "Energy consumption and other sustainability factors."}
+    - {id: certin.qbom.10.vulnerabilities,       name: Vulnerabilities,            canonical_path: "quantum_component.findings[]",            type: ref_list, weight: 3, source_page: 45, status: verified, description: "Known security vulnerabilities, severity ratings, and CVE identifiers."}
+    - {id: certin.qbom.11.attestations,          name: Attestations,               canonical_path: quantum_component.attestation_signature, type: signature, weight: 3, source_page: 45, status: verified, description: "Digital signature for the QBOM to ensure authenticity and integrity."}
+
+# ============================================================================
+# SECTION C — CRYPTOGRAPHIC ASSET  (Table 9, PDF p.45-49)
+# ============================================================================
+# DEFECT D7 — THIS TABLE IS TYPE-DISCRIMINATED.
+#
+# Four asset types with DIFFERENT field sets. Storage may be one wide table,
+# but COVERAGE MUST BE SCORED AGAINST THE FIELD SET FOR THAT ASSET TYPE.
+# Scoring a certificate against `size` (a Keys field) or an algorithm against
+# `issuer_name` (a Certificates field) would report every CBOM at roughly 30%
+# coverage — falsely, and in a compliance artifact.
+#
+# The coverage checker MUST branch on crypto_asset.asset_type.
+# ============================================================================
+
+crypto_asset:
+  source_table: "Table 9: Minimum Elements pertaining to Cryptographic Asset"
+  source_pages: [45, 46, 47, 48, 49]
+  discriminator: crypto_asset.asset_type
+  types:
+
+    algorithms:
+      asset_type_value: algorithm
+      fields:
+        - {id: certin.crypto.algo.name,             name: Name,                    canonical_path: crypto_asset.name,                    type: string,      weight: 3, source_page: 45, status: verified, description: "Name of the cryptographic algorithm or asset, e.g. AES-128-GCM."}
+        - {id: certin.crypto.algo.asset_type,       name: Asset Type,              canonical_path: crypto_asset.asset_type,              type: enum,        weight: 3, source_page: 45, status: verified, values: [algorithm]}
+        - {id: certin.crypto.algo.primitive,        name: Primitive,               canonical_path: crypto_asset.primitive,               type: string,      weight: 3, source_page: 45, status: verified, description: "Cryptographic primitive; for SHA512withRSA the primitive is 'signature'."}
+        - {id: certin.crypto.algo.mode,             name: Mode,                    canonical_path: crypto_asset.mode,                    type: string,      weight: 3, source_page: 45, status: verified, description: "Operational mode, e.g. 'gcm'."}
+        - {id: certin.crypto.algo.crypto_functions, name: Crypto Functions,        canonical_path: "crypto_asset.crypto_functions[]",       type: string_list, weight: 3, source_page: 46, status: verified, description: "e.g. keygen, encrypt, decrypt, tag-generation."}
+        - {id: certin.crypto.algo.security_level,   name: Classical security level, canonical_path: crypto_asset.classical_security_level, type: integer,    weight: 3, source_page: 46, status: verified, description: "Resistance to classical (non-quantum) attack, in bits. AES-128 → 128."}
+        - {id: certin.crypto.algo.oid,              name: OID,                     canonical_path: crypto_asset.oid,                     type: string,      weight: 3, source_page: 46, status: verified, description: "Globally unique Object Identifier, e.g. 2.16.840.1.101.3.4.1.6 for AES-128-GCM."}
+        - {id: certin.crypto.algo.list,             name: List,                    canonical_path: "crypto_asset.algorithm_list[]",         type: string_list, weight: 1, source_page: 46, status: verified, description: "Algorithms employed by the quantum device/system, for post-quantum readiness assessment."}
+
+    keys:
+      asset_type_value: key
+      fields:
+        - {id: certin.crypto.key.name,            name: Name,            canonical_path: crypto_asset.name,           type: string,   weight: 3, source_page: 46, status: verified}
+        - {id: certin.crypto.key.asset_type,      name: Asset Type,      canonical_path: crypto_asset.asset_type,     type: enum,     weight: 3, source_page: 46, status: verified, values: [key]}
+        - {id: certin.crypto.key.id,              name: id,              canonical_path: crypto_asset.key_id,         type: string,   weight: 3, source_page: 46, status: verified, description: "Key ID or reference number."}
+        - {id: certin.crypto.key.state,           name: state,           canonical_path: crypto_asset.key_state,      type: enum,     weight: 3, source_page: 46, status: verified, values: [active, revoked, expired, unknown]}
+        - {id: certin.crypto.key.size,            name: size,            canonical_path: crypto_asset.key_size,       type: integer,  weight: 3, source_page: 46, status: verified, description: "Key size in bits, e.g. 128, 2048."}
+        - {id: certin.crypto.key.creation_date,   name: Creation Date,   canonical_path: crypto_asset.creation_date,  type: date,     weight: 1, source_page: 46, status: verified}
+        - {id: certin.crypto.key.activation_date, name: Activation Date, canonical_path: crypto_asset.activation_date, type: date,    weight: 1, source_page: 46, status: verified}
+
+    protocols:
+      asset_type_value: protocol
+      fields:
+        - {id: certin.crypto.proto.name,          name: Name,          canonical_path: crypto_asset.name,             type: string,      weight: 3, source_page: 46, status: verified, description: "e.g. TLS, IPsec, SSH."}
+        - {id: certin.crypto.proto.asset_type,    name: Asset Type,    canonical_path: crypto_asset.asset_type,       type: enum,        weight: 3, source_page: 47, status: verified, values: [protocol]}
+        - {id: certin.crypto.proto.version,       name: Version,       canonical_path: crypto_asset.protocol_version, type: string,      weight: 3, source_page: 47, status: verified, description: "e.g. TLS 1.2, TLS 1.3."}
+        - {id: certin.crypto.proto.cipher_suites, name: Cipher Suites, canonical_path: "crypto_asset.cipher_suites[]",  type: string_list, weight: 3, source_page: 47, status: verified}
+        - {id: certin.crypto.proto.oid,           name: OID,           canonical_path: crypto_asset.oid,              type: string,      weight: 1, source_page: 47, status: verified}
+
+    certificates:
+      asset_type_value: certificate
+      fields:
+        - {id: certin.crypto.cert.name,             name: Name,                          canonical_path: crypto_asset.name,                       type: string, weight: 3, source_page: 47, status: verified, description: "Typically the subject or entity the certificate represents."}
+        - {id: certin.crypto.cert.asset_type,       name: Asset Type,                    canonical_path: crypto_asset.asset_type,                 type: enum,   weight: 3, source_page: 47, status: verified, values: [certificate]}
+        - {id: certin.crypto.cert.subject_name,     name: Subject Name,                  canonical_path: crypto_asset.cert_subject,                type: string, weight: 3, source_page: 47, status: verified, description: "Distinguished Name of the entity the certificate represents."}
+        - {id: certin.crypto.cert.issuer_name,      name: Issuer Name,                   canonical_path: crypto_asset.cert_issuer,                 type: string, weight: 3, source_page: 47, status: verified, description: "DN of the CA that verified and issued the certificate."}
+        - {id: certin.crypto.cert.not_valid_before, name: Not Valid Before,              canonical_path: crypto_asset.not_valid_before,            type: datetime, weight: 3, source_page: 47, status: verified}
+        - {id: certin.crypto.cert.not_valid_after,  name: Not Valid After,               canonical_path: crypto_asset.not_valid_after,             type: datetime, weight: 3, source_page: 47, status: verified}
+        - {id: certin.crypto.cert.sig_algo_ref,     name: Signature Algorithm Reference, canonical_path: crypto_asset.signature_algo_ref,          type: string, weight: 3, source_page: 47, status: verified, description: "Reference to the signing algorithm and its OID."}
+        - {id: certin.crypto.cert.subject_pk_ref,   name: Subject Public Key Reference,  canonical_path: crypto_asset.subject_public_key_ref,      type: string, weight: 3, source_page: 47, status: verified}
+        - {id: certin.crypto.cert.format,           name: Certificate Format,            canonical_path: crypto_asset.cert_format,                 type: string, weight: 1, source_page: 47, status: verified, description: "Commonly X.509."}
+        - {id: certin.crypto.cert.extension,        name: Certificate Extension,         canonical_path: crypto_asset.cert_extension,              type: string, weight: 1, source_page: 48, status: verified, description: "File extension, commonly .crt for X.509."}
+
+  # EncoreBOM extensions — NOT CERT-In fields. Excluded from coverage scoring;
+  # they are analysis output, not required elements. Driven by PDF p.43 §8.2.3
+  # (PQC transition) and p.50 §8.4.2.2 (prohibit weak/deprecated algorithms).
+  encorebom_extensions:
+    - {id: encorebom.crypto.quantum_vulnerable,  canonical_path: crypto_asset.quantum_vulnerable,  type: boolean, scored: false, description: "True for Shor-vulnerable primitives: RSA, ECC/ECDSA/ECDH, DH, DSA."}
+    - {id: encorebom.crypto.pqc_recommendation,  canonical_path: crypto_asset.pqc_recommendation,  type: text,    scored: false, description: "NIST PQC migration guidance: lattice / code-based / hash-based / multivariate."}
+    - {id: encorebom.crypto.deprecation_status,  canonical_path: crypto_asset.deprecation_status,  type: enum,    scored: false, values: [current, deprecated, weak, broken]}
+
+# ============================================================================
+# SECTION D — AIBOM  (Table 10, PDF p.54-55)
+# ============================================================================
+
+aibom:
+  source_table: "Table 10: Minimum Elements of AIBOM"
+  source_pages: [54, 55]
+  elements:
+    - {id: certin.aibom.01.model_name,            name: Model Name,                 canonical_path: ai_model.model_name,             type: string,      weight: 3, source_page: 54, status: verified, description: "Official name of the AI model."}
+    - {id: certin.aibom.02.model_version,         name: Model Version,              canonical_path: ai_model.model_version,          type: string,      weight: 3, source_page: 54, status: verified}
+    - {id: certin.aibom.03.model_type,            name: Model Type,                 canonical_path: ai_model.model_type,             type: string,      weight: 3, source_page: 54, status: verified, description: "e.g. text-generation, image-processing, image-classifier."}
+    - {id: certin.aibom.04.model_developer,       name: Model Developer,            canonical_path: ai_model.model_developer,        type: string,      weight: 3, source_page: 54, status: verified}
+    - {id: certin.aibom.05.licensing,             name: Model Licensing Information, canonical_path: ai_model.licensing,             type: spdx_expression, weight: 3, source_page: 54, status: verified, description: "Licenses for the model and any components used."}
+    - {id: certin.aibom.06.software_dependencies, name: Software Dependencies,      canonical_path: "ai_model.software_dependencies[]", type: ref_list,   weight: 3, source_page: 54, status: verified, description: "Third-party libraries, frameworks, OS requirements, proprietary software."}
+    - {id: certin.aibom.07.ml_models_algorithms,  name: ML Models and Algorithms,   canonical_path: "ai_model.ml_models_algorithms[]", type: string_list, weight: 3, source_page: 54, status: verified}
+    - {id: certin.aibom.08.performance_metrics,   name: Model Performance Metrics,  canonical_path: ai_model.performance_metrics,    type: json,        weight: 1, source_page: 54, status: verified, description: "Accuracy, precision, recall, F1 score, etc."}
+    - {id: certin.aibom.09.data_source,           name: Data Source,                canonical_path: ai_model.data_source,            type: text,        weight: 3, source_page: 54, status: verified, description: "Proprietary, publicly available, real-time, or synthetic data."}
+    - {id: certin.aibom.10.data_sets,             name: Data Sets,                  canonical_path: "ai_model.data_sets[]",            type: ref_list,    weight: 3, source_page: 55, status: verified, description: "Names, versions, formats, and limitations. Privacy and licensing compliance."}
+    - {id: certin.aibom.11.hardware,              name: Hardware,                   canonical_path: ai_model.hardware,               type: text,        weight: 1, source_page: 55, status: verified, description: "GPUs, TPUs, storage, memory."}
+    - {id: certin.aibom.12.security_requirements, name: Security Requirements,      canonical_path: ai_model.security_requirements,  type: text,        weight: 3, source_page: 55, status: verified, description: "Encryption methods and access control mechanisms."}
+    - {id: certin.aibom.13.input,                 name: Input,                      canonical_path: ai_model.input,                  type: string,      weight: 3, source_page: 55, status: verified}
+    - {id: certin.aibom.14.output,                name: Output,                     canonical_path: ai_model.output,                 type: string,      weight: 3, source_page: 55, status: verified}
+    - {id: certin.aibom.15.intended_usage,        name: Intended Usage,             canonical_path: ai_model.intended_usage,         type: text,        weight: 3, source_page: 55, status: verified}
+    - {id: certin.aibom.16.out_of_scope_usage,    name: Out of Scope Usage,         canonical_path: ai_model.out_of_scope_usage,     type: text,        weight: 3, source_page: 55, status: verified, description: "Scenarios the model is not intended for, to prevent misuse."}
+    - {id: certin.aibom.17.environmental_impact,  name: Environmental Impact,       canonical_path: ai_model.environmental_impact,   type: text,        weight: 1, source_page: 55, status: verified, description: "Energy consumption, resource use, carbon footprint."}
+    - {id: certin.aibom.18.vulnerabilities,       name: Vulnerabilities,            canonical_path: "ai_model.findings[]",             type: ref_list,    weight: 3, source_page: 55, status: verified}
+    - {id: certin.aibom.19.attestations,          name: Attestations,               canonical_path: ai_model.attestation_signature,  type: signature,   weight: 3, source_page: 55, status: verified, description: "Digital signature for the model or AIBOM."}
+
+  encorebom_extensions:
+    - {id: encorebom.aibom.owasp_llm_top10, canonical_path: "ai_model.owasp_llm_top10[]", type: string_list, scored: false, description: "OWASP LLM Top-10 mapping from Trusera ai-bom."}
+    - {id: encorebom.aibom.risk_score,      canonical_path: ai_model.risk_score,        type: number,      scored: false}
+
+# ============================================================================
+# SECTION E — HBOM  (Table 11, PDF p.60-61  +  §10.4.1.4, PDF p.62)
+# ============================================================================
+# HONEST LABEL: there is no credible open-source HBOM scanner. HBOM in
+# EncoreBOM is a structured CSV/form import plus a data model. Label it that
+# way in the UI. Do not imply discovery.
+#
+# DEFECT D9 — two problems with Table 11 taken alone:
+#   (a) §10.4.1.4 (p.62) mandates four fields that appear NOWHERE in Table 11:
+#       firmware version, origin, criticality rating, and vulnerabilities.
+#   (b) Table 11 lists "Supplier Information" and "Supplier Location" TWICE,
+#       with different descriptions — the product's supplier, and the
+#       component's supplier to the manufacturer. Different relationships,
+#       so they get distinct columns.
+# ============================================================================
+
+hbom:
+  source_table: "Table 11: Minimum Elements of HBOM"
+  source_pages: [60, 61]
+  recursive: true
+  recursion_field: certin.hbom.20.sub_component
+  elements:
+    - {id: certin.hbom.01.product_name,            name: Product Name,            canonical_path: hardware_component.product_name,            type: string, weight: 3, source_page: 60, status: verified, description: "Common or marketing name of the hardware item."}
+    - {id: certin.hbom.02.product_version,         name: Product Version,         canonical_path: hardware_component.product_version,         type: string, weight: 3, source_page: 60, status: verified}
+    - {id: certin.hbom.03.product_details,         name: Product Details,         canonical_path: hardware_component.product_details,         type: text,   weight: 1, source_page: 60, status: verified}
+    - {id: certin.hbom.04.warranty_amc,            name: Warranty/AMC,            canonical_path: hardware_component.warranty_amc,            type: text,   weight: 1, source_page: 60, status: verified, description: "Guarantee and any annual maintenance contract."}
+    - {id: certin.hbom.05.manufacturer_name,       name: Manufacturer Name,       canonical_path: hardware_component.manufacturer_name,       type: string, weight: 3, source_page: 60, status: verified}
+    - {id: certin.hbom.06.manufacturer_location,   name: Manufacturer Location,   canonical_path: hardware_component.manufacturer_location,   type: string, weight: 3, source_page: 60, status: verified, description: "Geographical address. Supply-chain provenance signal."}
+    - {id: certin.hbom.07.manufacturing_date,      name: Manufacturing Date,      canonical_path: hardware_component.manufacturing_date,      type: date,   weight: 1, source_page: 60, status: verified}
+    # --- product-level supplier (first occurrence, p.61) ---
+    - {id: certin.hbom.08.supplier_information,    name: Supplier Information,    canonical_path: hardware_component.supplier_info,           type: text,   weight: 3, source_page: 61, status: verified, description: "Details about the company that provided or sold the product.", scope: product}
+    - {id: certin.hbom.09.supplier_location,       name: Supplier Location,       canonical_path: hardware_component.supplier_location,       type: string, weight: 3, source_page: 61, status: verified, description: "Geographical address of the product's supplier.", scope: product}
+    - {id: certin.hbom.10.model_number,            name: Model Number,            canonical_path: hardware_component.model_number,            type: string, weight: 3, source_page: 61, status: verified, description: "Alphanumeric identifier for a particular product design (MPN)."}
+    - {id: certin.hbom.11.serial_number,           name: Serial Number,           canonical_path: hardware_component.serial_number,           type: string, weight: 3, source_page: 61, status: verified, description: "Unique identifier per individual unit."}
+    - {id: certin.hbom.12.technical_specification, name: Technical Specification, canonical_path: hardware_component.technical_specification, type: text,   weight: 3, source_page: 61, status: verified, description: "Voltage, frequency, capacity, etc."}
+    # --- component-level supplier (second occurrence, p.61) — DEFECT D9(b) ---
+    - {id: certin.hbom.13.component_supplier_information, name: Supplier Information (component), canonical_path: hardware_component.component_supplier_info,     type: text,   weight: 3, source_page: 61, status: verified, description: "Name and contact details of the company that supplied the component to the manufacturer of the larger product.", scope: component}
+    - {id: certin.hbom.14.component_supplier_location,    name: Supplier Location (component),    canonical_path: hardware_component.component_supplier_location, type: string, weight: 3, source_page: 61, status: verified, description: "City and country of the direct supplier of the component.", scope: component}
+    - {id: certin.hbom.15.technology_node,         name: Technology Node,         canonical_path: hardware_component.technology_node,         type: string, weight: 1, source_page: 61, status: verified, description: "For ICs: semiconductor process technology, e.g. 7nm, 14nm."}
+    - {id: certin.hbom.16.compliance,              name: Compliance,              canonical_path: "hardware_component.compliance[]",            type: string_list, weight: 3, source_page: 61, status: verified, description: "Certifications e.g. RoHS, CE."}
+    - {id: certin.hbom.17.power_supply,            name: Power supply,            canonical_path: hardware_component.power_supply,            type: text,   weight: 1, source_page: 61, status: verified, description: "Voltage, current, wattage."}
+    - {id: certin.hbom.18.license_information,     name: License Information,     canonical_path: hardware_component.license_info,            type: text,   weight: 1, source_page: 61, status: verified, description: "IP licenses or usage terms, particularly for firmware or embedded software."}
+    - {id: certin.hbom.19.test_result,             name: Test Result,             canonical_path: hardware_component.test_result,             type: text,   weight: 1, source_page: 61, status: verified, description: "Performance during QA or functional testing."}
+    - {id: certin.hbom.20.sub_component,           name: Sub-component,           canonical_path: "hardware_component.children[]",              type: recursive_ref, weight: 3, source_page: 61, status: verified, description: "Recursive: a component containing further distinct hardware parts lists them with the same attributes."}
+
+  # ---- DEFECT D9(a): mandated by §10.4.1.4 (p.62) but absent from Table 11 ----
+  additional_required_elements:
+    source_section: "10.4.1.4"
+    source_page: 62
+    source_quote: >
+      The HBOM accompanying hardware supplied to government and public sector
+      entities must include data fields such as manufacturer name, model number,
+      component version, firmware version, origin, criticality rating, and
+      associated vulnerabilities.
+    elements:
+      - {id: certin.hbom.21.firmware_version, name: Firmware Version,   canonical_path: hardware_component.firmware_version, type: string, weight: 3, source_page: 62, status: verified}
+      - {id: certin.hbom.22.origin,           name: Origin,             canonical_path: hardware_component.origin,           type: string, weight: 3, source_page: 62, status: verified, description: "Country/entity of origin. Distinct from manufacturer_location."}
+      - {id: certin.hbom.23.criticality,      name: Criticality Rating, canonical_path: hardware_component.criticality,      type: enum,   weight: 3, source_page: 62, status: verified, values: [critical, high, medium, low]}
+      - {id: certin.hbom.24.vulnerabilities,  name: Vulnerabilities,    canonical_path: "hardware_component.findings[]",       type: ref_list, weight: 3, source_page: 62, status: verified}
+
+  export_formats:
+    source_section: "10.4.1.6"
+    source_page: 62
+    note: "Extended SBOM formats preferred; structured and machine-readable."
+
+# ============================================================================
+# SECTION F — VULNERABILITY DISCLOSURE (VEX / CSAF)
+# ============================================================================
+# PDF p.35 §6, and restated for CBOM/QBOM (p.48 §8.4.1.6), AIBOM (p.56
+# §9.4.1.6) and HBOM (p.62 §10.4.1.5). Identical four statuses each time.
+# ============================================================================
+
+vex:
+  source_pages: [35, 48, 56, 62]
+  iterative: true
+  iterative_note: >
+    PDF p.35: "It is an iterative process and the VEX document gets updated with
+    each update in the vulnerability including the time taken by the supplier
+    along with remediation, workarounds, restart/downtime required, scores, and
+    risks." EncoreBOM therefore versions VEX statements with full history and
+    never mutates in place.
+  statuses:
+    - {id: not_affected,       name: Not affected,        csaf_value: not_affected,       source_page: 35, status: verified, description: "No remediation is required regarding this vulnerability."}
+    - {id: affected,           name: Affected,            csaf_value: known_affected,     source_page: 35, status: verified, description: "Actions are recommended to remediate or address this vulnerability."}
+    - {id: fixed,              name: Fixed,               csaf_value: fixed,              source_page: 35, status: verified, description: "These product versions contain a fix for the vulnerability."}
+    - {id: under_investigation, name: Under Investigation, csaf_value: under_investigation, source_page: 35, status: verified, description: "Not yet known whether these product versions are affected. An update will be provided in a later release."}
+  additional_fields:
+    - {id: certin.vex.remediation,    name: Remediation,             canonical_path: vex_statement.remediation,    type: text, weight: 3, source_page: 35, status: verified}
+    - {id: certin.vex.workarounds,    name: Workarounds,             canonical_path: vex_statement.workarounds,    type: text, weight: 1, source_page: 35, status: verified}
+    - {id: certin.vex.downtime,       name: Restart/Downtime Required, canonical_path: vex_statement.downtime,     type: text, weight: 1, source_page: 35, status: verified}
+    - {id: certin.vex.justification,  name: Justification,           canonical_path: vex_statement.justification,  type: text, weight: 3, source_page: 35, status: verified}
+
+csaf:
+  source_page: 35
+  sequence: [vulnerability_discovery, vex_publication, csaf_publication, patch_mitigation_instructions, ongoing_updates, sbom_integration]
+  sequence_note: "PDF p.35 Figure 7, worked through with the Log4Shell timeline on p.36."
+  required_content:
+    - {id: certin.csaf.description,       name: Description,             canonical_path: csaf_advisory.description,       type: text,    weight: 3, source_page: 35, status: verified}
+    - {id: certin.csaf.affected_versions, name: Affected Product Versions, canonical_path: "csaf_advisory.affected_versions[]", type: ref_list, weight: 3, source_page: 35, status: verified}
+    - {id: certin.csaf.severity,          name: Severity Assessment,     canonical_path: csaf_advisory.severity,          type: string,  weight: 3, source_page: 35, status: verified}
+    - {id: certin.csaf.mitigation,        name: Recommended Mitigation Steps, canonical_path: csaf_advisory.mitigation_steps, type: text, weight: 3, source_page: 35, status: verified}
+
+vulnerability_sources:
+  source_section: "6c"
+  source_page: 36
+  note: >
+    "Integrate their SBOM data with vulnerability databases, CERT-In
+    vulnerability notes, alerts, threat intelligence platforms and
+    vendor-specific advisories."
+  required: [NVD, OSV, "CERT-In vulnerability notes", "vendor advisories"]
+
+# ============================================================================
+# SECTION G — SECURE DISTRIBUTION  (PDF p.32-33 §5.3)
+# ============================================================================
+# These are platform controls, not per-component fields. They are scored as a
+# platform-level checklist rendered in every report's compliance section.
+# ============================================================================
+
+secure_distribution:
+  source_pages: [32, 33]
+  controls:
+    - {id: certin.dist.5.3.1.rbac,           section: "5.3.1", name: Role-based access control, source_page: 32, status: verified, encorebom_binding: "docs/05-SECURITY-MODEL.md §RBAC matrix"}
+    - {id: certin.dist.5.3.2.public_private, section: "5.3.2", name: Public and Private BOM, source_page: 32, status: verified, encorebom_binding: "report.visibility", note: "Guideline requires maintaining BOTH versions: public (non-sensitive) and private (includes vulnerabilities)."}
+    - {id: certin.dist.5.3.3.transport,      section: "5.3.3", name: Secure distribution mechanisms, source_page: 32, status: verified, encorebom_binding: "HTTPS + detached signature on every report"}
+    - {id: certin.dist.5.3.4.automation,     section: "5.3.4", name: Automated generation and updates, source_page: 33, status: verified, encorebom_binding: "Campaigns module"}
+    - {id: certin.dist.5.3.5.verification,   section: "5.3.5", name: Consumption and verification, source_page: 33, status: verified, encorebom_binding: "encorebom verify <report> — signature check CLI"}
+    - {id: certin.dist.5.3.6.audit,          section: "5.3.6", name: Monitoring and auditing, source_page: 33, status: verified, encorebom_binding: "audit_log table + access-log review export"}
+    - {id: certin.dist.5.3.7.incident,       section: "5.3.7", name: Incident response and remediation, source_page: 33, status: verified, encorebom_binding: "VEX/CSAF workflow"}
+
+# ============================================================================
+# VALIDATION EXPECTATIONS
+# ============================================================================
+# `task profile:lint` asserts these counts. They are transcription checks
+# against the PDF, so a change here means either the guideline was revised or
+# the transcription is wrong. Both warrant a human decision, never a silent fix.
+# ============================================================================
+
+expected_counts:
+  sbom_minimum_element_categories: 3
+  sbom_data_fields: 21
+  sbom_practices_and_processes_sub_elements: 6
+  sbom_levels: 5
+  sbom_classifications: 6
+  qbom_elements: 11
+  crypto_asset_types: 4
+  crypto_algorithms_fields: 8
+  crypto_keys_fields: 7
+  crypto_protocols_fields: 5
+  crypto_certificates_fields: 10
+  aibom_elements: 19
+  hbom_table11_elements: 20
+  hbom_additional_required_elements: 4
+  hbom_total_elements: 24
+  vex_statuses: 4
+  secure_distribution_controls: 7
