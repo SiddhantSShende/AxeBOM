@@ -38,31 +38,52 @@ type Service struct {
 	OTel     OTel
 }
 
+// Postgres carries TWO identities, and the separation is load-bearing.
+//
+//	User / Password      the OWNER. Runs migrations. Creates objects.
+//	AppRole / AppPassword the APPLICATION. Runs every request.
+//
+// The application role must not be superuser and must not have BYPASSRLS.
+// Row-Level Security is the only tenancy boundary (ADR-0006), and either
+// privilege disables every policy silently — the queries keep working and the
+// rows keep coming back. platform/db asserts this on every boot, because a
+// later GRANT can reintroduce it long after the migration that got it right.
 type Postgres struct {
 	Host     string
 	Port     int
 	Database string
+
+	// Owner — migrations only.
 	User     string
 	Password Secret
-	// AppRole must not be superuser and must not have BYPASSRLS. Row-Level
-	// Security is the only tenancy boundary (ADR-0006); a superuser connection
-	// silently disables every policy. Asserted at startup in Phase 1.
-	AppRole  string
+
+	// Application — everything else.
+	AppRole     string
+	AppPassword Secret
+
 	SSLMode  string
 	MaxConns int
 }
 
-// DSN builds a connection string. Never log the result — it contains the
-// password. Use Redacted() for anything human-visible.
-func (p Postgres) DSN() string {
+// AdminDSN connects as the owner. Migrations only.
+//
+// Never log the result — it contains a password. Use Redacted().
+func (p Postgres) AdminDSN() string {
 	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
 		p.User, p.Password.Reveal(), p.Host, p.Port, p.Database, p.SSLMode)
+}
+
+// AppDSN connects as the non-superuser application role. Everything at runtime
+// uses this, so RLS is always in force.
+func (p Postgres) AppDSN() string {
+	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
+		p.AppRole, p.AppPassword.Reveal(), p.Host, p.Port, p.Database, p.SSLMode)
 }
 
 // Redacted is the safe form for logs and error messages.
 func (p Postgres) Redacted() string {
 	return fmt.Sprintf("postgres://%s:[REDACTED]@%s:%d/%s?sslmode=%s",
-		p.User, p.Host, p.Port, p.Database, p.SSLMode)
+		p.AppRole, p.Host, p.Port, p.Database, p.SSLMode)
 }
 
 type NATS struct {
@@ -116,7 +137,7 @@ func LoadService(name string) (*Service, error) {
 
 		Postgres: Postgres{
 			Host:     l.StringOr("POSTGRES_HOST", "localhost"),
-			Port:     l.Int("POSTGRES_PORT", 5432),
+			Port:     l.Int("POSTGRES_PORT", 55432),
 			Database: l.StringOr("POSTGRES_DB", "encorebom"),
 			User:     l.StringOr("POSTGRES_USER", "encorebom"),
 			AppRole:  l.StringOr("POSTGRES_APP_ROLE", "encorebom_app"),
@@ -124,16 +145,16 @@ func LoadService(name string) (*Service, error) {
 			MaxConns: l.Int("POSTGRES_MAX_CONNS", 20),
 		},
 		NATS: NATS{
-			URL:           l.StringOr("NATS_URL", "nats://localhost:4222"),
+			URL:           l.StringOr("NATS_URL", "nats://localhost:54222"),
 			StreamJobs:    l.StringOr("NATS_STREAM_JOBS", "SCAN_JOBS"),
 			StreamEvents:  l.StringOr("NATS_STREAM_EVENTS", "SCAN_EVENTS"),
 			StreamResults: l.StringOr("NATS_STREAM_RESULTS", "SCAN_RESULTS"),
 		},
 		Redis: Redis{
-			URL: l.SecretOr("REDIS_URL", "redis://localhost:6379/0"),
+			URL: l.SecretOr("REDIS_URL", "redis://localhost:56379/0"),
 		},
 		S3: S3{
-			Endpoint:       l.StringOr("S3_ENDPOINT", "http://localhost:9000"),
+			Endpoint:       l.StringOr("S3_ENDPOINT", "http://localhost:59000"),
 			Region:         l.StringOr("S3_REGION", "us-east-1"),
 			Bucket:         l.StringOr("S3_BUCKET", "encorebom"),
 			ForcePathStyle: l.Bool("S3_FORCE_PATH_STYLE", true),
@@ -150,10 +171,12 @@ func LoadService(name string) (*Service, error) {
 	// with a default credential.
 	if env.IsProduction() {
 		svc.Postgres.Password = l.Secret("POSTGRES_PASSWORD")
+		svc.Postgres.AppPassword = l.Secret("POSTGRES_APP_PASSWORD")
 		svc.S3.AccessKey = l.Secret("S3_ACCESS_KEY")
 		svc.S3.SecretKey = l.Secret("S3_SECRET_KEY")
 	} else {
 		svc.Postgres.Password = l.SecretOr("POSTGRES_PASSWORD", "encorebom")
+		svc.Postgres.AppPassword = l.SecretOr("POSTGRES_APP_PASSWORD", "encorebom_app")
 		svc.S3.AccessKey = l.SecretOr("S3_ACCESS_KEY", "minioadmin")
 		svc.S3.SecretKey = l.SecretOr("S3_SECRET_KEY", "minioadmin")
 	}
@@ -173,6 +196,12 @@ func sslDefault(env Env) string {
 
 // defaultPort assigns each service a stable port so the local stack has no
 // collisions and no per-service env vars.
+//
+// Infrastructure defaults (Postgres 55432, NATS 54222, Redis 56379, MinIO
+// 59000) are deliberately NOT the upstream defaults: this development machine
+// already runs other projects on 5432, 4222, 6379 and 9000. Colliding means
+// silently connecting to somebody else's database and getting an auth failure
+// that looks like a credential bug rather than a port clash.
 func defaultPort(name string) int {
 	ports := map[string]int{
 		"gateway":           8080,

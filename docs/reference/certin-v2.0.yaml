@@ -657,9 +657,9 @@ crypto_asset:
   # they are analysis output, not required elements. Driven by PDF p.43 §8.2.3
   # (PQC transition) and p.50 §8.4.2.2 (prohibit weak/deprecated algorithms).
   encorebom_extensions:
-    - {id: encorebom.crypto.quantum_vulnerable,  canonical_path: crypto_asset.quantum_vulnerable,  type: boolean, scored: false, description: "True for Shor-vulnerable primitives: RSA, ECC/ECDSA/ECDH, DH, DSA."}
-    - {id: encorebom.crypto.pqc_recommendation,  canonical_path: crypto_asset.pqc_recommendation,  type: text,    scored: false, description: "NIST PQC migration guidance: lattice / code-based / hash-based / multivariate."}
-    - {id: encorebom.crypto.deprecation_status,  canonical_path: crypto_asset.deprecation_status,  type: enum,    scored: false, values: [current, deprecated, weak, broken]}
+    - {id: encorebom.crypto.quantum_vulnerable,  canonical_path: crypto_asset.quantum_vulnerable,  type: boolean, scored: false, status: extension, description: "True for Shor-vulnerable primitives: RSA, ECC/ECDSA/ECDH, DH, DSA."}
+    - {id: encorebom.crypto.pqc_recommendation,  canonical_path: crypto_asset.pqc_recommendation,  type: text,    scored: false, status: extension, description: "NIST PQC migration guidance: lattice / code-based / hash-based / multivariate."}
+    - {id: encorebom.crypto.deprecation_status,  canonical_path: crypto_asset.deprecation_status,  type: enum,    scored: false, status: extension, values: [current, deprecated, weak, broken]}
 
 # ============================================================================
 # SECTION D — AIBOM  (Table 10, PDF p.54-55)
@@ -690,8 +690,8 @@ aibom:
     - {id: certin.aibom.19.attestations,          name: Attestations,               canonical_path: ai_model.attestation_signature,  type: signature,   weight: 3, source_page: 55, status: verified, description: "Digital signature for the model or AIBOM."}
 
   encorebom_extensions:
-    - {id: encorebom.aibom.owasp_llm_top10, canonical_path: "ai_model.owasp_llm_top10[]", type: string_list, scored: false, description: "OWASP LLM Top-10 mapping from Trusera ai-bom."}
-    - {id: encorebom.aibom.risk_score,      canonical_path: ai_model.risk_score,        type: number,      scored: false}
+    - {id: encorebom.aibom.owasp_llm_top10, canonical_path: "ai_model.owasp_llm_top10[]", type: string_list, scored: false, status: extension, description: "OWASP LLM Top-10 mapping from Trusera ai-bom."}
+    - {id: encorebom.aibom.risk_score,      canonical_path: ai_model.risk_score,        type: number,      scored: false, status: extension}
 
 # ============================================================================
 # SECTION E — HBOM  (Table 11, PDF p.60-61  +  §10.4.1.4, PDF p.62)

@@ -40,13 +40,26 @@ tasks:
   # ================================================================== the gate
   verify:
     desc: "The gate: fmt + lint + boundaries + test + build + docs. CI runs this."
-    deps:
-      - fmt:check
-      - lint
-      - lint:boundaries
-      - test
-      - build
-      - docs:lint
+    # SEQUENTIAL, not parallel `deps`.
+    #
+    # Two reasons, both learned the hard way:
+    #   - golangci-lint refuses to run concurrently with itself, so `lint` and
+    #     `lint:boundaries` as parallel deps fail with "parallel golangci-lint
+    #     is running". (lint:boundaries is omitted anyway — `lint` already runs
+    #     depguard; it stays a standalone target for a fast boundary check.)
+    #   - golangci-lint + go test + go build + vite in parallel, on a machine
+    #     also running the Docker stack, exhausts memory and the build dies
+    #     with "fatal error: out of memory". A gate that passes or fails
+    #     depending on how much RAM happens to be free is not a gate.
+    #
+    # Ordered cheapest-first so an obvious failure surfaces quickly.
+    cmds:
+      - task: fmt:check
+      - task: profile:lint
+      - task: docs:lint
+      - task: lint
+      - task: test
+      - task: build
 
   fmt:
     desc: Format Go, Python and TypeScript
@@ -117,10 +130,16 @@ tasks:
       - exit 1
 
   test:rls:
-    desc: "[phase 1] Assert every tenant-scoped table has RLS enabled"
+    desc: Assert every tenant-scoped table has RLS, and cross-tenant access fails
+    # The acceptance criterion of Phase 1. Requires `task dev`; the tests skip
+    # (not fail) without a database so a developer offline is not blocked.
     cmds:
-      - cmd: echo "not implemented until Phase 1 - see docs/phases/PHASE-01-data-model-rls.md"
-      - exit 1
+      - go test ./libs/go-shared/platform/db -run "TestRLSCoverage|TestCrossTenant|TestPoolReuse|TestQueryOutside|TestAppRole|TestAuditLog|TestRawArtifacts|TestSetting|TestWithTenant" -v -count=1
+
+  db:verify-rls:
+    desc: Operator-facing RLS coverage report for a live database
+    cmds:
+      - go run ./cmd/encorebom db verify-rls
 
   # ==================================================================== build
   build:
@@ -171,26 +190,56 @@ tasks:
     desc: "Tail logs. Usage: task logs -- gateway"
     cmds: ['{{.COMPOSE}} logs -f {{.CLI_ARGS}}']
 
-  # =============================================================== not yet
+  # ================================================================ database
   db:migrate:
-    desc: "[phase 1] Apply pending migrations"
+    desc: Apply pending migrations across every schema
     cmds:
-      - cmd: echo "not implemented until Phase 1"
-      - exit 1
+      - go run ./cmd/encorebom db migrate
+
+  db:status:
+    desc: Show applied and pending migrations per schema
+    cmds:
+      - go run ./cmd/encorebom db status
+
+  db:seed:
+    desc: Load development fixtures (TWO tenants — isolation bugs are invisible with one)
+    cmds:
+      - go run ./cmd/encorebom db seed
 
   db:reset:
-    desc: "[phase 1] Drop, migrate, seed"
+    desc: Drop every schema, migrate from scratch, seed
+    prompt: This destroys the local database. Continue?
     cmds:
-      - cmd: echo "not implemented until Phase 1"
-      - exit 1
+      - go run ./cmd/encorebom db reset
+      - go run ./cmd/encorebom db seed
+
+  db:down-all:
+    desc: Roll every schema back to zero (development only)
+    prompt: This drops every table. Continue?
+    cmds:
+      - go run ./cmd/encorebom db down-all
 
   profile:lint:
-    desc: "[phase 1] Validate certin-v2.0.yaml counts and statuses"
-    # CI runs an equivalent Python check today (.github/workflows/verify.yml).
-    # Phase 1 replaces both with `encorebom profile lint`.
+    desc: Validate the compliance profile — counts, ids, statuses, paths
+    # The counts are TRANSCRIPTION ASSERTIONS against the source PDF. A
+    # mismatch means the guideline was revised or the transcription is wrong;
+    # both need a human. Never "fix" the expected value to match.
     cmds:
-      - cmd: echo "not implemented until Phase 1 - CI runs the equivalent check"
-      - exit 1
+      - go run ./cmd/encorebom profile lint
+
+  profile:gen:
+    desc: Regenerate Go and Python models from the compliance profile
+    # ruff format runs after generation so the committed Python is stable and
+    # the drift check compares like with like.
+    cmds:
+      - go run ./cmd/encorebom profile gen
+      - cmd: '{{.PY}} -m ruff format libs/py-shared/encorebom_shared/model'
+        ignore_error: true
+
+  profile:show:
+    desc: "Show what the profile requires. Usage: task profile:show -- --bom-type AIBOM"
+    cmds:
+      - go run ./cmd/encorebom profile show {{.CLI_ARGS}}
 
   osint:sync:
     desc: "[phase 2] Download and verify pinned scanner artifacts"

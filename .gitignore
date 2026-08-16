@@ -69,6 +69,17 @@ coverage.html
 /playwright-report/
 /test-results/
 
-# --- Generated (regenerate with `task profile:gen`) ------------------------
-libs/go-shared/model/generated_*.go
-libs/py-shared/model/generated_*.py
+# --- Generated code IS committed -------------------------------------------
+# The model files under libs/go-shared/model/ and
+# libs/py-shared/encorebom_shared/model/ are produced by `task profile:gen`
+# but deliberately NOT ignored:
+#
+#   - a fresh clone must `go build` without first running a codegen step
+#   - the diff is the review surface when the compliance profile changes,
+#     which is exactly the change that most deserves a human reading it
+#
+# Drift is caught by the `profile-drift` CI job, which regenerates and fails on
+# any difference — the same pattern as the service generator.
+
+# --- Genuinely generated, not committed ------------------------------------
+proto/gen/

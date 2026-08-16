@@ -20,6 +20,22 @@
 | **Money/scores** | `NUMERIC`, never `FLOAT`. CVSS scores are `NUMERIC(3,1)`. |
 | **Text from user repos** | Filenames may contain newlines, NULs, 4-byte emoji and 8 KB paths. Sanitize and truncate **before** insert. Column limits are enforced, not aspirational. |
 
+### Tables deliberately NOT tenant-scoped
+
+Seven tables have no `tenant_id` and no policy, each for a stated reason. The list is enforced in code (`libs/go-shared/platform/db/rls.go`), and `TestRLSCoverage` fails on any table that is neither scoped nor exempt — so an unlisted table cannot slip through unnoticed.
+
+| Table | Why |
+|---|---|
+| `auth.tenants` | the tenancy root — the table every policy keys on |
+| `auth.users` | global identity; one user may belong to several tenants |
+| `normalize.vuln_clusters` | the alias graph is shared knowledge, not tenant data (ADR-0005) |
+| `normalize.vuln_cluster_merges` | forwarding table for the global graph |
+| `normalize.vuln_ids` | namespaced ids belonging to global clusters |
+| `normalize.vuln_alias_edges` | global edge set; per-tenant would mean rediscovering every alias |
+| `normalize.licenses` | SPDX reference data, identical for everyone |
+
+**Adding to that list is a security decision.** "It was awkward to add `tenant_id`" is not a reason.
+
 ### Tenancy pattern (exact)
 
 ```sql
@@ -344,7 +360,7 @@ Every normalized fact records which engine saw it, which artifact it came from, 
 **Ingested verbatim, never deduped at ingest.** Deduping here would destroy the audit trail. `normalize.findings` is derived from these.
 
 ### `normalize.licenses`
-`(id, tenant_id, spdx_id, name, category, is_deprecated, obligations, text_ref)` — reference data, seeded from the pinned SPDX license list.
+`(id, spdx_id, name, category, is_deprecated, is_osi_approved, obligations, text_ref, list_version)` — **global reference data, NOT tenant-scoped.** The SPDX list is identical for every tenant; scoping it would mean each tenant re-seeding the same 600 licences. Tenant-specific unrecognized licence text lives in `license_refs`, which *is* scoped.
 
 ### `normalize.license_refs`
 `(id, tenant_id, slug, raw_text, first_seen_scan_id, mapped_spdx_id NULL, reviewed_by NULL)`

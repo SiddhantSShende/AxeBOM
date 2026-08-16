@@ -41,6 +41,8 @@ func init() {
 		{"preflight", "Report toolchain status and known environment gaps", 0, runPreflight},
 		{"version", "Print version and build information", 0, runVersion},
 		{"docs", "Documentation tooling (lint)", 0, runDocs},
+		{"db", "Migrations, reset, seed, RLS verification", 1, runDB},
+		{"profile", "Validate and generate from the CERT-In compliance profile", 1, runProfile},
 	}
 }
 
@@ -87,8 +89,6 @@ func usage() {
 		name, summary string
 		phase         int
 	}{
-		{"db", "Migrations, reset, seed", 1},
-		{"profile", "Validate and generate from the CERT-In compliance profile", 1},
 		{"toolctl", "Fetch and verify pinned scanner artifacts", 2},
 		{"verify", "Verify a report's detached signature", 9},
 	}
