@@ -1,12 +1,17 @@
+import { BrowserRouter, Link, Route, Routes } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { BOM_TYPES } from './lib/bomTypes';
+import { ProjectList } from './routes/projects/ProjectList';
+import { ProjectWizard } from './routes/projects/ProjectWizard';
+import { ProjectDetail } from './routes/projects/ProjectDetail';
 
 /**
- * Phase 0 scaffold.
+ * Application shell.
  *
- * Its only job is to prove the toolchain works end to end: React renders,
- * TanStack Query fetches through the Vite proxy, and the gateway answers.
- * Phase 10 replaces this with the real application (docs/07-FRONTEND-SPEC.md).
+ * Phase 4 adds the projects module. Phase 10 replaces this shell with the full
+ * application — dashboard, dependency explorer, findings, report viewer
+ * (docs/07-FRONTEND-SPEC.md). The routes added here are the ones Phase 4 owns,
+ * and they are built against the real API rather than mocked, so Phase 10
+ * inherits working screens instead of a scaffold.
  */
 
 interface Health {
@@ -21,64 +26,54 @@ async function fetchHealth(): Promise<Health> {
   return res.json() as Promise<Health>;
 }
 
-export function App() {
-  const { data, isPending, isError, error } = useQuery({
+function GatewayStatus() {
+  const { data, isError } = useQuery({
     queryKey: ['health'],
     queryFn: fetchHealth,
     retry: false,
   });
 
+  if (isError) {
+    return (
+      <span className="status status-down" role="status">
+        Gateway unreachable — run <code>task dev</code>
+      </span>
+    );
+  }
+  if (!data) return null;
   return (
-    <main className="shell">
-      <header>
-        <h1>EncoreBOM</h1>
-        <p className="tagline">Bill of Materials &amp; Software Composition Analysis</p>
-      </header>
+    <span className="status status-up" role="status">
+      {data.service} {data.status}
+    </span>
+  );
+}
 
-      <section aria-labelledby="bom-types-heading">
-        <h2 id="bom-types-heading">BOM types</h2>
-        {/*
-          Every chip carries glyph + label + colour. Colour is reinforcement,
-          never the signal — WCAG 1.4.1. See docs/07-FRONTEND-SPEC.md §2.
-        */}
-        <ul className="chips">
-          {BOM_TYPES.map((t) => (
-            <li key={t.id} className="chip" data-bom={t.id.toLowerCase()}>
-              <span aria-hidden="true">{t.glyph}</span>
-              <span>{t.id}</span>
-              <span className="chip-note">{t.note}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
+export function App() {
+  return (
+    <BrowserRouter>
+      <nav className="topbar">
+        <Link to="/projects" className="brand">
+          EncoreBOM
+        </Link>
+        <GatewayStatus />
+      </nav>
 
-      <section aria-labelledby="status-heading">
-        <h2 id="status-heading">Gateway</h2>
-        {isPending && (
-          <p className="status" aria-live="polite">
-            Checking…
-          </p>
-        )}
-        {isError && (
-          <p className="status status-down" role="status">
-            Unreachable — start the stack with <code>task dev</code>
-            {error instanceof Error ? ` (${error.message})` : null}
-          </p>
-        )}
-        {data && (
-          <p className="status status-up" role="status">
-            {data.service} is {data.status}
-            {data.version ? ` (${data.version})` : null}
-          </p>
-        )}
-      </section>
-
-      <footer>
-        <p>
-          Phase 0 scaffold. See <code>docs/STATE.md</code> for what exists and{' '}
-          <code>docs/phases/</code> for what comes next.
-        </p>
-      </footer>
-    </main>
+      <Routes>
+        <Route path="/" element={<ProjectList />} />
+        <Route path="/projects" element={<ProjectList />} />
+        {/* Before /projects/:id, or "new" is read as an id. */}
+        <Route path="/projects/new" element={<ProjectWizard />} />
+        <Route path="/projects/:id" element={<ProjectDetail />} />
+        <Route
+          path="*"
+          element={
+            <main className="shell">
+              <h1>Not found</h1>
+              <Link to="/projects">Back to projects</Link>
+            </main>
+          }
+        />
+      </Routes>
+    </BrowserRouter>
   );
 }

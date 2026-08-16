@@ -16,6 +16,8 @@ package store
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -239,10 +241,35 @@ func (s *Store) MembershipsForUser(ctx context.Context, userID string) ([]Member
 	return out, rows.Err()
 }
 
-// maxSlugAttempts bounds the disambiguation loop below. Ten is far beyond any
-// realistic collision, and a bound means a pathological case fails loudly
-// instead of spinning.
-const maxSlugAttempts = 10
+// maxSlugAttempts bounds the disambiguation loop below.
+//
+// Only the first three attempts are sequential; the rest carry 40 bits of
+// randomness, so reaching this bound means something is genuinely wrong rather
+// than that a name is popular. The bound exists so a pathological case fails
+// loudly instead of spinning.
+const maxSlugAttempts = 8
+
+// sequentialSlugAttempts is how many tidy `-2`, `-3` suffixes are tried before
+// falling back to randomness.
+const sequentialSlugAttempts = 3
+
+// slugCandidate derives the slug to try on a given attempt.
+func slugCandidate(base string, attempt int) (string, error) {
+	switch {
+	case attempt == 1:
+		return base, nil
+	case attempt <= sequentialSlugAttempts:
+		return fmt.Sprintf("%s-%d", base, attempt), nil
+	}
+
+	// 40 bits, hex-encoded. Enough that a collision here is far less likely
+	// than the transaction failing for an unrelated reason.
+	var b [5]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", fmt.Errorf("generate slug suffix: %w", err)
+	}
+	return base + "-" + hex.EncodeToString(b[:]), nil
+}
 
 // CreateTenantWithOwner creates a tenant and its first membership atomically.
 //
@@ -283,21 +310,31 @@ func (s *Store) CreateTenantWithOwner(ctx context.Context, name, slug, userID st
 	return tenantID, nil
 }
 
-// insertTenant inserts, appending a numeric suffix on slug collision.
+// insertTenant inserts, disambiguating the slug on collision.
+//
+// TWO SUFFIX STRATEGIES, and the split matters:
+//
+//	attempts 1-3   base, base-2, base-3 — tidy URLs for the common case, where
+//	               at most a couple of organisations share a name.
+//	attempts 4+    a random suffix. Sequential numbering ALONE does not scale:
+//	               with a cap of N, the (N+1)th organisation with a popular name
+//	               simply cannot sign up, and it fails with an error about
+//	               slugs that tells the user nothing they can act on. Ten
+//	               companies called "Acme" is not a hypothetical.
 //
 // Each attempt runs in a SAVEPOINT. Without one, the first unique violation
 // would poison the surrounding transaction — Postgres refuses every subsequent
 // statement until rollback — so the retry could never succeed.
 func insertTenant(ctx context.Context, tx pgx.Tx, name, slug string) (string, error) {
 	for attempt := 1; attempt <= maxSlugAttempts; attempt++ {
-		candidate := slug
-		if attempt > 1 {
-			candidate = fmt.Sprintf("%s-%d", slug, attempt)
-		}
-
-		sp, err := tx.Begin(ctx) // nested Begin == SAVEPOINT in pgx
+		candidate, err := slugCandidate(slug, attempt)
 		if err != nil {
 			return "", err
+		}
+
+		sp, spErr := tx.Begin(ctx) // nested Begin == SAVEPOINT in pgx
+		if spErr != nil {
+			return "", spErr
 		}
 
 		var id string

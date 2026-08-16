@@ -142,14 +142,42 @@ func TestCrossTenantCountIsScoped(t *testing.T) {
 	a, b := count(tenantA), count(tenantB)
 	t.Logf("tenant A sees %d projects, tenant B sees %d", a, b)
 
-	// Seed: A has two projects, B has one. If either sees three, the policy is
-	// not filtering — and because both tenants have a project called
-	// "payments-api", that shows up as an obvious duplicate.
-	if a != 2 {
-		t.Errorf("tenant A should see exactly its own 2 projects, saw %d", a)
+	// Both tenants must see at least their seeded projects, or RLS is filtering
+	// too much and the product is broken in the other direction.
+	if a < 2 {
+		t.Errorf("tenant A sees %d projects but was seeded with 2", a)
 	}
-	if b != 1 {
-		t.Errorf("tenant B should see exactly its own 1 project, saw %d", b)
+	if b < 1 {
+		t.Errorf("tenant B sees %d projects but was seeded with 1", b)
+	}
+
+	// THE ACTUAL ISOLATION ASSERTION.
+	//
+	// Deliberately NOT an exact count. Other tests create projects in these
+	// tenants, so `a == 2` was true only while this was the only suite that
+	// wrote rows — and a test that fails because a different package did its
+	// job reports "TENANT SCOPE LEAKED" for something that is not a leak.
+	// A guard on the most important invariant in the system must not cry wolf.
+	//
+	// So state the property directly: within a tenant's scope, the number of
+	// rows belonging to ANYONE ELSE must be zero. That holds no matter how much
+	// data exists.
+	foreign := func(tenant string) int {
+		var n int
+		if err := pool.WithTenant(ctx, tenant, func(ctx context.Context, tx Tx) error {
+			return tx.QueryRow(ctx,
+				`SELECT count(*) FROM project.projects WHERE tenant_id <> $1`, tenant).Scan(&n)
+		}); err != nil {
+			t.Fatalf("foreign count for %s: %v", tenant, err)
+		}
+		return n
+	}
+
+	if n := foreign(tenantA); n != 0 {
+		t.Errorf("tenant A can see %d rows belonging to another tenant — RLS IS NOT FILTERING", n)
+	}
+	if n := foreign(tenantB); n != 0 {
+		t.Errorf("tenant B can see %d rows belonging to another tenant — RLS IS NOT FILTERING", n)
 	}
 }
 
@@ -263,25 +291,32 @@ func TestPoolReuseDoesNotLeakTenantScope(t *testing.T) {
 	var wg sync.WaitGroup
 	errCh := make(chan error, iterations*2)
 
-	check := func(tenant string, want int) {
+	// Counts rows visible to `tenant` that belong to somebody else.
+	//
+	// Not an absolute count: other suites write projects into these tenants, and
+	// an exact-count assertion would report a leak whenever they did. This
+	// formulation is both immune to data volume and a sharper statement of the
+	// property — under concurrency, a tenant must see zero foreign rows.
+	check := func(tenant string) {
 		defer wg.Done()
 		var n int
 		if err := pool.WithTenant(ctx, tenant, func(ctx context.Context, tx Tx) error {
-			return tx.QueryRow(ctx, `SELECT count(*) FROM project.projects`).Scan(&n)
+			return tx.QueryRow(ctx,
+				`SELECT count(*) FROM project.projects WHERE tenant_id <> $1`, tenant).Scan(&n)
 		}); err != nil {
 			errCh <- err
 			return
 		}
-		if n != want {
+		if n != 0 {
 			errCh <- errors.New("TENANT SCOPE LEAKED ACROSS POOLED CONNECTIONS: tenant " +
-				tenant + " saw the wrong row count")
+				tenant + " saw rows belonging to another tenant")
 		}
 	}
 
 	for i := 0; i < iterations; i++ {
 		wg.Add(2)
-		go check(tenantA, 2)
-		go check(tenantB, 1)
+		go check(tenantA)
+		go check(tenantB)
 	}
 	wg.Wait()
 	close(errCh)

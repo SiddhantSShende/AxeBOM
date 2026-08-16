@@ -112,7 +112,34 @@ func register(t *testing.T, f *fixture, org string) (service.TokenPair, string) 
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
+	cleanupTenant(t, pair.TenantID, pair.UserID)
 	return pair, email
+}
+
+// cleanupTenant removes a test tenant and its user when the test finishes.
+//
+// Without it every run leaves a tenant behind, and the pile has two concrete
+// costs that were both hit before this existed: slug disambiguation eventually
+// exhausts its attempts, and tests elsewhere that reason about row counts start
+// failing for reasons unrelated to what they test.
+//
+// Runs as the OWNER, because deleting a tenant is exactly the operation the
+// application role must not be able to perform.
+func cleanupTenant(t *testing.T, tenantID, userID string) {
+	t.Helper()
+	t.Cleanup(func() {
+		conn := ownerConn(t)
+		// A fresh context: t.Context() is already cancelled by cleanup time.
+		ctx := context.Background()
+		// Memberships, sessions, invitations and audit rows cascade from the
+		// tenant; the user is global and needs its own delete.
+		if _, err := conn.Exec(ctx, `DELETE FROM auth.tenants WHERE id = $1`, tenantID); err != nil {
+			t.Logf("cleanup: delete tenant %s: %v", tenantID, err)
+		}
+		if _, err := conn.Exec(ctx, `DELETE FROM auth.users WHERE id = $1`, userID); err != nil {
+			t.Logf("cleanup: delete user %s: %v", userID, err)
+		}
+	})
 }
 
 // ---------------------------------------------------------------------------

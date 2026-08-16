@@ -174,6 +174,14 @@ var matrix = map[Permission]rule{
 	{ResourceRepoConn, ActionRead}:   {minRole: RoleViewer},
 	{ResourceRepoConn, ActionCreate}: {minRole: RoleAnalyst},
 	{ResourceRepoConn, ActionDelete}: {minRole: RoleAnalyst},
+	// Enumerating the provider's repositories, for the connect wizard.
+	//
+	// Analyst, NOT Viewer — deliberately stricter than repo_connection:read.
+	// Reading an existing connection reveals a repository the tenant already
+	// chose to register; this LISTS every private repository the signed-in
+	// user can see at GitHub, which is a much larger disclosure and is only
+	// needed by someone who is about to create a connection.
+	{ResourceRepoConn, ActionList}: {minRole: RoleAnalyst},
 
 	{ResourceUpload, ActionCreate}: {minRole: RoleAnalyst},
 	{ResourceUpload, ActionRead}:   {minRole: RoleViewer},

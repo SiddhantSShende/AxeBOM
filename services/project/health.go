@@ -17,8 +17,17 @@ import (
 // blip that fails liveness gets the entire fleet killed and turns a short
 // outage into a long one.
 func registerHealthChecks(c *health.Checker, d *deps) {
-	// Phase 1 adds: c.Register("postgres", db.Ping)
-	// Phase 6 adds: c.Register("nats", bus.Ping)
-	//               c.RegisterOptional("s3", blob.Ping)
-	_, _ = c, d
+	// Critical: every endpoint reads or writes a project row.
+	c.Register("postgres", d.pool.Ping)
+
+	// Critical: uploads are one of the two registration paths, so an instance
+	// that cannot reach object storage should leave the load balancer rather
+	// than accept files it will drop.
+	c.Register("objectstore", d.blob.Ping)
+
+	// OPTIONAL, deliberately. Vault being down blocks connecting a PRIVATE
+	// repository; it does not block public repositories, uploads, manual
+	// registration, or any read. Marking it critical would convert a
+	// credential-store outage into a total outage of the projects module.
+	c.RegisterOptional("vault", d.vault.Ping)
 }

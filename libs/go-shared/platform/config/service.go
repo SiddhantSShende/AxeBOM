@@ -37,6 +37,7 @@ type Service struct {
 	S3       S3
 	OTel     OTel
 	Auth     Auth
+	Vault    Vault
 }
 
 // Postgres carries TWO identities, and the separation is load-bearing.
@@ -113,6 +114,18 @@ type OTel struct {
 	Enabled   bool
 }
 
+// Vault configures the credential store.
+//
+// Credentials for third-party systems (repository tokens, webhook secrets)
+// live here and NEVER in Postgres — a database row holds only the path. See
+// libs/go-shared/vault.
+type Vault struct {
+	Address string
+	Token   Secret
+	// Mount is the KV v2 mount point.
+	Mount string
+}
+
 // Auth configures identity. Only the auth service consumes all of it; the
 // gateway needs the JWT fields to verify tokens it forwards.
 type Auth struct {
@@ -151,7 +164,7 @@ func LoadService(name string) (*Service, error) {
 		LogLevel:    l.Enum("LOG_LEVEL", []string{"debug", "info", "warn", "error"}, "info"),
 		LogFormat:   l.Enum("LOG_FORMAT", []string{"json", "text"}, "json"),
 		HTTPPort:    l.Int("HTTP_PORT", defaultPort(name)),
-		MetricsPort: l.Int("METRICS_PORT", 9090),
+		MetricsPort: l.Int("METRICS_PORT", defaultMetricsPort(name)),
 
 		ShutdownGrace: l.Duration("SHUTDOWN_GRACE", 20*time.Second),
 		ReadTimeout:   l.Duration("HTTP_READ_TIMEOUT", 15*time.Second),
@@ -186,6 +199,10 @@ func LoadService(name string) (*Service, error) {
 			Endpoint:  l.StringOr("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 			Namespace: l.StringOr("OTEL_SERVICE_NAMESPACE", "encorebom"),
 		},
+		Vault: Vault{
+			Address: l.StringOr("VAULT_ADDR", "http://localhost:58200"),
+			Mount:   l.StringOr("VAULT_MOUNT", "secret"),
+		},
 		Auth: Auth{
 			JWTIssuer: l.StringOr("JWT_ISSUER", "encorebom"),
 			// 15 minutes: long enough that clients are not refreshing
@@ -213,6 +230,9 @@ func LoadService(name string) (*Service, error) {
 		// A default signing key in production means anyone who has read this
 		// repository can mint a token for any tenant. There is no fallback.
 		svc.Auth.JWTSigningKey = l.Secret("JWT_SIGNING_KEY")
+		// Same reasoning: a default Vault token in production is a master key
+		// to every stored credential.
+		svc.Vault.Token = l.Secret("VAULT_TOKEN")
 	} else {
 		svc.Postgres.Password = l.SecretOr("POSTGRES_PASSWORD", "encorebom")
 		svc.Postgres.AppPassword = l.SecretOr("POSTGRES_APP_PASSWORD", "encorebom_app")
@@ -222,6 +242,8 @@ func LoadService(name string) (*Service, error) {
 		// cannot be mistaken for a real key.
 		svc.Auth.JWTSigningKey = l.SecretOr("JWT_SIGNING_KEY",
 			"dev-only-insecure-signing-key-do-not-use-in-production")
+		// Matches VAULT_DEV_ROOT_TOKEN_ID in deploy/compose/docker-compose.yml.
+		svc.Vault.Token = l.SecretOr("VAULT_TOKEN", "dev-root-token")
 	}
 	svc.Auth.GitHubClientSecret = l.SecretOr("GITHUB_CLIENT_SECRET", "")
 
@@ -247,20 +269,47 @@ func sslDefault(env Env) string {
 // silently connecting to somebody else's database and getting an auth failure
 // that looks like a credential bug rather than a port clash.
 func defaultPort(name string) int {
-	ports := map[string]int{
-		"gateway":           8080,
-		"auth":              8091,
-		"project":           8092,
-		"scan-orchestrator": 8093,
-		"report":            8094,
-		"campaign":          8095,
-		"comment":           8096,
-		"notification":      8097,
-	}
-	if p, ok := ports[name]; ok {
+	if p, ok := servicePorts[name]; ok {
 		return p
 	}
 	return 8080
+}
+
+var servicePorts = map[string]int{
+	"gateway":           8080,
+	"auth":              8091,
+	"project":           8092,
+	"scan-orchestrator": 8093,
+	"report":            8094,
+	"campaign":          8095,
+	"comment":           8096,
+	"notification":      8097,
+}
+
+// defaultMetricsPort gives each service its OWN metrics port.
+//
+// TWO defects were fixed here, both found by actually running two services at
+// once rather than by reading the config:
+//
+//  1. Every service defaulted to a SHARED 9090. The HTTP ports above were
+//     assigned per service precisely to avoid collisions, but the metrics
+//     listener was left common, so the second service to start died with
+//     "Only one usage of each socket address" — which reads as a mysterious
+//     crash rather than a port clash, and would have taken down `task dev`.
+//
+//  2. The obvious fix, 9091/9092, collides with Docker Desktop's WSL relay on
+//     this machine, which already listens on 9090-9092. That is the same
+//     reason the infrastructure ports were moved into the 5xxxx range.
+//
+// So: HTTP port + 10000 (8091 -> 18091). The mapping is obvious in a process
+// list, there is no second table to keep in sync, and the range is clear of
+// both the common Prometheus convention and Docker's relays.
+func defaultMetricsPort(name string) int {
+	http, ok := servicePorts[name]
+	if !ok {
+		return 18080
+	}
+	return http + 10000
 }
 
 // KnownServices lists every Go service. Used by the generator and by preflight.
