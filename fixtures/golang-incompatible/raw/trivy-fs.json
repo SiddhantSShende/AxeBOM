@@ -1,0 +1,1076 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.7.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.7",
+  "serialNumber": "urn:uuid:26693519-38db-425f-879c-424769c1d58b",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-08-16T22:28:18+00:00",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "manufacturer": {
+            "name": "Aqua Security Software Ltd."
+          },
+          "group": "aquasecurity",
+          "name": "trivy",
+          "version": "0.74.0"
+        }
+      ]
+    },
+    "component": {
+      "bom-ref": "1a9cb971-ec47-4a6f-b9f6-fc5bd3fe7004",
+      "type": "application",
+      "name": "/src",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:SchemaVersion",
+          "value": "2"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "f58b18d2-192a-4e3d-ba53-c8027a614a09",
+      "type": "application",
+      "name": "go.mod",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:Class",
+          "value": "lang-pkgs"
+        },
+        {
+          "name": "aquasecurity:trivy:Type",
+          "value": "gomod"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:golang/example.com/golang-incompatible",
+      "type": "library",
+      "name": "example.com/golang-incompatible",
+      "purl": "pkg:golang/example.com/golang-incompatible",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "example.com/golang-incompatible"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "gomod"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:golang/github.com/burntsushi/toml@v1.3.2",
+      "type": "library",
+      "name": "github.com/BurntSushi/toml",
+      "version": "v1.3.2",
+      "purl": "pkg:golang/github.com/burntsushi/toml@v1.3.2",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "github.com/BurntSushi/toml@v1.3.2"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "gomod"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible",
+      "type": "library",
+      "name": "github.com/docker/docker",
+      "version": "v24.0.5+incompatible",
+      "purl": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "github.com/docker/docker@v24.0.5+incompatible"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "gomod"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:golang/github.com/masterminds/semver/v3@v3.2.1",
+      "type": "library",
+      "name": "github.com/Masterminds/semver/v3",
+      "version": "v3.2.1",
+      "purl": "pkg:golang/github.com/masterminds/semver/v3@v3.2.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "github.com/Masterminds/semver/v3@v3.2.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "gomod"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:golang/gopkg.in/yaml.v3@v3.0.1",
+      "type": "library",
+      "name": "gopkg.in/yaml.v3",
+      "version": "v3.0.1",
+      "purl": "pkg:golang/gopkg.in/yaml.v3@v3.0.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "gopkg.in/yaml.v3@v3.0.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "gomod"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "1a9cb971-ec47-4a6f-b9f6-fc5bd3fe7004",
+      "dependsOn": [
+        "f58b18d2-192a-4e3d-ba53-c8027a614a09"
+      ]
+    },
+    {
+      "ref": "f58b18d2-192a-4e3d-ba53-c8027a614a09",
+      "dependsOn": [
+        "pkg:golang/example.com/golang-incompatible"
+      ]
+    },
+    {
+      "ref": "pkg:golang/example.com/golang-incompatible",
+      "dependsOn": [
+        "pkg:golang/github.com/burntsushi/toml@v1.3.2",
+        "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible",
+        "pkg:golang/github.com/masterminds/semver/v3@v3.2.1",
+        "pkg:golang/gopkg.in/yaml.v3@v3.0.1"
+      ]
+    },
+    {
+      "ref": "pkg:golang/github.com/burntsushi/toml@v1.3.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:golang/github.com/masterminds/semver/v3@v3.2.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:golang/gopkg.in/yaml.v3@v3.0.1",
+      "dependsOn": []
+    }
+  ],
+  "vulnerabilities": [
+    {
+      "id": "CVE-2024-24557",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Ago"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "azure"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "bottlerocket"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "cbl-mariner"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 6.9,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:R/S:C/C:L/I:H/A:L"
+        },
+        {
+          "source": {
+            "name": "nvd"
+          },
+          "score": 7.8,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H"
+        },
+        {
+          "source": {
+            "name": "photon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 6.9,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:R/S:C/C:L/I:H/A:L"
+        },
+        {
+          "source": {
+            "name": "ubuntu"
+          },
+          "severity": "medium"
+        }
+      ],
+      "cwes": [
+        345,
+        346
+      ],
+      "description": "Moby is an open-source project created by Docker to enable software containerization. The classic builder cache system is prone to cache poisoning if the image is built FROM scratch. Also, changes to some instructions (most important being HEALTHCHECK and ONBUILD) would not cause a cache miss. An attacker with the knowledge of the Dockerfile someone is using could poison their cache by making them pull a specially crafted image that would be considered as a valid cache candidate for some build steps. 23.0+ users are only affected if they explicitly opted out of Buildkit (DOCKER_BUILDKIT=0 environment variable) or are using the /build API endpoint. All users on versions older than 23.0 could be impacted. Image build API endpoint (/build) and ImageBuild function from github.com/docker/docker/client is also affected as it the uses classic builder by default. Patches are included in 24.0.9 and 25.0.2 releases.",
+      "recommendation": "Upgrade github.com/docker/docker to version 24.0.9, 25.0.2",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2024-24557"
+        },
+        {
+          "url": "http://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-24557"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2024-24557"
+        },
+        {
+          "url": "https://github.com/bottlerocket-os/bottlerocket/security/advisories/GHSA-wjwx-9x86-5xv2"
+        },
+        {
+          "url": "https://github.com/moby/moby"
+        },
+        {
+          "url": "https://github.com/moby/moby/commit/3e230cfdcc989dc524882f6579f9e0dac77400ae"
+        },
+        {
+          "url": "https://github.com/moby/moby/commit/fca702de7f71362c8d103073c7e4a1d0a467fadd"
+        },
+        {
+          "url": "https://github.com/moby/moby/commit/fce6e0ca9bc000888de3daa157af14fa41fcd0ff"
+        },
+        {
+          "url": "https://github.com/moby/moby/security/advisories/GHSA-xw73-rw38-6vjc"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-24557"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2024-24557"
+        }
+      ],
+      "published": "2024-02-01T17:15:10+00:00",
+      "updated": "2026-06-17T07:14:36+00:00",
+      "affects": [
+        {
+          "ref": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible",
+          "versions": [
+            {
+              "version": "v24.0.5+incompatible",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2024-41110",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Ago"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "azure"
+          },
+          "severity": "critical"
+        },
+        {
+          "source": {
+            "name": "bottlerocket"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "cbl-mariner"
+          },
+          "severity": "critical"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 10,
+          "severity": "critical",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 9.4,
+          "severity": "critical",
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:H/SC:H/SI:H/SA:H"
+        },
+        {
+          "source": {
+            "name": "photon"
+          },
+          "severity": "critical"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 9.9,
+          "severity": "critical",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H"
+        },
+        {
+          "source": {
+            "name": "ubuntu"
+          },
+          "severity": "high"
+        }
+      ],
+      "cwes": [
+        187,
+        444,
+        863
+      ],
+      "description": "Moby is an open-source project created by Docker for software containerization. A security vulnerability has been detected in certain versions of Docker Engine, which could allow an attacker to bypass authorization plugins (AuthZ) under specific circumstances. The base likelihood of this being exploited is low.\n\nUsing a specially-crafted API request, an Engine API client could make the daemon forward the request or response to an authorization plugin without the body. In certain circumstances, the authorization plugin may allow a request which it would have otherwise denied if the body had been forwarded to it.\n\nA security issue was discovered In 2018, where an attacker could bypass AuthZ plugins using a specially crafted API request. This could lead to unauthorized actions, including privilege escalation. Although this issue was fixed in Docker Engine v18.09.1 in January 2019, the fix was not carried forward to later major versions, resulting in a regression. Anyone who depends on authorization plugins that introspect the request and/or response body to make access control decisions is potentially impacted.\n\nDocker EE v19.03.x and all versions of Mirantis Container Runtime are not vulnerable.\n\ndocker-ce v27.1.1 containes patches to fix the vulnerability. Patches have also been merged into the master, 19.03, 20.0, 23.0, 24.0, 25.0, 26.0, and 26.1 release branches. If one is unable to upgrade immediately, avoid using AuthZ plugins and/or restrict access to the Docker API to trusted parties, following the principle of least privilege.",
+      "recommendation": "Upgrade github.com/docker/docker to version 23.0.15, 26.1.5, 27.1.1, 25.0.6",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2024-41110"
+        },
+        {
+          "url": "http://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-41110"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2024-41110"
+        },
+        {
+          "url": "https://github.com/bottlerocket-os/bottlerocket/security/advisories/GHSA-2v9q-99m9-j8g2"
+        },
+        {
+          "url": "https://github.com/moby/moby"
+        },
+        {
+          "url": "https://github.com/moby/moby/commit/411e817ddf710ff8e08fa193da80cb78af708191"
+        },
+        {
+          "url": "https://github.com/moby/moby/commit/42f40b1d6dd7562342f832b9cd2adf9e668eeb76"
+        },
+        {
+          "url": "https://github.com/moby/moby/commit/65cc597cea28cdc25bea3b8a86384b4251872919"
+        },
+        {
+          "url": "https://github.com/moby/moby/commit/852759a7df454cbf88db4e954c919becd48faa9b"
+        },
+        {
+          "url": "https://github.com/moby/moby/commit/a31260625655cff9ae226b51757915e275e304b0"
+        },
+        {
+          "url": "https://github.com/moby/moby/commit/a79fabbfe84117696a19671f4aa88b82d0f64fc1"
+        },
+        {
+          "url": "https://github.com/moby/moby/commit/ae160b4edddb72ef4bd71f66b975a1a1cc434f00"
+        },
+        {
+          "url": "https://github.com/moby/moby/commit/ae2b3666c517c96cbc2adf1af5591a6b00d4ec0f"
+        },
+        {
+          "url": "https://github.com/moby/moby/commit/cc13f952511154a2866bddbb7dddebfe9e83b801"
+        },
+        {
+          "url": "https://github.com/moby/moby/commit/fc274cd2ff4cf3b48c91697fb327dd1fb95588fb"
+        },
+        {
+          "url": "https://github.com/moby/moby/security/advisories/GHSA-v23v-6jw2-98fq"
+        },
+        {
+          "url": "https://lists.debian.org/debian-lts-announce/2024/10/msg00009.html"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-41110"
+        },
+        {
+          "url": "https://security.netapp.com/advisory/ntap-20240802-0001/"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-7161-1"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-7161-2"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-7161-3"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2024-41110"
+        },
+        {
+          "url": "https://www.docker.com/blog/docker-security-advisory-docker-engine-authz-plugin"
+        },
+        {
+          "url": "https://www.docker.com/blog/docker-security-advisory-docker-engine-authz-plugin/"
+        }
+      ],
+      "published": "2024-07-24T17:15:11+00:00",
+      "updated": "2026-06-17T07:47:17+00:00",
+      "affects": [
+        {
+          "ref": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible",
+          "versions": [
+            {
+              "version": "v24.0.5+incompatible",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2025-54410",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Ago"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "low"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 3.3,
+          "severity": "low",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:U/C:L/I:L/A:N"
+        },
+        {
+          "source": {
+            "name": "nvd"
+          },
+          "score": 5.2,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:L/I:L/A:N"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 3.3,
+          "severity": "low",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:U/C:L/I:L/A:N"
+        }
+      ],
+      "cwes": [
+        909
+      ],
+      "description": "Moby is an open source container framework developed by Docker Inc. that is distributed as Docker Engine, Mirantis Container Runtime, and various other downstream projects/products. A firewalld vulnerability affects Moby releases before 28.0.0. When firewalld reloads, Docker fails to re-create iptables rules that isolate bridge networks, allowing any container to access all ports on any other container across different bridge networks on the same host. This breaks network segmentation between containers that should be isolated, creating significant risk in multi-tenant environments. Only containers in --internal networks remain protected.\nWorkarounds include reloading firewalld and either restarting the docker daemon, re-creating bridge networks, or using rootless mode. Maintainers anticipate a fix for this issue in version 25.0.13.",
+      "recommendation": "Upgrade github.com/docker/docker to version 25.0.13, 28.0.0",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2025-54410"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2025-54410"
+        },
+        {
+          "url": "https://firewalld.org/documentation/howto/reload-firewalld.html"
+        },
+        {
+          "url": "https://github.com/moby/moby"
+        },
+        {
+          "url": "https://github.com/moby/moby/pull/49443"
+        },
+        {
+          "url": "https://github.com/moby/moby/pull/49728"
+        },
+        {
+          "url": "https://github.com/moby/moby/security/advisories/GHSA-4vq8-7jfc-9cvp"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-54410"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2025-54410"
+        }
+      ],
+      "published": "2025-07-30T14:15:28+00:00",
+      "updated": "2026-06-17T09:40:02+00:00",
+      "affects": [
+        {
+          "ref": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible",
+          "versions": [
+            {
+              "version": "v24.0.5+incompatible",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2026-33997",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Ago"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 6.8,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:N"
+        },
+        {
+          "source": {
+            "name": "nvd"
+          },
+          "score": 8.1,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:N"
+        },
+        {
+          "source": {
+            "name": "photon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 8.4,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:H/UI:R/S:C/C:H/I:H/A:H"
+        }
+      ],
+      "cwes": [
+        193,
+        266
+      ],
+      "description": "Moby is an open source container framework. Prior to version 29.3.1, a security vulnerability has been detected that allows plugins privilege validation to be bypassed during docker plugin install. Due to an error in the daemon's privilege comparison logic, the daemon may incorrectly accept a privilege set that differs from the one approved by the user. Plugins that request exactly one privilege are also affected, because no comparison is performed at all. This issue has been patched in version 29.3.1.",
+      "recommendation": "Upgrade github.com/docker/docker to version 29.3.1",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2026-33997"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:21769"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:22347"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:23345"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2026-33997"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2453277"
+        },
+        {
+          "url": "https://docs.docker.com/engine/extend/legacy_plugins"
+        },
+        {
+          "url": "https://github.com/moby/moby"
+        },
+        {
+          "url": "https://github.com/moby/moby/commit/f4d6f25bf0c3fa12d4968320a45685947756a22a"
+        },
+        {
+          "url": "https://github.com/moby/moby/releases/tag/docker-v29.3.1"
+        },
+        {
+          "url": "https://github.com/moby/moby/security/advisories/GHSA-pxq6-2prw-chj9"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-33997"
+        },
+        {
+          "url": "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-33997.json"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2026-33997"
+        }
+      ],
+      "published": "2026-03-31T03:15:57+00:00",
+      "updated": "2026-08-14T13:18:14+00:00",
+      "affects": [
+        {
+          "ref": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible",
+          "versions": [
+            {
+              "version": "v24.0.5+incompatible",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2026-34040",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Ago"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 8.8,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H"
+        },
+        {
+          "source": {
+            "name": "nvd"
+          },
+          "score": 7.8,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
+        },
+        {
+          "source": {
+            "name": "photon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 8.4,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:N"
+        }
+      ],
+      "cwes": [
+        288
+      ],
+      "description": "Moby is an open source container framework. Prior to version 29.3.1, a security vulnerability has been detected that allows attackers to bypass authorization plugins (AuthZ). This issue has been patched in version 29.3.1.",
+      "recommendation": "Upgrade github.com/docker/docker to version 29.3.1",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2026-34040"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2026-34040"
+        },
+        {
+          "url": "https://docs.docker.com/engine/extend/plugins_authorization"
+        },
+        {
+          "url": "https://github.com/moby/moby"
+        },
+        {
+          "url": "https://github.com/moby/moby/commit/e89edb19ad7de0407a5d31e3111cb01aa10b5a38"
+        },
+        {
+          "url": "https://github.com/moby/moby/releases/tag/docker-v29.3.1"
+        },
+        {
+          "url": "https://github.com/moby/moby/security/advisories/GHSA-v23v-6jw2-98fq"
+        },
+        {
+          "url": "https://github.com/moby/moby/security/advisories/GHSA-x744-4wpc-v9h2"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-34040"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2026-34040"
+        }
+      ],
+      "published": "2026-03-31T03:15:57+00:00",
+      "updated": "2026-06-17T10:38:28+00:00",
+      "affects": [
+        {
+          "ref": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible",
+          "versions": [
+            {
+              "version": "v24.0.5+incompatible",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2026-41567",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Ago"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 7.2,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:H/I:H/A:N"
+        },
+        {
+          "source": {
+            "name": "photon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 7.5,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:H/I:H/A:H"
+        }
+      ],
+      "cwes": [
+        427
+      ],
+      "description": "Moby is an open source container framework. In versions prior to 29.5.1 and in moby/moby v2 prior to v2.0.0-beta.14, when a compressed archive is uploaded to a container via `PUT /containers/{id}/archive` or piped through `docker cp -`, the daemon resolves decompression binaries (such as `xz` or `unpigz`) from the container's filesystem rather than the host's due to incorrect ordering of operations. A malicious container image containing a trojanized decompression binary can achieve arbitrary code execution with full daemon privileges, including host root UID and unrestricted capabilities, when a user uploads a compressed (xz or gzip) archive into that container. This issue is fixed in Docker Engine 29.5.1 and moby/moby v2.0.0-beta.14. Workarounds include only running containers from trusted images, using authorization plugins to restrict access to the `PUT /containers/{id}/archive` endpoint, and avoiding piping compressed archives into containers created from untrusted images",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2026-41567"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:37387"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:41030"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:42852"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:44622"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:51057"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2026-41567"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2485356"
+        },
+        {
+          "url": "https://github.com/moby/moby"
+        },
+        {
+          "url": "https://github.com/moby/moby/security/advisories/GHSA-x86f-5xw2-fm2r"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-41567"
+        },
+        {
+          "url": "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-41567.json"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2026-41567"
+        }
+      ],
+      "published": "2026-06-05T02:17:13+00:00",
+      "updated": "2026-08-14T13:18:36+00:00",
+      "affects": [
+        {
+          "ref": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible",
+          "versions": [
+            {
+              "version": "v24.0.5+incompatible",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2026-41568",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Ago"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 6,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:N/I:L/A:H"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 3.9,
+          "severity": "low",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:N/I:L/A:L"
+        }
+      ],
+      "cwes": [
+        81,
+        367
+      ],
+      "description": "Moby is an open source container framework. In Docker Engine prior to version 29.5.1, Docker Daemon versions 28.5.2 and prior, and Moby Daemon prior to version 2.0.0-beta.14, a race condition during docker cp mount setup allows a malicious container to create empty files or directories at arbitrary absolute paths on the host filesystem. This issue has been patched in Docker Engine version 29.5.1 and Moby Daemon version 2.0.0-beta.14.",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2026-41568"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2026-41568"
+        },
+        {
+          "url": "https://github.com/moby/moby"
+        },
+        {
+          "url": "https://github.com/moby/moby/security/advisories/GHSA-vp62-88p7-qqf5"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-41568"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2026-41568"
+        }
+      ],
+      "published": "2026-06-12T19:16:26+00:00",
+      "updated": "2026-06-17T10:46:51+00:00",
+      "affects": [
+        {
+          "ref": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible",
+          "versions": [
+            {
+              "version": "v24.0.5+incompatible",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2026-42306",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Ago"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 7.2,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:N/I:H/A:H"
+        },
+        {
+          "source": {
+            "name": "nvd"
+          },
+          "score": 7.2,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:N/I:H/A:H"
+        },
+        {
+          "source": {
+            "name": "photon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 7.2,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:N/I:H/A:H"
+        }
+      ],
+      "cwes": [
+        61,
+        367
+      ],
+      "description": "Moby is an open source container framework. In Docker Engine prior to version 29.5.1, Docker Daemon versions 28.5.2 and prior, and Moby Daemon prior to version 2.0.0-beta.14, a race condition during docker cp mount setup allows a malicious container to redirect a bind mount target to an arbitrary host path, potentially overwriting host files or causing denial of service. This issue has been patched in Docker Engine version 29.5.1 and Moby Daemon version 2.0.0-beta.14.",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2026-42306"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2026-42306"
+        },
+        {
+          "url": "https://github.com/moby/moby"
+        },
+        {
+          "url": "https://github.com/moby/moby/security/advisories/GHSA-rg2x-37c3-w2rh"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-42306"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2026-42306"
+        }
+      ],
+      "published": "2026-06-12T19:16:27+00:00",
+      "updated": "2026-06-17T10:47:39+00:00",
+      "affects": [
+        {
+          "ref": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible",
+          "versions": [
+            {
+              "version": "v24.0.5+incompatible",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "GHSA-jq35-85cj-fj4p",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Ago"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "severity": "medium"
+        }
+      ],
+      "description": "Intel's RAPL (Running Average Power Limit) feature, introduced by the Sandy Bridge microarchitecture, provides software insights into hardware energy consumption. To facilitate this, Intel introduced the powercap framework in Linux kernel 3.13, which reads values via relevant MSRs (model specific registers) and provides unprivileged userspace access via `sysfs`. As RAPL is an interface to access a hardware feature, it is only available when running on bare metal with the module compiled into the kernel.\n\nBy 2019, it was realized that in some cases unprivileged access to RAPL readings could be exploited as a power-based side-channel against security features including AES-NI (potentially inside a SGX enclave) and KASLR (kernel address space layout randomization). Also known as the [PLATYPUS attack](https://platypusattack.com/), Intel assigned [CVE-2020-8694](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-8694) and [CVE-2020-8695](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-8695), and AMD assigned [CVE-2020-12912](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-12912).\n\nSeveral mitigations were applied; Intel reduced the sampling resolution via a microcode update, and the Linux kernel [prevents access by non-root users](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=949dd0104c496fa7c14991a23c03c62e44637e71) since 5.10. However, this kernel-based mitigation does not apply to many container-based scenarios:\n* Unless using user namespaces, root inside a container has the same level of privilege as root outside the container, but with a slightly more narrow view of the system\n* `sysfs` is mounted inside containers read-only; however only read access is needed to carry out this attack on an unpatched CPU\n\nWhile this is not a direct vulnerability in container runtimes, defense in depth and safe defaults are valuable and preferred, especially as this poses a risk to multi-tenant container environments running directly on affected hardware. This is provided by masking `/sys/devices/virtual/powercap` in the default mount configuration, and adding an additional set of rules to deny it in the default AppArmor profile.\n\nWhile `sysfs` is not the only way to read from the RAPL subsystem, other ways of accessing it require additional capabilities such as `CAP_SYS_RAWIO` which is not available to containers by default, or `perf` paranoia level less than 1, which is a non-default kernel tunable.\n\n## References\n\n* https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-8694\n* https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-8695\n* https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-12912\n* https://platypusattack.com/\n* https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=949dd0104c496fa7c14991a23c03c62e44637e71\n* https://web.eece.maine.edu/~vweaver/projects/rapl/",
+      "recommendation": "Upgrade github.com/docker/docker to version 24.0.7, 23.0.8, 20.10.27",
+      "advisories": [
+        {
+          "url": "https://github.com/advisories/GHSA-jq35-85cj-fj4p"
+        },
+        {
+          "url": "https://github.com/moby/moby"
+        },
+        {
+          "url": "https://github.com/moby/moby/commit/48ebe353e49a9def5e6679f6e386b0efb1c95f0e"
+        },
+        {
+          "url": "https://github.com/moby/moby/commit/81ebe71275768629689a23bc3bca34b3b374a6a6"
+        },
+        {
+          "url": "https://github.com/moby/moby/commit/c9ccbfad11a60e703e91b6cca4f48927828c7e35"
+        },
+        {
+          "url": "https://github.com/moby/moby/releases/tag/v20.10.27"
+        },
+        {
+          "url": "https://github.com/moby/moby/releases/tag/v23.0.8"
+        },
+        {
+          "url": "https://github.com/moby/moby/releases/tag/v24.0.7"
+        },
+        {
+          "url": "https://github.com/moby/moby/security/advisories/GHSA-jq35-85cj-fj4p"
+        }
+      ],
+      "published": "2023-10-30T15:25:44+00:00",
+      "updated": "2023-10-30T15:25:44+00:00",
+      "affects": [
+        {
+          "ref": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible",
+          "versions": [
+            {
+              "version": "v24.0.5+incompatible",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

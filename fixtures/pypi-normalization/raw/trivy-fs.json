@@ -1,0 +1,251 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.7.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.7",
+  "serialNumber": "urn:uuid:e414b4da-7dfe-4b2c-9e90-e9031be87ec1",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-08-16T22:24:25+00:00",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "manufacturer": {
+            "name": "Aqua Security Software Ltd."
+          },
+          "group": "aquasecurity",
+          "name": "trivy",
+          "version": "0.74.0"
+        }
+      ]
+    },
+    "component": {
+      "bom-ref": "12ecf3b7-c1ab-4bf7-aee4-7d87bf469b1e",
+      "type": "application",
+      "name": "/src",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:SchemaVersion",
+          "value": "2"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "31e0c021-0f0e-4239-88f6-9cf08b285696",
+      "type": "application",
+      "name": "requirements.txt",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:Class",
+          "value": "lang-pkgs"
+        },
+        {
+          "name": "aquasecurity:trivy:Type",
+          "value": "pip"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/django-rest-framework@3.14.0",
+      "type": "library",
+      "name": "Django_REST_framework",
+      "version": "3.14.0",
+      "purl": "pkg:pypi/django-rest-framework@3.14.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pip"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/flask@2.3.2",
+      "type": "library",
+      "name": "Flask",
+      "version": "2.3.2",
+      "purl": "pkg:pypi/flask@2.3.2",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pip"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/python-dateutil@2.8.2",
+      "type": "library",
+      "name": "python-dateutil",
+      "version": "2.8.2",
+      "purl": "pkg:pypi/python-dateutil@2.8.2",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pip"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/pyyaml@6.0.1",
+      "type": "library",
+      "name": "PyYAML",
+      "version": "6.0.1",
+      "purl": "pkg:pypi/pyyaml@6.0.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pip"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/zope.interface@6.0",
+      "type": "library",
+      "name": "zope.interface",
+      "version": "6.0",
+      "purl": "pkg:pypi/zope.interface@6.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pip"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "12ecf3b7-c1ab-4bf7-aee4-7d87bf469b1e",
+      "dependsOn": [
+        "31e0c021-0f0e-4239-88f6-9cf08b285696"
+      ]
+    },
+    {
+      "ref": "31e0c021-0f0e-4239-88f6-9cf08b285696",
+      "dependsOn": [
+        "pkg:pypi/django-rest-framework@3.14.0",
+        "pkg:pypi/flask@2.3.2",
+        "pkg:pypi/python-dateutil@2.8.2",
+        "pkg:pypi/pyyaml@6.0.1",
+        "pkg:pypi/zope.interface@6.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/django-rest-framework@3.14.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/flask@2.3.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/python-dateutil@2.8.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/pyyaml@6.0.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/zope.interface@6.0",
+      "dependsOn": []
+    }
+  ],
+  "vulnerabilities": [
+    {
+      "id": "CVE-2026-27205",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Apip"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 2.3,
+          "severity": "low",
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N"
+        },
+        {
+          "source": {
+            "name": "nvd"
+          },
+          "score": 4.3,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:N/A:N"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 4.3,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:N/A:N"
+        },
+        {
+          "source": {
+            "name": "ubuntu"
+          },
+          "severity": "low"
+        }
+      ],
+      "cwes": [
+        524
+      ],
+      "description": "Flask is a web server gateway interface (WSGI) web application framework. In versions 3.1.2 and below, when the session object is accessed, Flask should set the Vary: Cookie header., resulting in a Use of Cache Containing Sensitive Information vulnerability. The logic instructs caches not to cache the response, as it may contain information specific to a logged in user. This is handled in most cases, but some forms of access such as the Python in operator were overlooked. The severity and risk depend on the application being hosted behind a caching proxy that doesn't ignore responses with cookies, not setting a Cache-Control header to mark pages as private or non-cacheable, and accessing the session in a way that only touches keys without reading values or mutating the session. The issue has been fixed in version 3.1.3.",
+      "recommendation": "Upgrade Flask to version 3.1.3",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2026-27205"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2026-27205"
+        },
+        {
+          "url": "https://github.com/pallets/flask"
+        },
+        {
+          "url": "https://github.com/pallets/flask/commit/089cb86dd22bff589a4eafb7ab8e42dc357623b4"
+        },
+        {
+          "url": "https://github.com/pallets/flask/releases/tag/3.1.3"
+        },
+        {
+          "url": "https://github.com/pallets/flask/security/advisories/GHSA-68rp-wp8r-4726"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-27205"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-8104-1"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2026-27205"
+        }
+      ],
+      "published": "2026-02-21T06:17:00+00:00",
+      "updated": "2026-06-17T10:26:50+00:00",
+      "affects": [
+        {
+          "ref": "pkg:pypi/flask@2.3.2",
+          "versions": [
+            {
+              "version": "2.3.2",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

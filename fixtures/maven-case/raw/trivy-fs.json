@@ -1,0 +1,909 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.7.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.7",
+  "serialNumber": "urn:uuid:2101b225-db60-4f77-a699-fb3fbdda4fe2",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-08-16T22:26:24+00:00",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "manufacturer": {
+            "name": "Aqua Security Software Ltd."
+          },
+          "group": "aquasecurity",
+          "name": "trivy",
+          "version": "0.74.0"
+        }
+      ]
+    },
+    "component": {
+      "bom-ref": "ab4e25e7-8981-4a0d-8f67-a4de26b94bb1",
+      "type": "application",
+      "name": "/src",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:SchemaVersion",
+          "value": "2"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "f3b07e99-865c-4874-a3cd-055cea60fc82",
+      "type": "application",
+      "name": "pom.xml",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:Class",
+          "value": "lang-pkgs"
+        },
+        {
+          "name": "aquasecurity:trivy:Type",
+          "value": "pom"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:maven/com.example/MavenCase@1.0.0",
+      "type": "library",
+      "group": "com.example",
+      "name": "MavenCase",
+      "version": "1.0.0",
+      "purl": "pkg:maven/com.example/MavenCase@1.0.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "com.example:MavenCase:1.0.0::7da78d0c"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pom"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
+      "type": "library",
+      "group": "com.fasterxml.jackson.core",
+      "name": "jackson-databind",
+      "version": "2.15.2",
+      "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "com.fasterxml.jackson.core:jackson-databind:2.15.2::37332d7c"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pom"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:maven/org.apache.commons/commons-lang3@3.12.0",
+      "type": "library",
+      "group": "org.apache.commons",
+      "name": "commons-lang3",
+      "version": "3.12.0",
+      "purl": "pkg:maven/org.apache.commons/commons-lang3@3.12.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "org.apache.commons:commons-lang3:3.12.0::ce409b0a"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pom"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:maven/org.springframework/spring-core@6.0.11",
+      "type": "library",
+      "group": "org.springframework",
+      "name": "spring-core",
+      "version": "6.0.11",
+      "purl": "pkg:maven/org.springframework/spring-core@6.0.11",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "org.springframework:spring-core:6.0.11::951d4f5c"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pom"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "ab4e25e7-8981-4a0d-8f67-a4de26b94bb1",
+      "dependsOn": [
+        "f3b07e99-865c-4874-a3cd-055cea60fc82"
+      ]
+    },
+    {
+      "ref": "f3b07e99-865c-4874-a3cd-055cea60fc82",
+      "dependsOn": [
+        "pkg:maven/com.example/MavenCase@1.0.0"
+      ]
+    },
+    {
+      "ref": "pkg:maven/com.example/MavenCase@1.0.0",
+      "dependsOn": [
+        "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
+        "pkg:maven/org.apache.commons/commons-lang3@3.12.0",
+        "pkg:maven/org.springframework/spring-core@6.0.11"
+      ]
+    },
+    {
+      "ref": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/org.apache.commons/commons-lang3@3.12.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/org.springframework/spring-core@6.0.11",
+      "dependsOn": []
+    }
+  ],
+  "vulnerabilities": [
+    {
+      "id": "CVE-2025-41249",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Amaven"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 7.5,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 7.5,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+        }
+      ],
+      "cwes": [
+        285
+      ],
+      "description": "The Spring Framework annotation detection mechanism may not correctly resolve annotations on methods within type hierarchies with a parameterized super type with unbounded generics. This can be an issue if such annotations are used for authorization decisions.\n\nYour application may be affected by this if you are using Spring Security's @EnableMethodSecurityÂ feature.\n\nYou are not affected by this if you are not using @EnableMethodSecurityÂ or if you do not use security annotations on methods in generic superclasses or generic interfaces.\n\nThis CVE is published in conjunction with  CVE-2025-41248 https://spring.io/security/cve-2025-41248 .",
+      "recommendation": "Upgrade org.springframework:spring-core to version 6.2.11",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2025-41249"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2025-41249"
+        },
+        {
+          "url": "https://github.com/spring-projects/spring-framework"
+        },
+        {
+          "url": "https://github.com/spring-projects/spring-framework/commit/6d710d482a6785b069e35022e81758953afc21ff"
+        },
+        {
+          "url": "https://github.com/spring-projects/spring-framework/issues/35342"
+        },
+        {
+          "url": "https://github.com/spring-projects/spring-framework/releases/tag/v6.2.11"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-41249"
+        },
+        {
+          "url": "https://spring.io/security/cve-2025-41249"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2025-41249"
+        }
+      ],
+      "published": "2025-09-16T11:15:30+00:00",
+      "updated": "2026-06-17T09:22:40+00:00",
+      "affects": [
+        {
+          "ref": "pkg:maven/org.springframework/spring-core@6.0.11",
+          "versions": [
+            {
+              "version": "6.0.11",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2025-48924",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Amaven"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "low"
+        },
+        {
+          "source": {
+            "name": "azure"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "cbl-mariner"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 6.5,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 3.7,
+          "severity": "low",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+        },
+        {
+          "source": {
+            "name": "ubuntu"
+          },
+          "severity": "medium"
+        }
+      ],
+      "cwes": [
+        674
+      ],
+      "description": "Uncontrolled Recursion vulnerability in Apache Commons Lang.\n\nThis issue affects Apache Commons Lang: Starting withÂ commons-lang:commons-langÂ 2.0 to 2.6, and, from org.apache.commons:commons-lang3 3.0 beforeÂ 3.18.0.\n\nThe methods ClassUtils.getClass(...) can throwÂ StackOverflowError on very long inputs. Because an Error is usually not handled by applications and libraries, a \nStackOverflowError couldÂ cause an application to stop.\n\nUsers are recommended to upgrade to version 3.18.0, which fixes the issue.",
+      "recommendation": "Upgrade org.apache.commons:commons-lang3 to version 3.18.0",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2025-48924"
+        },
+        {
+          "url": "http://www.openwall.com/lists/oss-security/2025/07/11/1"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2025-48924"
+        },
+        {
+          "url": "https://github.com/apache/commons-lang"
+        },
+        {
+          "url": "https://github.com/apache/commons-lang/commit/b424803abdb2bec818e4fbcb251ce031c22aca53"
+        },
+        {
+          "url": "https://lists.apache.org/thread/bgv0lpswokgol11tloxnjfzdl7yrc1g1"
+        },
+        {
+          "url": "https://lists.debian.org/debian-lts-announce/2025/08/msg00000.html"
+        },
+        {
+          "url": "https://lists.debian.org/debian-lts-announce/2025/08/msg00026.html"
+        },
+        {
+          "url": "https://lists.debian.org/debian-lts-announce/2025/09/msg00032.html"
+        },
+        {
+          "url": "https://lists.debian.org/debian-lts-announce/2025/09/msg00036.html"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-48924"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-8364-1"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2025-48924"
+        },
+        {
+          "url": "https://www.openwall.com/lists/oss-security/2025/07/11/1"
+        }
+      ],
+      "published": "2025-07-11T15:15:24+00:00",
+      "updated": "2026-06-17T09:30:29+00:00",
+      "affects": [
+        {
+          "ref": "pkg:maven/org.apache.commons/commons-lang3@3.12.0",
+          "versions": [
+            {
+              "version": "3.12.0",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2026-54512",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Amaven"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "alma"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 8.1,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H"
+        },
+        {
+          "source": {
+            "name": "oracle-oval"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 8.1,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H"
+        },
+        {
+          "source": {
+            "name": "rocky"
+          },
+          "severity": "high"
+        }
+      ],
+      "cwes": [
+        184,
+        502
+      ],
+      "description": "jackson-databind contains the general-purpose data-binding functionality and tree-model for Jackson Data Processor. From 2.10.0 until 2.18.8, 2.21.4, and 3.1.4, jackson-databind's PolymorphicTypeValidator (PTV) is the primary safety mechanism guarding polymorphic deserialization. When polymorphic typing is enabled and a type identifier contains generic parameters (i.e. the type ID string contains <), DatabindContext._resolveAndValidateGeneric() validates only the raw container class name (the substring before <) against the configured PTV. If the container type is approved, the method parses the full canonical type string via TypeFactory.constructFromCanonical() and returns the fully parameterized type without ever validating the nested type arguments against the PTV. The nested type arguments are then resolved, instantiated, and populated as beans during deserialization. An attacker who controls the type ID can therefore place a denied class as a generic type parameter of an allowed container â€” for example java.util.ArrayList<com.evil.Gadget> when only java.util.ArrayList is allow-listed. The container passes the PTV check; com.evil.Gadget is loaded via Class.forName(name, true, loader), instantiated, and its properties are set from attacker-controlled JSON. This completely bypasses an explicitly configured PTV allow-list. This vulnerability is fixed in 2.18.8, 2.21.4, and 3.1.4.",
+      "recommendation": "Upgrade com.fasterxml.jackson.core:jackson-databind to version 2.18.8, 3.1.4, 2.21.4",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2026-54512"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:40895"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2026-54512"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2492010"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2492015"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2492010"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2492015"
+        },
+        {
+          "url": "https://creativecommons.org/licenses/by/4.0/"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-54512"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-54513"
+        },
+        {
+          "url": "https://errata.almalinux.org/9/ALSA-2026-40895.html"
+        },
+        {
+          "url": "https://errata.rockylinux.org/RLSA-2026:40895"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/commit/434d6c511de7fdd9872f29157aafb6162d12d8d5"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/issues/5988"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-j3rv-43j4-c7qm"
+        },
+        {
+          "url": "https://linux.oracle.com/cve/CVE-2026-54512.html"
+        },
+        {
+          "url": "https://linux.oracle.com/errata/ELSA-2026-43400.html"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-54512"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2026-54512"
+        }
+      ],
+      "published": "2026-06-23T21:17:02+00:00",
+      "updated": "2026-06-27T21:01:36+00:00",
+      "affects": [
+        {
+          "ref": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
+          "versions": [
+            {
+              "version": "2.15.2",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2026-54513",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Amaven"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "alma"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 8.1,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H"
+        },
+        {
+          "source": {
+            "name": "oracle-oval"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 8.1,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H"
+        },
+        {
+          "source": {
+            "name": "rocky"
+          },
+          "severity": "high"
+        }
+      ],
+      "cwes": [
+        184
+      ],
+      "description": "jackson-databind contains the general-purpose data-binding functionality and tree-model for Jackson Data Processor. From 2.10.0 until 2.18.8, 2.21.4, and 3.1.4, BasicPolymorphicTypeValidator.Builder.allowIfSubTypeIsArray() allowlists any array type based only on clazz.isArray(), without validating the array's component (element) type against the configured allowlist. A PTV built with allowIfSubTypeIsArray() plus an explicit concrete-type allowlist therefore still permits EvilType[] even though EvilType is not allowlisted. When Jackson deserializes the elements and no per-element type IDs are present, it instantiates the component type directly with no further PTV check, bypassing the allowlist. This vulnerability is fixed in 2.18.8, 2.21.4, and 3.1.4.",
+      "recommendation": "Upgrade com.fasterxml.jackson.core:jackson-databind to version 2.18.8, 2.21.4, 3.1.4",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2026-54513"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:36839"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:40895"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:41951"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:43218"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:43400"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:44061"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:44062"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:44063"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:44064"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:44065"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:44066"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:44271"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:48095"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:48151"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:50846"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:50847"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:50848"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:50849"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:54435"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:54622"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2026-54513"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2492010"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2492015"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2492010"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2492015"
+        },
+        {
+          "url": "https://creativecommons.org/licenses/by/4.0/"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-54512"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-54513"
+        },
+        {
+          "url": "https://errata.almalinux.org/9/ALSA-2026-40895.html"
+        },
+        {
+          "url": "https://errata.rockylinux.org/RLSA-2026:40895"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/commit/01d1692c8d0ed03e51a0e3c4f8a9e6908e4931e5"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/commit/24529da29fdf46ff94ca38de9ebf31cd188f5e8e"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/issues/5981"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/issues/5983"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/pull/5984"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-rmj7-2vxq-3g9f"
+        },
+        {
+          "url": "https://linux.oracle.com/cve/CVE-2026-54513.html"
+        },
+        {
+          "url": "https://linux.oracle.com/errata/ELSA-2026-43400.html"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-54513"
+        },
+        {
+          "url": "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-54513.json"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2026-54513"
+        }
+      ],
+      "published": "2026-06-23T21:17:02+00:00",
+      "updated": "2026-08-14T13:19:03+00:00",
+      "affects": [
+        {
+          "ref": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
+          "versions": [
+            {
+              "version": "2.15.2",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2026-54514",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Amaven"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 5.3,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 5.3,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
+        }
+      ],
+      "cwes": [
+        918
+      ],
+      "description": "jackson-databind contains the general-purpose data-binding functionality and tree-model for Jackson Data Processor. From 2.0.0 until 2.18.8, 2.21.4, and 3.1.4, JDKFromStringDeserializer constructed InetSocketAddress with new InetSocketAddress(host, port), which performs eager DNS name resolution for hostname inputs at deserialization time. An application that binds untrusted JSON into a type containing an InetSocketAddress field issues an attacker-chosen DNS query during readValue, before any application-level validation or connect logic. The fix uses InetSocketAddress.createUnresolved(host, port), deferring DNS to an explicit connect. This vulnerability is fixed in 2.18.8, 2.21.4, and 3.1.4.",
+      "recommendation": "Upgrade com.fasterxml.jackson.core:jackson-databind to version 2.18.8, 2.21.4, 3.1.4",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2026-54514"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2026-54514"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/commit/1f5a1037b1e9e05920e755cb35f198bcd46667e4"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/pull/5951"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-hgj6-7826-r7m5"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-54514"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2026-54514"
+        }
+      ],
+      "published": "2026-06-23T21:17:02+00:00",
+      "updated": "2026-06-27T20:55:09+00:00",
+      "affects": [
+        {
+          "ref": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
+          "versions": [
+            {
+              "version": "2.15.2",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2026-54515",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Amaven"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 5.3,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 5.3,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"
+        }
+      ],
+      "cwes": [
+        915
+      ],
+      "description": "jackson-databind contains the general-purpose data-binding functionality and tree-model for Jackson Data Processor. From 2.8.0 until 2.18.9, 2.21.5, and 3.1.4, in BeanDeserializerBase.createContextual(), per-property @JsonIgnoreProperties exclusions are applied by _handleByNameInclusion(), producing a contextual deserializer whose BeanPropertyMap has the ignored properties removed. The subsequent per-property case-insensitivity block (triggered by @JsonFormat(ACCEPT_CASE_INSENSITIVE_PROPERTIES)) rebuilds from this._beanProperties (the original, unfiltered map) instead of contextual._beanProperties, then overwrites the filtered map â€” restoring every property _handleByNameInclusion had just removed. The ignored property becomes writable again. This vulnerability is fixed in 2.18.9, 2.21.5, and 3.1.4.",
+      "recommendation": "Upgrade com.fasterxml.jackson.core:jackson-databind to version 3.1.4, 2.18.9, 2.21.5, 2.22.1",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2026-54515"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2026-54515"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/commit/0e1b0b211f7a53baa62ba2f4c9bd006c7bf4d5fa"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/issues/5962"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/issues/5964"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-5jmj-h7xm-6q6v"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-54515"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2026-54515"
+        }
+      ],
+      "published": "2026-06-23T21:17:02+00:00",
+      "updated": "2026-06-29T13:38:59+00:00",
+      "affects": [
+        {
+          "ref": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
+          "versions": [
+            {
+              "version": "2.15.2",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2026-59888",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Amaven"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 6.5,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 6.5,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N"
+        }
+      ],
+      "cwes": [
+        915
+      ],
+      "description": "jackson-databind contains the general-purpose data-binding functionality and tree-model for Jackson Data Processor. From 2.15.0 until 2.18.8, 2.21.4, and 3.1.4, Java Records using a PropertyNamingStrategy can bypass @JsonIgnore because POJOPropertiesCollector._removeUnwantedIgnorals() records an ignored component under its original implicit name before _renameUsing() applies the naming strategy, allowing the renamed JSON key to be assigned to the Record constructor parameter. This issue is fixed in versions 2.18.8, 2.21.4, and 3.1.4.",
+      "recommendation": "Upgrade com.fasterxml.jackson.core:jackson-databind to version 2.18.8, 2.21.4",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2026-59888"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2026-59888"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/commit/baa2cdf5ca2b2717fbb88d91955d69d8651df3e4"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/commit/c7c678360624da5bc7eed2152789fa522880db9d"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/pull/5974"
+        },
+        {
+          "url": "https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-3pjw-73gf-8qr5"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-59888"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2026-59888"
+        }
+      ],
+      "published": "2026-07-14T17:17:15+00:00",
+      "updated": "2026-07-15T20:18:23+00:00",
+      "affects": [
+        {
+          "ref": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
+          "versions": [
+            {
+              "version": "2.15.2",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -233,6 +233,7 @@ Each of these has bitten real deployments. Adapters must handle them without emi
 | **`osv-scanner` exits 1 when it finds vulnerabilities** | `acceptable_exit_codes()` per engine. Otherwise the only "successful" scans are the ones that found nothing |
 | **A quiet flag hides the reason a run failed** | grype's `-q` suppressed the stderr naming a missing database, making it indistinguishable from a crash. Never suppress engine diagnostics to tidy output |
 | **`osv-scanner` visits one directory without `-r`** | On a monorepo it scans the root, finds nothing, exits 0 — a clean report for a repository that was not scanned |
+| **An engine needs scratch space, and the sandbox rootfs is read-only** | Point `TMPDIR` at the workspace tmpfs via `extra_env()`. trivy fails every run without it: *"unable to create temporary directory: read-only file system"* — an error naming neither trivy's needs nor the sandbox policy |
 
 ### Defensive parsing, always
 

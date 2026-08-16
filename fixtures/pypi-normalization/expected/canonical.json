@@ -1,5 +1,5 @@
 {
-  "component_count": 6,
+  "component_count": 7,
   "components": [
     {
       "candidate_identities": [],
@@ -33,6 +33,31 @@
       ],
       "purl": "",
       "scope": "excluded",
+      "version_raw": ""
+    },
+    {
+      "candidate_identities": [],
+      "component_key": "name:application/requirements.txt@",
+      "ecosystem": "application",
+      "hashes": [],
+      "identity_confidence": "low",
+      "identity_rule": "name",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [],
+      "name": "requirements.txt",
+      "observed_by": [
+        {
+          "confidence": "low",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "31e0c021-0f0e-4239-88f6-9cf08b285696"
+        }
+      ],
+      "purl": "",
+      "scope": "required",
       "version_raw": ""
     },
     {
@@ -337,7 +362,7 @@
       "hashes": [],
       "identity_confidence": "high",
       "identity_rule": "purl",
-      "is_direct": false,
+      "is_direct": true,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
       "license_rule": "concluded:spdx-noassertion",
@@ -361,6 +386,12 @@
           "engine": "syft-spdx",
           "engine_version": "1.51.0",
           "native_id": "SPDXRef-Package-python-django-rest-framework-e85e9a822cac0fb7"
+        },
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:pypi/django-rest-framework@3.14.0"
         }
       ],
       "purl": "pkg:pypi/django-rest-framework@3.14.0",
@@ -453,7 +484,7 @@
       "hashes": [],
       "identity_confidence": "high",
       "identity_rule": "purl",
-      "is_direct": false,
+      "is_direct": true,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
       "license_rule": "concluded:spdx-noassertion",
@@ -505,6 +536,12 @@
           "engine": "syft-spdx",
           "engine_version": "1.51.0",
           "native_id": "SPDXRef-Package-python-flask-5f2c27b3326c86e4"
+        },
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:pypi/flask@2.3.2"
         }
       ],
       "purl": "pkg:pypi/flask@2.3.2",
@@ -561,7 +598,7 @@
       "hashes": [],
       "identity_confidence": "high",
       "identity_rule": "purl",
-      "is_direct": false,
+      "is_direct": true,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
       "license_rule": "concluded:spdx-noassertion",
@@ -585,6 +622,12 @@
           "engine": "syft-spdx",
           "engine_version": "1.51.0",
           "native_id": "SPDXRef-Package-python-python-dateutil-4403351b83366486"
+        },
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:pypi/python-dateutil@2.8.2"
         }
       ],
       "purl": "pkg:pypi/python-dateutil@2.8.2",
@@ -677,7 +720,7 @@
       "hashes": [],
       "identity_confidence": "high",
       "identity_rule": "purl",
-      "is_direct": false,
+      "is_direct": true,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
       "license_rule": "concluded:spdx-noassertion",
@@ -701,6 +744,12 @@
           "engine": "syft-spdx",
           "engine_version": "1.51.0",
           "native_id": "SPDXRef-Package-python-pyyaml-52186525f2f8cf3c"
+        },
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:pypi/pyyaml@6.0.1"
         }
       ],
       "purl": "pkg:pypi/pyyaml@6.0.1",
@@ -913,7 +962,7 @@
       "hashes": [],
       "identity_confidence": "high",
       "identity_rule": "purl",
-      "is_direct": false,
+      "is_direct": true,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
       "license_rule": "concluded:spdx-noassertion",
@@ -937,6 +986,12 @@
           "engine": "syft-spdx",
           "engine_version": "1.51.0",
           "native_id": "SPDXRef-Package-python-zope-interface-2470067097e2bb31"
+        },
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:pypi/zope.interface@6.0"
         }
       ],
       "purl": "pkg:pypi/zope-interface@6.0",
@@ -945,31 +1000,31 @@
     }
   ],
   "coverage": {
-    "completeness_numerator": 30,
-    "completeness_pct": 10.64,
-    "declaration_numerator": 45,
-    "declaration_pct": 15.96,
-    "denominator": 282,
+    "completeness_numerator": 33,
+    "completeness_pct": 10.03,
+    "declaration_numerator": 48,
+    "declaration_pct": 14.59,
+    "denominator": 329,
     "field_count": 21,
     "fields": [
       {
         "completeness_pct": 100.0,
         "declaration_pct": 100.0,
-        "declared": 5,
+        "declared": 6,
         "field_id": "certin.sbom.01.component_name",
         "name": "Component Name",
-        "present": 5,
-        "total": 5,
+        "present": 6,
+        "total": 6,
         "weight": 3
       },
       {
-        "completeness_pct": 100.0,
-        "declaration_pct": 100.0,
+        "completeness_pct": 83.33,
+        "declaration_pct": 83.33,
         "declared": 5,
         "field_id": "certin.sbom.02.component_version",
         "name": "Component Version",
         "present": 5,
-        "total": 5,
+        "total": 6,
         "weight": 3
       },
       {
@@ -979,7 +1034,7 @@
         "field_id": "certin.sbom.03.component_description",
         "name": "Component Description",
         "present": 0,
-        "total": 5,
+        "total": 6,
         "weight": 1
       },
       {
@@ -989,17 +1044,17 @@
         "field_id": "certin.sbom.04.component_supplier",
         "name": "Component Supplier",
         "present": 0,
-        "total": 5,
+        "total": 6,
         "weight": 3
       },
       {
         "completeness_pct": 0.0,
-        "declaration_pct": 100.0,
+        "declaration_pct": 83.33,
         "declared": 5,
         "field_id": "certin.sbom.05.component_license",
         "name": "Component License",
         "present": 0,
-        "total": 5,
+        "total": 6,
         "weight": 3
       },
       {
@@ -1009,7 +1064,7 @@
         "field_id": "certin.sbom.06.component_origin",
         "name": "Component Origin",
         "present": 0,
-        "total": 5,
+        "total": 6,
         "weight": 3
       },
       {
@@ -1019,7 +1074,7 @@
         "field_id": "certin.sbom.07.component_dependencies",
         "name": "Component Dependencies",
         "present": 0,
-        "total": 5,
+        "total": 6,
         "weight": 3
       },
       {
@@ -1029,7 +1084,7 @@
         "field_id": "certin.sbom.08.vulnerabilities",
         "name": "Vulnerabilities",
         "present": 0,
-        "total": 5,
+        "total": 6,
         "weight": 3
       },
       {
@@ -1039,7 +1094,7 @@
         "field_id": "certin.sbom.09.patch_status",
         "name": "Patch Status",
         "present": 0,
-        "total": 5,
+        "total": 6,
         "weight": 3
       },
       {
@@ -1049,7 +1104,7 @@
         "field_id": "certin.sbom.10.release_date",
         "name": "Release Date",
         "present": 0,
-        "total": 5,
+        "total": 6,
         "weight": 1
       },
       {
@@ -1059,7 +1114,7 @@
         "field_id": "certin.sbom.11.eol_date",
         "name": "End-of-Life (EOL) Date",
         "present": 0,
-        "total": 5,
+        "total": 6,
         "weight": 1
       },
       {
@@ -1069,7 +1124,7 @@
         "field_id": "certin.sbom.12.criticality",
         "name": "Criticality",
         "present": 0,
-        "total": 5,
+        "total": 6,
         "weight": 3
       },
       {
@@ -1079,7 +1134,7 @@
         "field_id": "certin.sbom.13.usage_restrictions",
         "name": "Usage Restrictions",
         "present": 0,
-        "total": 5,
+        "total": 6,
         "weight": 1
       },
       {
@@ -1089,7 +1144,7 @@
         "field_id": "certin.sbom.14.checksums",
         "name": "Checksums or Hashes",
         "present": 0,
-        "total": 5,
+        "total": 6,
         "weight": 3
       },
       {
@@ -1099,7 +1154,7 @@
         "field_id": "certin.sbom.15.comments",
         "name": "Comments or Notes",
         "present": 0,
-        "total": 5,
+        "total": 6,
         "weight": 1
       },
       {
@@ -1109,7 +1164,7 @@
         "field_id": "certin.sbom.16.author_of_sbom_data",
         "name": "Author of SBOM Data",
         "present": 0,
-        "total": 5,
+        "total": 6,
         "weight": 3
       },
       {
@@ -1119,7 +1174,7 @@
         "field_id": "certin.sbom.17.timestamp",
         "name": "Timestamp",
         "present": 0,
-        "total": 5,
+        "total": 6,
         "weight": 3
       },
       {
@@ -1129,7 +1184,7 @@
         "field_id": "certin.sbom.18.executable_property",
         "name": "Executable Property",
         "present": 0,
-        "total": 5,
+        "total": 6,
         "weight": 1
       },
       {
@@ -1139,7 +1194,7 @@
         "field_id": "certin.sbom.19.archive_property",
         "name": "Archive Property",
         "present": 0,
-        "total": 5,
+        "total": 6,
         "weight": 1
       },
       {
@@ -1149,7 +1204,7 @@
         "field_id": "certin.sbom.20.structured_property",
         "name": "Structured Property",
         "present": 0,
-        "total": 5,
+        "total": 6,
         "weight": 1
       },
       {
@@ -1159,21 +1214,15 @@
         "field_id": "certin.sbom.21.unique_identifier",
         "name": "Unique Identifier",
         "present": 0,
-        "total": 5,
+        "total": 6,
         "weight": 3
       }
     ],
     "formula": "pct = 100 \u00d7 \u03a3_c \u03a3_f (w_f \u00d7 present(c,f)) / \u03a3_c \u03a3_f w_f",
-    "scored_entities": 6,
+    "scored_entities": 7,
     "unidentified_count": 1
   },
   "diagnostics": [
-    {
-      "code": "ENGINE_FIELD_MISSING",
-      "hint": "treated as zero components; the output shape may have changed",
-      "message": "trivy-fs output has no `components` array",
-      "severity": "warn"
-    },
     {
       "code": "NORMALIZE_CANDIDATE_IDENTITY",
       "component_key": "purl:pkg:pypi/flask@2.3.2",
@@ -1224,7 +1273,7 @@
   ],
   "engine_coverage": [
     {
-      "artifact_sha256": "3468089c48811168b4ecff2c665b3fac9d8d955af01b1e93258fe7e0de8b70c8",
+      "artifact_sha256": "0ebf76af5d2d26b764e556cf53b5ce7261bcfffbdf063b050f59f2ac2101a337",
       "ecosystems_covered": [
         "pypi"
       ],
@@ -1246,7 +1295,7 @@
       "version": ""
     },
     {
-      "artifact_sha256": "7db10f07f043e837abc88525d15b10462c9efa3eab879835f73488c7d08a4e24",
+      "artifact_sha256": "22bcc18c8463b80b964cd63cb44c16840ab7a91ce224b30ad3544b77469a28d7",
       "ecosystems_covered": [
         "pypi"
       ],
@@ -1257,7 +1306,7 @@
       "version": "1.51.0"
     },
     {
-      "artifact_sha256": "b7616370a328bd109b571cba36acc33b365cd5b69dee984233e61545057da8df",
+      "artifact_sha256": "92906df55e49b3f0cc7f45ce8e6df5a4c60e5cadf7765300d350a33ad5649f35",
       "ecosystems_covered": [
         "pypi"
       ],
@@ -1268,13 +1317,16 @@
       "version": "1.51.0"
     },
     {
-      "artifact_sha256": "",
-      "ecosystems_covered": [],
+      "artifact_sha256": "4ad0afac991fbc6dfad9ab953b95a03a8514cbf4e3a99bfa5ac1eb0f5b400efa",
+      "ecosystems_covered": [
+        "application",
+        "pypi"
+      ],
       "engine_db_version": "",
       "engine_id": "trivy-fs",
       "image_digest": "",
-      "status": "unavailable",
-      "version": ""
+      "status": "succeeded",
+      "version": "0.74.0"
     }
   ],
   "finding_count": 1,
@@ -1322,27 +1374,85 @@
     }
   ],
   "graph": {
-    "depth": {},
-    "direct": [],
-    "edges": [],
-    "orphans": [
-      "hash:e137f626694e848f9cbdaa1c270d8740bb408098ad324d8b1f8014ca9065b44f",
+    "depth": {
+      "hash:e137f626694e848f9cbdaa1c270d8740bb408098ad324d8b1f8014ca9065b44f": 0,
+      "name:application/requirements.txt@": 0,
+      "purl:pkg:pypi/django-rest-framework@3.14.0": 1,
+      "purl:pkg:pypi/flask@2.3.2": 1,
+      "purl:pkg:pypi/python-dateutil@2.8.2": 1,
+      "purl:pkg:pypi/pyyaml@6.0.1": 1,
+      "purl:pkg:pypi/zope-interface@6.0": 1
+    },
+    "direct": [
       "purl:pkg:pypi/django-rest-framework@3.14.0",
       "purl:pkg:pypi/flask@2.3.2",
       "purl:pkg:pypi/python-dateutil@2.8.2",
       "purl:pkg:pypi/pyyaml@6.0.1",
       "purl:pkg:pypi/zope-interface@6.0"
     ],
-    "owning_engine": {},
-    "roots": []
+    "edges": [
+      {
+        "confidence": "high",
+        "ecosystem": "pypi",
+        "from": "name:application/requirements.txt@",
+        "owning_engine": "trivy-fs",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:pypi/django-rest-framework@3.14.0"
+      },
+      {
+        "confidence": "high",
+        "ecosystem": "pypi",
+        "from": "name:application/requirements.txt@",
+        "owning_engine": "trivy-fs",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:pypi/flask@2.3.2"
+      },
+      {
+        "confidence": "high",
+        "ecosystem": "pypi",
+        "from": "name:application/requirements.txt@",
+        "owning_engine": "trivy-fs",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:pypi/python-dateutil@2.8.2"
+      },
+      {
+        "confidence": "high",
+        "ecosystem": "pypi",
+        "from": "name:application/requirements.txt@",
+        "owning_engine": "trivy-fs",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:pypi/pyyaml@6.0.1"
+      },
+      {
+        "confidence": "high",
+        "ecosystem": "pypi",
+        "from": "name:application/requirements.txt@",
+        "owning_engine": "trivy-fs",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:pypi/zope-interface@6.0"
+      }
+    ],
+    "orphans": [],
+    "owning_engine": {
+      "pypi": "trivy-fs"
+    },
+    "roots": [
+      "hash:e137f626694e848f9cbdaa1c270d8740bb408098ad324d8b1f8014ca9065b44f",
+      "name:application/requirements.txt@"
+    ]
   },
-  "known_unknowns": "Engines that did not complete: trivy-fs (unavailable).",
+  "known_unknowns": "All configured engines completed and every detected ecosystem had an engine.",
   "provenance": {
     "alias_snapshot_id": "fixture-pypi-normalization-aliases",
     "ecosystems_without_engine": [],
     "engines": [
       {
-        "artifact_sha256": "3468089c48811168b4ecff2c665b3fac9d8d955af01b1e93258fe7e0de8b70c8",
+        "artifact_sha256": "0ebf76af5d2d26b764e556cf53b5ce7261bcfffbdf063b050f59f2ac2101a337",
         "ecosystems_covered": [
           "pypi"
         ],
@@ -1364,7 +1474,7 @@
         "version": ""
       },
       {
-        "artifact_sha256": "7db10f07f043e837abc88525d15b10462c9efa3eab879835f73488c7d08a4e24",
+        "artifact_sha256": "22bcc18c8463b80b964cd63cb44c16840ab7a91ce224b30ad3544b77469a28d7",
         "ecosystems_covered": [
           "pypi"
         ],
@@ -1375,7 +1485,7 @@
         "version": "1.51.0"
       },
       {
-        "artifact_sha256": "b7616370a328bd109b571cba36acc33b365cd5b69dee984233e61545057da8df",
+        "artifact_sha256": "92906df55e49b3f0cc7f45ce8e6df5a4c60e5cadf7765300d350a33ad5649f35",
         "ecosystems_covered": [
           "pypi"
         ],
@@ -1386,13 +1496,16 @@
         "version": "1.51.0"
       },
       {
-        "artifact_sha256": "",
-        "ecosystems_covered": [],
+        "artifact_sha256": "4ad0afac991fbc6dfad9ab953b95a03a8514cbf4e3a99bfa5ac1eb0f5b400efa",
+        "ecosystems_covered": [
+          "application",
+          "pypi"
+        ],
         "engine_db_version": "",
         "engine_id": "trivy-fs",
         "image_digest": "",
-        "status": "unavailable",
-        "version": ""
+        "status": "succeeded",
+        "version": "0.74.0"
       }
     ],
     "normalization_version": 1,

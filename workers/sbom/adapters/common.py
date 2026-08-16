@@ -338,6 +338,21 @@ class SandboxedAdapter(ToolAdapterBase):
         """
         return {}
 
+    def extra_env(self, layout: WorkspaceLayout) -> dict[str, str]:
+        """Environment an engine needs regardless of any database.
+
+        ⚠ THE COMMON CASE IS `TMPDIR`.
+
+        The sandbox gives every engine a READ-ONLY ROOTFS, so `/tmp` does not
+        exist to write into. That is deliberate and not negotiable — we execute
+        third-party binaries over untrusted user code. Engines that need scratch
+        space must be pointed at the writable tmpfs instead, and an engine that
+        is not fails with an error that looks nothing like the real cause:
+
+            unable to create temporary directory: read-only file system
+        """
+        return {}
+
     def generate(self, target: ScanTarget) -> GenerateResult:
         """Run the engine and produce raw artifacts.
 
@@ -425,7 +440,7 @@ class SandboxedAdapter(ToolAdapterBase):
         redacted = redact_argv(argv)
 
         mounts = layout.mounts()
-        env: dict[str, str] = {}
+        env: dict[str, str] = dict(self.extra_env(layout))
         if database is not None:
             # Read-only, like every mount the sandbox allows. The engine reads
             # the database; only the provisioner writes it.

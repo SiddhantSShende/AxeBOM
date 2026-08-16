@@ -42,6 +42,22 @@ class TrivyImageAdapter(SandboxedAdapter):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(CAPABILITIES, **kwargs)
 
+    def extra_env(self, layout: WorkspaceLayout) -> dict[str, str]:
+        """Point trivy's scratch space at the writable tmpfs.
+
+        ⚠ WITHOUT THIS, EVERY TRIVY RUN FAILS.
+
+        trivy creates a temporary directory during post-analysis. The sandbox
+        rootfs is read-only, so `/tmp` is not writable, and the failure reads:
+
+            failed to prepare filesystem for post analysis:
+            unable to create temporary directory: read-only file system
+
+        which names neither trivy's needs nor the sandbox policy. The workspace
+        tmpfs is the only writable path in the container.
+        """
+        return {"TMPDIR": layout.container_scratch}
+
     def build_argv(self, target: ScanTarget, layout: WorkspaceLayout) -> list[str]:
         """Scan a container image.
 

@@ -644,7 +644,7 @@ Two platform-specific findings, both load-bearing:
 | `syft` | working — CycloneDX inventory, 4 ecosystems on the monorepo | 1.51.0 | — |
 | `syft-spdx` | working — SPDX inventory | 1.51.0 | — |
 | `grype` | working — real GHSA findings against **our** syft SBOM, never a re-scan | 0.117.0 | grype-db, provisioned |
-| `trivy-fs` | working — vuln + license + secret | 0.74.0 | trivy-db, provisioned |
+| `trivy-fs` | working — vuln + license + secret; needs `TMPDIR` on the tmpfs | 0.74.0 | trivy-db, provisioned |
 | `osv-scanner` | working — findings **and alias edges**, Phase 8's union-find input | 2.5.0 | OSV, 4 ecosystems |
 | `trivy-image` | implemented, **not exercised** — refuses non-digest refs; needs a pinned image to scan | 0.74.0 | shares trivy-db |
 | `dependency-check` | implemented, **not exercised** — needs an NVD API key and a 30–60 min first sync | 13.0.0 | not provisioned |
@@ -671,6 +671,22 @@ Two platform-specific findings, both load-bearing:
 running scanners, which is what makes normalization deterministic, offline and
 stable across upstream changes. Regenerating them is a deliberate act
 (`docs/09-GOLDEN-CORPUS.md` §5).
+
+### The last Phase 7 bug: a read-only rootfs with nowhere to write
+
+trivy failed EVERY run with:
+
+    failed to prepare filesystem for post analysis:
+    unable to create temporary directory: read-only file system
+
+The sandbox gives each engine a read-only rootfs — deliberate, and not
+negotiable, since we execute third-party binaries over untrusted user code. But
+the error names neither trivy's needs nor the sandbox policy, so it reads as a
+trivy bug.
+
+`SandboxedAdapter.extra_env()` now exists for exactly this: trivy is pointed at
+the workspace tmpfs, the only writable path in the container. All five engines
+now succeed on all five fixtures.
 
 ### Known debt from Phase 7
 
@@ -707,7 +723,13 @@ graph, alias closure, finding dedup, both coverage numbers, provenance.
 | `npm-simple` | 4 | 4 | lodash merged across 4 engines into one component; each vulnerability one finding with `detected_by: [grype, osv-scanner]` |
 | `pypi-normalization` | 6 | 1 | PEP 503 applied — `PyYAML`→`pyyaml`, `zope.interface`→`zope-interface`, `Django_REST_framework`→`django-rest-framework` |
 | `maven-case` | 5 | 7 | case preserved — `MavenCase` and `jackson-databind` survive verbatim |
-| `golang-incompatible` | 5 | 9 | `Masterminds` capitalisation, `+incompatible`, and `gopkg.in/yaml.v3` all preserved |
+| `golang-incompatible` | 9 | 9 | `Masterminds` capitalisation, `+incompatible`, and `gopkg.in/yaml.v3` all preserved |
+| `monorepo-multiroot` | 16 | 13 | **9 roots** — the N-roots property; four ecosystems in one repository |
+
+Counts are as of the full five-engine corpus. All five engines now succeed on
+all five fixtures, so `trivy-fs` contributes components and graph edges that the
+earlier four-engine run did not have — which is why every count moved and the
+goldens were regenerated.
 
 ### Three bugs the fixtures found that reading the spec would not have
 
@@ -800,11 +822,8 @@ reads the digest from the LOCATION.
 
 ### Known gaps in Phase 8
 
-- **`monorepo-multiroot` has no expected/ golden** — its raw artifacts were not
-  regenerated (see the Phase 7 debt). Its golden test skips rather than fails.
-- **`trivy-fs` and `dependency-check` have no committed artifacts**, so the
-  normalizer's handling of their formats is exercised by unit tests but not by
-  the corpus.
+- **`dependency-check` has no committed artifacts**, so the normalizer's handling
+  of its format is exercised by unit tests but not by the corpus.
 - **Coverage sits near 12%** across the fixtures. That is honest, not a bug: the
   canonical model currently populates name, version, purl, licences, hashes,
   scope and author. The remaining CERT-In fields are not collected by any engine

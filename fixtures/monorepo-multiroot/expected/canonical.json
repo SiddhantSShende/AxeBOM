@@ -1,0 +1,2259 @@
+{
+  "component_count": 16,
+  "components": [
+    {
+      "candidate_identities": [],
+      "component_key": "hash:32ea0146ec3af84f3b9af4036592e33fce98ed83aa12f8dd214f91473b8f3544",
+      "ecosystem": "",
+      "hashes": [
+        {
+          "alg": "sha1",
+          "value": "651804e9c92f4a19d7167a26c5896af5fde69d09"
+        },
+        {
+          "alg": "sha256",
+          "value": "32ea0146ec3af84f3b9af4036592e33fce98ed83aa12f8dd214f91473b8f3544"
+        }
+      ],
+      "identity_confidence": "medium",
+      "identity_rule": "hash",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [],
+      "name": "/src/tools/build/pom.xml",
+      "observed_by": [
+        {
+          "confidence": "medium",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "c58e3ca17df99304"
+        }
+      ],
+      "purl": "",
+      "scope": "excluded",
+      "version_raw": ""
+    },
+    {
+      "candidate_identities": [],
+      "component_key": "hash:4557f4af31a6dbe1c3fc9521fdf4c80f6317279ee2121642f770eef1bfd47f70",
+      "ecosystem": "",
+      "hashes": [
+        {
+          "alg": "sha1",
+          "value": "481c704679f1e7127e80f6e5cb2323fd3e75b52a"
+        },
+        {
+          "alg": "sha256",
+          "value": "4557f4af31a6dbe1c3fc9521fdf4c80f6317279ee2121642f770eef1bfd47f70"
+        }
+      ],
+      "identity_confidence": "medium",
+      "identity_rule": "hash",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [],
+      "name": "/src/libs/shared/go.mod",
+      "observed_by": [
+        {
+          "confidence": "medium",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "798f59d447f8931a"
+        }
+      ],
+      "purl": "",
+      "scope": "excluded",
+      "version_raw": ""
+    },
+    {
+      "candidate_identities": [],
+      "component_key": "hash:67bcf63d637a73edd7396bae7d1e19f089a5e14d7430561a77785894290e41fa",
+      "ecosystem": "",
+      "hashes": [
+        {
+          "alg": "sha1",
+          "value": "586e91365fa095577f70a44ae4f5e7d4492f80c2"
+        },
+        {
+          "alg": "sha256",
+          "value": "67bcf63d637a73edd7396bae7d1e19f089a5e14d7430561a77785894290e41fa"
+        }
+      ],
+      "identity_confidence": "medium",
+      "identity_rule": "hash",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [],
+      "name": "/src/services/api/package-lock.json",
+      "observed_by": [
+        {
+          "confidence": "medium",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "6ca4ffe1d9c64b91"
+        }
+      ],
+      "purl": "",
+      "scope": "excluded",
+      "version_raw": ""
+    },
+    {
+      "candidate_identities": [],
+      "component_key": "hash:e01af8c8a9c5a1fbe6ce324ba9a6187833ad134f67424d803819e08823994478",
+      "ecosystem": "",
+      "hashes": [
+        {
+          "alg": "sha1",
+          "value": "c0443ec56c1cee6a80b0552e94e7fef4cd978433"
+        },
+        {
+          "alg": "sha256",
+          "value": "e01af8c8a9c5a1fbe6ce324ba9a6187833ad134f67424d803819e08823994478"
+        }
+      ],
+      "identity_confidence": "medium",
+      "identity_rule": "hash",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [],
+      "name": "/src/services/worker/requirements.txt",
+      "observed_by": [
+        {
+          "confidence": "medium",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "7e0952390f7abdfe"
+        }
+      ],
+      "purl": "",
+      "scope": "excluded",
+      "version_raw": ""
+    },
+    {
+      "candidate_identities": [],
+      "component_key": "name:application/libs/shared/go.mod@",
+      "ecosystem": "application",
+      "hashes": [],
+      "identity_confidence": "low",
+      "identity_rule": "name",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [],
+      "name": "libs/shared/go.mod",
+      "observed_by": [
+        {
+          "confidence": "low",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "74ba7e23-e1f0-452f-858a-21d8a3c03214"
+        }
+      ],
+      "purl": "",
+      "scope": "required",
+      "version_raw": ""
+    },
+    {
+      "candidate_identities": [],
+      "component_key": "name:application/services/api/package-lock.json@",
+      "ecosystem": "application",
+      "hashes": [],
+      "identity_confidence": "low",
+      "identity_rule": "name",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [],
+      "name": "services/api/package-lock.json",
+      "observed_by": [
+        {
+          "confidence": "low",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "5802fe6a-bbe8-480a-b06f-3741dbf47e58"
+        }
+      ],
+      "purl": "",
+      "scope": "required",
+      "version_raw": ""
+    },
+    {
+      "candidate_identities": [],
+      "component_key": "name:application/services/worker/requirements.txt@",
+      "ecosystem": "application",
+      "hashes": [],
+      "identity_confidence": "low",
+      "identity_rule": "name",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [],
+      "name": "services/worker/requirements.txt",
+      "observed_by": [
+        {
+          "confidence": "low",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "4b6403fe-f0a4-4135-b98b-57d187d90878"
+        }
+      ],
+      "purl": "",
+      "scope": "required",
+      "version_raw": ""
+    },
+    {
+      "candidate_identities": [],
+      "component_key": "name:application/tools/build/pom.xml@",
+      "ecosystem": "application",
+      "hashes": [],
+      "identity_confidence": "low",
+      "identity_rule": "name",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [],
+      "name": "tools/build/pom.xml",
+      "observed_by": [
+        {
+          "confidence": "low",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "f00374b1-7923-4177-912f-dff6cd99f94e"
+        }
+      ],
+      "purl": "",
+      "scope": "required",
+      "version_raw": ""
+    },
+    {
+      "candidate_identities": [],
+      "component_key": "purl:pkg:golang/github.com/acme/shared",
+      "ecosystem": "golang",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": true,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [],
+      "name": "shared",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:golang/github.com/acme/shared"
+        }
+      ],
+      "purl": "pkg:golang/github.com/acme/shared",
+      "scope": "required",
+      "version_raw": ""
+    },
+    {
+      "candidate_identities": [
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft",
+          "value": "cpe:2.3:a:google:uuid:v1.3.1:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:google:uuid:v1.3.1:*:*:*:*:*:*:*"
+        }
+      ],
+      "component_key": "purl:pkg:golang/github.com/google/uuid@v1.3.1",
+      "ecosystem": "golang",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "NOASSERTION",
+      "license_rule": "concluded:spdx-noassertion",
+      "locations": [
+        {
+          "layer": "",
+          "path": "libs/shared/go.mod",
+          "sha256": ""
+        }
+      ],
+      "name": "uuid",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:golang/github.com/google/uuid@v1.3.1?package-id=cd805244926de32a"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft-spdx",
+          "engine_version": "1.51.0",
+          "native_id": "SPDXRef-Package-go-module-github.com-google-uuid-cd805244926de32a"
+        },
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:golang/github.com/google/uuid@v1.3.1"
+        }
+      ],
+      "purl": "pkg:golang/github.com/google/uuid@v1.3.1",
+      "scope": "required",
+      "version_raw": "v1.3.1"
+    },
+    {
+      "candidate_identities": [
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:acme:build-tools:0.1.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:acme:build_tools:0.1.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft",
+          "value": "cpe:2.3:a:build-tools:build-tools:0.1.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:build-tools:build-tools:0.1.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:build-tools:build_tools:0.1.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:build:build-tools:0.1.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:build:build_tools:0.1.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:build_tools:build-tools:0.1.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:build_tools:build_tools:0.1.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:com.acme:build-tools:0.1.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:com.acme:build_tools:0.1.0:*:*:*:*:*:*:*"
+        }
+      ],
+      "component_key": "purl:pkg:maven/com.acme/build-tools@0.1.0",
+      "ecosystem": "maven",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": true,
+      "license_ambiguous": false,
+      "license_effective": "NOASSERTION",
+      "license_rule": "concluded:spdx-noassertion",
+      "locations": [
+        {
+          "layer": "",
+          "path": "tools/build/pom.xml",
+          "sha256": ""
+        }
+      ],
+      "name": "build-tools",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:maven/com.acme/build-tools@0.1.0?package-id=24d42aafc90986ab"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft-spdx",
+          "engine_version": "1.51.0",
+          "native_id": "SPDXRef-Package-java-archive-build-tools-24d42aafc90986ab"
+        },
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:maven/com.acme/build-tools@0.1.0"
+        }
+      ],
+      "purl": "pkg:maven/com.acme/build-tools@0.1.0",
+      "scope": "required",
+      "version_raw": "0.1.0"
+    },
+    {
+      "candidate_identities": [
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft",
+          "value": "cpe:2.3:a:junit:junit:4.13.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:junit:junit:4.13.2:*:*:*:*:*:*:*"
+        }
+      ],
+      "component_key": "purl:pkg:maven/junit/junit@4.13.2",
+      "ecosystem": "maven",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "NOASSERTION",
+      "license_rule": "concluded:spdx-noassertion",
+      "locations": [
+        {
+          "layer": "",
+          "path": "tools/build/pom.xml",
+          "sha256": ""
+        }
+      ],
+      "name": "junit",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:maven/junit/junit@4.13.2?package-id=9f4796a4bf136d62"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft-spdx",
+          "engine_version": "1.51.0",
+          "native_id": "SPDXRef-Package-java-archive-junit-9f4796a4bf136d62"
+        },
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:maven/junit/junit@4.13.2"
+        }
+      ],
+      "purl": "pkg:maven/junit/junit@4.13.2",
+      "scope": "required",
+      "version_raw": "4.13.2"
+    },
+    {
+      "candidate_identities": [
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft",
+          "value": "cpe:2.3:a:\\@acme\\/api:\\@acme\\/api:2.1.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:\\@acme\\/api:\\@acme\\/api:2.1.0:*:*:*:*:*:*:*"
+        }
+      ],
+      "component_key": "purl:pkg:npm/@acme/api@2.1.0",
+      "ecosystem": "npm",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "NOASSERTION",
+      "license_rule": "concluded:spdx-noassertion",
+      "locations": [
+        {
+          "layer": "",
+          "path": "services/api/package-lock.json",
+          "sha256": ""
+        }
+      ],
+      "name": "api",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:npm/%40acme/api@2.1.0?package-id=cff88e37686e1c1f"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft-spdx",
+          "engine_version": "1.51.0",
+          "native_id": "SPDXRef-Package-npm--acme-api-cff88e37686e1c1f"
+        }
+      ],
+      "purl": "pkg:npm/@acme/api@2.1.0",
+      "scope": "required",
+      "version_raw": "2.1.0"
+    },
+    {
+      "candidate_identities": [
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft",
+          "value": "cpe:2.3:a:openjsf:express:4.18.2:*:*:*:*:node.js:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:openjsf:express:4.18.2:*:*:*:*:node.js:*:*"
+        }
+      ],
+      "component_key": "purl:pkg:npm/express@4.18.2",
+      "ecosystem": "npm",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": true,
+      "license_ambiguous": false,
+      "license_effective": "NOASSERTION",
+      "license_rule": "concluded:spdx-noassertion",
+      "locations": [
+        {
+          "layer": "",
+          "path": "services/api/package-lock.json",
+          "sha256": ""
+        },
+        {
+          "layer": "",
+          "path": "src/sbom.cdx.json",
+          "sha256": ""
+        },
+        {
+          "layer": "",
+          "path": "src/services/api/package-lock.json",
+          "sha256": ""
+        }
+      ],
+      "name": "express",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:npm/express@4.18.2?package-id=38dcbc807c3453bb"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:npm/express@4.18.2?package-id=38dcbc807c3453bb"
+        },
+        {
+          "confidence": "high",
+          "engine": "osv-scanner",
+          "engine_version": "",
+          "native_id": "express@4.18.2"
+        },
+        {
+          "confidence": "high",
+          "engine": "osv-scanner",
+          "engine_version": "",
+          "native_id": "express@4.18.2"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:npm/express@4.18.2?package-id=38dcbc807c3453bb"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft-spdx",
+          "engine_version": "1.51.0",
+          "native_id": "SPDXRef-Package-npm-express-38dcbc807c3453bb"
+        },
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:npm/express@4.18.2"
+        }
+      ],
+      "purl": "pkg:npm/express@4.18.2",
+      "scope": "required",
+      "version_raw": "4.18.2"
+    },
+    {
+      "candidate_identities": [
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft",
+          "value": "cpe:2.3:a:python:requests:2.31.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python:requests:2.31.0:*:*:*:*:*:*:*"
+        }
+      ],
+      "component_key": "purl:pkg:pypi/requests@2.31.0",
+      "ecosystem": "pypi",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": true,
+      "license_ambiguous": false,
+      "license_effective": "NOASSERTION",
+      "license_rule": "concluded:spdx-noassertion",
+      "locations": [
+        {
+          "layer": "",
+          "path": "services/worker/requirements.txt",
+          "sha256": ""
+        },
+        {
+          "layer": "",
+          "path": "src/sbom.cdx.json",
+          "sha256": ""
+        },
+        {
+          "layer": "",
+          "path": "src/services/worker/requirements.txt",
+          "sha256": ""
+        }
+      ],
+      "name": "requests",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:pypi/requests@2.31.0?package-id=a5c25e5ea6737a5f"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:pypi/requests@2.31.0?package-id=a5c25e5ea6737a5f"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:pypi/requests@2.31.0?package-id=a5c25e5ea6737a5f"
+        },
+        {
+          "confidence": "high",
+          "engine": "osv-scanner",
+          "engine_version": "",
+          "native_id": "requests@2.31.0"
+        },
+        {
+          "confidence": "high",
+          "engine": "osv-scanner",
+          "engine_version": "",
+          "native_id": "requests@2.31.0"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:pypi/requests@2.31.0?package-id=a5c25e5ea6737a5f"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft-spdx",
+          "engine_version": "1.51.0",
+          "native_id": "SPDXRef-Package-python-requests-a5c25e5ea6737a5f"
+        },
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:pypi/requests@2.31.0"
+        }
+      ],
+      "purl": "pkg:pypi/requests@2.31.0",
+      "scope": "required",
+      "version_raw": "2.31.0"
+    },
+    {
+      "candidate_identities": [
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft",
+          "value": "cpe:2.3:a:python:urllib3:2.0.4:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python:urllib3:2.0.4:*:*:*:*:*:*:*"
+        }
+      ],
+      "component_key": "purl:pkg:pypi/urllib3@2.0.4",
+      "ecosystem": "pypi",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": true,
+      "license_ambiguous": false,
+      "license_effective": "NOASSERTION",
+      "license_rule": "concluded:spdx-noassertion",
+      "locations": [
+        {
+          "layer": "",
+          "path": "services/worker/requirements.txt",
+          "sha256": ""
+        },
+        {
+          "layer": "",
+          "path": "src/sbom.cdx.json",
+          "sha256": ""
+        },
+        {
+          "layer": "",
+          "path": "src/services/worker/requirements.txt",
+          "sha256": ""
+        }
+      ],
+      "name": "urllib3",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:pypi/urllib3@2.0.4?package-id=937e73971a9af7e3"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:pypi/urllib3@2.0.4?package-id=937e73971a9af7e3"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:pypi/urllib3@2.0.4?package-id=937e73971a9af7e3"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:pypi/urllib3@2.0.4?package-id=937e73971a9af7e3"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:pypi/urllib3@2.0.4?package-id=937e73971a9af7e3"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:pypi/urllib3@2.0.4?package-id=937e73971a9af7e3"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:pypi/urllib3@2.0.4?package-id=937e73971a9af7e3"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:pypi/urllib3@2.0.4?package-id=937e73971a9af7e3"
+        },
+        {
+          "confidence": "high",
+          "engine": "osv-scanner",
+          "engine_version": "",
+          "native_id": "urllib3@2.0.4"
+        },
+        {
+          "confidence": "high",
+          "engine": "osv-scanner",
+          "engine_version": "",
+          "native_id": "urllib3@2.0.4"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:pypi/urllib3@2.0.4?package-id=937e73971a9af7e3"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft-spdx",
+          "engine_version": "1.51.0",
+          "native_id": "SPDXRef-Package-python-urllib3-937e73971a9af7e3"
+        },
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:pypi/urllib3@2.0.4"
+        }
+      ],
+      "purl": "pkg:pypi/urllib3@2.0.4",
+      "scope": "required",
+      "version_raw": "2.0.4"
+    }
+  ],
+  "coverage": {
+    "completeness_numerator": 57,
+    "completeness_pct": 7.58,
+    "declaration_numerator": 78,
+    "declaration_pct": 10.37,
+    "denominator": 752,
+    "field_count": 21,
+    "fields": [
+      {
+        "completeness_pct": 100.0,
+        "declaration_pct": 100.0,
+        "declared": 12,
+        "field_id": "certin.sbom.01.component_name",
+        "name": "Component Name",
+        "present": 12,
+        "total": 12,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 58.33,
+        "declaration_pct": 58.33,
+        "declared": 7,
+        "field_id": "certin.sbom.02.component_version",
+        "name": "Component Version",
+        "present": 7,
+        "total": 12,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.03.component_description",
+        "name": "Component Description",
+        "present": 0,
+        "total": 12,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.04.component_supplier",
+        "name": "Component Supplier",
+        "present": 0,
+        "total": 12,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 58.33,
+        "declared": 7,
+        "field_id": "certin.sbom.05.component_license",
+        "name": "Component License",
+        "present": 0,
+        "total": 12,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.06.component_origin",
+        "name": "Component Origin",
+        "present": 0,
+        "total": 12,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.07.component_dependencies",
+        "name": "Component Dependencies",
+        "present": 0,
+        "total": 12,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.08.vulnerabilities",
+        "name": "Vulnerabilities",
+        "present": 0,
+        "total": 12,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.09.patch_status",
+        "name": "Patch Status",
+        "present": 0,
+        "total": 12,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.10.release_date",
+        "name": "Release Date",
+        "present": 0,
+        "total": 12,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.11.eol_date",
+        "name": "End-of-Life (EOL) Date",
+        "present": 0,
+        "total": 12,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.12.criticality",
+        "name": "Criticality",
+        "present": 0,
+        "total": 12,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.13.usage_restrictions",
+        "name": "Usage Restrictions",
+        "present": 0,
+        "total": 12,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.14.checksums",
+        "name": "Checksums or Hashes",
+        "present": 0,
+        "total": 12,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.15.comments",
+        "name": "Comments or Notes",
+        "present": 0,
+        "total": 12,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.16.author_of_sbom_data",
+        "name": "Author of SBOM Data",
+        "present": 0,
+        "total": 12,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.17.timestamp",
+        "name": "Timestamp",
+        "present": 0,
+        "total": 12,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.18.executable_property",
+        "name": "Executable Property",
+        "present": 0,
+        "total": 12,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.19.archive_property",
+        "name": "Archive Property",
+        "present": 0,
+        "total": 12,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.20.structured_property",
+        "name": "Structured Property",
+        "present": 0,
+        "total": 12,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.21.unique_identifier",
+        "name": "Unique Identifier",
+        "present": 0,
+        "total": 12,
+        "weight": 3
+      }
+    ],
+    "formula": "pct = 100 \u00d7 \u03a3_c \u03a3_f (w_f \u00d7 present(c,f)) / \u03a3_c \u03a3_f w_f",
+    "scored_entities": 16,
+    "unidentified_count": 4
+  },
+  "diagnostics": [
+    {
+      "code": "NORMALIZE_CANDIDATE_IDENTITY",
+      "component_key": "purl:pkg:maven/com.acme/build-tools@0.1.0",
+      "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
+      "message": "11 identity claim(s) attached without merging",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_CANDIDATE_IDENTITY",
+      "component_key": "purl:pkg:golang/github.com/google/uuid@v1.3.1",
+      "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
+      "message": "2 identity claim(s) attached without merging",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_CANDIDATE_IDENTITY",
+      "component_key": "purl:pkg:maven/junit/junit@4.13.2",
+      "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
+      "message": "2 identity claim(s) attached without merging",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_CANDIDATE_IDENTITY",
+      "component_key": "purl:pkg:npm/@acme/api@2.1.0",
+      "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
+      "message": "2 identity claim(s) attached without merging",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_CANDIDATE_IDENTITY",
+      "component_key": "purl:pkg:npm/express@4.18.2",
+      "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
+      "message": "2 identity claim(s) attached without merging",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_CANDIDATE_IDENTITY",
+      "component_key": "purl:pkg:pypi/requests@2.31.0",
+      "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
+      "message": "2 identity claim(s) attached without merging",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_CANDIDATE_IDENTITY",
+      "component_key": "purl:pkg:pypi/urllib3@2.0.4",
+      "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
+      "message": "2 identity claim(s) attached without merging",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_SPDX_DOCUMENT_ROOT",
+      "hint": "recorded as a dependency-graph root rather than an inventory entry",
+      "message": "SPDXRef-DocumentRoot-Directory--src describes the scan target, not a component",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_UNIDENTIFIED_IN_DENOMINATOR",
+      "hint": "they remain in the coverage denominator; dropping them would let a scan that understood almost nothing report a high percentage",
+      "message": "4 unidentified entities scored zero",
+      "severity": "warn"
+    }
+  ],
+  "engine_coverage": [
+    {
+      "artifact_sha256": "e1908d94e3bb0bd59ecaba3e8ebd4f2d1b627078f8ad6db3a6700725390e4b00",
+      "ecosystems_covered": [
+        "npm",
+        "pypi"
+      ],
+      "engine_db_version": "",
+      "engine_id": "grype",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": "0.117.0"
+    },
+    {
+      "artifact_sha256": "4f16cdd961be51386b01eff35a5656ec5ca3da29afc8fa88db9e352bd1fad06a",
+      "ecosystems_covered": [
+        "npm",
+        "pypi"
+      ],
+      "engine_db_version": "",
+      "engine_id": "osv-scanner",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": ""
+    },
+    {
+      "artifact_sha256": "3305af4da92c55f0a6546a1bed6adcea2fdb7d01cd9e0370d0e5b496fcecdba5",
+      "ecosystems_covered": [
+        "golang",
+        "maven",
+        "npm",
+        "pypi"
+      ],
+      "engine_db_version": "",
+      "engine_id": "syft",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": "1.51.0"
+    },
+    {
+      "artifact_sha256": "472f9529c40fabff33e5dee093a828db899297d8066494103c7356dc7709021f",
+      "ecosystems_covered": [
+        "golang",
+        "maven",
+        "npm",
+        "pypi"
+      ],
+      "engine_db_version": "",
+      "engine_id": "syft-spdx",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": "1.51.0"
+    },
+    {
+      "artifact_sha256": "f24e3e979c64428554d9e5ca910b53aabfe394bc5a1262fe9ca1c05d52580590",
+      "ecosystems_covered": [
+        "application",
+        "golang",
+        "maven",
+        "npm",
+        "pypi"
+      ],
+      "engine_db_version": "",
+      "engine_id": "trivy-fs",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": "0.74.0"
+    }
+  ],
+  "finding_count": 13,
+  "findings": [
+    {
+      "component_key": "purl:pkg:pypi/urllib3@2.0.4",
+      "cvss_vectors": [
+        {
+          "score": 8.9,
+          "severity": "High",
+          "source": "Secondary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H",
+          "version": "4.0"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H",
+          "version": "4.0"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2025-66471",
+      "ecosystem": "pypi",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "2.6.0",
+      "fixed_versions": [
+        "2.6.0"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "high",
+      "severity_rule": "cvss-v4",
+      "vuln_cluster_id": "fixture-monorepo-multiroot-cluster-0000"
+    },
+    {
+      "component_key": "purl:pkg:pypi/urllib3@2.0.4",
+      "cvss_vectors": [
+        {
+          "score": 4.4,
+          "severity": "Medium",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2024-37891",
+      "ecosystem": "pypi",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "1.26.19",
+      "fixed_versions": [
+        "1.26.19",
+        "2.2.2"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "medium",
+      "severity_rule": "advisory-cvss-v3.1",
+      "vuln_cluster_id": "fixture-monorepo-multiroot-cluster-0001"
+    },
+    {
+      "component_key": "purl:pkg:pypi/urllib3@2.0.4",
+      "cvss_vectors": [
+        {
+          "score": 7.5,
+          "severity": "High",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "version": "3.1"
+        },
+        {
+          "score": 8.9,
+          "severity": "High",
+          "source": "Secondary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H",
+          "version": "4.0"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H",
+          "version": "4.0"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2026-21441",
+      "ecosystem": "pypi",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "2.6.3",
+      "fixed_versions": [
+        "2.6.3"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "high",
+      "severity_rule": "cvss-v4",
+      "vuln_cluster_id": "fixture-monorepo-multiroot-cluster-0002"
+    },
+    {
+      "component_key": "purl:pkg:pypi/requests@2.31.0",
+      "cvss_vectors": [
+        {
+          "score": 5.3,
+          "severity": "Medium",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2024-47081",
+      "ecosystem": "pypi",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "2.32.4",
+      "fixed_versions": [
+        "2.32.4"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "medium",
+      "severity_rule": "advisory-cvss-v3.1",
+      "vuln_cluster_id": "fixture-monorepo-multiroot-cluster-0003"
+    },
+    {
+      "component_key": "purl:pkg:pypi/requests@2.31.0",
+      "cvss_vectors": [
+        {
+          "score": 5.6,
+          "severity": "Medium",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:H/I:H/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:H/I:H/A:N",
+          "version": "3.1"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2024-35195",
+      "ecosystem": "pypi",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "2.32.0",
+      "fixed_versions": [
+        "2.32.0"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "medium",
+      "severity_rule": "advisory-cvss-v3.1",
+      "vuln_cluster_id": "fixture-monorepo-multiroot-cluster-0004"
+    },
+    {
+      "component_key": "purl:pkg:pypi/urllib3@2.0.4",
+      "cvss_vectors": [
+        {
+          "score": 4.2,
+          "severity": "Medium",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:A/AC:H/PR:H/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:A/AC:H/PR:H/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 5.7,
+          "severity": "Medium",
+          "source": "Secondary",
+          "vector": "CVSS:4.0/AV:A/AC:L/AT:P/PR:H/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
+          "version": "4.0"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:4.0/AV:A/AC:L/AT:P/PR:H/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
+          "version": "4.0"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2023-45803",
+      "ecosystem": "pypi",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "4e98d57809dacab1cbe625fddeec1a290c478ea9",
+      "fixed_versions": [
+        "1.26.18",
+        "2.0.7",
+        "4e98d57809dacab1cbe625fddeec1a290c478ea9"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "medium",
+      "severity_rule": "cvss-v4",
+      "vuln_cluster_id": "fixture-monorepo-multiroot-cluster-0005"
+    },
+    {
+      "component_key": "purl:pkg:pypi/requests@2.31.0",
+      "cvss_vectors": [
+        {
+          "score": 4.4,
+          "severity": "Medium",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:U/C:N/I:H/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:U/C:N/I:H/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:N",
+          "version": "3.1"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2026-25645",
+      "ecosystem": "pypi",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "2.33.0",
+      "fixed_versions": [
+        "2.33.0"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "medium",
+      "severity_rule": "advisory-cvss-v3.1",
+      "vuln_cluster_id": "fixture-monorepo-multiroot-cluster-0006"
+    },
+    {
+      "component_key": "purl:pkg:pypi/urllib3@2.0.4",
+      "cvss_vectors": [
+        {
+          "score": 8.9,
+          "severity": "High",
+          "source": "Secondary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H",
+          "version": "4.0"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H",
+          "version": "4.0"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2025-66418",
+      "ecosystem": "pypi",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "2.6.0",
+      "fixed_versions": [
+        "2.6.0"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "high",
+      "severity_rule": "cvss-v4",
+      "vuln_cluster_id": "fixture-monorepo-multiroot-cluster-0007"
+    },
+    {
+      "component_key": "purl:pkg:pypi/urllib3@2.0.4",
+      "cvss_vectors": [
+        {
+          "score": 5.3,
+          "severity": "Medium",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2025-50181",
+      "ecosystem": "pypi",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "2.5.0",
+      "fixed_versions": [
+        "2.5.0"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "medium",
+      "severity_rule": "advisory-cvss-v3.1",
+      "vuln_cluster_id": "fixture-monorepo-multiroot-cluster-0008"
+    },
+    {
+      "component_key": "purl:pkg:pypi/urllib3@2.0.4",
+      "cvss_vectors": [
+        {
+          "score": 5.3,
+          "severity": "High",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 8.2,
+          "severity": "High",
+          "source": "Secondary",
+          "vector": "CVSS:4.0/AV:N/AC:H/AT:P/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
+          "version": "4.0"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:4.0/AV:N/AC:H/AT:P/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
+          "version": "4.0"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2026-44431",
+      "ecosystem": "pypi",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "2.7.0",
+      "fixed_versions": [
+        "2.7.0"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "high",
+      "severity_rule": "cvss-v4",
+      "vuln_cluster_id": "fixture-monorepo-multiroot-cluster-0009"
+    },
+    {
+      "component_key": "purl:pkg:npm/express@4.18.2",
+      "cvss_vectors": [
+        {
+          "score": 5.0,
+          "severity": "Low",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:L",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:L",
+          "version": "3.1"
+        },
+        {
+          "score": 2.3,
+          "severity": "Low",
+          "source": "Secondary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:N/VI:N/VA:N/SC:L/SI:L/SA:L",
+          "version": "4.0"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:N/VI:N/VA:N/SC:L/SI:L/SA:L",
+          "version": "4.0"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2024-43796",
+      "ecosystem": "npm",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "4.20.0",
+      "fixed_versions": [
+        "4.20.0",
+        "5.0.0"
+      ],
+      "severity_conflict": true,
+      "severity_effective": "low",
+      "severity_rule": "cvss-v4",
+      "vuln_cluster_id": "fixture-monorepo-multiroot-cluster-0010"
+    },
+    {
+      "component_key": "purl:pkg:npm/express@4.18.2",
+      "cvss_vectors": [
+        {
+          "score": 6.1,
+          "severity": "Medium",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
+          "version": "3.1"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2024-29041",
+      "ecosystem": "npm",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "4.19.2",
+      "fixed_versions": [
+        "4.19.2",
+        "5.0.0-beta.3"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "medium",
+      "severity_rule": "advisory-cvss-v3.1",
+      "vuln_cluster_id": "fixture-monorepo-multiroot-cluster-0011"
+    },
+    {
+      "component_key": "purl:pkg:pypi/urllib3@2.0.4",
+      "cvss_vectors": [
+        {
+          "score": 5.9,
+          "severity": "High",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:H/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:H/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 7.4,
+          "severity": "High",
+          "source": "Secondary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:H/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N",
+          "version": "4.0"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:H/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N",
+          "version": "4.0"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2023-43804",
+      "ecosystem": "pypi",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "01220354d389cd05474713f8c982d05c9b17aafb",
+      "fixed_versions": [
+        "01220354d389cd05474713f8c982d05c9b17aafb",
+        "1.26.17",
+        "2.0.6",
+        "644124ecd0b6e417c527191f866daa05a5a2056d"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "high",
+      "severity_rule": "cvss-v4",
+      "vuln_cluster_id": "fixture-monorepo-multiroot-cluster-0012"
+    }
+  ],
+  "graph": {
+    "depth": {
+      "hash:32ea0146ec3af84f3b9af4036592e33fce98ed83aa12f8dd214f91473b8f3544": 0,
+      "hash:4557f4af31a6dbe1c3fc9521fdf4c80f6317279ee2121642f770eef1bfd47f70": 0,
+      "hash:67bcf63d637a73edd7396bae7d1e19f089a5e14d7430561a77785894290e41fa": 0,
+      "hash:e01af8c8a9c5a1fbe6ce324ba9a6187833ad134f67424d803819e08823994478": 0,
+      "name:application/libs/shared/go.mod@": 0,
+      "name:application/services/api/package-lock.json@": 0,
+      "name:application/services/worker/requirements.txt@": 0,
+      "name:application/tools/build/pom.xml@": 0,
+      "purl:pkg:golang/github.com/acme/shared": 1,
+      "purl:pkg:golang/github.com/google/uuid@v1.3.1": 2,
+      "purl:pkg:maven/com.acme/build-tools@0.1.0": 1,
+      "purl:pkg:maven/junit/junit@4.13.2": 2,
+      "purl:pkg:npm/@acme/api@2.1.0": 0,
+      "purl:pkg:npm/express@4.18.2": 1,
+      "purl:pkg:pypi/requests@2.31.0": 1,
+      "purl:pkg:pypi/urllib3@2.0.4": 1
+    },
+    "direct": [
+      "purl:pkg:golang/github.com/acme/shared",
+      "purl:pkg:maven/com.acme/build-tools@0.1.0",
+      "purl:pkg:npm/express@4.18.2",
+      "purl:pkg:pypi/requests@2.31.0",
+      "purl:pkg:pypi/urllib3@2.0.4"
+    ],
+    "edges": [
+      {
+        "confidence": "high",
+        "ecosystem": "golang",
+        "from": "name:application/libs/shared/go.mod@",
+        "owning_engine": "trivy-fs",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:golang/github.com/acme/shared"
+      },
+      {
+        "confidence": "high",
+        "ecosystem": "golang",
+        "from": "purl:pkg:golang/github.com/acme/shared",
+        "owning_engine": "trivy-fs",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:golang/github.com/google/uuid@v1.3.1"
+      },
+      {
+        "confidence": "high",
+        "ecosystem": "maven",
+        "from": "name:application/tools/build/pom.xml@",
+        "owning_engine": "trivy-fs",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:maven/com.acme/build-tools@0.1.0"
+      },
+      {
+        "confidence": "high",
+        "ecosystem": "maven",
+        "from": "purl:pkg:maven/com.acme/build-tools@0.1.0",
+        "owning_engine": "trivy-fs",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:maven/junit/junit@4.13.2"
+      },
+      {
+        "confidence": "high",
+        "ecosystem": "npm",
+        "from": "name:application/services/api/package-lock.json@",
+        "owning_engine": "trivy-fs",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:npm/express@4.18.2"
+      },
+      {
+        "confidence": "high",
+        "ecosystem": "pypi",
+        "from": "name:application/services/worker/requirements.txt@",
+        "owning_engine": "trivy-fs",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:pypi/requests@2.31.0"
+      },
+      {
+        "confidence": "high",
+        "ecosystem": "pypi",
+        "from": "name:application/services/worker/requirements.txt@",
+        "owning_engine": "trivy-fs",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:pypi/urllib3@2.0.4"
+      }
+    ],
+    "orphans": [],
+    "owning_engine": {
+      "golang": "trivy-fs",
+      "maven": "trivy-fs",
+      "npm": "trivy-fs",
+      "pypi": "trivy-fs"
+    },
+    "roots": [
+      "hash:32ea0146ec3af84f3b9af4036592e33fce98ed83aa12f8dd214f91473b8f3544",
+      "hash:4557f4af31a6dbe1c3fc9521fdf4c80f6317279ee2121642f770eef1bfd47f70",
+      "hash:67bcf63d637a73edd7396bae7d1e19f089a5e14d7430561a77785894290e41fa",
+      "hash:e01af8c8a9c5a1fbe6ce324ba9a6187833ad134f67424d803819e08823994478",
+      "name:application/libs/shared/go.mod@",
+      "name:application/services/api/package-lock.json@",
+      "name:application/services/worker/requirements.txt@",
+      "name:application/tools/build/pom.xml@",
+      "purl:pkg:npm/@acme/api@2.1.0"
+    ]
+  },
+  "known_unknowns": "All configured engines completed and every detected ecosystem had an engine.",
+  "provenance": {
+    "alias_snapshot_id": "fixture-monorepo-multiroot-aliases",
+    "ecosystems_without_engine": [],
+    "engines": [
+      {
+        "artifact_sha256": "e1908d94e3bb0bd59ecaba3e8ebd4f2d1b627078f8ad6db3a6700725390e4b00",
+        "ecosystems_covered": [
+          "npm",
+          "pypi"
+        ],
+        "engine_db_version": "",
+        "engine_id": "grype",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": "0.117.0"
+      },
+      {
+        "artifact_sha256": "4f16cdd961be51386b01eff35a5656ec5ca3da29afc8fa88db9e352bd1fad06a",
+        "ecosystems_covered": [
+          "npm",
+          "pypi"
+        ],
+        "engine_db_version": "",
+        "engine_id": "osv-scanner",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": ""
+      },
+      {
+        "artifact_sha256": "3305af4da92c55f0a6546a1bed6adcea2fdb7d01cd9e0370d0e5b496fcecdba5",
+        "ecosystems_covered": [
+          "golang",
+          "maven",
+          "npm",
+          "pypi"
+        ],
+        "engine_db_version": "",
+        "engine_id": "syft",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": "1.51.0"
+      },
+      {
+        "artifact_sha256": "472f9529c40fabff33e5dee093a828db899297d8066494103c7356dc7709021f",
+        "ecosystems_covered": [
+          "golang",
+          "maven",
+          "npm",
+          "pypi"
+        ],
+        "engine_db_version": "",
+        "engine_id": "syft-spdx",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": "1.51.0"
+      },
+      {
+        "artifact_sha256": "f24e3e979c64428554d9e5ca910b53aabfe394bc5a1262fe9ca1c05d52580590",
+        "ecosystems_covered": [
+          "application",
+          "golang",
+          "maven",
+          "npm",
+          "pypi"
+        ],
+        "engine_db_version": "",
+        "engine_id": "trivy-fs",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": "0.74.0"
+      }
+    ],
+    "normalization_version": 1,
+    "ruleset_version": "2026.08.1",
+    "scan_id": "fixture-monorepo-multiroot",
+    "source_commit_sha": "",
+    "spdx_license_list_version": "3.25",
+    "workspace_archive_sha256": ""
+  },
+  "ruleset_version": "2026.08.1",
+  "spdx_license_list_version": "3.25",
+  "unidentified_count": 0,
+  "vuln_clusters": [
+    {
+      "cluster_id": "fixture-monorepo-multiroot-cluster-0000",
+      "display_id_at_render": "CVE-2025-66471",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2025-66471",
+        "GHSA-2XPW-W6GG-JR37",
+        "PYSEC-2026-1994"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-2XPW-W6GG-JR37",
+          "id_b": "CVE-2025-66471",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "PYSEC-2026-1994",
+          "id_b": "CVE-2025-66471",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-monorepo-multiroot-cluster-0001",
+      "display_id_at_render": "CVE-2024-37891",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2024-37891",
+        "GHSA-34JH-P97F-MPXF",
+        "PYSEC-2026-1995"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-34JH-P97F-MPXF",
+          "id_b": "CVE-2024-37891",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "PYSEC-2026-1995",
+          "id_b": "CVE-2024-37891",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-monorepo-multiroot-cluster-0002",
+      "display_id_at_render": "CVE-2026-21441",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2026-21441",
+        "GHSA-38JV-5279-WG99",
+        "PYSEC-2026-1996"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-38JV-5279-WG99",
+          "id_b": "CVE-2026-21441",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "PYSEC-2026-1996",
+          "id_b": "CVE-2026-21441",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-monorepo-multiroot-cluster-0003",
+      "display_id_at_render": "CVE-2024-47081",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2024-47081",
+        "GHSA-9HJG-9R4M-MVJ7",
+        "PYSEC-2026-1872"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-9HJG-9R4M-MVJ7",
+          "id_b": "CVE-2024-47081",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "PYSEC-2026-1872",
+          "id_b": "CVE-2024-47081",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-monorepo-multiroot-cluster-0004",
+      "display_id_at_render": "CVE-2024-35195",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2024-35195",
+        "GHSA-9WX4-H78V-VM56",
+        "PYSEC-2026-1873"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-9WX4-H78V-VM56",
+          "id_b": "CVE-2024-35195",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "PYSEC-2026-1873",
+          "id_b": "CVE-2024-35195",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-monorepo-multiroot-cluster-0005",
+      "display_id_at_render": "CVE-2023-45803",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2023-45803",
+        "GHSA-G4MX-Q9VG-27P4",
+        "PYSEC-2023-212"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-G4MX-Q9VG-27P4",
+          "id_b": "CVE-2023-45803",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "PYSEC-2023-212",
+          "id_b": "CVE-2023-45803",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-monorepo-multiroot-cluster-0006",
+      "display_id_at_render": "CVE-2026-25645",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2026-25645",
+        "GHSA-GC5V-M9X4-R6X2",
+        "PYSEC-2026-2275"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-GC5V-M9X4-R6X2",
+          "id_b": "CVE-2026-25645",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "PYSEC-2026-2275",
+          "id_b": "CVE-2026-25645",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-monorepo-multiroot-cluster-0007",
+      "display_id_at_render": "CVE-2025-66418",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2025-66418",
+        "GHSA-GM62-XV2J-4W53",
+        "PYSEC-2026-1998"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-GM62-XV2J-4W53",
+          "id_b": "CVE-2025-66418",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "PYSEC-2026-1998",
+          "id_b": "CVE-2025-66418",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-monorepo-multiroot-cluster-0008",
+      "display_id_at_render": "CVE-2025-50181",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2025-50181",
+        "GHSA-PQ67-6M6Q-MJ2V",
+        "PYSEC-2026-1999"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-PQ67-6M6Q-MJ2V",
+          "id_b": "CVE-2025-50181",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "PYSEC-2026-1999",
+          "id_b": "CVE-2025-50181",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-monorepo-multiroot-cluster-0009",
+      "display_id_at_render": "CVE-2026-44431",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2026-44431",
+        "GHSA-QCCP-GFCP-XXVC",
+        "PYSEC-2026-141"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-QCCP-GFCP-XXVC",
+          "id_b": "CVE-2026-44431",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "PYSEC-2026-141",
+          "id_b": "CVE-2026-44431",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-monorepo-multiroot-cluster-0010",
+      "display_id_at_render": "CVE-2024-43796",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2024-43796",
+        "GHSA-QW6H-VGH9-J6WX"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-QW6H-VGH9-J6WX",
+          "id_b": "CVE-2024-43796",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-monorepo-multiroot-cluster-0011",
+      "display_id_at_render": "CVE-2024-29041",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2024-29041",
+        "GHSA-RV95-896H-C2VC"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-RV95-896H-C2VC",
+          "id_b": "CVE-2024-29041",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-monorepo-multiroot-cluster-0012",
+      "display_id_at_render": "CVE-2023-43804",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2023-43804",
+        "GHSA-V845-JXX5-VC9F",
+        "PYSEC-2023-192"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-V845-JXX5-VC9F",
+          "id_b": "CVE-2023-43804",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "PYSEC-2023-192",
+          "id_b": "CVE-2023-43804",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    }
+  ]
+}

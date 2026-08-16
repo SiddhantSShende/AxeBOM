@@ -1,5 +1,5 @@
 {
-  "component_count": 5,
+  "component_count": 9,
   "components": [
     {
       "candidate_identities": [],
@@ -33,6 +33,56 @@
       ],
       "purl": "",
       "scope": "excluded",
+      "version_raw": ""
+    },
+    {
+      "candidate_identities": [],
+      "component_key": "name:application/go.mod@",
+      "ecosystem": "application",
+      "hashes": [],
+      "identity_confidence": "low",
+      "identity_rule": "name",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [],
+      "name": "go.mod",
+      "observed_by": [
+        {
+          "confidence": "low",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "f58b18d2-192a-4e3d-ba53-c8027a614a09"
+        }
+      ],
+      "purl": "",
+      "scope": "required",
+      "version_raw": ""
+    },
+    {
+      "candidate_identities": [],
+      "component_key": "purl:pkg:golang/example.com/golang-incompatible",
+      "ecosystem": "golang",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": true,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [],
+      "name": "golang-incompatible",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:golang/example.com/golang-incompatible"
+        }
+      ],
+      "purl": "pkg:golang/example.com/golang-incompatible",
+      "scope": "required",
       "version_raw": ""
     },
     {
@@ -136,6 +186,31 @@
       "version_raw": "v3.2.1"
     },
     {
+      "candidate_identities": [],
+      "component_key": "purl:pkg:golang/github.com/burntsushi/toml@v1.3.2",
+      "ecosystem": "golang",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [],
+      "name": "toml",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:golang/github.com/burntsushi/toml@v1.3.2"
+        }
+      ],
+      "purl": "pkg:golang/github.com/burntsushi/toml@v1.3.2",
+      "scope": "required",
+      "version_raw": "v1.3.2"
+    },
+    {
       "candidate_identities": [
         {
           "confidence": "medium",
@@ -180,6 +255,60 @@
       "observed_by": [
         {
           "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible?package-id=723be37636119189"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible?package-id=723be37636119189"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible?package-id=723be37636119189"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible?package-id=723be37636119189"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible?package-id=723be37636119189"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible?package-id=723be37636119189"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible?package-id=723be37636119189"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible?package-id=723be37636119189"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible?package-id=723be37636119189"
+        },
+        {
+          "confidence": "high",
           "engine": "osv-scanner",
           "engine_version": "",
           "native_id": "github.com/docker/docker@24.0.5+incompatible"
@@ -201,11 +330,42 @@
           "engine": "syft-spdx",
           "engine_version": "1.51.0",
           "native_id": "SPDXRef-Package-go-module-github.com-docker-docker-723be37636119189"
+        },
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible"
         }
       ],
       "purl": "pkg:golang/github.com/docker/docker@v24.0.5+incompatible",
       "scope": "required",
       "version_raw": "v24.0.5+incompatible"
+    },
+    {
+      "candidate_identities": [],
+      "component_key": "purl:pkg:golang/github.com/masterminds/semver/v3@v3.2.1",
+      "ecosystem": "golang",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [],
+      "name": "v3",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:golang/github.com/masterminds/semver/v3@v3.2.1"
+        }
+      ],
+      "purl": "pkg:golang/github.com/masterminds/semver/v3@v3.2.1",
+      "scope": "required",
+      "version_raw": "v3.2.1"
     },
     {
       "candidate_identities": [
@@ -251,6 +411,12 @@
           "engine": "syft-spdx",
           "engine_version": "1.51.0",
           "native_id": "SPDXRef-Package-go-module-gopkg.in-yaml.v3-716c668b92999095"
+        },
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:golang/gopkg.in/yaml.v3@v3.0.1"
         }
       ],
       "purl": "pkg:golang/gopkg.in/yaml.v3@v3.0.1",
@@ -259,31 +425,31 @@
     }
   ],
   "coverage": {
-    "completeness_numerator": 24,
-    "completeness_pct": 10.21,
-    "declaration_numerator": 36,
-    "declaration_pct": 15.32,
-    "denominator": 235,
+    "completeness_numerator": 42,
+    "completeness_pct": 9.93,
+    "declaration_numerator": 54,
+    "declaration_pct": 12.77,
+    "denominator": 423,
     "field_count": 21,
     "fields": [
       {
         "completeness_pct": 100.0,
         "declaration_pct": 100.0,
-        "declared": 4,
+        "declared": 8,
         "field_id": "certin.sbom.01.component_name",
         "name": "Component Name",
-        "present": 4,
-        "total": 4,
+        "present": 8,
+        "total": 8,
         "weight": 3
       },
       {
-        "completeness_pct": 100.0,
-        "declaration_pct": 100.0,
-        "declared": 4,
+        "completeness_pct": 75.0,
+        "declaration_pct": 75.0,
+        "declared": 6,
         "field_id": "certin.sbom.02.component_version",
         "name": "Component Version",
-        "present": 4,
-        "total": 4,
+        "present": 6,
+        "total": 8,
         "weight": 3
       },
       {
@@ -293,7 +459,7 @@
         "field_id": "certin.sbom.03.component_description",
         "name": "Component Description",
         "present": 0,
-        "total": 4,
+        "total": 8,
         "weight": 1
       },
       {
@@ -303,17 +469,17 @@
         "field_id": "certin.sbom.04.component_supplier",
         "name": "Component Supplier",
         "present": 0,
-        "total": 4,
+        "total": 8,
         "weight": 3
       },
       {
         "completeness_pct": 0.0,
-        "declaration_pct": 100.0,
+        "declaration_pct": 50.0,
         "declared": 4,
         "field_id": "certin.sbom.05.component_license",
         "name": "Component License",
         "present": 0,
-        "total": 4,
+        "total": 8,
         "weight": 3
       },
       {
@@ -323,7 +489,7 @@
         "field_id": "certin.sbom.06.component_origin",
         "name": "Component Origin",
         "present": 0,
-        "total": 4,
+        "total": 8,
         "weight": 3
       },
       {
@@ -333,7 +499,7 @@
         "field_id": "certin.sbom.07.component_dependencies",
         "name": "Component Dependencies",
         "present": 0,
-        "total": 4,
+        "total": 8,
         "weight": 3
       },
       {
@@ -343,7 +509,7 @@
         "field_id": "certin.sbom.08.vulnerabilities",
         "name": "Vulnerabilities",
         "present": 0,
-        "total": 4,
+        "total": 8,
         "weight": 3
       },
       {
@@ -353,7 +519,7 @@
         "field_id": "certin.sbom.09.patch_status",
         "name": "Patch Status",
         "present": 0,
-        "total": 4,
+        "total": 8,
         "weight": 3
       },
       {
@@ -363,7 +529,7 @@
         "field_id": "certin.sbom.10.release_date",
         "name": "Release Date",
         "present": 0,
-        "total": 4,
+        "total": 8,
         "weight": 1
       },
       {
@@ -373,7 +539,7 @@
         "field_id": "certin.sbom.11.eol_date",
         "name": "End-of-Life (EOL) Date",
         "present": 0,
-        "total": 4,
+        "total": 8,
         "weight": 1
       },
       {
@@ -383,7 +549,7 @@
         "field_id": "certin.sbom.12.criticality",
         "name": "Criticality",
         "present": 0,
-        "total": 4,
+        "total": 8,
         "weight": 3
       },
       {
@@ -393,7 +559,7 @@
         "field_id": "certin.sbom.13.usage_restrictions",
         "name": "Usage Restrictions",
         "present": 0,
-        "total": 4,
+        "total": 8,
         "weight": 1
       },
       {
@@ -403,7 +569,7 @@
         "field_id": "certin.sbom.14.checksums",
         "name": "Checksums or Hashes",
         "present": 0,
-        "total": 4,
+        "total": 8,
         "weight": 3
       },
       {
@@ -413,7 +579,7 @@
         "field_id": "certin.sbom.15.comments",
         "name": "Comments or Notes",
         "present": 0,
-        "total": 4,
+        "total": 8,
         "weight": 1
       },
       {
@@ -423,7 +589,7 @@
         "field_id": "certin.sbom.16.author_of_sbom_data",
         "name": "Author of SBOM Data",
         "present": 0,
-        "total": 4,
+        "total": 8,
         "weight": 3
       },
       {
@@ -433,7 +599,7 @@
         "field_id": "certin.sbom.17.timestamp",
         "name": "Timestamp",
         "present": 0,
-        "total": 4,
+        "total": 8,
         "weight": 3
       },
       {
@@ -443,7 +609,7 @@
         "field_id": "certin.sbom.18.executable_property",
         "name": "Executable Property",
         "present": 0,
-        "total": 4,
+        "total": 8,
         "weight": 1
       },
       {
@@ -453,7 +619,7 @@
         "field_id": "certin.sbom.19.archive_property",
         "name": "Archive Property",
         "present": 0,
-        "total": 4,
+        "total": 8,
         "weight": 1
       },
       {
@@ -463,7 +629,7 @@
         "field_id": "certin.sbom.20.structured_property",
         "name": "Structured Property",
         "present": 0,
-        "total": 4,
+        "total": 8,
         "weight": 1
       },
       {
@@ -473,26 +639,15 @@
         "field_id": "certin.sbom.21.unique_identifier",
         "name": "Unique Identifier",
         "present": 0,
-        "total": 4,
+        "total": 8,
         "weight": 3
       }
     ],
     "formula": "pct = 100 \u00d7 \u03a3_c \u03a3_f (w_f \u00d7 present(c,f)) / \u03a3_c \u03a3_f w_f",
-    "scored_entities": 5,
+    "scored_entities": 9,
     "unidentified_count": 1
   },
   "diagnostics": [
-    {
-      "code": "ENGINE_FIELD_MISSING",
-      "message": "grype output has no `matches` array",
-      "severity": "warn"
-    },
-    {
-      "code": "ENGINE_FIELD_MISSING",
-      "hint": "treated as zero components; the output shape may have changed",
-      "message": "trivy-fs output has no `components` array",
-      "severity": "warn"
-    },
     {
       "code": "NORMALIZE_CANDIDATE_IDENTITY",
       "component_key": "purl:pkg:golang/github.com/BurntSushi/toml@v1.3.2",
@@ -536,13 +691,15 @@
   ],
   "engine_coverage": [
     {
-      "artifact_sha256": "",
-      "ecosystems_covered": [],
+      "artifact_sha256": "839e52dcac4db4d8b19fca761f27c5c38d4c13005d4a74bd88a0073f76920955",
+      "ecosystems_covered": [
+        "golang"
+      ],
       "engine_db_version": "",
       "engine_id": "grype",
       "image_digest": "",
-      "status": "unavailable",
-      "version": ""
+      "status": "succeeded",
+      "version": "0.117.0"
     },
     {
       "artifact_sha256": "b861f0f218a056f95f20c5bafaf73c8d4faf17c4c80e49be4c285688d3d6e4e6",
@@ -556,7 +713,7 @@
       "version": ""
     },
     {
-      "artifact_sha256": "b191a2a552a42be834fee3b84ff3c2fb29a358beae892471ee81ff9e62951dee",
+      "artifact_sha256": "5329756c6d29459779a0e598c7757ec3b8de3c099108e25b9cf3a3bf306f1465",
       "ecosystems_covered": [
         "golang"
       ],
@@ -567,7 +724,7 @@
       "version": "1.51.0"
     },
     {
-      "artifact_sha256": "808da6a69488de776e6a7cd46f23d258e4137b5a7cbf41b7d39fa6fdc71defd1",
+      "artifact_sha256": "4f3a03a2afe7ae8359b367c2787537145d3dc1cd195f374a283ae26a1454f5b4",
       "ecosystems_covered": [
         "golang"
       ],
@@ -578,13 +735,16 @@
       "version": "1.51.0"
     },
     {
-      "artifact_sha256": "",
-      "ecosystems_covered": [],
+      "artifact_sha256": "341622d6f88ea56e266a5ea3cc47d56ee567cb197c6a3245f58575343e4270eb",
+      "ecosystems_covered": [
+        "application",
+        "golang"
+      ],
       "engine_db_version": "",
       "engine_id": "trivy-fs",
       "image_digest": "",
-      "status": "unavailable",
-      "version": ""
+      "status": "succeeded",
+      "version": "0.74.0"
     }
   ],
   "finding_count": 9,
@@ -592,6 +752,13 @@
     {
       "component_key": "purl:pkg:golang/github.com/docker/docker@v24.0.5+incompatible",
       "cvss_vectors": [
+        {
+          "score": 3.3,
+          "severity": "Low",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:U/C:L/I:L/A:N",
+          "version": "3.1"
+        },
         {
           "score": null,
           "severity": "",
@@ -601,6 +768,7 @@
         }
       ],
       "detected_by": [
+        "grype",
         "osv-scanner"
       ],
       "display_id": "CVE-2025-54410",
@@ -614,13 +782,14 @@
       ],
       "severity_conflict": false,
       "severity_effective": "low",
-      "severity_rule": "vendor-string",
+      "severity_rule": "advisory-cvss-v3.1",
       "vuln_cluster_id": "fixture-golang-incompatible-cluster-0000"
     },
     {
       "component_key": "purl:pkg:golang/github.com/docker/docker@v24.0.5+incompatible",
       "cvss_vectors": [],
       "detected_by": [
+        "grype",
         "osv-scanner"
       ],
       "display_id": "GHSA-JQ35-85CJ-FJ4P",
@@ -633,13 +802,20 @@
         "24.0.7"
       ],
       "severity_conflict": false,
-      "severity_effective": "unknown",
-      "severity_rule": "tool-string-max",
+      "severity_effective": "medium",
+      "severity_rule": "vendor-string",
       "vuln_cluster_id": "fixture-golang-incompatible-cluster-0001"
     },
     {
       "component_key": "purl:pkg:golang/github.com/docker/docker@v24.0.5+incompatible",
       "cvss_vectors": [
+        {
+          "score": 6.8,
+          "severity": "Medium",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:N",
+          "version": "3.1"
+        },
         {
           "score": null,
           "severity": "",
@@ -649,6 +825,7 @@
         }
       ],
       "detected_by": [
+        "grype",
         "osv-scanner"
       ],
       "display_id": "CVE-2026-33997",
@@ -660,12 +837,19 @@
       ],
       "severity_conflict": false,
       "severity_effective": "medium",
-      "severity_rule": "vendor-string",
+      "severity_rule": "advisory-cvss-v3.1",
       "vuln_cluster_id": "fixture-golang-incompatible-cluster-0002"
     },
     {
       "component_key": "purl:pkg:golang/github.com/docker/docker@v24.0.5+incompatible",
       "cvss_vectors": [
+        {
+          "score": 7.2,
+          "severity": "High",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:N/I:H/A:H",
+          "version": "3.1"
+        },
         {
           "score": null,
           "severity": "",
@@ -675,6 +859,7 @@
         }
       ],
       "detected_by": [
+        "grype",
         "osv-scanner"
       ],
       "display_id": "CVE-2026-42306",
@@ -686,18 +871,32 @@
       ],
       "severity_conflict": false,
       "severity_effective": "high",
-      "severity_rule": "vendor-string",
+      "severity_rule": "advisory-cvss-v3.1",
       "vuln_cluster_id": "fixture-golang-incompatible-cluster-0003"
     },
     {
       "component_key": "purl:pkg:golang/github.com/docker/docker@v24.0.5+incompatible",
       "cvss_vectors": [
         {
+          "score": 9.9,
+          "severity": "Critical",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
           "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
           "version": "3.1"
+        },
+        {
+          "score": 9.4,
+          "severity": "Critical",
+          "source": "Secondary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:H/SC:H/SI:H/SA:H",
+          "version": "4.0"
         },
         {
           "score": null,
@@ -708,6 +907,7 @@
         }
       ],
       "detected_by": [
+        "grype",
         "osv-scanner"
       ],
       "display_id": "CVE-2024-41110",
@@ -725,12 +925,19 @@
       ],
       "severity_conflict": false,
       "severity_effective": "critical",
-      "severity_rule": "vendor-string",
+      "severity_rule": "cvss-v4",
       "vuln_cluster_id": "fixture-golang-incompatible-cluster-0004"
     },
     {
       "component_key": "purl:pkg:golang/github.com/docker/docker@v24.0.5+incompatible",
       "cvss_vectors": [
+        {
+          "score": 6.1,
+          "severity": "Medium",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:N/I:L/A:H",
+          "version": "3.1"
+        },
         {
           "score": null,
           "severity": "",
@@ -740,6 +947,7 @@
         }
       ],
       "detected_by": [
+        "grype",
         "osv-scanner"
       ],
       "display_id": "CVE-2026-41568",
@@ -751,12 +959,19 @@
       ],
       "severity_conflict": false,
       "severity_effective": "medium",
-      "severity_rule": "vendor-string",
+      "severity_rule": "advisory-cvss-v3.1",
       "vuln_cluster_id": "fixture-golang-incompatible-cluster-0005"
     },
     {
       "component_key": "purl:pkg:golang/github.com/docker/docker@v24.0.5+incompatible",
       "cvss_vectors": [
+        {
+          "score": 8.8,
+          "severity": "High",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+          "version": "3.1"
+        },
         {
           "score": null,
           "severity": "",
@@ -766,6 +981,7 @@
         }
       ],
       "detected_by": [
+        "grype",
         "osv-scanner"
       ],
       "display_id": "CVE-2026-34040",
@@ -778,12 +994,19 @@
       ],
       "severity_conflict": false,
       "severity_effective": "high",
-      "severity_rule": "vendor-string",
+      "severity_rule": "advisory-cvss-v3.1",
       "vuln_cluster_id": "fixture-golang-incompatible-cluster-0006"
     },
     {
       "component_key": "purl:pkg:golang/github.com/docker/docker@v24.0.5+incompatible",
       "cvss_vectors": [
+        {
+          "score": 7.2,
+          "severity": "High",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:H/I:H/A:N",
+          "version": "3.1"
+        },
         {
           "score": null,
           "severity": "",
@@ -793,6 +1016,7 @@
         }
       ],
       "detected_by": [
+        "grype",
         "osv-scanner"
       ],
       "display_id": "CVE-2026-41567",
@@ -804,12 +1028,19 @@
       ],
       "severity_conflict": false,
       "severity_effective": "high",
-      "severity_rule": "vendor-string",
+      "severity_rule": "advisory-cvss-v3.1",
       "vuln_cluster_id": "fixture-golang-incompatible-cluster-0007"
     },
     {
       "component_key": "purl:pkg:golang/github.com/docker/docker@v24.0.5+incompatible",
       "cvss_vectors": [
+        {
+          "score": 6.9,
+          "severity": "Medium",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:R/S:C/C:L/I:H/A:L",
+          "version": "3.1"
+        },
         {
           "score": null,
           "severity": "",
@@ -819,6 +1050,7 @@
         }
       ],
       "detected_by": [
+        "grype",
         "osv-scanner"
       ],
       "display_id": "CVE-2024-24557",
@@ -833,37 +1065,98 @@
       ],
       "severity_conflict": false,
       "severity_effective": "medium",
-      "severity_rule": "vendor-string",
+      "severity_rule": "advisory-cvss-v3.1",
       "vuln_cluster_id": "fixture-golang-incompatible-cluster-0008"
     }
   ],
   "graph": {
-    "depth": {},
-    "direct": [],
-    "edges": [],
-    "orphans": [
-      "hash:7f32cbd03038afc16289085d13297d71bce921572e347f5429c29eb5b6ddcd25",
-      "purl:pkg:golang/github.com/BurntSushi/toml@v1.3.2",
-      "purl:pkg:golang/github.com/Masterminds/semver/v3@v3.2.1",
-      "purl:pkg:golang/github.com/docker/docker@v24.0.5+incompatible",
-      "purl:pkg:golang/gopkg.in/yaml.v3@v3.0.1"
+    "depth": {
+      "hash:7f32cbd03038afc16289085d13297d71bce921572e347f5429c29eb5b6ddcd25": 0,
+      "name:application/go.mod@": 0,
+      "purl:pkg:golang/example.com/golang-incompatible": 1,
+      "purl:pkg:golang/github.com/BurntSushi/toml@v1.3.2": 0,
+      "purl:pkg:golang/github.com/Masterminds/semver/v3@v3.2.1": 0,
+      "purl:pkg:golang/github.com/burntsushi/toml@v1.3.2": 2,
+      "purl:pkg:golang/github.com/docker/docker@v24.0.5+incompatible": 2,
+      "purl:pkg:golang/github.com/masterminds/semver/v3@v3.2.1": 2,
+      "purl:pkg:golang/gopkg.in/yaml.v3@v3.0.1": 2
+    },
+    "direct": [
+      "purl:pkg:golang/example.com/golang-incompatible"
     ],
-    "owning_engine": {},
-    "roots": []
+    "edges": [
+      {
+        "confidence": "high",
+        "ecosystem": "golang",
+        "from": "name:application/go.mod@",
+        "owning_engine": "trivy-fs",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:golang/example.com/golang-incompatible"
+      },
+      {
+        "confidence": "high",
+        "ecosystem": "golang",
+        "from": "purl:pkg:golang/example.com/golang-incompatible",
+        "owning_engine": "trivy-fs",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:golang/github.com/burntsushi/toml@v1.3.2"
+      },
+      {
+        "confidence": "high",
+        "ecosystem": "golang",
+        "from": "purl:pkg:golang/example.com/golang-incompatible",
+        "owning_engine": "trivy-fs",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:golang/github.com/docker/docker@v24.0.5+incompatible"
+      },
+      {
+        "confidence": "high",
+        "ecosystem": "golang",
+        "from": "purl:pkg:golang/example.com/golang-incompatible",
+        "owning_engine": "trivy-fs",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:golang/github.com/masterminds/semver/v3@v3.2.1"
+      },
+      {
+        "confidence": "high",
+        "ecosystem": "golang",
+        "from": "purl:pkg:golang/example.com/golang-incompatible",
+        "owning_engine": "trivy-fs",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:golang/gopkg.in/yaml.v3@v3.0.1"
+      }
+    ],
+    "orphans": [],
+    "owning_engine": {
+      "golang": "trivy-fs"
+    },
+    "roots": [
+      "hash:7f32cbd03038afc16289085d13297d71bce921572e347f5429c29eb5b6ddcd25",
+      "name:application/go.mod@",
+      "purl:pkg:golang/github.com/BurntSushi/toml@v1.3.2",
+      "purl:pkg:golang/github.com/Masterminds/semver/v3@v3.2.1"
+    ]
   },
-  "known_unknowns": "Engines that did not complete: grype (unavailable), trivy-fs (unavailable).",
+  "known_unknowns": "All configured engines completed and every detected ecosystem had an engine.",
   "provenance": {
     "alias_snapshot_id": "fixture-golang-incompatible-aliases",
     "ecosystems_without_engine": [],
     "engines": [
       {
-        "artifact_sha256": "",
-        "ecosystems_covered": [],
+        "artifact_sha256": "839e52dcac4db4d8b19fca761f27c5c38d4c13005d4a74bd88a0073f76920955",
+        "ecosystems_covered": [
+          "golang"
+        ],
         "engine_db_version": "",
         "engine_id": "grype",
         "image_digest": "",
-        "status": "unavailable",
-        "version": ""
+        "status": "succeeded",
+        "version": "0.117.0"
       },
       {
         "artifact_sha256": "b861f0f218a056f95f20c5bafaf73c8d4faf17c4c80e49be4c285688d3d6e4e6",
@@ -877,7 +1170,7 @@
         "version": ""
       },
       {
-        "artifact_sha256": "b191a2a552a42be834fee3b84ff3c2fb29a358beae892471ee81ff9e62951dee",
+        "artifact_sha256": "5329756c6d29459779a0e598c7757ec3b8de3c099108e25b9cf3a3bf306f1465",
         "ecosystems_covered": [
           "golang"
         ],
@@ -888,7 +1181,7 @@
         "version": "1.51.0"
       },
       {
-        "artifact_sha256": "808da6a69488de776e6a7cd46f23d258e4137b5a7cbf41b7d39fa6fdc71defd1",
+        "artifact_sha256": "4f3a03a2afe7ae8359b367c2787537145d3dc1cd195f374a283ae26a1454f5b4",
         "ecosystems_covered": [
           "golang"
         ],
@@ -899,13 +1192,16 @@
         "version": "1.51.0"
       },
       {
-        "artifact_sha256": "",
-        "ecosystems_covered": [],
+        "artifact_sha256": "341622d6f88ea56e266a5ea3cc47d56ee567cb197c6a3245f58575343e4270eb",
+        "ecosystems_covered": [
+          "application",
+          "golang"
+        ],
         "engine_db_version": "",
         "engine_id": "trivy-fs",
         "image_digest": "",
-        "status": "unavailable",
-        "version": ""
+        "status": "succeeded",
+        "version": "0.74.0"
       }
     ],
     "normalization_version": 1,

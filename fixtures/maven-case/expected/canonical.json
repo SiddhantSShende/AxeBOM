@@ -1,5 +1,5 @@
 {
-  "component_count": 5,
+  "component_count": 6,
   "components": [
     {
       "candidate_identities": [],
@@ -36,6 +36,31 @@
       "version_raw": ""
     },
     {
+      "candidate_identities": [],
+      "component_key": "name:application/pom.xml@",
+      "ecosystem": "application",
+      "hashes": [],
+      "identity_confidence": "low",
+      "identity_rule": "name",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [],
+      "name": "pom.xml",
+      "observed_by": [
+        {
+          "confidence": "low",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "f3b07e99-865c-4874-a3cd-055cea60fc82"
+        }
+      ],
+      "purl": "",
+      "scope": "required",
+      "version_raw": ""
+    },
+    {
       "candidate_identities": [
         {
           "confidence": "medium",
@@ -67,7 +92,7 @@
       "hashes": [],
       "identity_confidence": "high",
       "identity_rule": "purl",
-      "is_direct": false,
+      "is_direct": true,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
       "license_rule": "concluded:spdx-noassertion",
@@ -91,6 +116,12 @@
           "engine": "syft-spdx",
           "engine_version": "1.51.0",
           "native_id": "SPDXRef-Package-java-archive-MavenCase-82f96b6fa20cfe7a"
+        },
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:maven/com.example/MavenCase@1.0.0"
         }
       ],
       "purl": "pkg:maven/com.example/MavenCase@1.0.0",
@@ -219,7 +250,7 @@
       "hashes": [],
       "identity_confidence": "high",
       "identity_rule": "purl",
-      "is_direct": true,
+      "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
       "license_rule": "concluded:spdx-noassertion",
@@ -284,6 +315,12 @@
           "engine": "syft-spdx",
           "engine_version": "1.51.0",
           "native_id": "SPDXRef-Package-java-archive-jackson-databind-b9189706674cde1c"
+        },
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2"
         }
       ],
       "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
@@ -322,7 +359,7 @@
       "hashes": [],
       "identity_confidence": "high",
       "identity_rule": "purl",
-      "is_direct": true,
+      "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
       "license_rule": "concluded:spdx-noassertion",
@@ -363,6 +400,12 @@
           "engine": "syft-spdx",
           "engine_version": "1.51.0",
           "native_id": "SPDXRef-Package-java-archive-commons-lang3-f654cc835b055dc3"
+        },
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:maven/org.apache.commons/commons-lang3@3.12.0"
         }
       ],
       "purl": "pkg:maven/org.apache.commons/commons-lang3@3.12.0",
@@ -719,7 +762,7 @@
       "hashes": [],
       "identity_confidence": "high",
       "identity_rule": "purl",
-      "is_direct": true,
+      "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
       "license_rule": "concluded:spdx-noassertion",
@@ -760,6 +803,12 @@
           "engine": "syft-spdx",
           "engine_version": "1.51.0",
           "native_id": "SPDXRef-Package-java-archive-spring-core-e59e92f3300f34f2"
+        },
+        {
+          "confidence": "high",
+          "engine": "trivy-fs",
+          "engine_version": "0.74.0",
+          "native_id": "pkg:maven/org.springframework/spring-core@6.0.11"
         }
       ],
       "purl": "pkg:maven/org.springframework/spring-core@6.0.11",
@@ -768,31 +817,31 @@
     }
   ],
   "coverage": {
-    "completeness_numerator": 24,
-    "completeness_pct": 10.21,
-    "declaration_numerator": 36,
-    "declaration_pct": 15.32,
-    "denominator": 235,
+    "completeness_numerator": 27,
+    "completeness_pct": 9.57,
+    "declaration_numerator": 39,
+    "declaration_pct": 13.83,
+    "denominator": 282,
     "field_count": 21,
     "fields": [
       {
         "completeness_pct": 100.0,
         "declaration_pct": 100.0,
-        "declared": 4,
+        "declared": 5,
         "field_id": "certin.sbom.01.component_name",
         "name": "Component Name",
-        "present": 4,
-        "total": 4,
+        "present": 5,
+        "total": 5,
         "weight": 3
       },
       {
-        "completeness_pct": 100.0,
-        "declaration_pct": 100.0,
+        "completeness_pct": 80.0,
+        "declaration_pct": 80.0,
         "declared": 4,
         "field_id": "certin.sbom.02.component_version",
         "name": "Component Version",
         "present": 4,
-        "total": 4,
+        "total": 5,
         "weight": 3
       },
       {
@@ -802,7 +851,7 @@
         "field_id": "certin.sbom.03.component_description",
         "name": "Component Description",
         "present": 0,
-        "total": 4,
+        "total": 5,
         "weight": 1
       },
       {
@@ -812,17 +861,17 @@
         "field_id": "certin.sbom.04.component_supplier",
         "name": "Component Supplier",
         "present": 0,
-        "total": 4,
+        "total": 5,
         "weight": 3
       },
       {
         "completeness_pct": 0.0,
-        "declaration_pct": 100.0,
+        "declaration_pct": 80.0,
         "declared": 4,
         "field_id": "certin.sbom.05.component_license",
         "name": "Component License",
         "present": 0,
-        "total": 4,
+        "total": 5,
         "weight": 3
       },
       {
@@ -832,7 +881,7 @@
         "field_id": "certin.sbom.06.component_origin",
         "name": "Component Origin",
         "present": 0,
-        "total": 4,
+        "total": 5,
         "weight": 3
       },
       {
@@ -842,7 +891,7 @@
         "field_id": "certin.sbom.07.component_dependencies",
         "name": "Component Dependencies",
         "present": 0,
-        "total": 4,
+        "total": 5,
         "weight": 3
       },
       {
@@ -852,7 +901,7 @@
         "field_id": "certin.sbom.08.vulnerabilities",
         "name": "Vulnerabilities",
         "present": 0,
-        "total": 4,
+        "total": 5,
         "weight": 3
       },
       {
@@ -862,7 +911,7 @@
         "field_id": "certin.sbom.09.patch_status",
         "name": "Patch Status",
         "present": 0,
-        "total": 4,
+        "total": 5,
         "weight": 3
       },
       {
@@ -872,7 +921,7 @@
         "field_id": "certin.sbom.10.release_date",
         "name": "Release Date",
         "present": 0,
-        "total": 4,
+        "total": 5,
         "weight": 1
       },
       {
@@ -882,7 +931,7 @@
         "field_id": "certin.sbom.11.eol_date",
         "name": "End-of-Life (EOL) Date",
         "present": 0,
-        "total": 4,
+        "total": 5,
         "weight": 1
       },
       {
@@ -892,7 +941,7 @@
         "field_id": "certin.sbom.12.criticality",
         "name": "Criticality",
         "present": 0,
-        "total": 4,
+        "total": 5,
         "weight": 3
       },
       {
@@ -902,7 +951,7 @@
         "field_id": "certin.sbom.13.usage_restrictions",
         "name": "Usage Restrictions",
         "present": 0,
-        "total": 4,
+        "total": 5,
         "weight": 1
       },
       {
@@ -912,7 +961,7 @@
         "field_id": "certin.sbom.14.checksums",
         "name": "Checksums or Hashes",
         "present": 0,
-        "total": 4,
+        "total": 5,
         "weight": 3
       },
       {
@@ -922,7 +971,7 @@
         "field_id": "certin.sbom.15.comments",
         "name": "Comments or Notes",
         "present": 0,
-        "total": 4,
+        "total": 5,
         "weight": 1
       },
       {
@@ -932,7 +981,7 @@
         "field_id": "certin.sbom.16.author_of_sbom_data",
         "name": "Author of SBOM Data",
         "present": 0,
-        "total": 4,
+        "total": 5,
         "weight": 3
       },
       {
@@ -942,7 +991,7 @@
         "field_id": "certin.sbom.17.timestamp",
         "name": "Timestamp",
         "present": 0,
-        "total": 4,
+        "total": 5,
         "weight": 3
       },
       {
@@ -952,7 +1001,7 @@
         "field_id": "certin.sbom.18.executable_property",
         "name": "Executable Property",
         "present": 0,
-        "total": 4,
+        "total": 5,
         "weight": 1
       },
       {
@@ -962,7 +1011,7 @@
         "field_id": "certin.sbom.19.archive_property",
         "name": "Archive Property",
         "present": 0,
-        "total": 4,
+        "total": 5,
         "weight": 1
       },
       {
@@ -972,7 +1021,7 @@
         "field_id": "certin.sbom.20.structured_property",
         "name": "Structured Property",
         "present": 0,
-        "total": 4,
+        "total": 5,
         "weight": 1
       },
       {
@@ -982,21 +1031,15 @@
         "field_id": "certin.sbom.21.unique_identifier",
         "name": "Unique Identifier",
         "present": 0,
-        "total": 4,
+        "total": 5,
         "weight": 3
       }
     ],
     "formula": "pct = 100 \u00d7 \u03a3_c \u03a3_f (w_f \u00d7 present(c,f)) / \u03a3_c \u03a3_f w_f",
-    "scored_entities": 5,
+    "scored_entities": 6,
     "unidentified_count": 1
   },
   "diagnostics": [
-    {
-      "code": "ENGINE_FIELD_MISSING",
-      "hint": "treated as zero components; the output shape may have changed",
-      "message": "trivy-fs output has no `components` array",
-      "severity": "warn"
-    },
     {
       "code": "NORMALIZE_CANDIDATE_IDENTITY",
       "component_key": "purl:pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
@@ -1040,7 +1083,7 @@
   ],
   "engine_coverage": [
     {
-      "artifact_sha256": "f672f58d0fdb7422c6539fb873521c930bd687b5ddf4de6fc6ae307152962312",
+      "artifact_sha256": "8498c6e8b9925b921c2e54c601e94676e0a39fe01a92ed3c389aaa0d8a3a0bc9",
       "ecosystems_covered": [
         "maven"
       ],
@@ -1062,7 +1105,7 @@
       "version": ""
     },
     {
-      "artifact_sha256": "e319a30374a67d4e9e99a3f4cef233bd2631faab71ff22545d15976ca01a4a68",
+      "artifact_sha256": "30db4bc9750ed1cb8c0b3b1135b0a7076eef4419213b5ecdb9b69f27cfb44a1c",
       "ecosystems_covered": [
         "maven"
       ],
@@ -1073,7 +1116,7 @@
       "version": "1.51.0"
     },
     {
-      "artifact_sha256": "6badfe75e1a23c2f005cdcf3138763136a5a25a10c5da44c04789359545c0312",
+      "artifact_sha256": "a18235ca79dcca484e92c755695317c18a2c2535df1df7b2b513506f7634faf9",
       "ecosystems_covered": [
         "maven"
       ],
@@ -1084,13 +1127,16 @@
       "version": "1.51.0"
     },
     {
-      "artifact_sha256": "",
-      "ecosystems_covered": [],
+      "artifact_sha256": "ea9a33991a1131eb9f1d72c41917eb41abb023b587eaf851a65a1a5f0b6a01b9",
+      "ecosystems_covered": [
+        "application",
+        "maven"
+      ],
       "engine_db_version": "",
       "engine_id": "trivy-fs",
       "image_digest": "",
-      "status": "unavailable",
-      "version": ""
+      "status": "succeeded",
+      "version": "0.74.0"
     }
   ],
   "finding_count": 7,
@@ -1348,40 +1394,48 @@
   "graph": {
     "depth": {
       "hash:55a743832ee4d9e84f5271f172e506e01be0bd0d3b28befe867924c963727d6b": 0,
-      "purl:pkg:maven/com.example/MavenCase@1.0.0": 0,
-      "purl:pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2": 1,
-      "purl:pkg:maven/org.apache.commons/commons-lang3@3.12.0": 1,
-      "purl:pkg:maven/org.springframework/spring-core@6.0.11": 1
+      "name:application/pom.xml@": 0,
+      "purl:pkg:maven/com.example/MavenCase@1.0.0": 1,
+      "purl:pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2": 2,
+      "purl:pkg:maven/org.apache.commons/commons-lang3@3.12.0": 2,
+      "purl:pkg:maven/org.springframework/spring-core@6.0.11": 2
     },
     "direct": [
-      "purl:pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
-      "purl:pkg:maven/org.apache.commons/commons-lang3@3.12.0",
-      "purl:pkg:maven/org.springframework/spring-core@6.0.11"
+      "purl:pkg:maven/com.example/MavenCase@1.0.0"
     ],
     "edges": [
       {
-        "confidence": "low",
+        "confidence": "high",
+        "ecosystem": "maven",
+        "from": "name:application/pom.xml@",
+        "owning_engine": "trivy-fs",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:maven/com.example/MavenCase@1.0.0"
+      },
+      {
+        "confidence": "high",
         "ecosystem": "maven",
         "from": "purl:pkg:maven/com.example/MavenCase@1.0.0",
-        "owning_engine": "syft",
+        "owning_engine": "trivy-fs",
         "relationship": "depends_on",
         "scope": "required",
         "to": "purl:pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2"
       },
       {
-        "confidence": "low",
+        "confidence": "high",
         "ecosystem": "maven",
         "from": "purl:pkg:maven/com.example/MavenCase@1.0.0",
-        "owning_engine": "syft",
+        "owning_engine": "trivy-fs",
         "relationship": "depends_on",
         "scope": "required",
         "to": "purl:pkg:maven/org.apache.commons/commons-lang3@3.12.0"
       },
       {
-        "confidence": "low",
+        "confidence": "high",
         "ecosystem": "maven",
         "from": "purl:pkg:maven/com.example/MavenCase@1.0.0",
-        "owning_engine": "syft",
+        "owning_engine": "trivy-fs",
         "relationship": "depends_on",
         "scope": "required",
         "to": "purl:pkg:maven/org.springframework/spring-core@6.0.11"
@@ -1389,20 +1443,20 @@
     ],
     "orphans": [],
     "owning_engine": {
-      "maven": "syft"
+      "maven": "trivy-fs"
     },
     "roots": [
       "hash:55a743832ee4d9e84f5271f172e506e01be0bd0d3b28befe867924c963727d6b",
-      "purl:pkg:maven/com.example/MavenCase@1.0.0"
+      "name:application/pom.xml@"
     ]
   },
-  "known_unknowns": "Engines that did not complete: trivy-fs (unavailable).",
+  "known_unknowns": "All configured engines completed and every detected ecosystem had an engine.",
   "provenance": {
     "alias_snapshot_id": "fixture-maven-case-aliases",
     "ecosystems_without_engine": [],
     "engines": [
       {
-        "artifact_sha256": "f672f58d0fdb7422c6539fb873521c930bd687b5ddf4de6fc6ae307152962312",
+        "artifact_sha256": "8498c6e8b9925b921c2e54c601e94676e0a39fe01a92ed3c389aaa0d8a3a0bc9",
         "ecosystems_covered": [
           "maven"
         ],
@@ -1424,7 +1478,7 @@
         "version": ""
       },
       {
-        "artifact_sha256": "e319a30374a67d4e9e99a3f4cef233bd2631faab71ff22545d15976ca01a4a68",
+        "artifact_sha256": "30db4bc9750ed1cb8c0b3b1135b0a7076eef4419213b5ecdb9b69f27cfb44a1c",
         "ecosystems_covered": [
           "maven"
         ],
@@ -1435,7 +1489,7 @@
         "version": "1.51.0"
       },
       {
-        "artifact_sha256": "6badfe75e1a23c2f005cdcf3138763136a5a25a10c5da44c04789359545c0312",
+        "artifact_sha256": "a18235ca79dcca484e92c755695317c18a2c2535df1df7b2b513506f7634faf9",
         "ecosystems_covered": [
           "maven"
         ],
@@ -1446,13 +1500,16 @@
         "version": "1.51.0"
       },
       {
-        "artifact_sha256": "",
-        "ecosystems_covered": [],
+        "artifact_sha256": "ea9a33991a1131eb9f1d72c41917eb41abb023b587eaf851a65a1a5f0b6a01b9",
+        "ecosystems_covered": [
+          "application",
+          "maven"
+        ],
         "engine_db_version": "",
         "engine_id": "trivy-fs",
         "image_digest": "",
-        "status": "unavailable",
-        "version": ""
+        "status": "succeeded",
+        "version": "0.74.0"
       }
     ],
     "normalization_version": 1,

@@ -1,0 +1,2720 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.7.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.7",
+  "serialNumber": "urn:uuid:a9ad5487-3122-4e99-b989-c9f3b88f4478",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-08-16T22:30:09+00:00",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "manufacturer": {
+            "name": "Aqua Security Software Ltd."
+          },
+          "group": "aquasecurity",
+          "name": "trivy",
+          "version": "0.74.0"
+        }
+      ]
+    },
+    "component": {
+      "bom-ref": "1f7f3351-0a7d-4b86-ad75-c9a1d06055b5",
+      "type": "application",
+      "name": "/src",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:SchemaVersion",
+          "value": "2"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "4b6403fe-f0a4-4135-b98b-57d187d90878",
+      "type": "application",
+      "name": "services/worker/requirements.txt",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:Class",
+          "value": "lang-pkgs"
+        },
+        {
+          "name": "aquasecurity:trivy:Type",
+          "value": "pip"
+        }
+      ]
+    },
+    {
+      "bom-ref": "5802fe6a-bbe8-480a-b06f-3741dbf47e58",
+      "type": "application",
+      "name": "services/api/package-lock.json",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:Class",
+          "value": "lang-pkgs"
+        },
+        {
+          "name": "aquasecurity:trivy:Type",
+          "value": "npm"
+        }
+      ]
+    },
+    {
+      "bom-ref": "74ba7e23-e1f0-452f-858a-21d8a3c03214",
+      "type": "application",
+      "name": "libs/shared/go.mod",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:Class",
+          "value": "lang-pkgs"
+        },
+        {
+          "name": "aquasecurity:trivy:Type",
+          "value": "gomod"
+        }
+      ]
+    },
+    {
+      "bom-ref": "f00374b1-7923-4177-912f-dff6cd99f94e",
+      "type": "application",
+      "name": "tools/build/pom.xml",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:Class",
+          "value": "lang-pkgs"
+        },
+        {
+          "name": "aquasecurity:trivy:Type",
+          "value": "pom"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:golang/github.com/acme/shared",
+      "type": "library",
+      "name": "github.com/acme/shared",
+      "purl": "pkg:golang/github.com/acme/shared",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "github.com/acme/shared"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "gomod"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:golang/github.com/google/uuid@v1.3.1",
+      "type": "library",
+      "name": "github.com/google/uuid",
+      "version": "v1.3.1",
+      "purl": "pkg:golang/github.com/google/uuid@v1.3.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "github.com/google/uuid@v1.3.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "gomod"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:maven/com.acme/build-tools@0.1.0",
+      "type": "library",
+      "group": "com.acme",
+      "name": "build-tools",
+      "version": "0.1.0",
+      "purl": "pkg:maven/com.acme/build-tools@0.1.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "com.acme:build-tools:0.1.0::9529ca6a"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pom"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:maven/junit/junit@4.13.2",
+      "type": "library",
+      "group": "junit",
+      "name": "junit",
+      "version": "4.13.2",
+      "purl": "pkg:maven/junit/junit@4.13.2",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "junit:junit:4.13.2::4b6d366f"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pom"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:npm/express@4.18.2",
+      "type": "library",
+      "name": "express",
+      "version": "4.18.2",
+      "purl": "pkg:npm/express@4.18.2",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "express@4.18.2"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "npm"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/requests@2.31.0",
+      "type": "library",
+      "name": "requests",
+      "version": "2.31.0",
+      "purl": "pkg:pypi/requests@2.31.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pip"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/urllib3@2.0.4",
+      "type": "library",
+      "name": "urllib3",
+      "version": "2.0.4",
+      "purl": "pkg:pypi/urllib3@2.0.4",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pip"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "1f7f3351-0a7d-4b86-ad75-c9a1d06055b5",
+      "dependsOn": [
+        "4b6403fe-f0a4-4135-b98b-57d187d90878",
+        "5802fe6a-bbe8-480a-b06f-3741dbf47e58",
+        "74ba7e23-e1f0-452f-858a-21d8a3c03214",
+        "f00374b1-7923-4177-912f-dff6cd99f94e"
+      ]
+    },
+    {
+      "ref": "4b6403fe-f0a4-4135-b98b-57d187d90878",
+      "dependsOn": [
+        "pkg:pypi/requests@2.31.0",
+        "pkg:pypi/urllib3@2.0.4"
+      ]
+    },
+    {
+      "ref": "5802fe6a-bbe8-480a-b06f-3741dbf47e58",
+      "dependsOn": [
+        "pkg:npm/express@4.18.2"
+      ]
+    },
+    {
+      "ref": "74ba7e23-e1f0-452f-858a-21d8a3c03214",
+      "dependsOn": [
+        "pkg:golang/github.com/acme/shared"
+      ]
+    },
+    {
+      "ref": "f00374b1-7923-4177-912f-dff6cd99f94e",
+      "dependsOn": [
+        "pkg:maven/com.acme/build-tools@0.1.0"
+      ]
+    },
+    {
+      "ref": "pkg:golang/github.com/acme/shared",
+      "dependsOn": [
+        "pkg:golang/github.com/google/uuid@v1.3.1"
+      ]
+    },
+    {
+      "ref": "pkg:golang/github.com/google/uuid@v1.3.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/com.acme/build-tools@0.1.0",
+      "dependsOn": [
+        "pkg:maven/junit/junit@4.13.2"
+      ]
+    },
+    {
+      "ref": "pkg:maven/junit/junit@4.13.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/express@4.18.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/requests@2.31.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/urllib3@2.0.4",
+      "dependsOn": []
+    }
+  ],
+  "vulnerabilities": [
+    {
+      "id": "CVE-2023-43804",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Apip"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "alma"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "azure"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "cbl-mariner"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 5.9,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:H/A:N"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 7.4,
+          "severity": "high",
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:H/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N"
+        },
+        {
+          "source": {
+            "name": "nvd"
+          },
+          "score": 8.1,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N"
+        },
+        {
+          "source": {
+            "name": "oracle-oval"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "photon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 5.9,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:H/A:N"
+        },
+        {
+          "source": {
+            "name": "rocky"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "ubuntu"
+          },
+          "severity": "medium"
+        }
+      ],
+      "cwes": [
+        200
+      ],
+      "description": "urllib3 is a user-friendly HTTP client library for Python. urllib3 doesn't treat the `Cookie` HTTP header special or provide any helpers for managing cookies over HTTP, that is the responsibility of the user. However, it is possible for a user to specify a `Cookie` header and unknowingly leak information via HTTP redirects to a different origin if that user doesn't disable redirects explicitly. This issue has been patched in urllib3 version 1.26.17 or 2.0.5.",
+      "recommendation": "Upgrade urllib3 to version 2.0.6, 1.26.17",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2023-43804"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2024:2159"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2024:2987"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2023-43804"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2242493"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2158559"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2240059"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2242493"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2249755"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2257854"
+        },
+        {
+          "url": "https://creativecommons.org/licenses/by/4.0/"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-40897"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-48560"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-48565"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2023-43804"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-22195"
+        },
+        {
+          "url": "https://errata.almalinux.org/9/ALSA-2024-2159.html"
+        },
+        {
+          "url": "https://errata.rockylinux.org/RLSA-2024:2987"
+        },
+        {
+          "url": "https://github.com/pypa/advisory-database/tree/main/vulns/urllib3/PYSEC-2023-192.yaml"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/commit/01220354d389cd05474713f8c982d05c9b17aafb"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/commit/644124ecd0b6e417c527191f866daa05a5a2056d"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/security/advisories/GHSA-v845-jxx5-vc9f"
+        },
+        {
+          "url": "https://linux.oracle.com/cve/CVE-2023-43804.html"
+        },
+        {
+          "url": "https://linux.oracle.com/errata/ELSA-2024-2987.html"
+        },
+        {
+          "url": "https://lists.debian.org/debian-lts-announce/2023/10/msg00012.html"
+        },
+        {
+          "url": "https://lists.debian.org/debian-lts-announce/2024/12/msg00020.html"
+        },
+        {
+          "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/5F5CUBAN5XMEBVBZPHFITBLMJV5FIJJ5"
+        },
+        {
+          "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/5F5CUBAN5XMEBVBZPHFITBLMJV5FIJJ5/"
+        },
+        {
+          "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/I3PR7C6RJ6JUBQKIJ644DMIJSUP36VDY"
+        },
+        {
+          "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/I3PR7C6RJ6JUBQKIJ644DMIJSUP36VDY/"
+        },
+        {
+          "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/NDAGZXYJ7H2G3SB47M453VQVNAWKAEJJ"
+        },
+        {
+          "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/NDAGZXYJ7H2G3SB47M453VQVNAWKAEJJ/"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2023-43804"
+        },
+        {
+          "url": "https://security.netapp.com/advisory/ntap-20241213-0007"
+        },
+        {
+          "url": "https://security.netapp.com/advisory/ntap-20241213-0007/"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-6473-1"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-6473-2"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2023-43804"
+        },
+        {
+          "url": "https://www.vicarius.io/vsociety/posts/cve-2023-43804-urllib3-vulnerability-3"
+        }
+      ],
+      "published": "2023-10-04T17:15:10+00:00",
+      "updated": "2026-06-17T06:26:29+00:00",
+      "affects": [
+        {
+          "ref": "pkg:pypi/urllib3@2.0.4",
+          "versions": [
+            {
+              "version": "2.0.4",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2023-45803",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Apip"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "alma"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "azure"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "cbl-mariner"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 4.2,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:A/AC:H/PR:H/UI:N/S:U/C:H/I:N/A:N"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 5.7,
+          "severity": "medium",
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:A/AC:L/AT:P/PR:H/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
+        },
+        {
+          "source": {
+            "name": "nvd"
+          },
+          "score": 4.2,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:A/AC:H/PR:H/UI:N/S:U/C:H/I:N/A:N"
+        },
+        {
+          "source": {
+            "name": "oracle-oval"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "photon"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 4.2,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:A/AC:H/PR:H/UI:N/S:U/C:H/I:N/A:N"
+        },
+        {
+          "source": {
+            "name": "rocky"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "ubuntu"
+          },
+          "severity": "medium"
+        }
+      ],
+      "cwes": [
+        200
+      ],
+      "description": "urllib3 is a user-friendly HTTP client library for Python. urllib3 previously wouldn't remove the HTTP request body when an HTTP redirect response using status 301, 302, or 303 after the request had its method changed from one that could accept a request body (like `POST`) to `GET` as is required by HTTP RFCs. Although this behavior is not specified in the section for redirects, it can be inferred by piecing together information from different sections and we have observed the behavior in other major HTTP client implementations like curl and web browsers. Because the vulnerability requires a previously trusted service to become compromised in order to have an impact on confidentiality we believe the exploitability of this vulnerability is low. Additionally, many users aren't putting sensitive data in HTTP request bodies, if this is the case then this vulnerability isn't exploitable. Both of the following conditions must be true to be affected by this vulnerability: 1. Using urllib3 and submitting sensitive information in the HTTP request body (such as form data or JSON) and 2. The origin service is compromised and starts redirecting using 301, 302, or 303 to a malicious peer or the redirected-to service becomes compromised. This issue has been addressed in versions 1.26.18 and 2.0.7 and users are advised to update to resolve this issue. Users unable to update should disable redirects for services that aren't expecting to respond with redirects with `redirects=False` and disable automatic redirects with `redirects=False` and handle 301, 302, and 303 redirects manually by stripping the HTTP request body.",
+      "recommendation": "Upgrade urllib3 to version 2.0.7, 1.26.18",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2023-45803"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2024:11238"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2024:2132"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2023-45803"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2246840"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2257028"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2257854"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2246840"
+        },
+        {
+          "url": "https://creativecommons.org/licenses/by/4.0/"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2023-45803"
+        },
+        {
+          "url": "https://errata.almalinux.org/9/ALSA-2024-2132.html"
+        },
+        {
+          "url": "https://errata.rockylinux.org/RLSA-2024:11238"
+        },
+        {
+          "url": "https://github.com/pypa/advisory-database/tree/main/vulns/urllib3/PYSEC-2023-212.yaml"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/commit/4e50fbc5db74e32cabd5ccc1ab81fc103adfe0b3"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/commit/4e98d57809dacab1cbe625fddeec1a290c478ea9"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/commit/b594c5ceaca38e1ac215f916538fb128e3526a36"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/releases/tag/1.26.18"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/releases/tag/2.0.7"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/security/advisories/GHSA-g4mx-q9vg-27p4"
+        },
+        {
+          "url": "https://linux.oracle.com/cve/CVE-2023-45803.html"
+        },
+        {
+          "url": "https://linux.oracle.com/errata/ELSA-2024-2988.html"
+        },
+        {
+          "url": "https://lists.debian.org/debian-lts-announce/2024/12/msg00020.html"
+        },
+        {
+          "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/4R2Y5XK3WALSR3FNAGN7JBYV2B343ZKB"
+        },
+        {
+          "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/4R2Y5XK3WALSR3FNAGN7JBYV2B343ZKB/"
+        },
+        {
+          "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/5F5CUBAN5XMEBVBZPHFITBLMJV5FIJJ5"
+        },
+        {
+          "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/5F5CUBAN5XMEBVBZPHFITBLMJV5FIJJ5/"
+        },
+        {
+          "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/PPDPLM6UUMN55ESPQWJFLLIZY4ZKCNRX"
+        },
+        {
+          "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/PPDPLM6UUMN55ESPQWJFLLIZY4ZKCNRX/"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2023-45803"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-6473-1"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-6473-2"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-7762-1"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2023-45803"
+        },
+        {
+          "url": "https://www.rfc-editor.org/rfc/rfc9110.html#name-get"
+        }
+      ],
+      "published": "2023-10-17T20:15:10+00:00",
+      "updated": "2026-06-17T06:29:33+00:00",
+      "affects": [
+        {
+          "ref": "pkg:pypi/urllib3@2.0.4",
+          "versions": [
+            {
+              "version": "2.0.4",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2024-29041",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Anpm"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "cbl-mariner"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 6.1,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 6.1,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"
+        },
+        {
+          "source": {
+            "name": "ubuntu"
+          },
+          "severity": "medium"
+        }
+      ],
+      "cwes": [
+        601,
+        1286
+      ],
+      "description": "Express.js minimalist web framework for node. Versions of Express.js prior to 4.19.0 and all pre-release alpha and beta versions of 5.0 are affected by an open redirect vulnerability using malformed URLs. When a user of Express performs a redirect using a user-provided URL Express performs an encode [using `encodeurl`](https://github.com/pillarjs/encodeurl) on the contents before passing it to the `location` header. This can cause malformed URLs to be evaluated in unexpected ways by common redirect allow list implementations in Express applications, leading to an Open Redirect via bypass of a properly implemented allow list. The main method impacted is `res.location()` but this is also called from within `res.redirect()`. The vulnerability is fixed in 4.19.2 and 5.0.0-beta.3.",
+      "recommendation": "Upgrade express to version 4.19.2, 5.0.0-beta.3",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2024-29041"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2024-29041"
+        },
+        {
+          "url": "https://expressjs.com/en/4x/api.html#res.location"
+        },
+        {
+          "url": "https://github.com/expressjs/express"
+        },
+        {
+          "url": "https://github.com/expressjs/express/commit/0867302ddbde0e9463d0564fea5861feb708c2dd"
+        },
+        {
+          "url": "https://github.com/expressjs/express/commit/0b746953c4bd8e377123527db11f9cd866e39f94"
+        },
+        {
+          "url": "https://github.com/expressjs/express/pull/5539"
+        },
+        {
+          "url": "https://github.com/expressjs/express/security/advisories/GHSA-rv95-896h-c2vc"
+        },
+        {
+          "url": "https://github.com/koajs/koa/issues/1800"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-29041"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-7581-1"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2024-29041"
+        }
+      ],
+      "published": "2024-03-25T21:15:46+00:00",
+      "updated": "2026-06-17T07:22:18+00:00",
+      "affects": [
+        {
+          "ref": "pkg:npm/express@4.18.2",
+          "versions": [
+            {
+              "version": "4.18.2",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2024-35195",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Apip"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "alma"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "azure"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "cbl-mariner"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 5.6,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:H/I:H/A:N"
+        },
+        {
+          "source": {
+            "name": "oracle-oval"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "photon"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 5.6,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:H/I:H/A:N"
+        },
+        {
+          "source": {
+            "name": "rocky"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "ubuntu"
+          },
+          "severity": "medium"
+        }
+      ],
+      "cwes": [
+        670
+      ],
+      "description": "Requests is a HTTP library. Prior to 2.32.0, when making requests through a Requests `Session`, if the first request is made with `verify=False` to disable cert verification, all subsequent requests to the same host will continue to ignore cert verification regardless of changes to the value of `verify`. This behavior will continue for the lifecycle of the connection in the connection pool. This vulnerability is fixed in 2.32.0.",
+      "recommendation": "Upgrade requests to version 2.32.0",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2024-35195"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2025:7049"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2024-35195"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2282114"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2282114"
+        },
+        {
+          "url": "https://creativecommons.org/licenses/by/4.0/"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-35195"
+        },
+        {
+          "url": "https://errata.almalinux.org/9/ALSA-2025-7049.html"
+        },
+        {
+          "url": "https://errata.rockylinux.org/RLSA-2025:7049"
+        },
+        {
+          "url": "https://github.com/psf/requests"
+        },
+        {
+          "url": "https://github.com/psf/requests/commit/a58d7f2ffb4d00b46dca2d70a3932a0b37e22fac"
+        },
+        {
+          "url": "https://github.com/psf/requests/pull/6655"
+        },
+        {
+          "url": "https://github.com/psf/requests/security/advisories/GHSA-9wx4-h78v-vm56"
+        },
+        {
+          "url": "https://linux.oracle.com/cve/CVE-2024-35195.html"
+        },
+        {
+          "url": "https://linux.oracle.com/errata/ELSA-2025-7049.html"
+        },
+        {
+          "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/IYLSNK5TL46Q6XPRVMHVWS63MVJQOK4Q"
+        },
+        {
+          "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/IYLSNK5TL46Q6XPRVMHVWS63MVJQOK4Q/"
+        },
+        {
+          "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/N7WP6EYDSUOCOJYHDK5NX43PYZ4SNHGZ"
+        },
+        {
+          "url": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/N7WP6EYDSUOCOJYHDK5NX43PYZ4SNHGZ/"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-35195"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-8344-1"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2024-35195"
+        }
+      ],
+      "published": "2024-05-20T21:15:09+00:00",
+      "updated": "2026-06-17T07:34:31+00:00",
+      "affects": [
+        {
+          "ref": "pkg:pypi/requests@2.31.0",
+          "versions": [
+            {
+              "version": "2.31.0",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2024-37891",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Apip"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "alma"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "azure"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "cbl-mariner"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 4.4,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:N/A:N"
+        },
+        {
+          "source": {
+            "name": "nvd"
+          },
+          "score": 6.5,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N"
+        },
+        {
+          "source": {
+            "name": "oracle-oval"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "photon"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 4.4,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:N/A:N"
+        },
+        {
+          "source": {
+            "name": "rocky"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "ubuntu"
+          },
+          "severity": "low"
+        }
+      ],
+      "cwes": [
+        669
+      ],
+      "description": " urllib3 is a user-friendly HTTP client library for Python. When using urllib3's proxy support with `ProxyManager`, the `Proxy-Authorization` header is only sent to the configured proxy, as expected. However, when sending HTTP requests *without* using urllib3's proxy support, it's possible to accidentally configure the `Proxy-Authorization` header even though it won't have any effect as the request is not using a forwarding proxy or a tunneling proxy. In those cases, urllib3 doesn't treat the `Proxy-Authorization` HTTP header as one carrying authentication material and thus doesn't strip the header on cross-origin redirects. Because this is a highly unlikely scenario, we believe the severity of this vulnerability is low for almost all users. Out of an abundance of caution urllib3 will automatically strip the `Proxy-Authorization` header during cross-origin redirects to avoid the small chance that users are doing this on accident. Users should use urllib3's proxy support or disable automatic redirects to achieve safe processing of the `Proxy-Authorization` header, but we still decided to strip the header by default in order to further protect users who aren't using the correct approach. We believe the number of usages affected by this advisory is low. It requires all of the following to be true to be exploited: 1. Setting the `Proxy-Authorization` header without using urllib3's built-in proxy support. 2. Not disabling HTTP redirects. 3. Either not using an HTTPS origin server or for the proxy or target origin to redirect to a malicious origin. Users are advised to update to either version 1.26.19 or version 2.2.2. Users unable to upgrade may use the `Proxy-Authorization` header with urllib3's `ProxyManager`, disable HTTP redirects using `redirects=False` when sending requests, or not user the `Proxy-Authorization` header as mitigations.",
+      "recommendation": "Upgrade urllib3 to version 1.26.19, 2.2.2",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2024-37891"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2024:9457"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2024:9458"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2024-37891"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2292788"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2292788"
+        },
+        {
+          "url": "https://creativecommons.org/licenses/by/4.0/"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-37891"
+        },
+        {
+          "url": "https://errata.almalinux.org/9/ALSA-2024-9458.html"
+        },
+        {
+          "url": "https://errata.rockylinux.org/RLSA-2024:9457"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/commit/40b6d1605814dd1db0a46e202d6e56f2e4c9a468"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/commit/accff72ecc2f6cf5a76d9570198a93ac7c90270e"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf"
+        },
+        {
+          "url": "https://linux.oracle.com/cve/CVE-2024-37891.html"
+        },
+        {
+          "url": "https://linux.oracle.com/errata/ELSA-2024-9458.html"
+        },
+        {
+          "url": "https://lists.debian.org/debian-lts-announce/2024/12/msg00020.html"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-37891"
+        },
+        {
+          "url": "https://security.netapp.com/advisory/ntap-20240822-0003"
+        },
+        {
+          "url": "https://security.netapp.com/advisory/ntap-20240822-0003/"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-7084-1"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-7084-2"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2024-37891"
+        },
+        {
+          "url": "https://www.vicarius.io/vsociety/posts/proxy-authorization-header-handling-vulnerability-in-urllib3-cve-2024-37891"
+        }
+      ],
+      "published": "2024-06-17T20:15:13+00:00",
+      "updated": "2026-06-17T07:38:59+00:00",
+      "affects": [
+        {
+          "ref": "pkg:pypi/urllib3@2.0.4",
+          "versions": [
+            {
+              "version": "2.0.4",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2024-43796",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Anpm"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "azure"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "cbl-mariner"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 5,
+          "severity": "low",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:L"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 2.3,
+          "severity": "low",
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:N/VI:N/VA:N/SC:L/SI:L/SA:L"
+        },
+        {
+          "source": {
+            "name": "nvd"
+          },
+          "score": 4.7,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:C/C:L/I:L/A:N"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 5,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:L"
+        },
+        {
+          "source": {
+            "name": "ubuntu"
+          },
+          "severity": "medium"
+        }
+      ],
+      "cwes": [
+        79
+      ],
+      "description": "Express.js minimalist web framework for node. In express < 4.20.0, passing untrusted user input - even after sanitizing it - to response.redirect() may execute untrusted code. This issue is patched in express 4.20.0.",
+      "recommendation": "Upgrade express to version 4.20.0, 5.0.0",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2024-43796"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2024-43796"
+        },
+        {
+          "url": "https://github.com/expressjs/express"
+        },
+        {
+          "url": "https://github.com/expressjs/express/commit/54271f69b511fea198471e6ff3400ab805d6b553"
+        },
+        {
+          "url": "https://github.com/expressjs/express/security/advisories/GHSA-qw6h-vgh9-j6wx"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-43796"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-7581-1"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2024-43796"
+        }
+      ],
+      "published": "2024-09-10T15:15:17+00:00",
+      "updated": "2026-06-17T07:51:43+00:00",
+      "affects": [
+        {
+          "ref": "pkg:npm/express@4.18.2",
+          "versions": [
+            {
+              "version": "4.18.2",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2024-47081",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Apip"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "alma"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "azure"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "cbl-mariner"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 5.3,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:N/A:N"
+        },
+        {
+          "source": {
+            "name": "oracle-oval"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "photon"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 5.3,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:N/A:N"
+        },
+        {
+          "source": {
+            "name": "rocky"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "ubuntu"
+          },
+          "severity": "medium"
+        }
+      ],
+      "cwes": [
+        522
+      ],
+      "description": "Requests is a HTTP library. Due to a URL parsing issue, Requests releases prior to 2.32.4 may leak .netrc credentials to third parties for specific maliciously-crafted URLs. Users should upgrade to version 2.32.4 to receive a fix. For older versions of Requests, use of the .netrc file can be disabled with `trust_env=False` on one's Requests Session.",
+      "recommendation": "Upgrade requests to version 2.32.4",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2024-47081"
+        },
+        {
+          "url": "http://seclists.org/fulldisclosure/2025/Jun/2"
+        },
+        {
+          "url": "http://www.openwall.com/lists/oss-security/2025/06/03/11"
+        },
+        {
+          "url": "http://www.openwall.com/lists/oss-security/2025/06/03/9"
+        },
+        {
+          "url": "http://www.openwall.com/lists/oss-security/2025/06/04/1"
+        },
+        {
+          "url": "http://www.openwall.com/lists/oss-security/2025/06/04/6"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2025:12519"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2024-47081"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2371272"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2371272"
+        },
+        {
+          "url": "https://creativecommons.org/licenses/by/4.0/"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-47081"
+        },
+        {
+          "url": "https://errata.almalinux.org/9/ALSA-2025-12519.html"
+        },
+        {
+          "url": "https://errata.rockylinux.org/RLSA-2025:12519"
+        },
+        {
+          "url": "https://github.com/psf/requests"
+        },
+        {
+          "url": "https://github.com/psf/requests/commit/96ba401c1296ab1dda74a2365ef36d88f7d144ef"
+        },
+        {
+          "url": "https://github.com/psf/requests/pull/6965"
+        },
+        {
+          "url": "https://github.com/psf/requests/security/advisories/GHSA-9hjg-9r4m-mvj7"
+        },
+        {
+          "url": "https://linux.oracle.com/cve/CVE-2024-47081.html"
+        },
+        {
+          "url": "https://linux.oracle.com/errata/ELSA-2025-14999.html"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-47081"
+        },
+        {
+          "url": "https://requests.readthedocs.io/en/latest/api/#requests.Session.trust_env"
+        },
+        {
+          "url": "https://seclists.org/fulldisclosure/2025/Jun/2"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-7568-1"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-7762-1"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2024-47081"
+        },
+        {
+          "url": "https://www.openwall.com/lists/oss-security/2025/06/03/9"
+        }
+      ],
+      "published": "2025-06-09T18:15:24+00:00",
+      "updated": "2026-06-17T07:56:30+00:00",
+      "affects": [
+        {
+          "ref": "pkg:pypi/requests@2.31.0",
+          "versions": [
+            {
+              "version": "2.31.0",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2025-50181",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Apip"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "azure"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "cbl-mariner"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 5.3,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:N/A:N"
+        },
+        {
+          "source": {
+            "name": "nvd"
+          },
+          "score": 6.1,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"
+        },
+        {
+          "source": {
+            "name": "photon"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 5.3,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:N/A:N"
+        },
+        {
+          "source": {
+            "name": "ubuntu"
+          },
+          "severity": "medium"
+        }
+      ],
+      "cwes": [
+        601
+      ],
+      "description": "urllib3 is a user-friendly HTTP client library for Python. Prior to 2.5.0, it is possible to disable redirects for all requests by instantiating a PoolManager and specifying retries in a way that disable redirects. By default, requests and botocore users are not affected. An application attempting to mitigate SSRF or open redirect vulnerabilities by disabling redirects at the PoolManager level will remain vulnerable. This issue has been patched in version 2.5.0.",
+      "recommendation": "Upgrade urllib3 to version 2.5.0",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2025-50181"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2025-50181"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/commit/f05b1329126d5be6de501f9d1e3e36738bc08857"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/releases/tag/2.5.0"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/security/advisories/GHSA-pq67-6m6q-mj2v"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-50181"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-7599-1"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-7599-2"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2025-50181"
+        }
+      ],
+      "published": "2025-06-19T01:15:24+00:00",
+      "updated": "2026-06-17T09:34:48+00:00",
+      "affects": [
+        {
+          "ref": "pkg:pypi/urllib3@2.0.4",
+          "versions": [
+            {
+              "version": "2.0.4",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2025-66418",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Apip"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "alma"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "azure"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "cbl-mariner"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 8.9,
+          "severity": "high",
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H"
+        },
+        {
+          "source": {
+            "name": "nvd"
+          },
+          "score": 7.5,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "source": {
+            "name": "oracle-oval"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "photon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 7.5,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "source": {
+            "name": "rocky"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "ubuntu"
+          },
+          "severity": "medium"
+        }
+      ],
+      "cwes": [
+        770
+      ],
+      "description": "urllib3 is a user-friendly HTTP client library for Python. Starting in version 1.24 and prior to 2.6.0, the number of links in the decompression chain was unbounded allowing a malicious server to insert a virtually unlimited number of compression steps leading to high CPU usage and massive memory allocation for the decompressed data. This vulnerability is fixed in 2.6.0.",
+      "recommendation": "Upgrade urllib3 to version 2.6.0",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2025-66418"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1087"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1239"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2025-66418"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2419455"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2419467"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2427726"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2419455"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2419467"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2427726"
+        },
+        {
+          "url": "https://creativecommons.org/licenses/by/4.0/"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-66418"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-66471"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-21441"
+        },
+        {
+          "url": "https://errata.almalinux.org/9/ALSA-2026-1239.html"
+        },
+        {
+          "url": "https://errata.rockylinux.org/RLSA-2026:1087"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/commit/24d7b67eac89f94e11003424bcf0d8f7b72222a8"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/security/advisories/GHSA-gm62-xv2j-4w53"
+        },
+        {
+          "url": "https://linux.oracle.com/cve/CVE-2025-66418.html"
+        },
+        {
+          "url": "https://linux.oracle.com/errata/ELSA-2026-1254.html"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-66418"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-7927-1"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-8010-1"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-8344-1"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2025-66418"
+        },
+        {
+          "url": "https://www.openwall.com/lists/oss-security/2025/12/05/4"
+        }
+      ],
+      "published": "2025-12-05T16:15:51+00:00",
+      "updated": "2026-06-17T09:56:48+00:00",
+      "affects": [
+        {
+          "ref": "pkg:pypi/urllib3@2.0.4",
+          "versions": [
+            {
+              "version": "2.0.4",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2025-66471",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Apip"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "alma"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "azure"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "cbl-mariner"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 8.9,
+          "severity": "high",
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H"
+        },
+        {
+          "source": {
+            "name": "nvd"
+          },
+          "score": 7.5,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "source": {
+            "name": "oracle-oval"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "photon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 7.5,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "source": {
+            "name": "rocky"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "ubuntu"
+          },
+          "severity": "medium"
+        }
+      ],
+      "cwes": [
+        409
+      ],
+      "description": "urllib3 is a user-friendly HTTP client library for Python. Starting in version 1.0 and prior to 2.6.0, the Streaming API improperly handles highly compressed data. urllib3's streaming API is designed for the efficient handling of large HTTP responses by reading the content in chunks, rather than loading the entire response body into memory at once. When streaming a compressed response, urllib3 can perform decoding or decompression based on the HTTP Content-Encoding header (e.g., gzip, deflate, br, or zstd). The library must read compressed data from the network and decompress it until the requested chunk size is met. Any resulting decompressed data that exceeds the requested amount is held in an internal buffer for the next read operation. The decompression logic could cause urllib3 to fully decode a small amount of highly compressed data in a single operation. This can result in excessive resource consumption (high CPU usage and massive memory allocation for the decompressed data.",
+      "recommendation": "Upgrade urllib3 to version 2.6.0",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2025-66471"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1087"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1239"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2025-66471"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2419455"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2419467"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2427726"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2419455"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2419467"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2427726"
+        },
+        {
+          "url": "https://creativecommons.org/licenses/by/4.0/"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-66418"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-66471"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-21441"
+        },
+        {
+          "url": "https://errata.almalinux.org/9/ALSA-2026-1239.html"
+        },
+        {
+          "url": "https://errata.rockylinux.org/RLSA-2026:1087"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/commit/c19571de34c47de3a766541b041637ba5f716ed7"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/security/advisories/GHSA-2xpw-w6gg-jr37"
+        },
+        {
+          "url": "https://linux.oracle.com/cve/CVE-2025-66471.html"
+        },
+        {
+          "url": "https://linux.oracle.com/errata/ELSA-2026-1254.html"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-66471"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-7927-1"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-7927-2"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-7927-3"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-8344-1"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-8344-2"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-8344-3"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2025-66471"
+        },
+        {
+          "url": "https://www.openwall.com/lists/oss-security/2025/12/05/4"
+        }
+      ],
+      "published": "2025-12-05T17:16:04+00:00",
+      "updated": "2026-06-17T09:56:53+00:00",
+      "affects": [
+        {
+          "ref": "pkg:pypi/urllib3@2.0.4",
+          "versions": [
+            {
+              "version": "2.0.4",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2026-21441",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Apip"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "alma"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "azure"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "cbl-mariner"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 7.5,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 8.9,
+          "severity": "high",
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H"
+        },
+        {
+          "source": {
+            "name": "nvd"
+          },
+          "score": 7.5,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "source": {
+            "name": "oracle-oval"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "photon"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 7.5,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "source": {
+            "name": "rocky"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "ubuntu"
+          },
+          "severity": "medium"
+        }
+      ],
+      "cwes": [
+        409
+      ],
+      "description": "urllib3 is an HTTP client library for Python. urllib3's streaming API is designed for the efficient handling of large HTTP responses by reading the content in chunks, rather than loading the entire response body into memory at once. urllib3 can perform decoding or decompression based on the HTTP `Content-Encoding` header (e.g., `gzip`, `deflate`, `br`, or `zstd`). When using the streaming API, the library decompresses only the necessary bytes, enabling partial content consumption. Starting in version 1.22 and prior to version 2.6.3, for HTTP redirect responses, the library would read the entire response body to drain the connection and decompress the content unnecessarily. This decompression occurred even before any read methods were called, and configured read limits did not restrict the amount of decompressed data. As a result, there was no safeguard against decompression bombs. A malicious server could exploit this to trigger excessive resource consumption on the client. Applications and libraries are affected when they stream content from untrusted sources by setting `preload_content=False` when they do not disable redirects. Users should upgrade to at least urllib3 v2.6.3, in which the library does not decode content of redirect responses when `preload_content=False`. If upgrading is not immediately possible, disable redirects by setting `redirect=False` for requests to untrusted source.",
+      "recommendation": "Upgrade urllib3 to version 2.6.3",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2026-21441"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:0981"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:0990"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:10184"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1038"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1041"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1042"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1086"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1087"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1088"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1089"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1166"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1168"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1176"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1224"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1226"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1239"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1240"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1241"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1254"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1485"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:14877"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1504"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1546"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1596"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1599"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1609"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1618"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1619"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1652"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1674"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1676"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1693"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1704"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1706"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1712"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1717"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1726"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1729"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1730"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1734"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1735"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1736"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:17456"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:17457"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:17460"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:17461"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:17462"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:17463"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1791"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1792"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1793"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1794"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1803"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1805"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1942"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:1957"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:19712"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2106"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2126"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2137"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2139"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2144"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2256"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2456"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2500"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:25127"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2563"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2681"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2695"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2717"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2718"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2723"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2728"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2760"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2762"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2764"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2765"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:28043"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:28441"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2900"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2911"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2919"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2924"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2925"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:2926"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:3296"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:33154"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:3406"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:3444"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:3461"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:3462"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:3713"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:3782"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:3869"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:3874"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:3884"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:3960"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:4185"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:41928"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:4215"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:4271"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:4466"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:4467"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:44696"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:51357"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:5459"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:6287"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:6292"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:8151"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:8500"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:8501"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2026-21441"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2419455"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2419467"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2427726"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2419455"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2419467"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2427726"
+        },
+        {
+          "url": "https://creativecommons.org/licenses/by/4.0/"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-66418"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-66471"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-21441"
+        },
+        {
+          "url": "https://errata.almalinux.org/9/ALSA-2026-1239.html"
+        },
+        {
+          "url": "https://errata.rockylinux.org/RLSA-2026:1087"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/commit/8864ac407bba8607950025e0979c4c69bc7abc7b"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/security/advisories/GHSA-38jv-5279-wg99"
+        },
+        {
+          "url": "https://linux.oracle.com/cve/CVE-2026-21441.html"
+        },
+        {
+          "url": "https://linux.oracle.com/errata/ELSA-2026-1254.html"
+        },
+        {
+          "url": "https://lists.debian.org/debian-lts-announce/2026/01/msg00017.html"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-21441"
+        },
+        {
+          "url": "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-21441.json"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-7955-1"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-7955-2"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-8010-1"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2026-21441"
+        }
+      ],
+      "published": "2026-01-07T22:15:44+00:00",
+      "updated": "2026-08-14T13:17:38+00:00",
+      "affects": [
+        {
+          "ref": "pkg:pypi/urllib3@2.0.4",
+          "versions": [
+            {
+              "version": "2.0.4",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2026-25645",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Apip"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "azure"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 4.4,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:U/C:N/I:H/A:N"
+        },
+        {
+          "source": {
+            "name": "nvd"
+          },
+          "score": 5.5,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:N"
+        },
+        {
+          "source": {
+            "name": "photon"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 4.7,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:N/I:H/A:N"
+        }
+      ],
+      "cwes": [
+        377
+      ],
+      "description": "Requests is a HTTP library. Prior to version 2.33.0, the `requests.utils.extract_zipped_paths()` utility function uses a predictable filename when extracting files from zip archives into the system temporary directory. If the target file already exists, it is reused without validation. A local attacker with write access to the temp directory could pre-create a malicious file that would be loaded in place of the legitimate one. Standard usage of the Requests library is not affected by this vulnerability. Only applications that call `extract_zipped_paths()` directly are impacted. Starting in version 2.33.0, the library extracts files to a non-deterministic location. If developers are unable to upgrade, they can set `TMPDIR` in their environment to a directory with restricted write access.",
+      "recommendation": "Upgrade requests to version 2.33.0",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2026-25645"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2026-25645"
+        },
+        {
+          "url": "https://github.com/psf/requests"
+        },
+        {
+          "url": "https://github.com/psf/requests/commit/66d21cb07bd6255b1280291c4fafb71803cdb3b7"
+        },
+        {
+          "url": "https://github.com/psf/requests/releases/tag/v2.33.0"
+        },
+        {
+          "url": "https://github.com/psf/requests/security/advisories/GHSA-gc5v-m9x4-r6x2"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-25645"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2026-25645"
+        }
+      ],
+      "published": "2026-03-25T17:16:52+00:00",
+      "updated": "2026-06-17T10:25:00+00:00",
+      "affects": [
+        {
+          "ref": "pkg:pypi/requests@2.31.0",
+          "versions": [
+            {
+              "version": "2.31.0",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CVE-2026-44431",
+      "source": {
+        "name": "ghsa",
+        "url": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Apip"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "alma"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "amazon"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "azure"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 5.3,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
+        },
+        {
+          "source": {
+            "name": "ghsa"
+          },
+          "score": 8.2,
+          "severity": "high",
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:H/AT:P/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
+        },
+        {
+          "source": {
+            "name": "nvd"
+          },
+          "score": 5.3,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
+        },
+        {
+          "source": {
+            "name": "oracle-oval"
+          },
+          "severity": "medium"
+        },
+        {
+          "source": {
+            "name": "redhat"
+          },
+          "score": 5.9,
+          "severity": "medium",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N"
+        },
+        {
+          "source": {
+            "name": "rocky"
+          },
+          "severity": "high"
+        },
+        {
+          "source": {
+            "name": "ubuntu"
+          },
+          "severity": "medium"
+        }
+      ],
+      "cwes": [
+        200
+      ],
+      "description": "urllib3 is an HTTP client library for Python. From 1.23 to before 2.7.0, cross-origin redirects followed from the low-level API via ProxyManager.connection_from_url().urlopen(..., assert_same_host=False) still forward these sensitive headers. This vulnerability is fixed in 2.7.0.",
+      "recommendation": "Upgrade urllib3 to version 2.7.0",
+      "advisories": [
+        {
+          "url": "https://avd.aquasec.com/nvd/cve-2026-44431"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:28158"
+        },
+        {
+          "url": "https://access.redhat.com/errata/RHSA-2026:28159"
+        },
+        {
+          "url": "https://access.redhat.com/security/cve/CVE-2026-44431"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2477154"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/2477167"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2477154"
+        },
+        {
+          "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2477167"
+        },
+        {
+          "url": "https://creativecommons.org/licenses/by/4.0/"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-44431"
+        },
+        {
+          "url": "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-44432"
+        },
+        {
+          "url": "https://errata.almalinux.org/9/ALSA-2026-28159.html"
+        },
+        {
+          "url": "https://errata.rockylinux.org/RLSA-2026:28158"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3"
+        },
+        {
+          "url": "https://github.com/urllib3/urllib3/security/advisories/GHSA-qccp-gfcp-xxvc"
+        },
+        {
+          "url": "https://linux.oracle.com/cve/CVE-2026-44431.html"
+        },
+        {
+          "url": "https://linux.oracle.com/errata/ELSA-2026-49927.html"
+        },
+        {
+          "url": "https://lists.debian.org/debian-lts-announce/2026/06/msg00040.html"
+        },
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-44431"
+        },
+        {
+          "url": "https://ubuntu.com/security/notices/USN-8379-1"
+        },
+        {
+          "url": "https://www.cve.org/CVERecord?id=CVE-2026-44431"
+        }
+      ],
+      "published": "2026-05-13T16:16:57+00:00",
+      "updated": "2026-06-26T12:16:32+00:00",
+      "affects": [
+        {
+          "ref": "pkg:pypi/urllib3@2.0.4",
+          "versions": [
+            {
+              "version": "2.0.4",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
