@@ -26,9 +26,7 @@ FIXTURES = Path("fixtures")
 #:
 #: Discovered rather than listed, so a fixture added without its raw/ directory
 #: is simply not tested instead of failing the suite for the wrong reason.
-AVAILABLE = sorted(
-    p.parent.name for p in FIXTURES.glob("*/raw") if any(p.glob("*.json"))
-)
+AVAILABLE = sorted(p.parent.name for p in FIXTURES.glob("*/raw") if any(p.glob("*.json")))
 
 
 def canonical(name: str) -> dict:
@@ -83,7 +81,7 @@ def test_every_report_states_what_it_could_not_see(name: str) -> None:
 @pytest.mark.golden
 @pytest.mark.parametrize("name", AVAILABLE)
 def test_provenance_is_complete_enough_to_replay(name: str) -> None:
-    """"Where did this line come from?" must have an answer without re-running."""
+    """ "Where did this line come from?" must have an answer without re-running."""
     provenance = canonical(name)["provenance"]
     assert provenance["ruleset_version"]
     assert provenance["spdx_license_list_version"]
@@ -186,9 +184,7 @@ def test_maven_coordinates_keep_their_case() -> None:
 @pytest.mark.skipif("golang-incompatible" not in AVAILABLE, reason="fixture not generated")
 def test_go_identity_survives_all_three_traps() -> None:
     """Capitalisation, +incompatible, and the .vN path suffix."""
-    keys = " ".join(
-        c["component_key"] for c in canonical("golang-incompatible")["components"]
-    )
+    keys = " ".join(c["component_key"] for c in canonical("golang-incompatible")["components"])
 
     assert "Masterminds" in keys, "proxy escaping was decoded to the wrong case"
     assert "+incompatible" in keys, "the suffix was stripped, naming a version that does not exist"
@@ -216,9 +212,7 @@ def test_a_monorepo_yields_multiple_ecosystems() -> None:
     """⚠ A scanner that stops at the first manifest reports a smaller,
     cleaner-looking component count for a repository it barely scanned."""
     result = canonical("monorepo-multiroot")
-    ecosystems = {
-        c["ecosystem"] for c in result["components"] if c.get("ecosystem")
-    }
+    ecosystems = {c["ecosystem"] for c in result["components"] if c.get("ecosystem")}
     assert len(ecosystems) >= 3, f"only found {ecosystems}"
 
 
@@ -265,9 +259,7 @@ def test_every_cluster_can_explain_its_merges(name: str) -> None:
 
 # -- the golden diff ------------------------------------------------------
 
-GOLDEN = sorted(
-    p.parent.parent.name for p in FIXTURES.glob("*/expected/canonical.json")
-)
+GOLDEN = sorted(p.parent.parent.name for p in FIXTURES.glob("*/expected/canonical.json"))
 
 
 @pytest.mark.golden
@@ -310,15 +302,96 @@ def test_canonical_output_matches_the_committed_golden(name: str) -> None:
         f"  removed: {sorted(set(expected_keys) - set(actual_keys))}"
     )
 
-    actual_findings = sorted(
-        (f["display_id"], f["component_key"]) for f in actual["findings"]
-    )
-    expected_findings = sorted(
-        (f["display_id"], f["component_key"]) for f in expected["findings"]
-    )
+    actual_findings = sorted((f["display_id"], f["component_key"]) for f in actual["findings"])
+    expected_findings = sorted((f["display_id"], f["component_key"]) for f in expected["findings"])
     assert actual_findings == expected_findings, f"{name}: the finding set changed"
 
     # Finally the whole document, so nothing outside the named fields drifts.
     assert json.dumps(actual, sort_keys=True) == json.dumps(expected, sort_keys=True), (
         f"{name}: canonical output differs from the golden outside the checked fields"
     )
+
+
+# -- re-normalization -----------------------------------------------------
+
+
+@pytest.mark.golden
+@pytest.mark.skipif("npm-simple" not in AVAILABLE, reason="fixture not generated")
+def test_renormalize_produces_version_2_without_touching_version_1() -> None:
+    """⚠ THE PAYOFF OF ADR-0003.
+
+    Fixing a normalizer bug replays STORED artifacts into a new version. It does
+    not re-run the scanners — which would not even be reproducible, because the
+    vulnerability databases have moved and the tools have changed since.
+
+    Version 1 must come back byte-identical afterwards, or a report issued
+    against it no longer resolves to the data it was rendered from.
+    """
+    from encorebom_shared.normalize.renormalize import renormalize
+
+    from .normalize_runner import load_artifacts, sbom_fields
+
+    fixture = FIXTURES / "npm-simple"
+    version_1 = canonical("npm-simple")
+    v1_bytes = json.dumps(version_1, sort_keys=True)
+
+    result, delta = renormalize(
+        load_artifacts(fixture / "raw"),
+        version_1,
+        scan_id="fixture-npm-simple",
+        fields=sbom_fields(),
+        alias_snapshot_id="fixture-npm-simple-aliases",
+    )
+    version_2 = result.as_dict()
+
+    assert version_2["provenance"]["normalization_version"] == 2
+    assert version_1["provenance"]["normalization_version"] == 1
+
+    # ⚠ Version 1 is untouched. Not "restored" — never modified.
+    assert json.dumps(canonical("npm-simple"), sort_keys=True) == v1_bytes
+
+    # Same artifacts and same ruleset, so the content must not have moved.
+    assert not delta.changed, f"re-normalization changed the answer: {delta.summary()}"
+    assert delta.from_version == 1
+    assert delta.to_version == 2
+
+
+@pytest.mark.golden
+@pytest.mark.skipif("npm-simple" not in AVAILABLE, reason="fixture not generated")
+def test_vex_joins_to_findings_without_changing_them() -> None:
+    """A suppressed finding is still a finding, with its justification beside
+    it. Removing it would make "assessed and not applicable" indistinguishable
+    from "never seen"."""
+    from encorebom_shared.normalize.pipeline import normalize
+    from encorebom_shared.normalize.vex import VexStatement, apply
+
+    from .normalize_runner import load_artifacts, sbom_fields
+
+    result = normalize(
+        load_artifacts(FIXTURES / "npm-simple" / "raw"),
+        scan_id="fixture-npm-simple",
+        fields=sbom_fields(),
+    )
+    assert result.findings, "the fixture should produce findings to join against"
+
+    target = result.findings[0]
+    before = target.as_dict()
+
+    rows, diagnostics = apply(
+        result.findings,
+        [
+            VexStatement(
+                id="vex-1",
+                cluster_id=target.vuln_cluster_id,
+                component_key=target.component_key,
+                status="not_affected",
+                justification="vulnerable_code_not_in_execute_path",
+                created_at="2026-08-17T00:00:00Z",
+            )
+        ],
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["suppresses_from_actionable"] is True
+    assert target.as_dict() == before, "VEX mutated the finding it joined to"
+    assert any(d["code"] == "VEX_SUPPRESSED_FINDINGS" for d in diagnostics)

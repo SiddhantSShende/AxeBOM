@@ -774,6 +774,30 @@ reads the digest from the LOCATION.
 - **No field count appears anywhere in code.** `fields_from_profile` is the only
   path into scoring, so a CERT-In revision is a data change (invariant 2).
 
+### Also delivered: VEX, re-normalization, bulk insert
+
+- **`vex.py`** — CSAF 2.0 statuses joined to findings, never mutating them. A
+  suppressed finding is still a finding, carrying its status and justification:
+  "we assessed this and it does not apply" is a defensible position, while "this
+  CVE does not appear in our scan" is a different claim that must not look the
+  same. Statements are append-only and versioned; a superseded one stays in the
+  history. `not_affected` without a justification is refused, because an
+  unjustified suppression is an assertion a reviewer cannot evaluate.
+
+- **`renormalize.py`** — replays stored artifacts into `normalization_version +
+  1` and returns a `VersionDiff`. Version N is never overwritten; a golden test
+  proves version 1 comes back byte-identical afterwards. The diff keys findings
+  on the DISPLAY id rather than the cluster id, because cluster ids are durable
+  surrogates that differ between a stored run and a fresh one — diffing on them
+  would report every finding as changed.
+
+- **`bulk.py`** — COPY batches, because row-by-row INSERT at 50k components is
+  not slow but unusable. Above the cap the run is REFUSED rather than truncated:
+  a truncated BOM looks complete, is smaller than the truth, and every component
+  past the cut-off is a false negative the customer trusts. NUL bytes are
+  stripped at the storage boundary, since a NUL silently truncates a Postgres
+  text value with no error.
+
 ### Known gaps in Phase 8
 
 - **`monorepo-multiroot` has no expected/ golden** — its raw artifacts were not
@@ -787,10 +811,13 @@ reads the digest from the LOCATION.
   we run, and `not-provided` correctly scores zero for completeness.
 - **The corpus is four fixtures, not fifteen.** The remaining eleven from
   `09-GOLDEN-CORPUS.md` are not built.
-- **No database writes yet.** The pipeline returns the canonical model; the
-  `COPY` bulk-insert and the `renormalize` command are not implemented.
-- **VEX is not applied.** It joins after dedup and never mutates a finding
-  (spec §2.6); the table exists, the join does not.
+- **`bulk.plan()` produces COPY batches but nothing executes them.** The
+  driver-level write and the transaction around it are not wired, so no
+  canonical row reaches Postgres yet.
+- **`renormalize` has no CLI entry point.** The function and its diff are tested;
+  `encorebom renormalize <scan>` is not built.
+- **VEX statements have no ingestion path.** The join and its precedence rules
+  are implemented and tested; nothing creates a statement yet (Phase 13).
 
 ---
 
