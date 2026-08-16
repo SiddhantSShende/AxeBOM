@@ -821,6 +821,50 @@ reads the digest from the LOCATION.
 
 ---
 
+## What Phase 9 built (started)
+
+Two pieces, both chosen because they are structural and security-critical rather
+than because they are first in the phase file.
+
+### `render/safe` — spreadsheet formula injection (invariant 8)
+
+A component named `=cmd|'/c calc'!A1` EXECUTES when the XLSX is opened. The
+attacker never touches our servers: they publish a package with a hostile name,
+a customer scans a project that depends on it, and the payload travels inside a
+compliance report the customer trusts enough to open.
+
+The escaping lives in the WRITER and is applied unconditionally, never at call
+sites — a call site will eventually be added without it.
+
+Eight real payloads are tested: DDE process launch under `=`, `+` and `-`
+prefixes, `@`-prefixed functions, `WEBSERVICE` exfiltration, `HYPERLINK`
+phishing, and TAB/CR parse shifting. **The guard was mutation-tested**: removing
+`-` from the dangerous set makes the suite fail, naming the payload and why it
+matters. Escaping is idempotent (a value may pass through two writers) and does
+not corrupt UTF-8 names.
+
+### `level` — Top-Level vs Complete projection
+
+`Top-Level` is `depth <= 1`; `Complete` is everything with orphans flagged.
+
+**An orphan can never satisfy Top-Level**, and that is the honest answer: we do
+not know where it sits, so including it would assert a tree position that was
+never established. Everything a level excludes is COUNTED — a Top-Level report
+claiming "42 components" without saying it omitted 900 is indistinguishable
+from a project that genuinely has 42 — and the note points at where the omitted
+components can be found.
+
+Unimplemented levels (`n-Level`, `Delivery`, `Transitive`) are REFUSED rather
+than silently rendered as Complete under a label the customer chose for
+something narrower.
+
+### Not yet built in Phase 9
+
+Exporters (SPDX/CycloneDX via protobom), the PDF and XLSX renderers, Ed25519
+signing, share links, and the async render worker.
+
+---
+
 ## Session log
 
 ### 2026-08-17 (j) — Phase 8 normalizer core
