@@ -1,0 +1,1596 @@
+{
+  "component_count": 5,
+  "components": [
+    {
+      "candidate_identities": [],
+      "component_key": "hash:55a743832ee4d9e84f5271f172e506e01be0bd0d3b28befe867924c963727d6b",
+      "ecosystem": "",
+      "hashes": [
+        {
+          "alg": "sha1",
+          "value": "04f22dd65237b28d177ba145a94952bf82e41137"
+        },
+        {
+          "alg": "sha256",
+          "value": "55a743832ee4d9e84f5271f172e506e01be0bd0d3b28befe867924c963727d6b"
+        }
+      ],
+      "identity_confidence": "medium",
+      "identity_rule": "hash",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [],
+      "name": "/src/pom.xml",
+      "observed_by": [
+        {
+          "confidence": "medium",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "0328106cb52bb1b0"
+        }
+      ],
+      "purl": "",
+      "scope": "excluded",
+      "version_raw": ""
+    },
+    {
+      "candidate_identities": [
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:MavenCase:MavenCase:1.0.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft",
+          "value": "cpe:2.3:a:com.example:MavenCase:1.0.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:com.example:MavenCase:1.0.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:example:MavenCase:1.0.0:*:*:*:*:*:*:*"
+        }
+      ],
+      "component_key": "purl:pkg:maven/com.example/MavenCase@1.0.0",
+      "ecosystem": "maven",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "NOASSERTION",
+      "license_rule": "concluded:spdx-noassertion",
+      "locations": [
+        {
+          "layer": "",
+          "path": "pom.xml",
+          "sha256": ""
+        }
+      ],
+      "name": "MavenCase",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:maven/com.example/MavenCase@1.0.0?package-id=82f96b6fa20cfe7a"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft-spdx",
+          "engine_version": "1.51.0",
+          "native_id": "SPDXRef-Package-java-archive-MavenCase-82f96b6fa20cfe7a"
+        }
+      ],
+      "purl": "pkg:maven/com.example/MavenCase@1.0.0",
+      "scope": "required",
+      "version_raw": "1.0.0"
+    },
+    {
+      "candidate_identities": [
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft",
+          "value": "cpe:2.3:a:com.fasterxml.jackson.core:jackson-databind:2.15.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:com.fasterxml.jackson.core:jackson-databind:2.15.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:com.fasterxml.jackson.core:jackson:2.15.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:com.fasterxml.jackson.core:jackson_databind:2.15.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:core:jackson-databind:2.15.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:core:jackson:2.15.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:core:jackson_databind:2.15.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:fasterxml:jackson-databind:2.15.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:fasterxml:jackson:2.15.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:fasterxml:jackson_databind:2.15.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:jackson-databind:jackson-databind:2.15.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:jackson-databind:jackson:2.15.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:jackson-databind:jackson_databind:2.15.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:jackson:jackson-databind:2.15.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:jackson:jackson:2.15.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:jackson:jackson_databind:2.15.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:jackson_databind:jackson-databind:2.15.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:jackson_databind:jackson:2.15.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:jackson_databind:jackson_databind:2.15.2:*:*:*:*:*:*:*"
+        }
+      ],
+      "component_key": "purl:pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
+      "ecosystem": "maven",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": true,
+      "license_ambiguous": false,
+      "license_effective": "NOASSERTION",
+      "license_rule": "concluded:spdx-noassertion",
+      "locations": [
+        {
+          "layer": "",
+          "path": "pom.xml",
+          "sha256": ""
+        },
+        {
+          "layer": "",
+          "path": "src/pom.xml",
+          "sha256": ""
+        }
+      ],
+      "name": "jackson-databind",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2?package-id=b9189706674cde1c"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2?package-id=b9189706674cde1c"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2?package-id=b9189706674cde1c"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2?package-id=b9189706674cde1c"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2?package-id=b9189706674cde1c"
+        },
+        {
+          "confidence": "high",
+          "engine": "osv-scanner",
+          "engine_version": "",
+          "native_id": "com.fasterxml.jackson.core:jackson-databind@2.15.2"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2?package-id=b9189706674cde1c"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft-spdx",
+          "engine_version": "1.51.0",
+          "native_id": "SPDXRef-Package-java-archive-jackson-databind-b9189706674cde1c"
+        }
+      ],
+      "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
+      "scope": "required",
+      "version_raw": "2.15.2"
+    },
+    {
+      "candidate_identities": [
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft",
+          "value": "cpe:2.3:a:apache:commons-lang3:3.12.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:apache:commons-lang3:3.12.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:apache:commons:3.12.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:apache:commons_lang3:3.12.0:*:*:*:*:*:*:*"
+        }
+      ],
+      "component_key": "purl:pkg:maven/org.apache.commons/commons-lang3@3.12.0",
+      "ecosystem": "maven",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": true,
+      "license_ambiguous": false,
+      "license_effective": "NOASSERTION",
+      "license_rule": "concluded:spdx-noassertion",
+      "locations": [
+        {
+          "layer": "",
+          "path": "pom.xml",
+          "sha256": ""
+        },
+        {
+          "layer": "",
+          "path": "src/pom.xml",
+          "sha256": ""
+        }
+      ],
+      "name": "commons-lang3",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:maven/org.apache.commons/commons-lang3@3.12.0?package-id=f654cc835b055dc3"
+        },
+        {
+          "confidence": "high",
+          "engine": "osv-scanner",
+          "engine_version": "",
+          "native_id": "org.apache.commons:commons-lang3@3.12.0"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:maven/org.apache.commons/commons-lang3@3.12.0?package-id=f654cc835b055dc3"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft-spdx",
+          "engine_version": "1.51.0",
+          "native_id": "SPDXRef-Package-java-archive-commons-lang3-f654cc835b055dc3"
+        }
+      ],
+      "purl": "pkg:maven/org.apache.commons/commons-lang3@3.12.0",
+      "scope": "required",
+      "version_raw": "3.12.0"
+    },
+    {
+      "candidate_identities": [
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:org.springframework:spring-core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:org.springframework:spring_core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:org.springframework:spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:org.springframework:springsource_spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:pivotal_software:spring-core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:pivotal_software:spring_core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:pivotal_software:spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:pivotal_software:springsource_spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring-core:spring-core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring-core:spring_core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring-core:spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring-core:springsource_spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring-framework:spring-core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring-framework:spring_core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring-framework:spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring-framework:springsource_spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring:spring-core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring:spring_core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring:spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring:springsource_spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring_core:spring-core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring_core:spring_core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring_core:spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring_core:springsource_spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring_framework:spring-core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring_framework:spring_core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring_framework:spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:spring_framework:springsource_spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springframework:spring-core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springframework:spring_core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springframework:spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springframework:springsource_spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource-spring-framework:spring-core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource-spring-framework:spring_core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource-spring-framework:spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft",
+          "value": "cpe:2.3:a:springsource-spring-framework:springsource_spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource-spring-framework:springsource_spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource-spring:spring-core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource-spring:spring_core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource-spring:spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource-spring:springsource_spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource:spring-core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource:spring_core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource:spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource:springsource_spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource_spring:spring-core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource_spring:spring_core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource_spring:spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource_spring:springsource_spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource_spring_framework:spring-core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource_spring_framework:spring_core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource_spring_framework:spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:springsource_spring_framework:springsource_spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:vmware:spring-core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:vmware:spring_core:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:vmware:spring_framework:6.0.11:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:vmware:springsource_spring_framework:6.0.11:*:*:*:*:*:*:*"
+        }
+      ],
+      "component_key": "purl:pkg:maven/org.springframework/spring-core@6.0.11",
+      "ecosystem": "maven",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": true,
+      "license_ambiguous": false,
+      "license_effective": "NOASSERTION",
+      "license_rule": "concluded:spdx-noassertion",
+      "locations": [
+        {
+          "layer": "",
+          "path": "pom.xml",
+          "sha256": ""
+        },
+        {
+          "layer": "",
+          "path": "src/pom.xml",
+          "sha256": ""
+        }
+      ],
+      "name": "spring-core",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:maven/org.springframework/spring-core@6.0.11?package-id=e59e92f3300f34f2"
+        },
+        {
+          "confidence": "high",
+          "engine": "osv-scanner",
+          "engine_version": "",
+          "native_id": "org.springframework:spring-core@6.0.11"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:maven/org.springframework/spring-core@6.0.11?package-id=e59e92f3300f34f2"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft-spdx",
+          "engine_version": "1.51.0",
+          "native_id": "SPDXRef-Package-java-archive-spring-core-e59e92f3300f34f2"
+        }
+      ],
+      "purl": "pkg:maven/org.springframework/spring-core@6.0.11",
+      "scope": "required",
+      "version_raw": "6.0.11"
+    }
+  ],
+  "coverage": {
+    "completeness_numerator": 24,
+    "completeness_pct": 10.21,
+    "declaration_numerator": 36,
+    "declaration_pct": 15.32,
+    "denominator": 235,
+    "field_count": 21,
+    "fields": [
+      {
+        "completeness_pct": 100.0,
+        "declaration_pct": 100.0,
+        "declared": 4,
+        "field_id": "certin.sbom.01.component_name",
+        "name": "Component Name",
+        "present": 4,
+        "total": 4,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 100.0,
+        "declaration_pct": 100.0,
+        "declared": 4,
+        "field_id": "certin.sbom.02.component_version",
+        "name": "Component Version",
+        "present": 4,
+        "total": 4,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.03.component_description",
+        "name": "Component Description",
+        "present": 0,
+        "total": 4,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.04.component_supplier",
+        "name": "Component Supplier",
+        "present": 0,
+        "total": 4,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 100.0,
+        "declared": 4,
+        "field_id": "certin.sbom.05.component_license",
+        "name": "Component License",
+        "present": 0,
+        "total": 4,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.06.component_origin",
+        "name": "Component Origin",
+        "present": 0,
+        "total": 4,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.07.component_dependencies",
+        "name": "Component Dependencies",
+        "present": 0,
+        "total": 4,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.08.vulnerabilities",
+        "name": "Vulnerabilities",
+        "present": 0,
+        "total": 4,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.09.patch_status",
+        "name": "Patch Status",
+        "present": 0,
+        "total": 4,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.10.release_date",
+        "name": "Release Date",
+        "present": 0,
+        "total": 4,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.11.eol_date",
+        "name": "End-of-Life (EOL) Date",
+        "present": 0,
+        "total": 4,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.12.criticality",
+        "name": "Criticality",
+        "present": 0,
+        "total": 4,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.13.usage_restrictions",
+        "name": "Usage Restrictions",
+        "present": 0,
+        "total": 4,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.14.checksums",
+        "name": "Checksums or Hashes",
+        "present": 0,
+        "total": 4,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.15.comments",
+        "name": "Comments or Notes",
+        "present": 0,
+        "total": 4,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.16.author_of_sbom_data",
+        "name": "Author of SBOM Data",
+        "present": 0,
+        "total": 4,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.17.timestamp",
+        "name": "Timestamp",
+        "present": 0,
+        "total": 4,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.18.executable_property",
+        "name": "Executable Property",
+        "present": 0,
+        "total": 4,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.19.archive_property",
+        "name": "Archive Property",
+        "present": 0,
+        "total": 4,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.20.structured_property",
+        "name": "Structured Property",
+        "present": 0,
+        "total": 4,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.21.unique_identifier",
+        "name": "Unique Identifier",
+        "present": 0,
+        "total": 4,
+        "weight": 3
+      }
+    ],
+    "formula": "pct = 100 \u00d7 \u03a3_c \u03a3_f (w_f \u00d7 present(c,f)) / \u03a3_c \u03a3_f w_f",
+    "scored_entities": 5,
+    "unidentified_count": 1
+  },
+  "diagnostics": [
+    {
+      "code": "ENGINE_FIELD_MISSING",
+      "hint": "treated as zero components; the output shape may have changed",
+      "message": "trivy-fs output has no `components` array",
+      "severity": "warn"
+    },
+    {
+      "code": "NORMALIZE_CANDIDATE_IDENTITY",
+      "component_key": "purl:pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
+      "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
+      "message": "19 identity claim(s) attached without merging",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_CANDIDATE_IDENTITY",
+      "component_key": "purl:pkg:maven/com.example/MavenCase@1.0.0",
+      "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
+      "message": "4 identity claim(s) attached without merging",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_CANDIDATE_IDENTITY",
+      "component_key": "purl:pkg:maven/org.apache.commons/commons-lang3@3.12.0",
+      "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
+      "message": "4 identity claim(s) attached without merging",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_CANDIDATE_IDENTITY",
+      "component_key": "purl:pkg:maven/org.springframework/spring-core@6.0.11",
+      "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
+      "message": "57 identity claim(s) attached without merging",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_SPDX_DOCUMENT_ROOT",
+      "hint": "recorded as a dependency-graph root rather than an inventory entry",
+      "message": "SPDXRef-DocumentRoot-Directory--src describes the scan target, not a component",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_UNIDENTIFIED_IN_DENOMINATOR",
+      "hint": "they remain in the coverage denominator; dropping them would let a scan that understood almost nothing report a high percentage",
+      "message": "1 unidentified entities scored zero",
+      "severity": "warn"
+    }
+  ],
+  "engine_coverage": [
+    {
+      "artifact_sha256": "f672f58d0fdb7422c6539fb873521c930bd687b5ddf4de6fc6ae307152962312",
+      "ecosystems_covered": [
+        "maven"
+      ],
+      "engine_db_version": "",
+      "engine_id": "grype",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": "0.117.0"
+    },
+    {
+      "artifact_sha256": "74c0918071614b6ee3757c9aaa8b7d28441c7741b292e8367def4b18d774d0b1",
+      "ecosystems_covered": [
+        "maven"
+      ],
+      "engine_db_version": "",
+      "engine_id": "osv-scanner",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": ""
+    },
+    {
+      "artifact_sha256": "e319a30374a67d4e9e99a3f4cef233bd2631faab71ff22545d15976ca01a4a68",
+      "ecosystems_covered": [
+        "maven"
+      ],
+      "engine_db_version": "",
+      "engine_id": "syft",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": "1.51.0"
+    },
+    {
+      "artifact_sha256": "6badfe75e1a23c2f005cdcf3138763136a5a25a10c5da44c04789359545c0312",
+      "ecosystems_covered": [
+        "maven"
+      ],
+      "engine_db_version": "",
+      "engine_id": "syft-spdx",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": "1.51.0"
+    },
+    {
+      "artifact_sha256": "",
+      "ecosystems_covered": [],
+      "engine_db_version": "",
+      "engine_id": "trivy-fs",
+      "image_digest": "",
+      "status": "unavailable",
+      "version": ""
+    }
+  ],
+  "finding_count": 7,
+  "findings": [
+    {
+      "component_key": "purl:pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
+      "cvss_vectors": [
+        {
+          "score": 6.5,
+          "severity": "Medium",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N",
+          "version": "3.1"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2026-59888",
+      "ecosystem": "maven",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "2.18.8",
+      "fixed_versions": [
+        "2.18.8",
+        "2.21.4",
+        "3.1.4"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "medium",
+      "severity_rule": "advisory-cvss-v3.1",
+      "vuln_cluster_id": "fixture-maven-case-cluster-0000"
+    },
+    {
+      "component_key": "purl:pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
+      "cvss_vectors": [
+        {
+          "score": 5.3,
+          "severity": "Medium",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N",
+          "version": "3.1"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2026-54515",
+      "ecosystem": "maven",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "2.18.9",
+      "fixed_versions": [
+        "2.18.9",
+        "2.21.5",
+        "2.22.1",
+        "3.1.4"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "medium",
+      "severity_rule": "advisory-cvss-v3.1",
+      "vuln_cluster_id": "fixture-maven-case-cluster-0001"
+    },
+    {
+      "component_key": "purl:pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
+      "cvss_vectors": [
+        {
+          "score": 5.3,
+          "severity": "Medium",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+          "version": "3.1"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2026-54514",
+      "ecosystem": "maven",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "2.18.8",
+      "fixed_versions": [
+        "2.18.8",
+        "2.21.4",
+        "3.1.4"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "medium",
+      "severity_rule": "advisory-cvss-v3.1",
+      "vuln_cluster_id": "fixture-maven-case-cluster-0002"
+    },
+    {
+      "component_key": "purl:pkg:maven/org.apache.commons/commons-lang3@3.12.0",
+      "cvss_vectors": [
+        {
+          "score": 6.5,
+          "severity": "Medium",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N",
+          "version": "3.1"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2025-48924",
+      "ecosystem": "maven",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "3.18.0",
+      "fixed_versions": [
+        "3.18.0"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "medium",
+      "severity_rule": "advisory-cvss-v3.1",
+      "vuln_cluster_id": "fixture-maven-case-cluster-0003"
+    },
+    {
+      "component_key": "purl:pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
+      "cvss_vectors": [
+        {
+          "score": 8.1,
+          "severity": "High",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "version": "3.1"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2026-54512",
+      "ecosystem": "maven",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "2.18.8",
+      "fixed_versions": [
+        "2.18.8",
+        "2.21.4",
+        "3.1.4"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "high",
+      "severity_rule": "advisory-cvss-v3.1",
+      "vuln_cluster_id": "fixture-maven-case-cluster-0004"
+    },
+    {
+      "component_key": "purl:pkg:maven/org.springframework/spring-core@6.0.11",
+      "cvss_vectors": [
+        {
+          "score": 7.5,
+          "severity": "High",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2025-41249",
+      "ecosystem": "maven",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "6.2.11",
+      "fixed_versions": [
+        "6.2.11"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "high",
+      "severity_rule": "advisory-cvss-v3.1",
+      "vuln_cluster_id": "fixture-maven-case-cluster-0005"
+    },
+    {
+      "component_key": "purl:pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
+      "cvss_vectors": [
+        {
+          "score": 8.1,
+          "severity": "High",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "version": "3.1"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2026-54513",
+      "ecosystem": "maven",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "2.18.8",
+      "fixed_versions": [
+        "2.18.8",
+        "2.21.4",
+        "3.1.4"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "high",
+      "severity_rule": "advisory-cvss-v3.1",
+      "vuln_cluster_id": "fixture-maven-case-cluster-0006"
+    }
+  ],
+  "graph": {
+    "depth": {
+      "hash:55a743832ee4d9e84f5271f172e506e01be0bd0d3b28befe867924c963727d6b": 0,
+      "purl:pkg:maven/com.example/MavenCase@1.0.0": 0,
+      "purl:pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2": 1,
+      "purl:pkg:maven/org.apache.commons/commons-lang3@3.12.0": 1,
+      "purl:pkg:maven/org.springframework/spring-core@6.0.11": 1
+    },
+    "direct": [
+      "purl:pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
+      "purl:pkg:maven/org.apache.commons/commons-lang3@3.12.0",
+      "purl:pkg:maven/org.springframework/spring-core@6.0.11"
+    ],
+    "edges": [
+      {
+        "confidence": "low",
+        "ecosystem": "maven",
+        "from": "purl:pkg:maven/com.example/MavenCase@1.0.0",
+        "owning_engine": "syft",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2"
+      },
+      {
+        "confidence": "low",
+        "ecosystem": "maven",
+        "from": "purl:pkg:maven/com.example/MavenCase@1.0.0",
+        "owning_engine": "syft",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:maven/org.apache.commons/commons-lang3@3.12.0"
+      },
+      {
+        "confidence": "low",
+        "ecosystem": "maven",
+        "from": "purl:pkg:maven/com.example/MavenCase@1.0.0",
+        "owning_engine": "syft",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:maven/org.springframework/spring-core@6.0.11"
+      }
+    ],
+    "orphans": [],
+    "owning_engine": {
+      "maven": "syft"
+    },
+    "roots": [
+      "hash:55a743832ee4d9e84f5271f172e506e01be0bd0d3b28befe867924c963727d6b",
+      "purl:pkg:maven/com.example/MavenCase@1.0.0"
+    ]
+  },
+  "known_unknowns": "Engines that did not complete: trivy-fs (unavailable).",
+  "provenance": {
+    "alias_snapshot_id": "fixture-maven-case-aliases",
+    "ecosystems_without_engine": [],
+    "engines": [
+      {
+        "artifact_sha256": "f672f58d0fdb7422c6539fb873521c930bd687b5ddf4de6fc6ae307152962312",
+        "ecosystems_covered": [
+          "maven"
+        ],
+        "engine_db_version": "",
+        "engine_id": "grype",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": "0.117.0"
+      },
+      {
+        "artifact_sha256": "74c0918071614b6ee3757c9aaa8b7d28441c7741b292e8367def4b18d774d0b1",
+        "ecosystems_covered": [
+          "maven"
+        ],
+        "engine_db_version": "",
+        "engine_id": "osv-scanner",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": ""
+      },
+      {
+        "artifact_sha256": "e319a30374a67d4e9e99a3f4cef233bd2631faab71ff22545d15976ca01a4a68",
+        "ecosystems_covered": [
+          "maven"
+        ],
+        "engine_db_version": "",
+        "engine_id": "syft",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": "1.51.0"
+      },
+      {
+        "artifact_sha256": "6badfe75e1a23c2f005cdcf3138763136a5a25a10c5da44c04789359545c0312",
+        "ecosystems_covered": [
+          "maven"
+        ],
+        "engine_db_version": "",
+        "engine_id": "syft-spdx",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": "1.51.0"
+      },
+      {
+        "artifact_sha256": "",
+        "ecosystems_covered": [],
+        "engine_db_version": "",
+        "engine_id": "trivy-fs",
+        "image_digest": "",
+        "status": "unavailable",
+        "version": ""
+      }
+    ],
+    "normalization_version": 1,
+    "ruleset_version": "2026.08.1",
+    "scan_id": "fixture-maven-case",
+    "source_commit_sha": "",
+    "spdx_license_list_version": "3.25",
+    "workspace_archive_sha256": ""
+  },
+  "ruleset_version": "2026.08.1",
+  "spdx_license_list_version": "3.25",
+  "unidentified_count": 0,
+  "vuln_clusters": [
+    {
+      "cluster_id": "fixture-maven-case-cluster-0000",
+      "display_id_at_render": "CVE-2026-59888",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2026-59888",
+        "GHSA-3PJW-73GF-8QR5"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-3PJW-73GF-8QR5",
+          "id_b": "CVE-2026-59888",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-maven-case-cluster-0001",
+      "display_id_at_render": "CVE-2026-54515",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2026-54515",
+        "GHSA-5JMJ-H7XM-6Q6V"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-5JMJ-H7XM-6Q6V",
+          "id_b": "CVE-2026-54515",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-maven-case-cluster-0002",
+      "display_id_at_render": "CVE-2026-54514",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2026-54514",
+        "GHSA-HGJ6-7826-R7M5"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-HGJ6-7826-R7M5",
+          "id_b": "CVE-2026-54514",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-maven-case-cluster-0003",
+      "display_id_at_render": "CVE-2025-48924",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2025-48924",
+        "GHSA-J288-Q9X7-2F5V"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-J288-Q9X7-2F5V",
+          "id_b": "CVE-2025-48924",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-maven-case-cluster-0004",
+      "display_id_at_render": "CVE-2026-54512",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2026-54512",
+        "GHSA-J3RV-43J4-C7QM"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-J3RV-43J4-C7QM",
+          "id_b": "CVE-2026-54512",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-maven-case-cluster-0005",
+      "display_id_at_render": "CVE-2025-41249",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2025-41249",
+        "GHSA-JMP9-X22R-554X"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-JMP9-X22R-554X",
+          "id_b": "CVE-2025-41249",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-maven-case-cluster-0006",
+      "display_id_at_render": "CVE-2026-54513",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2026-54513",
+        "GHSA-RMJ7-2VXQ-3G9F"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-RMJ7-2VXQ-3G9F",
+          "id_b": "CVE-2026-54513",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    }
+  ]
+}

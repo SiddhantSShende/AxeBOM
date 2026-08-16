@@ -110,6 +110,34 @@ Part enrichment sits behind a `PartDataProvider` interface: `nexar` (Octopart's 
 
 ---
 
+## 2a. Provisioned vulnerability databases
+
+**A vulnerability engine runs only against a database we provisioned and stamped. No stamp, no run.**
+
+This is enforced in `SandboxedAdapter.generate` *before the container starts*, not inferred from the output afterwards. The reason is that the failure it prevents is invisible in the output:
+
+> osv-scanner with `--offline-vulnerabilities` and no cached database parses every lockfile, finds every package, matches against nothing, prints `{"results": []}` and **exits 0**.
+
+Nothing in the exit code, stderr or output shape distinguishes that from a genuinely clean project. Once such a result exists there is no correct way to classify it, so the run is refused instead. grype and trivy happen to fail loudly today, but that is their choice, not a guarantee, and it has changed between releases — so the rule does not depend on any engine's behaviour.
+
+An engine with no provisioned database is **`unavailable` + `ENGINE_DB_STALE` + `ENGINE_DB_NOT_PROVISIONED`**, which lands in Engine Coverage as a stated gap rather than in the findings list as a false all-clear.
+
+| Database | Engine | Pointed at by | Notes |
+|---|---|---|---|
+| `osv` | osv-scanner | `XDG_CACHE_HOME` | No `--db-path` flag exists; it reads the OS cache dir. **One archive per ecosystem**, fetched lazily, so warming requires a tree containing every supported ecosystem |
+| `grype` | grype | `GRYPE_DB_CACHE_DIR` | Also `GRYPE_DB_AUTO_UPDATE=false` and `GRYPE_DB_VALIDATE_AGE=false` — *we* decide what counts as stale, from the stamp |
+| `trivy` | trivy-fs, trivy-image | `--cache-dir` | Previously pointed at the empty tmpfs, so trivy started with no database on every run |
+
+Provisioning is `python -m workers.sbom.dbsync <id>`. It is **the one place that runs an engine image with a network**, and it differs from a scan in the two ways that make that acceptable: no user repository is mounted, and it is invoked by an operator rather than by a scan. It is not a weakened sandbox; it is a different operation on different data.
+
+The stamp (`encorebom-db.json`) is written by the provisioner **only after a successful download that produced bytes**, and carries the vintage that becomes `engine_db_version`. A directory with database files but no stamp is treated as absent — that is what a half-finished download leaves behind, and its vintage cannot be stated.
+
+> ⚠ **`engine_db_version` comes from our stamp, never from the engine's self-report.** An earlier osv-scanner adapter derived it from the *image* version and described a database "bundled in the image". That image is a single 57 MB binary and bundles no database at all. The fabricated string made the `requires_db_version` check pass for an engine that had nothing to match against — the check certifying the exact condition it existed to catch.
+
+**Exit codes are per-engine.** osv-scanner exits `1` when it *finds vulnerabilities*. Treating that as failure inverts the product: every scan that found something would be `failed`, so the only scans reported as succeeding would be the ones that found nothing. See `acceptable_exit_codes()`.
+
+---
+
 ## 3. Invocations
 
 Representative commands. Exact argv is owned by each adapter and recorded, redacted, in `ScanResultV1.invocation.argv_redacted`.
@@ -201,6 +229,10 @@ Each of these has bitten real deployments. Adapters must handle them without emi
 | **trivy fs vs image differ** in scanners and parsers | Modelled as two engines |
 | **syft reports Go modules, trivy sometimes packages** | Reconcile on module path only |
 | **Engine finds zero components** | `partial` + diagnostic; not `succeeded`. Zero is a claim, and it needs to be an explicit one |
+| **A vulnerability engine with no database reports a clean project, exit 0** | Refused before the container starts — see §2a. This is the only failure here that makes a customer *less* safe than having no scanner |
+| **`osv-scanner` exits 1 when it finds vulnerabilities** | `acceptable_exit_codes()` per engine. Otherwise the only "successful" scans are the ones that found nothing |
+| **A quiet flag hides the reason a run failed** | grype's `-q` suppressed the stderr naming a missing database, making it indistinguishable from a crash. Never suppress engine diagnostics to tidy output |
+| **`osv-scanner` visits one directory without `-r`** | On a monorepo it scans the root, finds nothing, exits 0 — a clean report for a repository that was not scanned |
 
 ### Defensive parsing, always
 

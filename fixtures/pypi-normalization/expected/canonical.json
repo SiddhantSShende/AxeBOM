@@ -1,0 +1,1436 @@
+{
+  "component_count": 6,
+  "components": [
+    {
+      "candidate_identities": [],
+      "component_key": "hash:e137f626694e848f9cbdaa1c270d8740bb408098ad324d8b1f8014ca9065b44f",
+      "ecosystem": "",
+      "hashes": [
+        {
+          "alg": "sha1",
+          "value": "d386ff8df3cfe35e6d90f6715d63d7bcebf51735"
+        },
+        {
+          "alg": "sha256",
+          "value": "e137f626694e848f9cbdaa1c270d8740bb408098ad324d8b1f8014ca9065b44f"
+        }
+      ],
+      "identity_confidence": "medium",
+      "identity_rule": "hash",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [],
+      "name": "/src/requirements.txt",
+      "observed_by": [
+        {
+          "confidence": "medium",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "26ca2b7dc025d550"
+        }
+      ],
+      "purl": "",
+      "scope": "excluded",
+      "version_raw": ""
+    },
+    {
+      "candidate_identities": [
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django-rest-framework:django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django-rest-framework:django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django-rest-framework:python-django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django-rest-framework:python_django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django-rest:django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django-rest:django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django-rest:python-django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django-rest:python_django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django:django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django:django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django:python-django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django:python_django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django_rest:django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django_rest:django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django_rest:python-django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django_rest:python_django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django_rest_framework:django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django_rest_framework:django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django_rest_framework:python-django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:django_rest_framework:python_django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-django-rest-framework:django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-django-rest-framework:django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft",
+          "value": "cpe:2.3:a:python-django-rest-framework:python-django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-django-rest-framework:python-django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-django-rest-framework:python_django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-django-rest:django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-django-rest:django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-django-rest:python-django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-django-rest:python_django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-django:django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-django:django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-django:python-django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-django:python_django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python:django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python:django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python:python-django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python:python_django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_django:django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_django:django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_django:python-django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_django:python_django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_django_rest:django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_django_rest:django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_django_rest:python-django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_django_rest:python_django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_django_rest_framework:django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_django_rest_framework:django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_django_rest_framework:python-django-rest-framework:3.14.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_django_rest_framework:python_django_rest_framework:3.14.0:*:*:*:*:*:*:*"
+        }
+      ],
+      "component_key": "purl:pkg:pypi/django-rest-framework@3.14.0",
+      "ecosystem": "pypi",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "NOASSERTION",
+      "license_rule": "concluded:spdx-noassertion",
+      "locations": [
+        {
+          "layer": "",
+          "path": "requirements.txt",
+          "sha256": ""
+        }
+      ],
+      "name": "django-rest-framework",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:pypi/django-rest-framework@3.14.0?package-id=e85e9a822cac0fb7"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft-spdx",
+          "engine_version": "1.51.0",
+          "native_id": "SPDXRef-Package-python-django-rest-framework-e85e9a822cac0fb7"
+        }
+      ],
+      "purl": "pkg:pypi/django-rest-framework@3.14.0",
+      "scope": "required",
+      "version_raw": "3.14.0"
+    },
+    {
+      "candidate_identities": [
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:flask:flask:2.3.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:flask:python-flask:2.3.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:flask:python_flask:2.3.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-flask:flask:2.3.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft",
+          "value": "cpe:2.3:a:python-flask:python-flask:2.3.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-flask:python-flask:2.3.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-flask:python_flask:2.3.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python:flask:2.3.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python:python-flask:2.3.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python:python_flask:2.3.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_flask:flask:2.3.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_flask:python-flask:2.3.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_flask:python_flask:2.3.2:*:*:*:*:*:*:*"
+        }
+      ],
+      "component_key": "purl:pkg:pypi/flask@2.3.2",
+      "ecosystem": "pypi",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "NOASSERTION",
+      "license_rule": "concluded:spdx-noassertion",
+      "locations": [
+        {
+          "layer": "",
+          "path": "requirements.txt",
+          "sha256": ""
+        },
+        {
+          "layer": "",
+          "path": "src/requirements.txt",
+          "sha256": ""
+        },
+        {
+          "layer": "",
+          "path": "src/sbom.cdx.json",
+          "sha256": ""
+        }
+      ],
+      "name": "flask",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:pypi/flask@2.3.2?package-id=5f2c27b3326c86e4"
+        },
+        {
+          "confidence": "high",
+          "engine": "osv-scanner",
+          "engine_version": "",
+          "native_id": "flask@2.3.2"
+        },
+        {
+          "confidence": "high",
+          "engine": "osv-scanner",
+          "engine_version": "",
+          "native_id": "flask@2.3.2"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:pypi/flask@2.3.2?package-id=5f2c27b3326c86e4"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft-spdx",
+          "engine_version": "1.51.0",
+          "native_id": "SPDXRef-Package-python-flask-5f2c27b3326c86e4"
+        }
+      ],
+      "purl": "pkg:pypi/flask@2.3.2",
+      "scope": "required",
+      "version_raw": "2.3.2"
+    },
+    {
+      "candidate_identities": [
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft",
+          "value": "cpe:2.3:a:python-dateutil:python-dateutil:2.8.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-dateutil:python-dateutil:2.8.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-dateutil:python_dateutil:2.8.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python:python-dateutil:2.8.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python:python_dateutil:2.8.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_dateutil:python-dateutil:2.8.2:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_dateutil:python_dateutil:2.8.2:*:*:*:*:*:*:*"
+        }
+      ],
+      "component_key": "purl:pkg:pypi/python-dateutil@2.8.2",
+      "ecosystem": "pypi",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "NOASSERTION",
+      "license_rule": "concluded:spdx-noassertion",
+      "locations": [
+        {
+          "layer": "",
+          "path": "requirements.txt",
+          "sha256": ""
+        }
+      ],
+      "name": "python-dateutil",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:pypi/python-dateutil@2.8.2?package-id=4403351b83366486"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft-spdx",
+          "engine_version": "1.51.0",
+          "native_id": "SPDXRef-Package-python-python-dateutil-4403351b83366486"
+        }
+      ],
+      "purl": "pkg:pypi/python-dateutil@2.8.2",
+      "scope": "required",
+      "version_raw": "2.8.2"
+    },
+    {
+      "candidate_identities": [
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft",
+          "value": "cpe:2.3:a:python-pyyaml:python-pyyaml:6.0.1:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-pyyaml:python-pyyaml:6.0.1:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-pyyaml:python_pyyaml:6.0.1:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-pyyaml:pyyaml:6.0.1:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python:python-pyyaml:6.0.1:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python:python_pyyaml:6.0.1:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python:pyyaml:6.0.1:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_pyyaml:python-pyyaml:6.0.1:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_pyyaml:python_pyyaml:6.0.1:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_pyyaml:pyyaml:6.0.1:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:pyyaml:python-pyyaml:6.0.1:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:pyyaml:python_pyyaml:6.0.1:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:pyyaml:pyyaml:6.0.1:*:*:*:*:*:*:*"
+        }
+      ],
+      "component_key": "purl:pkg:pypi/pyyaml@6.0.1",
+      "ecosystem": "pypi",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "NOASSERTION",
+      "license_rule": "concluded:spdx-noassertion",
+      "locations": [
+        {
+          "layer": "",
+          "path": "requirements.txt",
+          "sha256": ""
+        }
+      ],
+      "name": "pyyaml",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:pypi/pyyaml@6.0.1?package-id=52186525f2f8cf3c"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft-spdx",
+          "engine_version": "1.51.0",
+          "native_id": "SPDXRef-Package-python-pyyaml-52186525f2f8cf3c"
+        }
+      ],
+      "purl": "pkg:pypi/pyyaml@6.0.1",
+      "scope": "required",
+      "version_raw": "6.0.1"
+    },
+    {
+      "candidate_identities": [
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft",
+          "value": "cpe:2.3:a:python-zope-interface:python-zope-interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-zope-interface:python-zope-interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-zope-interface:python_zope_interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-zope-interface:zope-interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-zope-interface:zope_interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-zope:python-zope-interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-zope:python_zope_interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-zope:zope-interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python-zope:zope_interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python:python-zope-interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python:python_zope_interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python:zope-interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python:zope_interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_zope:python-zope-interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_zope:python_zope_interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_zope:zope-interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_zope:zope_interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_zope_interface:python-zope-interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_zope_interface:python_zope_interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_zope_interface:zope-interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:python_zope_interface:zope_interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:zope-interface:python-zope-interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:zope-interface:python_zope_interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:zope-interface:zope-interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:zope-interface:zope_interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:zope:python-zope-interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:zope:python_zope_interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:zope:zope-interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:zope:zope_interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:zope_interface:python-zope-interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:zope_interface:python_zope_interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:zope_interface:zope-interface:6.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:zope_interface:zope_interface:6.0:*:*:*:*:*:*:*"
+        }
+      ],
+      "component_key": "purl:pkg:pypi/zope-interface@6.0",
+      "ecosystem": "pypi",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "NOASSERTION",
+      "license_rule": "concluded:spdx-noassertion",
+      "locations": [
+        {
+          "layer": "",
+          "path": "requirements.txt",
+          "sha256": ""
+        }
+      ],
+      "name": "zope-interface",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:pypi/zope-interface@6.0?package-id=2470067097e2bb31"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft-spdx",
+          "engine_version": "1.51.0",
+          "native_id": "SPDXRef-Package-python-zope-interface-2470067097e2bb31"
+        }
+      ],
+      "purl": "pkg:pypi/zope-interface@6.0",
+      "scope": "required",
+      "version_raw": "6.0"
+    }
+  ],
+  "coverage": {
+    "completeness_numerator": 30,
+    "completeness_pct": 10.64,
+    "declaration_numerator": 45,
+    "declaration_pct": 15.96,
+    "denominator": 282,
+    "field_count": 21,
+    "fields": [
+      {
+        "completeness_pct": 100.0,
+        "declaration_pct": 100.0,
+        "declared": 5,
+        "field_id": "certin.sbom.01.component_name",
+        "name": "Component Name",
+        "present": 5,
+        "total": 5,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 100.0,
+        "declaration_pct": 100.0,
+        "declared": 5,
+        "field_id": "certin.sbom.02.component_version",
+        "name": "Component Version",
+        "present": 5,
+        "total": 5,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.03.component_description",
+        "name": "Component Description",
+        "present": 0,
+        "total": 5,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.04.component_supplier",
+        "name": "Component Supplier",
+        "present": 0,
+        "total": 5,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 100.0,
+        "declared": 5,
+        "field_id": "certin.sbom.05.component_license",
+        "name": "Component License",
+        "present": 0,
+        "total": 5,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.06.component_origin",
+        "name": "Component Origin",
+        "present": 0,
+        "total": 5,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.07.component_dependencies",
+        "name": "Component Dependencies",
+        "present": 0,
+        "total": 5,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.08.vulnerabilities",
+        "name": "Vulnerabilities",
+        "present": 0,
+        "total": 5,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.09.patch_status",
+        "name": "Patch Status",
+        "present": 0,
+        "total": 5,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.10.release_date",
+        "name": "Release Date",
+        "present": 0,
+        "total": 5,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.11.eol_date",
+        "name": "End-of-Life (EOL) Date",
+        "present": 0,
+        "total": 5,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.12.criticality",
+        "name": "Criticality",
+        "present": 0,
+        "total": 5,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.13.usage_restrictions",
+        "name": "Usage Restrictions",
+        "present": 0,
+        "total": 5,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.14.checksums",
+        "name": "Checksums or Hashes",
+        "present": 0,
+        "total": 5,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.15.comments",
+        "name": "Comments or Notes",
+        "present": 0,
+        "total": 5,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.16.author_of_sbom_data",
+        "name": "Author of SBOM Data",
+        "present": 0,
+        "total": 5,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.17.timestamp",
+        "name": "Timestamp",
+        "present": 0,
+        "total": 5,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.18.executable_property",
+        "name": "Executable Property",
+        "present": 0,
+        "total": 5,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.19.archive_property",
+        "name": "Archive Property",
+        "present": 0,
+        "total": 5,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.20.structured_property",
+        "name": "Structured Property",
+        "present": 0,
+        "total": 5,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.21.unique_identifier",
+        "name": "Unique Identifier",
+        "present": 0,
+        "total": 5,
+        "weight": 3
+      }
+    ],
+    "formula": "pct = 100 \u00d7 \u03a3_c \u03a3_f (w_f \u00d7 present(c,f)) / \u03a3_c \u03a3_f w_f",
+    "scored_entities": 6,
+    "unidentified_count": 1
+  },
+  "diagnostics": [
+    {
+      "code": "ENGINE_FIELD_MISSING",
+      "hint": "treated as zero components; the output shape may have changed",
+      "message": "trivy-fs output has no `components` array",
+      "severity": "warn"
+    },
+    {
+      "code": "NORMALIZE_CANDIDATE_IDENTITY",
+      "component_key": "purl:pkg:pypi/flask@2.3.2",
+      "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
+      "message": "13 identity claim(s) attached without merging",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_CANDIDATE_IDENTITY",
+      "component_key": "purl:pkg:pypi/pyyaml@6.0.1",
+      "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
+      "message": "13 identity claim(s) attached without merging",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_CANDIDATE_IDENTITY",
+      "component_key": "purl:pkg:pypi/zope-interface@6.0",
+      "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
+      "message": "33 identity claim(s) attached without merging",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_CANDIDATE_IDENTITY",
+      "component_key": "purl:pkg:pypi/django-rest-framework@3.14.0",
+      "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
+      "message": "49 identity claim(s) attached without merging",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_CANDIDATE_IDENTITY",
+      "component_key": "purl:pkg:pypi/python-dateutil@2.8.2",
+      "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
+      "message": "7 identity claim(s) attached without merging",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_SPDX_DOCUMENT_ROOT",
+      "hint": "recorded as a dependency-graph root rather than an inventory entry",
+      "message": "SPDXRef-DocumentRoot-Directory--src describes the scan target, not a component",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_UNIDENTIFIED_IN_DENOMINATOR",
+      "hint": "they remain in the coverage denominator; dropping them would let a scan that understood almost nothing report a high percentage",
+      "message": "1 unidentified entities scored zero",
+      "severity": "warn"
+    }
+  ],
+  "engine_coverage": [
+    {
+      "artifact_sha256": "3468089c48811168b4ecff2c665b3fac9d8d955af01b1e93258fe7e0de8b70c8",
+      "ecosystems_covered": [
+        "pypi"
+      ],
+      "engine_db_version": "",
+      "engine_id": "grype",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": "0.117.0"
+    },
+    {
+      "artifact_sha256": "93c8730c724000e25b56a13ccaca99b684ef3568d7afd412bad4014143155a80",
+      "ecosystems_covered": [
+        "pypi"
+      ],
+      "engine_db_version": "",
+      "engine_id": "osv-scanner",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": ""
+    },
+    {
+      "artifact_sha256": "7db10f07f043e837abc88525d15b10462c9efa3eab879835f73488c7d08a4e24",
+      "ecosystems_covered": [
+        "pypi"
+      ],
+      "engine_db_version": "",
+      "engine_id": "syft",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": "1.51.0"
+    },
+    {
+      "artifact_sha256": "b7616370a328bd109b571cba36acc33b365cd5b69dee984233e61545057da8df",
+      "ecosystems_covered": [
+        "pypi"
+      ],
+      "engine_db_version": "",
+      "engine_id": "syft-spdx",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": "1.51.0"
+    },
+    {
+      "artifact_sha256": "",
+      "ecosystems_covered": [],
+      "engine_db_version": "",
+      "engine_id": "trivy-fs",
+      "image_digest": "",
+      "status": "unavailable",
+      "version": ""
+    }
+  ],
+  "finding_count": 1,
+  "findings": [
+    {
+      "component_key": "purl:pkg:pypi/flask@2.3.2",
+      "cvss_vectors": [
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:N/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 2.3,
+          "severity": "Low",
+          "source": "Secondary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N",
+          "version": "4.0"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N",
+          "version": "4.0"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2026-27205",
+      "ecosystem": "pypi",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "3.1.3",
+      "fixed_versions": [
+        "3.1.3"
+      ],
+      "severity_conflict": true,
+      "severity_effective": "low",
+      "severity_rule": "cvss-v4",
+      "vuln_cluster_id": "fixture-pypi-normalization-cluster-0000"
+    }
+  ],
+  "graph": {
+    "depth": {},
+    "direct": [],
+    "edges": [],
+    "orphans": [
+      "hash:e137f626694e848f9cbdaa1c270d8740bb408098ad324d8b1f8014ca9065b44f",
+      "purl:pkg:pypi/django-rest-framework@3.14.0",
+      "purl:pkg:pypi/flask@2.3.2",
+      "purl:pkg:pypi/python-dateutil@2.8.2",
+      "purl:pkg:pypi/pyyaml@6.0.1",
+      "purl:pkg:pypi/zope-interface@6.0"
+    ],
+    "owning_engine": {},
+    "roots": []
+  },
+  "known_unknowns": "Engines that did not complete: trivy-fs (unavailable).",
+  "provenance": {
+    "alias_snapshot_id": "fixture-pypi-normalization-aliases",
+    "ecosystems_without_engine": [],
+    "engines": [
+      {
+        "artifact_sha256": "3468089c48811168b4ecff2c665b3fac9d8d955af01b1e93258fe7e0de8b70c8",
+        "ecosystems_covered": [
+          "pypi"
+        ],
+        "engine_db_version": "",
+        "engine_id": "grype",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": "0.117.0"
+      },
+      {
+        "artifact_sha256": "93c8730c724000e25b56a13ccaca99b684ef3568d7afd412bad4014143155a80",
+        "ecosystems_covered": [
+          "pypi"
+        ],
+        "engine_db_version": "",
+        "engine_id": "osv-scanner",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": ""
+      },
+      {
+        "artifact_sha256": "7db10f07f043e837abc88525d15b10462c9efa3eab879835f73488c7d08a4e24",
+        "ecosystems_covered": [
+          "pypi"
+        ],
+        "engine_db_version": "",
+        "engine_id": "syft",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": "1.51.0"
+      },
+      {
+        "artifact_sha256": "b7616370a328bd109b571cba36acc33b365cd5b69dee984233e61545057da8df",
+        "ecosystems_covered": [
+          "pypi"
+        ],
+        "engine_db_version": "",
+        "engine_id": "syft-spdx",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": "1.51.0"
+      },
+      {
+        "artifact_sha256": "",
+        "ecosystems_covered": [],
+        "engine_db_version": "",
+        "engine_id": "trivy-fs",
+        "image_digest": "",
+        "status": "unavailable",
+        "version": ""
+      }
+    ],
+    "normalization_version": 1,
+    "ruleset_version": "2026.08.1",
+    "scan_id": "fixture-pypi-normalization",
+    "source_commit_sha": "",
+    "spdx_license_list_version": "3.25",
+    "workspace_archive_sha256": ""
+  },
+  "ruleset_version": "2026.08.1",
+  "spdx_license_list_version": "3.25",
+  "unidentified_count": 0,
+  "vuln_clusters": [
+    {
+      "cluster_id": "fixture-pypi-normalization-cluster-0000",
+      "display_id_at_render": "CVE-2026-27205",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2026-27205",
+        "GHSA-68RP-WP8R-4726",
+        "PYSEC-2026-2151"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-68RP-WP8R-4726",
+          "id_b": "CVE-2026-27205",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "PYSEC-2026-2151",
+          "id_b": "CVE-2026-27205",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    }
+  ]
+}

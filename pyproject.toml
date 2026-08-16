@@ -19,6 +19,11 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.7",
     "mypy>=1.13",
+    # Validates worker output against proto/schemas/*.json, which are GENERATED
+    # from the Go types in libs/go-shared/events. That is the point: it catches
+    # the Python worker and the Go orchestrator drifting apart at the envelope,
+    # which is otherwise only discovered when a result is silently dropped.
+    "jsonschema>=4.23",
 ]
 
 # Scanner adapters. Installed into the worker image, not into a developer's

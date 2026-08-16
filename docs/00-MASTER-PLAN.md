@@ -56,13 +56,15 @@ Eight Go services, five Python workers, a React frontend. Postgres (schema per s
 | `aibom-worker` | ai-bom, aibom-generator |
 | `hbom-worker` | CSV import, form, part-data enrichment |
 
-### Three structural decisions
+### Four structural decisions
 
 **The fetcher materializes source exactly once per scan.** Engines cloning independently could land on different commits, producing a report describing a codebase that never existed. Fetching once also means only the fetcher holds git credentials, so **no component that runs a third-party scanner over untrusted code holds any secret**. → ADR-0008.
 
 **One engine per job.** Retry, timeout, partial failure and progress all become per-engine, instead of re-running syft because dependency-check timed out. → ADR-0004.
 
 **Normalization is replayable over immutable raw artifacts.** A dedup bug is fixed by re-normalizing, not re-scanning: reports stay defensible, fixes apply retroactively, and a future CERT-In revision becomes a data change. → ADR-0003.
+
+**A vulnerability engine never runs without a provisioned database.** An engine with no database does not fail — it reports a clean project, with exit 0 and valid output. Measured, not assumed: osv-scanner parses every lockfile, matches against nothing and exits 0. That empty result cannot be classified after the fact, so the run is refused before the container starts and the engine is `unavailable`. → ADR-0009.
 
 ### Microservices: the choice and its cost
 

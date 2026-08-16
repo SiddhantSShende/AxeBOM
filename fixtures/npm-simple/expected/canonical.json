@@ -1,0 +1,997 @@
+{
+  "component_count": 4,
+  "components": [
+    {
+      "candidate_identities": [],
+      "component_key": "hash:86b1fae6365b31d94b1abb048499095c90e0164f2d832aabf5fbde0641f66622",
+      "ecosystem": "",
+      "hashes": [
+        {
+          "alg": "sha1",
+          "value": "e836324d3e65d972bc3c26f5fc0d01db3c552726"
+        },
+        {
+          "alg": "sha256",
+          "value": "86b1fae6365b31d94b1abb048499095c90e0164f2d832aabf5fbde0641f66622"
+        }
+      ],
+      "identity_confidence": "medium",
+      "identity_rule": "hash",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [],
+      "name": "/src/package-lock.json",
+      "observed_by": [
+        {
+          "confidence": "medium",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "fd71c2238fc07657"
+        }
+      ],
+      "purl": "",
+      "scope": "excluded",
+      "version_raw": ""
+    },
+    {
+      "candidate_identities": [
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft",
+          "value": "cpe:2.3:a:openjsf:express:4.18.2:*:*:*:*:node.js:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:openjsf:express:4.18.2:*:*:*:*:node.js:*:*"
+        }
+      ],
+      "component_key": "purl:pkg:npm/express@4.18.2",
+      "ecosystem": "npm",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": true,
+      "license_ambiguous": false,
+      "license_effective": "NOASSERTION",
+      "license_rule": "concluded:spdx-noassertion",
+      "locations": [
+        {
+          "layer": "",
+          "path": "package-lock.json",
+          "sha256": ""
+        },
+        {
+          "layer": "",
+          "path": "src/package-lock.json",
+          "sha256": ""
+        },
+        {
+          "layer": "",
+          "path": "src/sbom.cdx.json",
+          "sha256": ""
+        }
+      ],
+      "name": "express",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:npm/express@4.18.2?package-id=b794fd7324a469fc"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:npm/express@4.18.2?package-id=b794fd7324a469fc"
+        },
+        {
+          "confidence": "high",
+          "engine": "osv-scanner",
+          "engine_version": "",
+          "native_id": "express@4.18.2"
+        },
+        {
+          "confidence": "high",
+          "engine": "osv-scanner",
+          "engine_version": "",
+          "native_id": "express@4.18.2"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:npm/express@4.18.2?package-id=b794fd7324a469fc"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft-spdx",
+          "engine_version": "1.51.0",
+          "native_id": "SPDXRef-Package-npm-express-b794fd7324a469fc"
+        }
+      ],
+      "purl": "pkg:npm/express@4.18.2",
+      "scope": "required",
+      "version_raw": "4.18.2"
+    },
+    {
+      "candidate_identities": [
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft",
+          "value": "cpe:2.3:a:lodash:lodash:4.17.21:*:*:*:*:node.js:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:lodash:lodash:4.17.21:*:*:*:*:node.js:*:*"
+        }
+      ],
+      "component_key": "purl:pkg:npm/lodash@4.17.21",
+      "ecosystem": "npm",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": true,
+      "license_ambiguous": false,
+      "license_effective": "NOASSERTION",
+      "license_rule": "concluded:spdx-noassertion",
+      "locations": [
+        {
+          "layer": "",
+          "path": "package-lock.json",
+          "sha256": ""
+        },
+        {
+          "layer": "",
+          "path": "src/package-lock.json",
+          "sha256": ""
+        },
+        {
+          "layer": "",
+          "path": "src/sbom.cdx.json",
+          "sha256": ""
+        }
+      ],
+      "name": "lodash",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:npm/lodash@4.17.21?package-id=b04f85c555e15aa8"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:npm/lodash@4.17.21?package-id=b04f85c555e15aa8"
+        },
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:npm/lodash@4.17.21?package-id=b04f85c555e15aa8"
+        },
+        {
+          "confidence": "high",
+          "engine": "osv-scanner",
+          "engine_version": "",
+          "native_id": "lodash@4.17.21"
+        },
+        {
+          "confidence": "high",
+          "engine": "osv-scanner",
+          "engine_version": "",
+          "native_id": "lodash@4.17.21"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:npm/lodash@4.17.21?package-id=b04f85c555e15aa8"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft-spdx",
+          "engine_version": "1.51.0",
+          "native_id": "SPDXRef-Package-npm-lodash-b04f85c555e15aa8"
+        }
+      ],
+      "purl": "pkg:npm/lodash@4.17.21",
+      "scope": "required",
+      "version_raw": "4.17.21"
+    },
+    {
+      "candidate_identities": [
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft",
+          "value": "cpe:2.3:a:npm-simple:npm-simple:1.0.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:npm-simple:npm-simple:1.0.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:npm-simple:npm_simple:1.0.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:npm:npm-simple:1.0.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:npm:npm_simple:1.0.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:npm_simple:npm-simple:1.0.0:*:*:*:*:*:*:*"
+        },
+        {
+          "confidence": "medium",
+          "kind": "cpe",
+          "source_engine": "syft-spdx",
+          "value": "cpe:2.3:a:npm_simple:npm_simple:1.0.0:*:*:*:*:*:*:*"
+        }
+      ],
+      "component_key": "purl:pkg:npm/npm-simple@1.0.0",
+      "ecosystem": "npm",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "NOASSERTION",
+      "license_rule": "concluded:spdx-noassertion",
+      "locations": [
+        {
+          "layer": "",
+          "path": "package-lock.json",
+          "sha256": ""
+        }
+      ],
+      "name": "npm-simple",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:npm/npm-simple@1.0.0?package-id=d0178b486261c877"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft-spdx",
+          "engine_version": "1.51.0",
+          "native_id": "SPDXRef-Package-npm-npm-simple-d0178b486261c877"
+        }
+      ],
+      "purl": "pkg:npm/npm-simple@1.0.0",
+      "scope": "required",
+      "version_raw": "1.0.0"
+    }
+  ],
+  "coverage": {
+    "completeness_numerator": 18,
+    "completeness_pct": 9.57,
+    "declaration_numerator": 27,
+    "declaration_pct": 14.36,
+    "denominator": 188,
+    "field_count": 21,
+    "fields": [
+      {
+        "completeness_pct": 100.0,
+        "declaration_pct": 100.0,
+        "declared": 3,
+        "field_id": "certin.sbom.01.component_name",
+        "name": "Component Name",
+        "present": 3,
+        "total": 3,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 100.0,
+        "declaration_pct": 100.0,
+        "declared": 3,
+        "field_id": "certin.sbom.02.component_version",
+        "name": "Component Version",
+        "present": 3,
+        "total": 3,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.03.component_description",
+        "name": "Component Description",
+        "present": 0,
+        "total": 3,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.04.component_supplier",
+        "name": "Component Supplier",
+        "present": 0,
+        "total": 3,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 100.0,
+        "declared": 3,
+        "field_id": "certin.sbom.05.component_license",
+        "name": "Component License",
+        "present": 0,
+        "total": 3,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.06.component_origin",
+        "name": "Component Origin",
+        "present": 0,
+        "total": 3,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.07.component_dependencies",
+        "name": "Component Dependencies",
+        "present": 0,
+        "total": 3,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.08.vulnerabilities",
+        "name": "Vulnerabilities",
+        "present": 0,
+        "total": 3,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.09.patch_status",
+        "name": "Patch Status",
+        "present": 0,
+        "total": 3,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.10.release_date",
+        "name": "Release Date",
+        "present": 0,
+        "total": 3,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.11.eol_date",
+        "name": "End-of-Life (EOL) Date",
+        "present": 0,
+        "total": 3,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.12.criticality",
+        "name": "Criticality",
+        "present": 0,
+        "total": 3,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.13.usage_restrictions",
+        "name": "Usage Restrictions",
+        "present": 0,
+        "total": 3,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.14.checksums",
+        "name": "Checksums or Hashes",
+        "present": 0,
+        "total": 3,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.15.comments",
+        "name": "Comments or Notes",
+        "present": 0,
+        "total": 3,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.16.author_of_sbom_data",
+        "name": "Author of SBOM Data",
+        "present": 0,
+        "total": 3,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.17.timestamp",
+        "name": "Timestamp",
+        "present": 0,
+        "total": 3,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.18.executable_property",
+        "name": "Executable Property",
+        "present": 0,
+        "total": 3,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.19.archive_property",
+        "name": "Archive Property",
+        "present": 0,
+        "total": 3,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.20.structured_property",
+        "name": "Structured Property",
+        "present": 0,
+        "total": 3,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.21.unique_identifier",
+        "name": "Unique Identifier",
+        "present": 0,
+        "total": 3,
+        "weight": 3
+      }
+    ],
+    "formula": "pct = 100 \u00d7 \u03a3_c \u03a3_f (w_f \u00d7 present(c,f)) / \u03a3_c \u03a3_f w_f",
+    "scored_entities": 4,
+    "unidentified_count": 1
+  },
+  "diagnostics": [
+    {
+      "code": "ENGINE_FIELD_MISSING",
+      "hint": "treated as zero components; the output shape may have changed",
+      "message": "trivy-fs output has no `components` array",
+      "severity": "warn"
+    },
+    {
+      "code": "NORMALIZE_CANDIDATE_IDENTITY",
+      "component_key": "purl:pkg:npm/express@4.18.2",
+      "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
+      "message": "2 identity claim(s) attached without merging",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_CANDIDATE_IDENTITY",
+      "component_key": "purl:pkg:npm/lodash@4.17.21",
+      "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
+      "message": "2 identity claim(s) attached without merging",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_CANDIDATE_IDENTITY",
+      "component_key": "purl:pkg:npm/npm-simple@1.0.0",
+      "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
+      "message": "7 identity claim(s) attached without merging",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_SPDX_DOCUMENT_ROOT",
+      "hint": "recorded as a dependency-graph root rather than an inventory entry",
+      "message": "SPDXRef-DocumentRoot-Directory--src describes the scan target, not a component",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_UNIDENTIFIED_IN_DENOMINATOR",
+      "hint": "they remain in the coverage denominator; dropping them would let a scan that understood almost nothing report a high percentage",
+      "message": "1 unidentified entities scored zero",
+      "severity": "warn"
+    }
+  ],
+  "engine_coverage": [
+    {
+      "artifact_sha256": "514d56d91b0f8942f167490215ed2a596c61540264b19e44706866fc90e26d0e",
+      "ecosystems_covered": [
+        "npm"
+      ],
+      "engine_db_version": "",
+      "engine_id": "grype",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": "0.117.0"
+    },
+    {
+      "artifact_sha256": "89e6ddb293e34634023fdc9903c85e1f099e2571187cd2874f0562894f83a536",
+      "ecosystems_covered": [
+        "npm"
+      ],
+      "engine_db_version": "",
+      "engine_id": "osv-scanner",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": ""
+    },
+    {
+      "artifact_sha256": "bfc66fbc1ffb4d3529360726b3316dbee1d7fcec9d52208efe806eda6d17b681",
+      "ecosystems_covered": [
+        "npm"
+      ],
+      "engine_db_version": "",
+      "engine_id": "syft",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": "1.51.0"
+    },
+    {
+      "artifact_sha256": "adcd7518cbc76f29392ae1d7dea91bb8262e111457768172ff0bbebc8b284001",
+      "ecosystems_covered": [
+        "npm"
+      ],
+      "engine_db_version": "",
+      "engine_id": "syft-spdx",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": "1.51.0"
+    },
+    {
+      "artifact_sha256": "",
+      "ecosystems_covered": [],
+      "engine_db_version": "",
+      "engine_id": "trivy-fs",
+      "image_digest": "",
+      "status": "unavailable",
+      "version": ""
+    }
+  ],
+  "finding_count": 4,
+  "findings": [
+    {
+      "component_key": "purl:pkg:npm/lodash@4.17.21",
+      "cvss_vectors": [
+        {
+          "score": 6.5,
+          "severity": "Medium",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L",
+          "version": "3.1"
+        },
+        {
+          "score": 6.9,
+          "severity": "Medium",
+          "source": "Secondary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:L/VA:L/SC:H/SI:H/SA:H/E:P",
+          "version": "4.0"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:L/VA:L/SC:H/SI:H/SA:H/E:P",
+          "version": "4.0"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2025-13465",
+      "ecosystem": "npm",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "4.17.23",
+      "fixed_versions": [
+        "4.17.23",
+        "4.18.0"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "medium",
+      "severity_rule": "cvss-v4",
+      "vuln_cluster_id": "fixture-npm-simple-cluster-0000"
+    },
+    {
+      "component_key": "purl:pkg:npm/express@4.18.2",
+      "cvss_vectors": [
+        {
+          "score": 5.0,
+          "severity": "Low",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:L",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:L",
+          "version": "3.1"
+        },
+        {
+          "score": 2.3,
+          "severity": "Low",
+          "source": "Secondary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:N/VI:N/VA:N/SC:L/SI:L/SA:L",
+          "version": "4.0"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:N/VI:N/VA:N/SC:L/SI:L/SA:L",
+          "version": "4.0"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2024-43796",
+      "ecosystem": "npm",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "4.20.0",
+      "fixed_versions": [
+        "4.20.0",
+        "5.0.0"
+      ],
+      "severity_conflict": true,
+      "severity_effective": "low",
+      "severity_rule": "cvss-v4",
+      "vuln_cluster_id": "fixture-npm-simple-cluster-0001"
+    },
+    {
+      "component_key": "purl:pkg:npm/lodash@4.17.21",
+      "cvss_vectors": [
+        {
+          "score": 8.1,
+          "severity": "High",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "version": "3.1"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2021-23337",
+      "ecosystem": "npm",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "4.18.0",
+      "fixed_versions": [
+        "4.18.0"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "high",
+      "severity_rule": "advisory-cvss-v3.1",
+      "vuln_cluster_id": "fixture-npm-simple-cluster-0002"
+    },
+    {
+      "component_key": "purl:pkg:npm/express@4.18.2",
+      "cvss_vectors": [
+        {
+          "score": 6.1,
+          "severity": "Medium",
+          "source": "Secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
+          "version": "3.1"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2024-29041",
+      "ecosystem": "npm",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "4.19.2",
+      "fixed_versions": [
+        "4.19.2",
+        "5.0.0-beta.3"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "medium",
+      "severity_rule": "advisory-cvss-v3.1",
+      "vuln_cluster_id": "fixture-npm-simple-cluster-0003"
+    }
+  ],
+  "graph": {
+    "depth": {
+      "hash:86b1fae6365b31d94b1abb048499095c90e0164f2d832aabf5fbde0641f66622": 0,
+      "purl:pkg:npm/express@4.18.2": 1,
+      "purl:pkg:npm/lodash@4.17.21": 1,
+      "purl:pkg:npm/npm-simple@1.0.0": 0
+    },
+    "direct": [
+      "purl:pkg:npm/express@4.18.2",
+      "purl:pkg:npm/lodash@4.17.21"
+    ],
+    "edges": [
+      {
+        "confidence": "low",
+        "ecosystem": "npm",
+        "from": "purl:pkg:npm/npm-simple@1.0.0",
+        "owning_engine": "syft",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:npm/express@4.18.2"
+      },
+      {
+        "confidence": "low",
+        "ecosystem": "npm",
+        "from": "purl:pkg:npm/npm-simple@1.0.0",
+        "owning_engine": "syft",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:npm/lodash@4.17.21"
+      }
+    ],
+    "orphans": [],
+    "owning_engine": {
+      "npm": "syft"
+    },
+    "roots": [
+      "hash:86b1fae6365b31d94b1abb048499095c90e0164f2d832aabf5fbde0641f66622",
+      "purl:pkg:npm/npm-simple@1.0.0"
+    ]
+  },
+  "known_unknowns": "Engines that did not complete: trivy-fs (unavailable).",
+  "provenance": {
+    "alias_snapshot_id": "fixture-npm-simple-aliases",
+    "ecosystems_without_engine": [],
+    "engines": [
+      {
+        "artifact_sha256": "514d56d91b0f8942f167490215ed2a596c61540264b19e44706866fc90e26d0e",
+        "ecosystems_covered": [
+          "npm"
+        ],
+        "engine_db_version": "",
+        "engine_id": "grype",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": "0.117.0"
+      },
+      {
+        "artifact_sha256": "89e6ddb293e34634023fdc9903c85e1f099e2571187cd2874f0562894f83a536",
+        "ecosystems_covered": [
+          "npm"
+        ],
+        "engine_db_version": "",
+        "engine_id": "osv-scanner",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": ""
+      },
+      {
+        "artifact_sha256": "bfc66fbc1ffb4d3529360726b3316dbee1d7fcec9d52208efe806eda6d17b681",
+        "ecosystems_covered": [
+          "npm"
+        ],
+        "engine_db_version": "",
+        "engine_id": "syft",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": "1.51.0"
+      },
+      {
+        "artifact_sha256": "adcd7518cbc76f29392ae1d7dea91bb8262e111457768172ff0bbebc8b284001",
+        "ecosystems_covered": [
+          "npm"
+        ],
+        "engine_db_version": "",
+        "engine_id": "syft-spdx",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": "1.51.0"
+      },
+      {
+        "artifact_sha256": "",
+        "ecosystems_covered": [],
+        "engine_db_version": "",
+        "engine_id": "trivy-fs",
+        "image_digest": "",
+        "status": "unavailable",
+        "version": ""
+      }
+    ],
+    "normalization_version": 1,
+    "ruleset_version": "2026.08.1",
+    "scan_id": "fixture-npm-simple",
+    "source_commit_sha": "",
+    "spdx_license_list_version": "3.25",
+    "workspace_archive_sha256": ""
+  },
+  "ruleset_version": "2026.08.1",
+  "spdx_license_list_version": "3.25",
+  "unidentified_count": 0,
+  "vuln_clusters": [
+    {
+      "cluster_id": "fixture-npm-simple-cluster-0000",
+      "display_id_at_render": "CVE-2025-13465",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2025-13465",
+        "CVE-2026-2950",
+        "GHSA-F23M-R3PF-42RH",
+        "GHSA-XXJR-MMJV-4GPG"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-F23M-R3PF-42RH",
+          "id_b": "CVE-2025-13465",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-XXJR-MMJV-4GPG",
+          "id_b": "CVE-2025-13465",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-F23M-R3PF-42RH",
+          "id_b": "CVE-2026-2950",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-npm-simple-cluster-0001",
+      "display_id_at_render": "CVE-2024-43796",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2024-43796",
+        "GHSA-QW6H-VGH9-J6WX"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-QW6H-VGH9-J6WX",
+          "id_b": "CVE-2024-43796",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-npm-simple-cluster-0002",
+      "display_id_at_render": "CVE-2021-23337",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2021-23337",
+        "CVE-2026-4800",
+        "GHSA-35JH-R3H4-6JHM",
+        "GHSA-R5FR-RJXR-66JC"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-R5FR-RJXR-66JC",
+          "id_b": "CVE-2021-23337",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-R5FR-RJXR-66JC",
+          "id_b": "CVE-2026-4800",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-R5FR-RJXR-66JC",
+          "id_b": "GHSA-35JH-R3H4-6JHM",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    },
+    {
+      "cluster_id": "fixture-npm-simple-cluster-0003",
+      "display_id_at_render": "CVE-2024-29041",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2024-29041",
+        "GHSA-RV95-896H-C2VC"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-RV95-896H-C2VC",
+          "id_b": "CVE-2024-29041",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    }
+  ]
+}

@@ -39,8 +39,11 @@ A session that writes code but does not update this file has failed — the next
 | **Database** | ✅ **9 schemas, 43 tables + 32 partitions, migrated** |
 | **RLS tenancy** | ✅ **36 protected, 7 exempt, 0 gaps — and proven to fail on a gap** |
 | **Compliance codegen** | ✅ **Go + Python agree; counts match the PDF** |
-| Python shared package | ✅ errors, logging+redaction, config, timeutil |
-| Python workers (5) | ⬜ directories only |
+| Python shared package | ✅ errors, logging+redaction, config, timeutil, **sandbox bridge**, **enginedb** |
+| **Normalizer** | ✅ **identity, merge, graph, alias union-find, dedup, both coverage numbers, provenance; 151 tests + 43 golden** |
+| **SBOM worker** | ✅ **7 adapters; 74 tests; syft/syft-spdx/grype/trivy-fs/osv-scanner exercised on 5 fixtures** |
+| **Engine databases** | ✅ **provisioned + stamped (grype, trivy, osv); a vuln engine cannot run without one** |
+| Python workers (other 4) | ⬜ directories only |
 | Frontend | ✅ scaffold builds; **Phase 10 replaces it** |
 | Boundary lint | ✅ configured and demonstrated failing |
 | CI (dual-OS) | ✅ written, **never run** — no remote |
@@ -570,7 +573,271 @@ real. `partial` counts as succeeded for "did anything work?" and as not-clean fo
 
 ---
 
+## What Phase 7 built
+
+Seven SBOM adapters behind one sandboxed base class, a provisioned-database
+layer, and 74 tests. Five engines are exercised end to end against all five
+fixtures; two are deferred with stated reasons.
+
+### The theme of this phase: a scanner that finds nothing looks exactly like a clean project
+
+Every significant defect found here was the same shape — an engine reporting
+success, exit 0, valid JSON, and **zero findings, because it had not actually
+checked anything**. None of them raised an error. All of them would have
+rendered as a clean compliance report.
+
+| What happened | Why it produced a false all-clear |
+|---|---|
+| `osv-scanner --offline-vulnerabilities` with a fully populated cache mounted | Documented as "checks for vulnerabilities using local databases that are already cached". It loads none of them. `{"results": []}`, exit 0. **`--offline` on the same mount returns real findings.** |
+| The OSV database was root-owned `0750`; the sandbox runs as uid 65534 | `EACCES` on the directory. osv-scanner does not treat an unreadable database as an error — it reports the project clean |
+| `osv_db_version()` fell back to the image version, describing a database "bundled in the image" | That image is a 57 MB binary and bundles no database. The fabricated string made `requires_db_version` pass for an engine with nothing to match against — the check certifying the exact condition it existed to catch |
+| `trivy --cache-dir` pointed at the empty tmpfs | trivy began every run with no database. It failed loudly, which is the only reason this one was not silent too |
+| grype's `-q` | Suppressed the stderr line naming a missing database, making it indistinguishable from a crash: `failed` instead of `unavailable` |
+| `osv-scanner` without `-r` | Visits ONE directory. On the monorepo fixture it scans the root, finds nothing, exits 0 |
+| `osv-scanner` exit 1 treated as failure | Exit 1 means **vulnerabilities found**. Every scan that found something would be `failed`, so the only scans reported as succeeding would be the ones that found nothing |
+
+### The rule that came out of it
+
+**A vulnerability engine runs only against a database we provisioned and stamped.
+No stamp, no run** — checked in `SandboxedAdapter.generate` *before the container
+starts*, never inferred from the output afterwards.
+
+This is deliberately not a classification rule. Once `{"results": []}` exists
+there is no correct way to interpret it, so the run is refused instead and the
+engine is `unavailable` + `ENGINE_DB_STALE` + `ENGINE_DB_NOT_PROVISIONED` — a
+stated gap in Engine Coverage rather than a false negative in the findings list.
+
+`engine_db_version` comes from **our stamp**, never from the engine's
+self-report, because the stamp is the one claim about staleness we can stand
+behind: we wrote it when we downloaded the data.
+
+Because that guard cannot prove the engine *used* the database it was given,
+osv-scanner additionally verifies from stderr that it opened one
+(`loaded_local_databases`). That check is what the `--offline-vulnerabilities`
+trap would otherwise have walked straight through.
+
+### `workers/sbom/dbsync.py` — provisioning
+
+The one place that runs an engine image **with a network**. It differs from a
+scan in the two ways that make that acceptable: no user repository is mounted,
+and an operator invokes it. It is not a weakened sandbox; it is a different
+operation on different data.
+
+Stamped only after a download that (a) exited acceptably, (b) actually wrote
+bytes, and (c) **is readable as uid 65534** — verified by reading a byte as that
+user, because a database the scan user cannot read is not provisioned.
+
+Two platform-specific findings, both load-bearing:
+
+- **grype's database cannot be written to a Windows/macOS bind mount.** It is
+  SQLite, and activation runs a migration: `unable to migrate: disk I/O error
+  (778)` after a successful 1m26s download. It is downloaded inside the
+  container and `docker cp`-ed out.
+- **anchore/grype is distroless** — no `sh` — so the permission work borrows a
+  shell from another image already pinned in the manifest rather than pulling an
+  unpinned utility image.
+
+### Engines
+
+| Engine | State | Version | Database |
+|---|---|---|---|
+| `syft` | working — CycloneDX inventory, 4 ecosystems on the monorepo | 1.51.0 | — |
+| `syft-spdx` | working — SPDX inventory | 1.51.0 | — |
+| `grype` | working — real GHSA findings against **our** syft SBOM, never a re-scan | 0.117.0 | grype-db, provisioned |
+| `trivy-fs` | working — vuln + license + secret | 0.74.0 | trivy-db, provisioned |
+| `osv-scanner` | working — findings **and alias edges**, Phase 8's union-find input | 2.5.0 | OSV, 4 ecosystems |
+| `trivy-image` | implemented, **not exercised** — refuses non-digest refs; needs a pinned image to scan | 0.74.0 | shares trivy-db |
+| `dependency-check` | implemented, **not exercised** — needs an NVD API key and a 30–60 min first sync | 13.0.0 | not provisioned |
+
+### Tests — 74, in three files
+
+- `test_database_guard.py` (25) — the one that matters. Parameterised over every
+  vulnerability engine, asserting the container **never starts** without a
+  database, that the status is exactly `unavailable`, that an unstamped or
+  undated directory does not count, and that syft — which needs no database — is
+  not blocked by the guard.
+- `test_runner.py` (23) — envelopes validated against
+  `proto/schemas/scan-result-v1.schema.json`, **generated from the Go types**, so
+  worker/orchestrator drift fails a test rather than silently dropping results.
+  Plus idempotency, grype's dependency on syft, and no-credential-in-output.
+- `test_classification.py` (26) — zero-is-a-claim, timeout vs failure vs
+  unavailable, one broken ecosystem not discarding the others, and the flag pins
+  (`--offline`, `-r`, no `-q`) that stop the silent-false-negative traps
+  recurring.
+
+### Fixtures
+
+`fixtures/*/raw/*.json` are Phase 8's **input**. Tests replay them instead of
+running scanners, which is what makes normalization deterministic, offline and
+stable across upstream changes. Regenerating them is a deliberate act
+(`docs/09-GOLDEN-CORPUS.md` §5).
+
+### Known debt from Phase 7
+
+- **`dependency-check` and `trivy-image` are unexercised.** Both are implemented
+  and both report `unavailable` today for stated reasons, which is the honest
+  status rather than a hidden gap. dependency-check needs an NVD API key.
+- **Engine databases live outside the repo** (`ENCOREBOM_ENGINE_DB_ROOT`,
+  ~4.5 GB). CI has none, so DB-backed engines are `unavailable` there — correct
+  behaviour, but it means CI does not exercise the matching path.
+- **The NATS subscription loop is not wired.** `SBOMWorker.handle` is complete
+  and tested; `main()` validates the sandbox and reports what it can run. The
+  consumer lands with the worker deployment.
+- **`loaded_local_databases` parses stderr**, which is fragile against upstream
+  rewording. The failure direction is chosen deliberately: a miss reports
+  `unavailable`, understating coverage visibly, rather than reporting a project
+  clean because we could not tell whether anything was checked.
+
+---
+
+## What Phase 8 built (in progress)
+
+The normalizer: the component that produces every number a customer sees. Ten
+modules, six ecosystem version comparators, 151 unit tests and a 43-test golden
+corpus that replays the Phase 7 fixtures.
+
+### What runs today
+
+`python -m workers.sbom.normalize_runner fixtures/<name>` reads the committed
+`raw/*.json`, and produces the canonical model end to end: identity, merge,
+graph, alias closure, finding dedup, both coverage numbers, provenance.
+
+| Fixture | Components | Findings | What it proved |
+|---|---|---|---|
+| `npm-simple` | 4 | 4 | lodash merged across 4 engines into one component; each vulnerability one finding with `detected_by: [grype, osv-scanner]` |
+| `pypi-normalization` | 6 | 1 | PEP 503 applied — `PyYAML`→`pyyaml`, `zope.interface`→`zope-interface`, `Django_REST_framework`→`django-rest-framework` |
+| `maven-case` | 5 | 7 | case preserved — `MavenCase` and `jackson-databind` survive verbatim |
+| `golang-incompatible` | 5 | 9 | `Masterminds` capitalisation, `+incompatible`, and `gopkg.in/yaml.v3` all preserved |
+
+### Three bugs the fixtures found that reading the spec would not have
+
+1. **The same Go module counted twice.** syft emits `v24.0.5+incompatible`;
+   another engine emits `24.0.5+incompatible`. The `v` is part of Go's version
+   grammar, not part of the number — so `docker/docker` appeared twice and
+   **every one of its vulnerabilities was counted twice** (18 findings where
+   there were 9). Fixed in `purl._canonical_version`, which normalizes that
+   syntax and nothing else.
+
+2. **Findings displayed GHSA ids where a CVE was known.** The alias closure had
+   the edge; the pipeline was overwriting the pinned display id with a derived
+   one. CVE is the identifier a remediation ticket quotes.
+
+3. **A cluster-id lookup miss is silent and destructive.** Storage holding
+   `ghsa-xxxx-...` where the closure produced `GHSA-XXXX-...` does not fail — it
+   mints a NEW cluster id and orphans the stored one. That is the ADR-0005
+   durability failure arriving through the back door. Both `assign_cluster_ids`
+   and `dedup` now normalize their map keys defensively.
+
+Also found: rule 5 of the identity chain (`file:`) was **unreachable**. It read
+the digest from the same place rule 4 (`hash:`) does, so rule 4 always fired
+first — a documented branch of the fallback chain that could never run. It now
+reads the digest from the LOCATION.
+
+### The rules that are enforced, with the test that proves each
+
+- **Never merge name+version across ecosystems.** `name:npm/lodash@4` ≠
+  `name:maven/lodash@4` — the single most common dedup bug in SBOM tooling.
+- **PEP 503 collapses separator RUNS; it does not delete separators.** `pyyaml`
+  and `py-yaml` are different projects. Over-merging is the dangerous direction:
+  a missing component is a missing vulnerability.
+- **Cluster ids are durable surrogates**, never content-derived. Proven by a
+  test that absorbs a new alias and asserts the id did not move.
+- **CVE↔CVE merges require an authoritative source**; a scanner assertion is
+  refused and the refusal is recorded.
+- **Clusters above 12 members are flagged, not merged** — and authoritative
+  edges are applied first so the cap sacrifices the untrustworthy ones.
+- **Severity is never averaged and never max'd across CVSS versions.** v2, v3.1
+  and v4.0 are different scales. Conflicts are surfaced, not hidden.
+- **`fixed_in_min` uses an ecosystem-correct comparator**, or reports `unknown`.
+  A lexical sort answers `1.10.0` where the truth is `1.9.0` — a version that
+  does not contain the fix.
+- **`GPL-2.0` is flagged ambiguous, never resolved.** Choosing wrong is a legal
+  error, not a data-quality error.
+- **`NONE` counts as present; `NOASSERTION` does not.** The one deliberate
+  exception in the coverage rules, documented where it is implemented.
+- **Graphs are replaced per ecosystem, not unioned.** Unioning invents
+  transitive edges no engine reported.
+- **Orphans get `depth = NULL`.** Never forced to 1, which would inflate the
+  direct-dependency count.
+- **Both coverage numbers, always**, with the formula rendered into the output
+  so the number is auditable.
+
+### Deliberate design notes
+
+- **Excluded and opaque components stay in the coverage denominator** (spec
+  §5.4). syft catalogues the lockfile itself as `type: file`; it is marked
+  `excluded` rather than dropped, so it cannot be used to quietly improve a
+  percentage.
+- **The SPDX document root is not a component.** `SPDXRef-DocumentRoot-…`
+  describes the scanned directory; it would otherwise appear in the report as a
+  dependency called `/src`.
+- **No field count appears anywhere in code.** `fields_from_profile` is the only
+  path into scoring, so a CERT-In revision is a data change (invariant 2).
+
+### Known gaps in Phase 8
+
+- **`monorepo-multiroot` has no expected/ golden** — its raw artifacts were not
+  regenerated (see the Phase 7 debt). Its golden test skips rather than fails.
+- **`trivy-fs` and `dependency-check` have no committed artifacts**, so the
+  normalizer's handling of their formats is exercised by unit tests but not by
+  the corpus.
+- **Coverage sits near 12%** across the fixtures. That is honest, not a bug: the
+  canonical model currently populates name, version, purl, licences, hashes,
+  scope and author. The remaining CERT-In fields are not collected by any engine
+  we run, and `not-provided` correctly scores zero for completeness.
+- **The corpus is four fixtures, not fifteen.** The remaining eleven from
+  `09-GOLDEN-CORPUS.md` are not built.
+- **No database writes yet.** The pipeline returns the canonical model; the
+  `COPY` bulk-insert and the `renormalize` command are not implemented.
+- **VEX is not applied.** It joins after dedup and never mutates a finding
+  (spec §2.6); the table exists, the join does not.
+
+---
+
 ## Session log
+
+### 2026-08-17 (j) — Phase 8 normalizer core
+
+The normalizer runs end to end over the committed fixtures: identity, merge,
+graph, alias closure, finding dedup, both coverage numbers, provenance. 151 unit
+tests plus a 43-test golden corpus, all offline — they replay pinned raw
+artifacts and run no scanners.
+
+The fixtures earned their keep immediately. `golang-incompatible` exposed the
+same Go module being counted twice because one engine writes `v24.0.5` and
+another `24.0.5`, which doubled every finding on it. `npm-simple` exposed
+findings displaying GHSA ids when the CVE was already known.
+
+The most instructive bug was neither: a cluster-id lookup that misses on case
+does not fail, it mints a new id and orphans the stored one — the ADR-0005
+durability failure arriving through the back door.
+
+**Next session:** finish Phase 8 — the remaining eleven golden fixtures, the
+`COPY` bulk insert, `renormalize` into `normalization_version + 1`, and the VEX
+join. Then Phase 9 (reports). Note the Phase 7 debt: `monorepo-multiroot` and
+`trivy-fs` still need their raw artifacts regenerated, which needs Docker.
+
+### 2026-08-17 (i) — Phase 7 implemented
+
+Seven SBOM adapters, a provisioned-database layer, 74 tests. Five engines
+exercised against all five fixtures; grype and osv-scanner now return **real
+findings with alias edges**, which is what Phase 8's union-find needs.
+
+Every defect found this phase had one shape: **an engine reporting exit 0, valid
+JSON and zero findings because it had not checked anything.** The worst was
+`osv-scanner --offline-vulnerabilities` — the flag documented for exactly this
+purpose — silently loading no database while a full cache sat mounted.
+
+The rule that came out of it is structural rather than a classification tweak: a
+vulnerability engine runs only against a database we provisioned and stamped,
+checked before the container starts. An empty result cannot be interpreted after
+the fact, so the run is refused instead.
+
+**Next session:** Phase 8 (`docs/phases/PHASE-08-normalizer.md`) — the normalizer
+and golden corpus, the largest phase in the plan. Its inputs are
+`fixtures/*/raw/*.json`, already committed. Note that alias edges come from
+osv-scanner, and that the cluster id must be a durable surrogate row, never
+derived from its members.
 
 ### 2026-08-17 (h) — Phase 6 implemented
 

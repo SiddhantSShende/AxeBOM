@@ -1,0 +1,2006 @@
+{
+  "results": [
+    {
+      "source": {
+        "path": "/src/pom.xml",
+        "type": "lockfile"
+      },
+      "packages": [
+        {
+          "package": {
+            "name": "com.fasterxml.jackson.core:jackson-databind",
+            "version": "2.15.2",
+            "ecosystem": "Maven"
+          },
+          "groups": [
+            {
+              "ids": [
+                "GHSA-3pjw-73gf-8qr5"
+              ],
+              "aliases": [
+                "CVE-2026-59888",
+                "GHSA-3pjw-73gf-8qr5"
+              ],
+              "max_severity": "6.5"
+            },
+            {
+              "ids": [
+                "GHSA-5jmj-h7xm-6q6v"
+              ],
+              "aliases": [
+                "CVE-2026-54515",
+                "GHSA-5jmj-h7xm-6q6v"
+              ],
+              "max_severity": "5.3"
+            },
+            {
+              "ids": [
+                "GHSA-hgj6-7826-r7m5"
+              ],
+              "aliases": [
+                "CVE-2026-54514",
+                "GHSA-hgj6-7826-r7m5"
+              ],
+              "max_severity": "5.3"
+            },
+            {
+              "ids": [
+                "GHSA-j3rv-43j4-c7qm"
+              ],
+              "aliases": [
+                "CVE-2026-54512",
+                "GHSA-j3rv-43j4-c7qm"
+              ],
+              "max_severity": "8.1"
+            },
+            {
+              "ids": [
+                "GHSA-rmj7-2vxq-3g9f"
+              ],
+              "aliases": [
+                "CVE-2026-54513",
+                "GHSA-rmj7-2vxq-3g9f"
+              ],
+              "max_severity": "8.1"
+            }
+          ],
+          "vulnerabilities": [
+            {
+              "affected": [
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/07/GHSA-3pjw-73gf-8qr5/GHSA-3pjw-73gf-8qr5.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "com.fasterxml.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "2.15.0"
+                        },
+                        {
+                          "fixed": "2.18.8"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "2.15.0",
+                    "2.15.1",
+                    "2.15.2",
+                    "2.15.3",
+                    "2.15.4",
+                    "2.16.0",
+                    "2.16.0-rc1",
+                    "2.16.1",
+                    "2.16.2",
+                    "2.17.0",
+                    "2.17.0-rc1",
+                    "2.17.1",
+                    "2.17.2",
+                    "2.17.3",
+                    "2.18.0",
+                    "2.18.0-rc1",
+                    "2.18.1",
+                    "2.18.2",
+                    "2.18.3",
+                    "2.18.4",
+                    "2.18.5",
+                    "2.18.6",
+                    "2.18.7"
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/07/GHSA-3pjw-73gf-8qr5/GHSA-3pjw-73gf-8qr5.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "com.fasterxml.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "2.19.0"
+                        },
+                        {
+                          "fixed": "2.21.4"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "2.19.0",
+                    "2.19.1",
+                    "2.19.2",
+                    "2.19.3",
+                    "2.19.4",
+                    "2.20.0",
+                    "2.20.0-rc1",
+                    "2.20.1",
+                    "2.20.2",
+                    "2.21.0",
+                    "2.21.1",
+                    "2.21.2",
+                    "2.21.3"
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/07/GHSA-3pjw-73gf-8qr5/GHSA-3pjw-73gf-8qr5.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "tools.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/tools.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "3.0.0"
+                        },
+                        {
+                          "fixed": "3.1.4"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "3.0.0",
+                    "3.0.1",
+                    "3.0.2",
+                    "3.0.3",
+                    "3.0.4",
+                    "3.1.0",
+                    "3.1.0-rc1",
+                    "3.1.1",
+                    "3.1.2",
+                    "3.1.3"
+                  ]
+                }
+              ],
+              "aliases": [
+                "CVE-2026-59888"
+              ],
+              "database_specific": {
+                "cwe_ids": [
+                  "CWE-915"
+                ],
+                "github_reviewed": true,
+                "github_reviewed_at": "2026-07-21T19:33:06Z",
+                "nvd_published_at": "2026-07-14T17:17:15Z",
+                "severity": "MODERATE"
+              },
+              "details": "## Summary\nFor Java Records, `POJOPropertiesCollector._removeUnwantedIgnorals()` records a `@JsonIgnore`-annotated component under its original implicit name before `_renameUsing()` applies the `PropertyNamingStrategy`. After the rename, `_ignoredPropertyNames` still holds only the pre-rename name, so `_ignorableProps` is built from the stale key. The renamed JSON key passes `IgnorePropertiesUtil.shouldIgnore()` and is assigned to the Record's constructor parameter, defeating the `@JsonIgnore`.\n\n## Impact\nA Record using a naming strategy that relies on `@JsonIgnore` to keep an internal/privileged component out of deserialization can have that component set from the wire via its renamed key (e.g. a role/flag controlled by an untrusted client).\n\n## Affected / Patched (verified via `git tag --contains`)\n- 2.15-2.18 line: `\u003e= 2.15.0, \u003c 2.18.8` -\u003e fixed in **2.18.8** (backport `c7c6783`)\n- 2.19-2.21 line: `\u003e= 2.19.0, \u003c 2.21.4` -\u003e fixed in **2.21.4**\n- 3.x line: `\u003e= 3.0.0, \u003c 3.1.4` -\u003e fixed in **3.1.4** (#5974, `baa2cdf`)\n\n## Severity / CWE\nMaintainer: minor. Reporter: Moderate. CWE-915; related CWE-345.\n\n## Credits\nOmkhar Arasaratnam (@omkhar) - finder.",
+              "id": "GHSA-3pjw-73gf-8qr5",
+              "modified": "2026-07-25T03:29:37.657238077Z",
+              "published": "2026-07-21T19:33:06Z",
+              "references": [
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-3pjw-73gf-8qr5"
+                },
+                {
+                  "type": "ADVISORY",
+                  "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-59888"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/pull/5974"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/commit/baa2cdf5ca2b2717fbb88d91955d69d8651df3e4"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/commit/c7c678360624da5bc7eed2152789fa522880db9d"
+                },
+                {
+                  "type": "PACKAGE",
+                  "url": "https://github.com/FasterXML/jackson-databind"
+                }
+              ],
+              "related": [
+                "CGA-26p9-w832-5q9c"
+              ],
+              "schema_version": "1.7.5",
+              "severity": [
+                {
+                  "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N",
+                  "type": "CVSS_V3"
+                }
+              ],
+              "summary": "jackson-databind: @JsonIgnore on a Record property is bypassed with a PropertyNamingStrategy"
+            },
+            {
+              "affected": [
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/06/GHSA-5jmj-h7xm-6q6v/GHSA-5jmj-h7xm-6q6v.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "com.fasterxml.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "3.1.0"
+                        },
+                        {
+                          "fixed": "3.1.4"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/06/GHSA-5jmj-h7xm-6q6v/GHSA-5jmj-h7xm-6q6v.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "tools.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/tools.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "3.1.0"
+                        },
+                        {
+                          "fixed": "3.1.4"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "3.1.0",
+                    "3.1.1",
+                    "3.1.2",
+                    "3.1.3"
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/06/GHSA-5jmj-h7xm-6q6v/GHSA-5jmj-h7xm-6q6v.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "com.fasterxml.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "2.8.0"
+                        },
+                        {
+                          "fixed": "2.18.9"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "2.10.0",
+                    "2.10.0.pr1",
+                    "2.10.0.pr2",
+                    "2.10.0.pr3",
+                    "2.10.1",
+                    "2.10.2",
+                    "2.10.3",
+                    "2.10.4",
+                    "2.10.5",
+                    "2.10.5.1",
+                    "2.11.0",
+                    "2.11.0.rc1",
+                    "2.11.1",
+                    "2.11.2",
+                    "2.11.3",
+                    "2.11.4",
+                    "2.12.0",
+                    "2.12.0-rc1",
+                    "2.12.0-rc2",
+                    "2.12.1",
+                    "2.12.2",
+                    "2.12.3",
+                    "2.12.4",
+                    "2.12.5",
+                    "2.12.6",
+                    "2.12.6.1",
+                    "2.12.7",
+                    "2.12.7.1",
+                    "2.12.7.2",
+                    "2.13.0",
+                    "2.13.0-rc1",
+                    "2.13.0-rc2",
+                    "2.13.1",
+                    "2.13.2",
+                    "2.13.2.1",
+                    "2.13.2.2",
+                    "2.13.3",
+                    "2.13.4",
+                    "2.13.4.1",
+                    "2.13.4.2",
+                    "2.13.5",
+                    "2.14.0",
+                    "2.14.0-rc1",
+                    "2.14.0-rc2",
+                    "2.14.0-rc3",
+                    "2.14.1",
+                    "2.14.2",
+                    "2.14.3",
+                    "2.15.0",
+                    "2.15.0-rc1",
+                    "2.15.0-rc2",
+                    "2.15.0-rc3",
+                    "2.15.1",
+                    "2.15.2",
+                    "2.15.3",
+                    "2.15.4",
+                    "2.16.0",
+                    "2.16.0-rc1",
+                    "2.16.1",
+                    "2.16.2",
+                    "2.17.0",
+                    "2.17.0-rc1",
+                    "2.17.1",
+                    "2.17.2",
+                    "2.17.3",
+                    "2.18.0",
+                    "2.18.0-rc1",
+                    "2.18.1",
+                    "2.18.2",
+                    "2.18.3",
+                    "2.18.4",
+                    "2.18.5",
+                    "2.18.6",
+                    "2.18.7",
+                    "2.18.8",
+                    "2.8.0",
+                    "2.8.1",
+                    "2.8.10",
+                    "2.8.11",
+                    "2.8.11.1",
+                    "2.8.11.2",
+                    "2.8.11.3",
+                    "2.8.11.4",
+                    "2.8.11.5",
+                    "2.8.11.6",
+                    "2.8.2",
+                    "2.8.3",
+                    "2.8.4",
+                    "2.8.5",
+                    "2.8.6",
+                    "2.8.7",
+                    "2.8.8",
+                    "2.8.8.1",
+                    "2.8.9",
+                    "2.9.0",
+                    "2.9.0.pr1",
+                    "2.9.0.pr2",
+                    "2.9.0.pr3",
+                    "2.9.0.pr4",
+                    "2.9.1",
+                    "2.9.10",
+                    "2.9.10.1",
+                    "2.9.10.2",
+                    "2.9.10.3",
+                    "2.9.10.4",
+                    "2.9.10.5",
+                    "2.9.10.6",
+                    "2.9.10.7",
+                    "2.9.10.8",
+                    "2.9.2",
+                    "2.9.3",
+                    "2.9.4",
+                    "2.9.5",
+                    "2.9.6",
+                    "2.9.7",
+                    "2.9.8",
+                    "2.9.9",
+                    "2.9.9.1",
+                    "2.9.9.2",
+                    "2.9.9.3"
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/06/GHSA-5jmj-h7xm-6q6v/GHSA-5jmj-h7xm-6q6v.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "com.fasterxml.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "2.19.0"
+                        },
+                        {
+                          "fixed": "2.21.5"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "2.19.0",
+                    "2.19.1",
+                    "2.19.2",
+                    "2.19.3",
+                    "2.19.4",
+                    "2.20.0",
+                    "2.20.0-rc1",
+                    "2.20.1",
+                    "2.20.2",
+                    "2.21.0",
+                    "2.21.1",
+                    "2.21.2",
+                    "2.21.3",
+                    "2.21.4"
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/06/GHSA-5jmj-h7xm-6q6v/GHSA-5jmj-h7xm-6q6v.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "com.fasterxml.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "2.22.0"
+                        },
+                        {
+                          "fixed": "2.22.1"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "2.22.0"
+                  ]
+                }
+              ],
+              "aliases": [
+                "CVE-2026-54515"
+              ],
+              "database_specific": {
+                "cwe_ids": [
+                  "CWE-915"
+                ],
+                "github_reviewed": true,
+                "github_reviewed_at": "2026-06-23T21:23:58Z",
+                "nvd_published_at": "2026-06-23T21:17:02Z",
+                "severity": "MODERATE"
+              },
+              "details": "## Summary\nIn `BeanDeserializerBase.createContextual()`, per-property `@JsonIgnoreProperties` exclusions are applied by `_handleByNameInclusion()`, producing a `contextual` deserializer whose `BeanPropertyMap` has the ignored properties removed. The subsequent per-property case-insensitivity block (triggered by `@JsonFormat(ACCEPT_CASE_INSENSITIVE_PROPERTIES)`) rebuilds from `this._beanProperties` (the original, unfiltered map) instead of `contextual._beanProperties`, then overwrites the filtered map â€” restoring every property `_handleByNameInclusion` had just removed. The ignored property becomes writable again.\n\n## Impact\nAn application that both enables case-insensitive matching and relies on per-property `@JsonIgnoreProperties` to keep a field unwritable can have that field set from untrusted JSON (mass-assignment-style write).\n\n## Affected / Patched\nWill be fixed in 2.18.9, 2.21.5, 2.22.1 and 3.1.4.\n\n## Severity / CWE\nMaintainer: minor. Reporter: Moderate. CWE-915.\n\n## Upstream fix\nFasterXML/jackson-databind#5962 (PR #5964, `0e1b0b2`), milestone 3.1.4. Released 2026-06-04.",
+              "id": "GHSA-5jmj-h7xm-6q6v",
+              "modified": "2026-07-16T21:30:21.943601698Z",
+              "published": "2026-06-23T21:23:58Z",
+              "references": [
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-5jmj-h7xm-6q6v"
+                },
+                {
+                  "type": "ADVISORY",
+                  "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-54515"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/issues/5962"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/issues/5964"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/commit/0e1b0b211f7a53baa62ba2f4c9bd006c7bf4d5fa"
+                },
+                {
+                  "type": "PACKAGE",
+                  "url": "https://github.com/FasterXML/jackson-databind"
+                }
+              ],
+              "related": [
+                "CGA-68jj-7999-6x26"
+              ],
+              "schema_version": "1.7.5",
+              "severity": [
+                {
+                  "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N",
+                  "type": "CVSS_V3"
+                }
+              ],
+              "summary": "jackson-databind has case-insensitive deserialization bypasses per-property @JsonIgnoreProperties"
+            },
+            {
+              "affected": [
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/06/GHSA-hgj6-7826-r7m5/GHSA-hgj6-7826-r7m5.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "com.fasterxml.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "2.0.0"
+                        },
+                        {
+                          "fixed": "2.18.8"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "2.0.0",
+                    "2.0.1",
+                    "2.0.2",
+                    "2.0.4",
+                    "2.0.5",
+                    "2.0.6",
+                    "2.1.0",
+                    "2.1.1",
+                    "2.1.2",
+                    "2.1.3",
+                    "2.1.4",
+                    "2.1.5",
+                    "2.10.0",
+                    "2.10.0.pr1",
+                    "2.10.0.pr2",
+                    "2.10.0.pr3",
+                    "2.10.1",
+                    "2.10.2",
+                    "2.10.3",
+                    "2.10.4",
+                    "2.10.5",
+                    "2.10.5.1",
+                    "2.11.0",
+                    "2.11.0.rc1",
+                    "2.11.1",
+                    "2.11.2",
+                    "2.11.3",
+                    "2.11.4",
+                    "2.12.0",
+                    "2.12.0-rc1",
+                    "2.12.0-rc2",
+                    "2.12.1",
+                    "2.12.2",
+                    "2.12.3",
+                    "2.12.4",
+                    "2.12.5",
+                    "2.12.6",
+                    "2.12.6.1",
+                    "2.12.7",
+                    "2.12.7.1",
+                    "2.12.7.2",
+                    "2.13.0",
+                    "2.13.0-rc1",
+                    "2.13.0-rc2",
+                    "2.13.1",
+                    "2.13.2",
+                    "2.13.2.1",
+                    "2.13.2.2",
+                    "2.13.3",
+                    "2.13.4",
+                    "2.13.4.1",
+                    "2.13.4.2",
+                    "2.13.5",
+                    "2.14.0",
+                    "2.14.0-rc1",
+                    "2.14.0-rc2",
+                    "2.14.0-rc3",
+                    "2.14.1",
+                    "2.14.2",
+                    "2.14.3",
+                    "2.15.0",
+                    "2.15.0-rc1",
+                    "2.15.0-rc2",
+                    "2.15.0-rc3",
+                    "2.15.1",
+                    "2.15.2",
+                    "2.15.3",
+                    "2.15.4",
+                    "2.16.0",
+                    "2.16.0-rc1",
+                    "2.16.1",
+                    "2.16.2",
+                    "2.17.0",
+                    "2.17.0-rc1",
+                    "2.17.1",
+                    "2.17.2",
+                    "2.17.3",
+                    "2.18.0",
+                    "2.18.0-rc1",
+                    "2.18.1",
+                    "2.18.2",
+                    "2.18.3",
+                    "2.18.4",
+                    "2.18.5",
+                    "2.18.6",
+                    "2.18.7",
+                    "2.2.0",
+                    "2.2.0-rc1",
+                    "2.2.1",
+                    "2.2.2",
+                    "2.2.3",
+                    "2.2.4",
+                    "2.3.0",
+                    "2.3.0-rc1",
+                    "2.3.1",
+                    "2.3.2",
+                    "2.3.3",
+                    "2.3.4",
+                    "2.3.5",
+                    "2.4.0",
+                    "2.4.0-rc1",
+                    "2.4.0-rc2",
+                    "2.4.0-rc3",
+                    "2.4.1",
+                    "2.4.1.1",
+                    "2.4.1.2",
+                    "2.4.1.3",
+                    "2.4.2",
+                    "2.4.3",
+                    "2.4.4",
+                    "2.4.5",
+                    "2.4.5.1",
+                    "2.4.6",
+                    "2.4.6.1",
+                    "2.5.0",
+                    "2.5.0-rc1",
+                    "2.5.1",
+                    "2.5.2",
+                    "2.5.3",
+                    "2.5.4",
+                    "2.5.5",
+                    "2.6.0",
+                    "2.6.0-rc1",
+                    "2.6.0-rc2",
+                    "2.6.0-rc3",
+                    "2.6.0-rc4",
+                    "2.6.1",
+                    "2.6.2",
+                    "2.6.3",
+                    "2.6.4",
+                    "2.6.5",
+                    "2.6.6",
+                    "2.6.7",
+                    "2.6.7.1",
+                    "2.6.7.2",
+                    "2.6.7.3",
+                    "2.6.7.4",
+                    "2.6.7.5",
+                    "2.7.0",
+                    "2.7.0-rc1",
+                    "2.7.0-rc2",
+                    "2.7.0-rc3",
+                    "2.7.1",
+                    "2.7.1-1",
+                    "2.7.2",
+                    "2.7.3",
+                    "2.7.4",
+                    "2.7.5",
+                    "2.7.6",
+                    "2.7.7",
+                    "2.7.8",
+                    "2.7.9",
+                    "2.7.9.1",
+                    "2.7.9.2",
+                    "2.7.9.3",
+                    "2.7.9.4",
+                    "2.7.9.5",
+                    "2.7.9.6",
+                    "2.7.9.7",
+                    "2.8.0",
+                    "2.8.0.rc1",
+                    "2.8.0.rc2",
+                    "2.8.1",
+                    "2.8.10",
+                    "2.8.11",
+                    "2.8.11.1",
+                    "2.8.11.2",
+                    "2.8.11.3",
+                    "2.8.11.4",
+                    "2.8.11.5",
+                    "2.8.11.6",
+                    "2.8.2",
+                    "2.8.3",
+                    "2.8.4",
+                    "2.8.5",
+                    "2.8.6",
+                    "2.8.7",
+                    "2.8.8",
+                    "2.8.8.1",
+                    "2.8.9",
+                    "2.9.0",
+                    "2.9.0.pr1",
+                    "2.9.0.pr2",
+                    "2.9.0.pr3",
+                    "2.9.0.pr4",
+                    "2.9.1",
+                    "2.9.10",
+                    "2.9.10.1",
+                    "2.9.10.2",
+                    "2.9.10.3",
+                    "2.9.10.4",
+                    "2.9.10.5",
+                    "2.9.10.6",
+                    "2.9.10.7",
+                    "2.9.10.8",
+                    "2.9.2",
+                    "2.9.3",
+                    "2.9.4",
+                    "2.9.5",
+                    "2.9.6",
+                    "2.9.7",
+                    "2.9.8",
+                    "2.9.9",
+                    "2.9.9.1",
+                    "2.9.9.2",
+                    "2.9.9.3"
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/06/GHSA-hgj6-7826-r7m5/GHSA-hgj6-7826-r7m5.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "com.fasterxml.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "2.19.0"
+                        },
+                        {
+                          "fixed": "2.21.4"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "2.19.0",
+                    "2.19.1",
+                    "2.19.2",
+                    "2.19.3",
+                    "2.19.4",
+                    "2.20.0",
+                    "2.20.0-rc1",
+                    "2.20.1",
+                    "2.20.2",
+                    "2.21.0",
+                    "2.21.1",
+                    "2.21.2",
+                    "2.21.3"
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/06/GHSA-hgj6-7826-r7m5/GHSA-hgj6-7826-r7m5.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "com.fasterxml.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "3.0.0"
+                        },
+                        {
+                          "fixed": "3.1.4"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/06/GHSA-hgj6-7826-r7m5/GHSA-hgj6-7826-r7m5.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "tools.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/tools.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "2.19.0"
+                        },
+                        {
+                          "fixed": "2.21.4"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/06/GHSA-hgj6-7826-r7m5/GHSA-hgj6-7826-r7m5.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "tools.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/tools.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "3.0.0"
+                        },
+                        {
+                          "fixed": "3.1.4"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "3.0.0",
+                    "3.0.1",
+                    "3.0.2",
+                    "3.0.3",
+                    "3.0.4",
+                    "3.1.0",
+                    "3.1.0-rc1",
+                    "3.1.1",
+                    "3.1.2",
+                    "3.1.3"
+                  ]
+                }
+              ],
+              "aliases": [
+                "CVE-2026-54514"
+              ],
+              "database_specific": {
+                "cwe_ids": [
+                  "CWE-918"
+                ],
+                "github_reviewed": true,
+                "github_reviewed_at": "2026-06-23T21:22:54Z",
+                "nvd_published_at": "2026-06-23T21:17:02Z",
+                "severity": "MODERATE"
+              },
+              "details": "## Summary\n`JDKFromStringDeserializer` constructed `InetSocketAddress` with `new InetSocketAddress(host, port)`, which performs eager DNS name resolution for hostname inputs at deserialization time. An application that binds untrusted JSON into a type containing an `InetSocketAddress` field issues an attacker-chosen DNS query during `readValue`, before any application-level validation or connect logic. The fix uses `InetSocketAddress.createUnresolved(host, port)`, deferring DNS to an explicit connect.\n\n## Impact\nAn attacker controlling JSON deserialized into an `InetSocketAddress`-bearing type can force outbound DNS lookups for attacker-chosen hostnames at deserialization time (SSRF / DNS-based out-of-band interaction / internal-resolver probing), purely from binding.\n\n## Affected / Patched (verified via `git tag --contains` on `1f5a103`)\n- 2.18 line: `\u003e= 2.18.0, \u003c 2.18.8` -\u003e fixed in **2.18.8**\n- 2.19-2.21 line: `\u003e= 2.19.0, \u003c 2.21.4` -\u003e fixed in **2.21.4**\n- 3.x line: `\u003e= 3.0.0, \u003c 3.1.4` -\u003e fixed in **3.1.4**\n\n## Severity / CWE\nMaintainer: minor. Reporter: LOW. CWE-918 (SSRF).\n\n## Upstream fix\nFasterXML/jackson-databind#5951 (\"Improve InetSocketAddress deserialization\"). Released 2026-06-04 in 2.18.8 / 2.21.4 / 3.1.4.\n\n## Credits\nOmkhar Arasaratnam (@omkhar) - finder.",
+              "id": "GHSA-hgj6-7826-r7m5",
+              "modified": "2026-07-20T21:30:31.809711002Z",
+              "published": "2026-06-23T21:22:54Z",
+              "references": [
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-hgj6-7826-r7m5"
+                },
+                {
+                  "type": "ADVISORY",
+                  "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-54514"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/pull/5951"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/commit/1f5a1037b1e9e05920e755cb35f198bcd46667e4"
+                },
+                {
+                  "type": "PACKAGE",
+                  "url": "https://github.com/FasterXML/jackson-databind"
+                }
+              ],
+              "related": [
+                "CGA-4f5q-c77q-qjj3"
+              ],
+              "schema_version": "1.7.5",
+              "severity": [
+                {
+                  "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+                  "type": "CVSS_V3"
+                }
+              ],
+              "summary": "jackson-databind: InetSocketAddress deserialization triggers eager DNS resolution (SSRF)"
+            },
+            {
+              "affected": [
+                {
+                  "database_specific": {
+                    "last_known_affected_version_range": "\u003c= 2.18.7",
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/06/GHSA-j3rv-43j4-c7qm/GHSA-j3rv-43j4-c7qm.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "com.fasterxml.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "2.10.0"
+                        },
+                        {
+                          "fixed": "2.18.8"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "2.10.0",
+                    "2.10.0.pr1",
+                    "2.10.0.pr2",
+                    "2.10.0.pr3",
+                    "2.10.1",
+                    "2.10.2",
+                    "2.10.3",
+                    "2.10.4",
+                    "2.10.5",
+                    "2.10.5.1",
+                    "2.11.0",
+                    "2.11.0.rc1",
+                    "2.11.1",
+                    "2.11.2",
+                    "2.11.3",
+                    "2.11.4",
+                    "2.12.0",
+                    "2.12.0-rc1",
+                    "2.12.0-rc2",
+                    "2.12.1",
+                    "2.12.2",
+                    "2.12.3",
+                    "2.12.4",
+                    "2.12.5",
+                    "2.12.6",
+                    "2.12.6.1",
+                    "2.12.7",
+                    "2.12.7.1",
+                    "2.12.7.2",
+                    "2.13.0",
+                    "2.13.0-rc1",
+                    "2.13.0-rc2",
+                    "2.13.1",
+                    "2.13.2",
+                    "2.13.2.1",
+                    "2.13.2.2",
+                    "2.13.3",
+                    "2.13.4",
+                    "2.13.4.1",
+                    "2.13.4.2",
+                    "2.13.5",
+                    "2.14.0",
+                    "2.14.0-rc1",
+                    "2.14.0-rc2",
+                    "2.14.0-rc3",
+                    "2.14.1",
+                    "2.14.2",
+                    "2.14.3",
+                    "2.15.0",
+                    "2.15.0-rc1",
+                    "2.15.0-rc2",
+                    "2.15.0-rc3",
+                    "2.15.1",
+                    "2.15.2",
+                    "2.15.3",
+                    "2.15.4",
+                    "2.16.0",
+                    "2.16.0-rc1",
+                    "2.16.1",
+                    "2.16.2",
+                    "2.17.0",
+                    "2.17.0-rc1",
+                    "2.17.1",
+                    "2.17.2",
+                    "2.17.3",
+                    "2.18.0",
+                    "2.18.0-rc1",
+                    "2.18.1",
+                    "2.18.2",
+                    "2.18.3",
+                    "2.18.4",
+                    "2.18.5",
+                    "2.18.6",
+                    "2.18.7"
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "last_known_affected_version_range": "\u003c= 3.1.3",
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/06/GHSA-j3rv-43j4-c7qm/GHSA-j3rv-43j4-c7qm.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "com.fasterxml.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "3.0.0"
+                        },
+                        {
+                          "fixed": "3.1.4"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "last_known_affected_version_range": "\u003c= 2.21.3",
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/06/GHSA-j3rv-43j4-c7qm/GHSA-j3rv-43j4-c7qm.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "com.fasterxml.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "2.19.0"
+                        },
+                        {
+                          "fixed": "2.21.4"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "2.19.0",
+                    "2.19.1",
+                    "2.19.2",
+                    "2.19.3",
+                    "2.19.4",
+                    "2.20.0",
+                    "2.20.0-rc1",
+                    "2.20.1",
+                    "2.20.2",
+                    "2.21.0",
+                    "2.21.1",
+                    "2.21.2",
+                    "2.21.3"
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "last_known_affected_version_range": "\u003c= 3.1.3",
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/06/GHSA-j3rv-43j4-c7qm/GHSA-j3rv-43j4-c7qm.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "tools.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/tools.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "3.0.0"
+                        },
+                        {
+                          "fixed": "3.1.4"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "3.0.0",
+                    "3.0.1",
+                    "3.0.2",
+                    "3.0.3",
+                    "3.0.4",
+                    "3.1.0",
+                    "3.1.0-rc1",
+                    "3.1.1",
+                    "3.1.2",
+                    "3.1.3"
+                  ]
+                }
+              ],
+              "aliases": [
+                "CVE-2026-54512"
+              ],
+              "database_specific": {
+                "cwe_ids": [
+                  "CWE-184",
+                  "CWE-502"
+                ],
+                "github_reviewed": true,
+                "github_reviewed_at": "2026-06-23T21:21:38Z",
+                "nvd_published_at": "2026-06-23T21:17:02Z",
+                "severity": "HIGH"
+              },
+              "details": "`jackson-databind`'s `PolymorphicTypeValidator` (PTV) is the primary safety mechanism guarding polymorphic deserialization. When polymorphic typing is enabled and a type identifier contains generic parameters (i.e. the type ID string contains `\u003c`), `DatabindContext._resolveAndValidateGeneric()` validates **only the raw container class name** (the substring before `\u003c`) against the configured PTV.\n\nIf the container type is approved, the method parses the full canonical type string via `TypeFactory.constructFromCanonical()` and returns the fully parameterized type **without ever validating the nested type arguments** against the PTV. The nested type arguments are then resolved, instantiated, and populated as beans during deserialization.\n\nAn attacker who controls the type ID can therefore place a denied class as a generic type parameter of an allowed container â€” for example `java.util.ArrayList\u003ccom.evil.Gadget\u003e` when only `java.util.ArrayList` is allow-listed. The container passes the PTV check; `com.evil.Gadget` is loaded via `Class.forName(name, true, loader)`, instantiated, and its properties are set from attacker-controlled JSON. This completely bypasses an explicitly configured PTV allow-list.\n\nThis is the same vulnerability class responsible for the historical sequence of jackson-databind deserialization CVEs; here it manifests as a validator bypass rather than a missing deny-list entry.\n\n\n## Impact\n\n- **Bypass of the PTV allow-list**, including the recommended `BasicPolymorphicTypeValidator` configured with name-prefix allow rules.\n- **Arbitrary class instantiation** of any type assignable to the container's element/parameter position, with attacker-controlled property values (setter/field injection).\n- **Potential unauthenticated remote code execution** when a class with exploitable side effects (JNDI lookup, JDBC/connection-pool gadgets,`TemplatesImpl`-style loaders, etc.) is present on the classpath.\n\nApplications that accept untrusted JSON and rely on a configured PTV â€” the documented, security-conscious configuration â€” are affected.\n\n\n## Proof of Concept\n\nConfiguration restricting polymorphic deserialization to a single safe container:\n\n```java\nBasicPolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()\n        .allowIfSubType(\"java.util.ArrayList\")\n        .build();\n\nObjectMapper mapper = JsonMapper.builder()\n        .polymorphicTypeValidator(ptv)\n        .build();\n```\n\nMalicious payload (`Wrapper.value` is `Object` with `@JsonTypeInfo(use = Id.CLASS, include = As.WRAPPER_ARRAY)`):\n\n```json\n{\"value\":[\"java.util.ArrayList\u003ccom.evil.EvilGadget\u003e\",[{\"cmd\":\"calc.exe\"}]]}\n```\n\nOn vulnerable versions, `com.evil.EvilGadget` is instantiated and its `cmd` property is set, despite only `java.util.ArrayList` being allow-listed. On `2.18.8` / `2.21.4` / `3.1.4` the deserialization throws `InvalidTypeIdException` before instantiation.\n\n**Variant payloads** (all bypass an `ArrayList`/`HashMap` allow-list):\n\n| Type ID | Smuggled type position |\n|---|---|\n| `java.util.ArrayList\u003cEvil\u003e` | list element |\n| `java.util.HashMap\u003cEvil,String\u003e` | map key |\n| `java.util.HashMap\u003cString,Evil\u003e` | map value |\n| `java.util.ArrayList\u003cjava.util.ArrayList\u003cEvil\u003e\u003e` | nested element |\n| `java.util.ArrayList\u003cEvil[]\u003e` | array element |\n\n---\n\n## Patches\n\nFixed in **2.18.8**, **2.21.4** and **3.1.4** via the changes for [FasterXML/jackson-databind#5988](https://github.com/FasterXML/jackson-databind/issues/5988), commit `434d6c511`. The fix adds recursive validation of each non-trivial type parameter (and array element types appearing as parameters) through the full PTV chain, with documented exemptions for `Object` (wildcard resolution) and `Enum` types.\n\n`PolymorphicTypeValidator` was added in 2.10.0 so vulnerability N/A for versions prior to that.",
+              "id": "GHSA-j3rv-43j4-c7qm",
+              "modified": "2026-07-20T21:30:40.174709386Z",
+              "published": "2026-06-23T21:21:38Z",
+              "references": [
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-j3rv-43j4-c7qm"
+                },
+                {
+                  "type": "ADVISORY",
+                  "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-54512"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/issues/5988"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/commit/434d6c511de7fdd9872f29157aafb6162d12d8d5"
+                },
+                {
+                  "type": "PACKAGE",
+                  "url": "https://github.com/FasterXML/jackson-databind"
+                }
+              ],
+              "related": [
+                "CGA-m9px-pc9w-g99r"
+              ],
+              "schema_version": "1.7.5",
+              "severity": [
+                {
+                  "score": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                  "type": "CVSS_V3"
+                }
+              ],
+              "summary": "jackson-databind has a PolymorphicTypeValidator bypass via generic type parameters that allows arbitrary class instantiation"
+            },
+            {
+              "affected": [
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/06/GHSA-rmj7-2vxq-3g9f/GHSA-rmj7-2vxq-3g9f.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "com.fasterxml.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "2.10.0"
+                        },
+                        {
+                          "fixed": "2.18.8"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "2.10.0",
+                    "2.10.0.pr1",
+                    "2.10.0.pr2",
+                    "2.10.0.pr3",
+                    "2.10.1",
+                    "2.10.2",
+                    "2.10.3",
+                    "2.10.4",
+                    "2.10.5",
+                    "2.10.5.1",
+                    "2.11.0",
+                    "2.11.0.rc1",
+                    "2.11.1",
+                    "2.11.2",
+                    "2.11.3",
+                    "2.11.4",
+                    "2.12.0",
+                    "2.12.0-rc1",
+                    "2.12.0-rc2",
+                    "2.12.1",
+                    "2.12.2",
+                    "2.12.3",
+                    "2.12.4",
+                    "2.12.5",
+                    "2.12.6",
+                    "2.12.6.1",
+                    "2.12.7",
+                    "2.12.7.1",
+                    "2.12.7.2",
+                    "2.13.0",
+                    "2.13.0-rc1",
+                    "2.13.0-rc2",
+                    "2.13.1",
+                    "2.13.2",
+                    "2.13.2.1",
+                    "2.13.2.2",
+                    "2.13.3",
+                    "2.13.4",
+                    "2.13.4.1",
+                    "2.13.4.2",
+                    "2.13.5",
+                    "2.14.0",
+                    "2.14.0-rc1",
+                    "2.14.0-rc2",
+                    "2.14.0-rc3",
+                    "2.14.1",
+                    "2.14.2",
+                    "2.14.3",
+                    "2.15.0",
+                    "2.15.0-rc1",
+                    "2.15.0-rc2",
+                    "2.15.0-rc3",
+                    "2.15.1",
+                    "2.15.2",
+                    "2.15.3",
+                    "2.15.4",
+                    "2.16.0",
+                    "2.16.0-rc1",
+                    "2.16.1",
+                    "2.16.2",
+                    "2.17.0",
+                    "2.17.0-rc1",
+                    "2.17.1",
+                    "2.17.2",
+                    "2.17.3",
+                    "2.18.0",
+                    "2.18.0-rc1",
+                    "2.18.1",
+                    "2.18.2",
+                    "2.18.3",
+                    "2.18.4",
+                    "2.18.5",
+                    "2.18.6",
+                    "2.18.7"
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/06/GHSA-rmj7-2vxq-3g9f/GHSA-rmj7-2vxq-3g9f.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "com.fasterxml.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "2.19.0"
+                        },
+                        {
+                          "fixed": "2.21.4"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "2.19.0",
+                    "2.19.1",
+                    "2.19.2",
+                    "2.19.3",
+                    "2.19.4",
+                    "2.20.0",
+                    "2.20.0-rc1",
+                    "2.20.1",
+                    "2.20.2",
+                    "2.21.0",
+                    "2.21.1",
+                    "2.21.2",
+                    "2.21.3"
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/06/GHSA-rmj7-2vxq-3g9f/GHSA-rmj7-2vxq-3g9f.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "com.fasterxml.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "3.0.0"
+                        },
+                        {
+                          "fixed": "3.1.4"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/06/GHSA-rmj7-2vxq-3g9f/GHSA-rmj7-2vxq-3g9f.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "tools.jackson.core:jackson-databind",
+                    "purl": "pkg:maven/tools.jackson.core/jackson-databind"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "3.0.0"
+                        },
+                        {
+                          "fixed": "3.1.4"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "3.0.0",
+                    "3.0.1",
+                    "3.0.2",
+                    "3.0.3",
+                    "3.0.4",
+                    "3.1.0",
+                    "3.1.0-rc1",
+                    "3.1.1",
+                    "3.1.2",
+                    "3.1.3"
+                  ]
+                }
+              ],
+              "aliases": [
+                "CVE-2026-54513"
+              ],
+              "database_specific": {
+                "cwe_ids": [
+                  "CWE-184"
+                ],
+                "github_reviewed": true,
+                "github_reviewed_at": "2026-06-23T21:22:15Z",
+                "nvd_published_at": "2026-06-23T21:17:02Z",
+                "severity": "HIGH"
+              },
+              "details": "## Summary\n`BasicPolymorphicTypeValidator.Builder.allowIfSubTypeIsArray()` allowlists any array type based only on `clazz.isArray()`, without validating the array's component (element) type against the configured allowlist. A PTV built with `allowIfSubTypeIsArray()` plus an explicit concrete-type allowlist therefore still permits `EvilType[]` even though `EvilType` is not allowlisted. When Jackson deserializes the elements and no per-element type IDs are present, it instantiates the component type directly with no further PTV check, bypassing the allowlist.\n\n## Impact\nApplications using `BasicPolymorphicTypeValidator` with `allowIfSubTypeIsArray()` as a safeguard get no protection for concrete array component types; an attacker controlling JSON can instantiate non-allowlisted types via an array wrapper, re-opening the gadget-instantiation risk PTV is meant to prevent.\n\n## Affected / Patched (verified via `git tag --contains`)\n- 2.18 line: `\u003e= 2.10.0, \u003c 2.18.8` -\u003e fixed in **2.18.8**\n- 2.19-2.21 line: `\u003e= 2.19.0, \u003c 2.21.4` -\u003e fixed in **2.21.4**\n- 3.x line: `\u003e= 3.0.0, \u003c 3.1.4` -\u003e fixed in **3.1.4**\n\n`PolymorphicTypeValidator` was added in 2.10.0 so vulnerability N/A for versions prior to that.\n\n## Severity / CWE\nMaintainer: significant. Reporter: HIGH. CWE-184 (Incomplete List of Disallowed Inputs); related CWE-502.\n\n## Upstream fix\nFasterXML/jackson-databind#5981; fix PR #5983 (`24529da`), 2.18 backport PR #5984 (`01d1692`). Released 2026-06-04 in 2.18.8 / 2.21.4 / 3.1.4.\n\n## Credits\nOmkhar Arasaratnam (@omkhar) - finder.",
+              "id": "GHSA-rmj7-2vxq-3g9f",
+              "modified": "2026-08-14T15:46:50.175670907Z",
+              "published": "2026-06-23T21:22:15Z",
+              "references": [
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-rmj7-2vxq-3g9f"
+                },
+                {
+                  "type": "ADVISORY",
+                  "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-54513"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/issues/5983"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/issues/5981"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/pull/5984"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/commit/24529da29fdf46ff94ca38de9ebf31cd188f5e8e"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/FasterXML/jackson-databind/commit/01d1692c8d0ed03e51a0e3c4f8a9e6908e4931e5"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-54513.json"
+                },
+                {
+                  "type": "PACKAGE",
+                  "url": "https://github.com/FasterXML/jackson-databind"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2492010"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/security/cve/CVE-2026-54513"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:54622"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:54435"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:50849"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:50848"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:50847"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:50846"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:48151"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:48095"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:44271"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:44066"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:44065"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:44064"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:44063"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:44062"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:44061"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:43400"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:43218"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:41951"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:40895"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://access.redhat.com/errata/RHSA-2026:36839"
+                }
+              ],
+              "related": [
+                "CGA-4qr5-c8qc-3ffp"
+              ],
+              "schema_version": "1.9.0",
+              "severity": [
+                {
+                  "score": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                  "type": "CVSS_V3"
+                }
+              ],
+              "summary": "jackson-databind has an array subtype allowlist bypass in BasicPolymorphicTypeValidator (allowIfSubTypeIsArray)"
+            }
+          ]
+        },
+        {
+          "package": {
+            "name": "org.apache.commons:commons-lang3",
+            "version": "3.12.0",
+            "ecosystem": "Maven"
+          },
+          "groups": [
+            {
+              "ids": [
+                "GHSA-j288-q9x7-2f5v"
+              ],
+              "aliases": [
+                "CVE-2025-48924",
+                "GHSA-j288-q9x7-2f5v"
+              ],
+              "max_severity": "6.5"
+            }
+          ],
+          "vulnerabilities": [
+            {
+              "affected": [
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2025/07/GHSA-j288-q9x7-2f5v/GHSA-j288-q9x7-2f5v.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "org.apache.commons:commons-lang3",
+                    "purl": "pkg:maven/org.apache.commons/commons-lang3"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "3.0"
+                        },
+                        {
+                          "fixed": "3.18.0"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "3.0",
+                    "3.0.1",
+                    "3.1",
+                    "3.10",
+                    "3.11",
+                    "3.12.0",
+                    "3.13.0",
+                    "3.14.0",
+                    "3.15.0",
+                    "3.16.0",
+                    "3.17.0",
+                    "3.2",
+                    "3.2.1",
+                    "3.3",
+                    "3.3.1",
+                    "3.3.2",
+                    "3.4",
+                    "3.5",
+                    "3.6",
+                    "3.7",
+                    "3.8",
+                    "3.8.1",
+                    "3.9"
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2025/07/GHSA-j288-q9x7-2f5v/GHSA-j288-q9x7-2f5v.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "commons-lang:commons-lang",
+                    "purl": "pkg:maven/commons-lang/commons-lang"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "2.0"
+                        },
+                        {
+                          "last_affected": "2.6"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "2.0",
+                    "2.1",
+                    "2.2",
+                    "2.3",
+                    "2.4",
+                    "2.5",
+                    "2.6"
+                  ]
+                }
+              ],
+              "aliases": [
+                "CVE-2025-48924"
+              ],
+              "database_specific": {
+                "cwe_ids": [
+                  "CWE-674"
+                ],
+                "github_reviewed": true,
+                "github_reviewed_at": "2025-07-12T00:48:03Z",
+                "nvd_published_at": "2025-07-11T15:15:24Z",
+                "severity": "MODERATE"
+              },
+              "details": "Uncontrolled Recursion vulnerability in Apache Commons Lang.\n\nThis issue affects Apache Commons Lang: Starting withÂ commons-lang:commons-langÂ 2.0 to 2.6, and, from org.apache.commons:commons-lang3 3.0 beforeÂ 3.18.0.\n\nThe methods ClassUtils.getClass(...) can throwÂ StackOverflowError on very long inputs. Because an Error is usually not handled by applications and libraries, a StackOverflowError couldÂ cause an application to stop.\n\nUsers are recommended to upgrade to version 3.18.0, which fixes the issue.",
+              "id": "GHSA-j288-q9x7-2f5v",
+              "modified": "2026-02-04T03:18:02.851501Z",
+              "published": "2025-07-11T15:31:37Z",
+              "references": [
+                {
+                  "type": "ADVISORY",
+                  "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-48924"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/apache/commons-lang/commit/b424803abdb2bec818e4fbcb251ce031c22aca53"
+                },
+                {
+                  "type": "PACKAGE",
+                  "url": "https://github.com/apache/commons-lang"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://lists.apache.org/thread/bgv0lpswokgol11tloxnjfzdl7yrc1g1"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://lists.debian.org/debian-lts-announce/2025/08/msg00000.html"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://lists.debian.org/debian-lts-announce/2025/08/msg00026.html"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://lists.debian.org/debian-lts-announce/2025/09/msg00032.html"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://lists.debian.org/debian-lts-announce/2025/09/msg00036.html"
+                },
+                {
+                  "type": "WEB",
+                  "url": "http://www.openwall.com/lists/oss-security/2025/07/11/1"
+                }
+              ],
+              "related": [
+                "CGA-j2mh-4wvr-f7fc"
+              ],
+              "schema_version": "1.7.3",
+              "severity": [
+                {
+                  "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N",
+                  "type": "CVSS_V3"
+                }
+              ],
+              "summary": "Apache Commons Lang is vulnerable to Uncontrolled Recursion when processing long inputs"
+            }
+          ]
+        },
+        {
+          "package": {
+            "name": "org.springframework:spring-core",
+            "version": "6.0.11",
+            "ecosystem": "Maven"
+          },
+          "groups": [
+            {
+              "ids": [
+                "GHSA-jmp9-x22r-554x"
+              ],
+              "aliases": [
+                "CVE-2025-41249",
+                "GHSA-jmp9-x22r-554x"
+              ],
+              "max_severity": "7.5"
+            }
+          ],
+          "vulnerabilities": [
+            {
+              "affected": [
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2025/09/GHSA-jmp9-x22r-554x/GHSA-jmp9-x22r-554x.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "org.springframework:spring-core",
+                    "purl": "pkg:maven/org.springframework/spring-core"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "5.3.0"
+                        },
+                        {
+                          "last_affected": "5.3.44"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "5.3.0",
+                    "5.3.1",
+                    "5.3.10",
+                    "5.3.11",
+                    "5.3.12",
+                    "5.3.13",
+                    "5.3.14",
+                    "5.3.15",
+                    "5.3.16",
+                    "5.3.17",
+                    "5.3.18",
+                    "5.3.19",
+                    "5.3.2",
+                    "5.3.20",
+                    "5.3.21",
+                    "5.3.22",
+                    "5.3.23",
+                    "5.3.24",
+                    "5.3.25",
+                    "5.3.26",
+                    "5.3.27",
+                    "5.3.28",
+                    "5.3.29",
+                    "5.3.3",
+                    "5.3.30",
+                    "5.3.31",
+                    "5.3.32",
+                    "5.3.33",
+                    "5.3.34",
+                    "5.3.35",
+                    "5.3.36",
+                    "5.3.37",
+                    "5.3.38",
+                    "5.3.39",
+                    "5.3.4",
+                    "5.3.5",
+                    "5.3.6",
+                    "5.3.7",
+                    "5.3.8",
+                    "5.3.9"
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2025/09/GHSA-jmp9-x22r-554x/GHSA-jmp9-x22r-554x.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "org.springframework:spring-core",
+                    "purl": "pkg:maven/org.springframework/spring-core"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "6.0.0"
+                        },
+                        {
+                          "last_affected": "6.1.22"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "6.0.0",
+                    "6.0.1",
+                    "6.0.10",
+                    "6.0.11",
+                    "6.0.12",
+                    "6.0.13",
+                    "6.0.14",
+                    "6.0.15",
+                    "6.0.16",
+                    "6.0.17",
+                    "6.0.18",
+                    "6.0.19",
+                    "6.0.2",
+                    "6.0.20",
+                    "6.0.21",
+                    "6.0.22",
+                    "6.0.23",
+                    "6.0.3",
+                    "6.0.4",
+                    "6.0.5",
+                    "6.0.6",
+                    "6.0.7",
+                    "6.0.8",
+                    "6.0.9",
+                    "6.1.0",
+                    "6.1.1",
+                    "6.1.10",
+                    "6.1.11",
+                    "6.1.12",
+                    "6.1.13",
+                    "6.1.14",
+                    "6.1.15",
+                    "6.1.16",
+                    "6.1.17",
+                    "6.1.18",
+                    "6.1.19",
+                    "6.1.2",
+                    "6.1.20",
+                    "6.1.21",
+                    "6.1.3",
+                    "6.1.4",
+                    "6.1.5",
+                    "6.1.6",
+                    "6.1.7",
+                    "6.1.8",
+                    "6.1.9"
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "last_known_affected_version_range": "\u003c= 6.2.10",
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2025/09/GHSA-jmp9-x22r-554x/GHSA-jmp9-x22r-554x.json"
+                  },
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "org.springframework:spring-core",
+                    "purl": "pkg:maven/org.springframework/spring-core"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "6.2.0"
+                        },
+                        {
+                          "fixed": "6.2.11"
+                        }
+                      ],
+                      "type": "ECOSYSTEM"
+                    }
+                  ],
+                  "versions": [
+                    "6.2.0",
+                    "6.2.1",
+                    "6.2.10",
+                    "6.2.2",
+                    "6.2.3",
+                    "6.2.4",
+                    "6.2.5",
+                    "6.2.6",
+                    "6.2.7",
+                    "6.2.8",
+                    "6.2.9"
+                  ]
+                }
+              ],
+              "aliases": [
+                "CVE-2025-41249"
+              ],
+              "database_specific": {
+                "cwe_ids": [
+                  "CWE-285",
+                  "CWE-863"
+                ],
+                "github_reviewed": true,
+                "github_reviewed_at": "2025-09-16T19:38:20Z",
+                "nvd_published_at": "2025-09-16T11:15:30Z",
+                "severity": "HIGH"
+              },
+              "details": "The Spring Framework annotation detection mechanism may not correctly resolve annotations on methods within type hierarchies with a parameterized super type with unbounded generics. This can be an issue if such annotations are used for authorization decisions.\n\nYour application may be affected by this if you are using Spring Security's @EnableMethodSecurityÂ feature.\n\nYou are not affected by this if you are not using @EnableMethodSecurityÂ or if you do not use security annotations on methods in generic superclasses or generic interfaces.\n\nThis CVE is published in conjunction with  CVE-2025-41248 https://spring.io/security/cve-2025-41248 .",
+              "id": "GHSA-jmp9-x22r-554x",
+              "modified": "2026-02-04T02:59:53.509459Z",
+              "published": "2025-09-16T15:32:34Z",
+              "references": [
+                {
+                  "type": "ADVISORY",
+                  "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-41249"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/spring-projects/spring-framework/issues/35342"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/spring-projects/spring-framework/commit/6d710d482a6785b069e35022e81758953afc21ff"
+                },
+                {
+                  "type": "PACKAGE",
+                  "url": "https://github.com/spring-projects/spring-framework"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/spring-projects/spring-framework/releases/tag/v6.2.11"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://spring.io/security/cve-2025-41249"
+                }
+              ],
+              "related": [
+                "CGA-jv8r-5vrc-9287"
+              ],
+              "schema_version": "1.7.3",
+              "severity": [
+                {
+                  "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+                  "type": "CVSS_V3"
+                }
+              ],
+              "summary": "Spring Framework annotation detection mechanism may result in improper authorization"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "experimental_config": {
+    "licenses": {
+      "summary": false,
+      "allowlist": null
+    }
+  }
+}

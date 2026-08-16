@@ -132,10 +132,22 @@ tasks:
       - go test ./... -race -count=1
 
   test:golden:
-    desc: "[phase 8] Normalizer golden-file diff over the fixture corpus"
+    desc: Normalizer golden-file diff over the fixture corpus
+    # ⚠ Runs NO scanners and touches no network. It replays the committed
+    # fixtures/*/raw/*.json, which is what makes normalization tests
+    # deterministic, offline and stable across upstream tool changes (ADR-0003).
+    #
+    # A failure here means the canonical output changed. That is the point:
+    # none of these changes crash anything, they just report a different number.
+    # Update a golden only with `normalize_runner --write-expected` AND a
+    # justification in the commit message.
     cmds:
-      - cmd: echo "not implemented until Phase 8 - see docs/phases/PHASE-08-normalizer.md"
-      - exit 1
+      - python -m pytest workers/sbom/test_golden.py -v -m golden
+
+  normalize:
+    desc: Normalize one fixture's stored artifacts and print the summary
+    cmds:
+      - python -m workers.sbom.normalize_runner {{.CLI_ARGS}}
 
   test:rls:
     desc: Assert every tenant-scoped table has RLS, and cross-tenant access fails
@@ -273,6 +285,23 @@ tasks:
     desc: Probe every engine and report available/unavailable with reasons
     cmds:
       - go run ./cmd/encorebom toolctl verify
+
+  osint:dbsync:
+    desc: Provision the vulnerability databases (grype, trivy, osv) — REQUIRED before any vuln scan
+    # ⚠ Without this, every DB-backed engine reports `unavailable` and NO
+    # vulnerability matching happens at all. That is deliberate (ADR-0009): an
+    # engine with no database does not fail, it reports a clean project, so the
+    # run is refused rather than allowed to produce a false all-clear.
+    #
+    # Downloads several GB and takes a few minutes. It is the one operation that
+    # runs an engine image with a network — no user code is mounted.
+    cmds:
+      - python -m workers.sbom.dbsync --all
+
+  osint:dbstatus:
+    desc: Show which vulnerability databases are provisioned, and how old they are
+    cmds:
+      - python -m workers.sbom.dbstatus
 
   osint:licenses:
     desc: Fail if a copyleft dependency would be linked into an EncoreBOM binary

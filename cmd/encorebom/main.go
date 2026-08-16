@@ -45,6 +45,7 @@ func init() {
 		{"profile", "Validate and generate from the CERT-In compliance profile", 1, runProfile},
 		{"toolctl", "Fetch, verify and probe pinned scanner artifacts", 2, runToolctl},
 		{"schema", "Generate the published envelope JSON Schemas", 6, runSchema},
+		{"sandbox", "Run a command in the scan sandbox (the bridge Python workers call)", 7, runSandbox},
 	}
 }
 
