@@ -14,11 +14,11 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/encorebom/encorebom/libs/go-shared/platform/ctxkey"
 	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"github.com/encorebom/encorebom/libs/go-shared/platform/ratelimit"
 )
 
 // RateLimitConfig configures the limiter.
@@ -71,96 +71,26 @@ var authPaths = []string{
 	"/v1/auth/invitations/accept",
 }
 
-// bucket is one token bucket.
+// Limiter is the gateway's rate-limiting POLICY over the shared token-bucket
+// core in platform/ratelimit.
 //
-// Token bucket rather than a fixed window: a fixed window lets a client spend
-// its whole quota in the last millisecond of one window and again in the first
-// of the next, which is double the intended rate at exactly the wrong moment.
-type bucket struct {
-	tokens float64
-	last   time.Time
-}
-
-// Limiter is a fixed-memory in-process rate limiter.
-//
-// In-process is a deliberate limit worth stating: with several gateway
-// replicas each enforces its own budget, so the effective limit is N times the
-// configured one. That is acceptable for abuse control and NOT sufficient for
-// quota billing. A shared Redis limiter is the Phase 16 upgrade.
+// The bucket math lives there because the report service needs it too, for its
+// one unauthenticated route. What stays here is the part that is the gateway's:
+// which budget a path falls under, and how a caller is identified.
 type Limiter struct {
-	cfg RateLimitConfig
-
-	mu      sync.Mutex
-	buckets map[string]*bucket
-
-	// lastSweep bounds memory. Without eviction, one request per forged
-	// address grows the map until the process dies — the limiter becomes the
-	// denial of service.
-	lastSweep time.Time
+	cfg     RateLimitConfig
+	buckets *ratelimit.Buckets
 }
 
 // NewLimiter builds a limiter.
 func NewLimiter(cfg RateLimitConfig) *Limiter {
 	cfg = cfg.withDefaults()
-	return &Limiter{
-		cfg:       cfg,
-		buckets:   make(map[string]*bucket),
-		lastSweep: cfg.Now(),
-	}
+	return &Limiter{cfg: cfg, buckets: ratelimit.New(cfg.Now)}
 }
-
-// sweepInterval and idleTTL bound the bucket map.
-const (
-	sweepInterval = 5 * time.Minute
-	idleTTL       = 15 * time.Minute
-)
 
 // allow reports whether a request may proceed, and how long to wait if not.
 func (l *Limiter) allow(key string, rate float64, burst int) (bool, time.Duration) {
-	now := l.cfg.Now()
-
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	if now.Sub(l.lastSweep) >= sweepInterval {
-		for k, b := range l.buckets {
-			if now.Sub(b.last) > idleTTL {
-				delete(l.buckets, k)
-			}
-		}
-		l.lastSweep = now
-	}
-
-	b, ok := l.buckets[key]
-	if !ok {
-		// A new client starts with a full bucket, so a first request is never
-		// delayed.
-		b = &bucket{tokens: float64(burst), last: now}
-		l.buckets[key] = b
-	}
-
-	// Refill for elapsed time, capped at the burst size.
-	elapsed := now.Sub(b.last).Seconds()
-	if elapsed > 0 {
-		b.tokens += elapsed * rate
-		if b.tokens > float64(burst) {
-			b.tokens = float64(burst)
-		}
-		b.last = now
-	}
-
-	if b.tokens >= 1 {
-		b.tokens--
-		return true, 0
-	}
-
-	// Seconds until one token is available. Rounded UP, because a client that
-	// retries after a rounded-down wait is immediately limited again.
-	wait := time.Duration((1 - b.tokens) / rate * float64(time.Second))
-	if wait < time.Second {
-		wait = time.Second
-	}
-	return false, wait
+	return l.buckets.Allow(key, rate, burst)
 }
 
 // RateLimit returns the middleware.

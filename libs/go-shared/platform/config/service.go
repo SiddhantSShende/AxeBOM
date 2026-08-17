@@ -38,6 +38,7 @@ type Service struct {
 	OTel     OTel
 	Auth     Auth
 	Vault    Vault
+	Report   Report
 }
 
 // Postgres carries TWO identities, and the separation is load-bearing.
@@ -126,6 +127,22 @@ type Vault struct {
 	Mount string
 }
 
+// Report configures report signing.
+//
+// ⚠ THE SIGNING KEY LIVES IN VAULT TRANSIT AND ONLY ITS NAME IS HERE. The
+// private key never reaches this process, so a memory disclosure in the
+// renderer leaks reports rather than the ability to forge every future one.
+type Report struct {
+	// SigningKey is the Vault Transit key NAME, not key material. Empty means
+	// reports are stored unsigned — degraded loudly at startup, never silently,
+	// because an unsigned report that looks signed is worse than either.
+	SigningKey string
+	// TransitMount is the transit mount point. Separate from Vault.Mount, which
+	// is the KV v2 mount: sharing one field would send signing requests to
+	// `secret/sign/...`, which 404s in a way that reads like a missing key.
+	TransitMount string
+}
+
 // Auth configures identity. Only the auth service consumes all of it; the
 // gateway needs the JWT fields to verify tokens it forwards.
 type Auth struct {
@@ -202,6 +219,13 @@ func LoadService(name string) (*Service, error) {
 		Vault: Vault{
 			Address: l.StringOr("VAULT_ADDR", "http://localhost:58200"),
 			Mount:   l.StringOr("VAULT_MOUNT", "secret"),
+		},
+		Report: Report{
+			// No default. A default key NAME would have every deployment sign
+			// with whatever happens to exist at that path — including nothing,
+			// which fails at render time rather than at startup.
+			SigningKey:   l.StringOr("REPORT_SIGNING_KEY", ""),
+			TransitMount: l.StringOr("VAULT_TRANSIT_MOUNT", "transit"),
 		},
 		Auth: Auth{
 			JWTIssuer: l.StringOr("JWT_ISSUER", "encorebom"),

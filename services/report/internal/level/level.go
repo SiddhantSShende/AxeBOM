@@ -21,25 +21,49 @@ package level
 import (
 	"fmt"
 	"sort"
+
+	"github.com/encorebom/encorebom/libs/go-shared/model"
 )
 
 // Level is a CERT-In BOM level.
 type Level string
 
+// ⚠ THESE SPELLINGS COME FROM THE COMPLIANCE PROFILE, NOT FROM THIS PACKAGE.
+//
+// `model.BOMLevels` is generated from certin-v2.0.yaml and is what the database
+// CHECK constraint on report.reports.level accepts. A second spelling here —
+// `top-level` with a hyphen, say — reads fine everywhere until the first INSERT,
+// which fails a constraint nobody was looking at. TestLevelsMatchTheProfile
+// pins them together.
 const (
 	// TopLevel is depth <= 1 from the root set.
-	TopLevel Level = "top-level"
+	TopLevel Level = "top_level"
 	// Complete is everything, including flagged orphans.
 	Complete Level = "complete"
 )
 
 // Valid reports whether a level string is one this projection implements.
 //
-// n-Level, Delivery and Transitive are defined by the guideline but not yet
-// produced; an explicit "not implemented" is better than silently rendering a
+// ⚠ IMPLEMENTED, NOT MERELY DEFINED. The guideline (§3.1) also defines n-Level,
+// Delivery and Transitive; those are known levels this build does not produce,
+// and an explicit "not implemented" is better than silently rendering a
 // Complete BOM under a label the customer chose for something narrower.
 func Valid(l Level) bool {
 	return l == TopLevel || l == Complete
+}
+
+// Known reports whether a level is one CERT-In defines at all.
+//
+// Separate from Valid on purpose: "we do not build that yet" and "that is not a
+// BOM level" are different answers, and a caller asking for `delivery` deserves
+// the first rather than being told their spelling is wrong.
+func Known(l Level) bool {
+	for _, v := range model.BOMLevels {
+		if Level(v) == l {
+			return true
+		}
+	}
+	return false
 }
 
 // Component is the subset of the canonical model this projection needs.

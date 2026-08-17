@@ -16,7 +16,7 @@ func sampleBOM() BOM {
 		ReportID:           "0199-report",
 		ProjectName:        "acme-web",
 		BOMType:            model.BOMTypeSBOM,
-		Level:              "top-level",
+		Level:              "top_level",
 		LevelNote:          "This is a Top-Level BOM: it lists 2 direct dependencies and omits 7 transitive ones.",
 		GeneratedAt:        "2026-08-17T09:14:03Z",
 		ProfileID:          model.ProfileID,

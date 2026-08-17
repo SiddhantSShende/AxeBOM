@@ -615,7 +615,7 @@ func documentTime(generatedAt string) time.Time {
 // levelTitle renders a level for a heading.
 func levelTitle(level string) string {
 	switch level {
-	case "top-level":
+	case "top_level":
 		return "Top-Level"
 	case "complete":
 		return "Complete"

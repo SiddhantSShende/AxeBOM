@@ -254,21 +254,17 @@ func TestIdleBucketsAreEvicted(t *testing.T) {
 			request("/v1/projects", "10.1."+strconv.Itoa(i/256)+"."+strconv.Itoa(i%256)+":1"))
 	}
 
-	l.mu.Lock()
-	before := len(l.buckets)
-	l.mu.Unlock()
+	before := l.buckets.Len()
 	if before < 50 {
 		t.Fatalf("expected 50 buckets, got %d", before)
 	}
 
 	// Past both the sweep interval and the idle TTL, then one more request to
 	// trigger the sweep.
-	c.advance(sweepInterval + idleTTL + time.Second)
+	c.advance(21 * time.Minute) // past ratelimit's 5m sweep + 15m idle TTL
 	h.ServeHTTP(httptest.NewRecorder(), request("/v1/projects", "10.9.9.9:1"))
 
-	l.mu.Lock()
-	after := len(l.buckets)
-	l.mu.Unlock()
+	after := l.buckets.Len()
 
 	if after >= before {
 		t.Errorf("idle buckets were not evicted: %d before, %d after", before, after)

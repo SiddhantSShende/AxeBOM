@@ -176,14 +176,21 @@ func isNoiseEndpoint(p string) bool {
 	return p == "/healthz" || p == "/readyz" || p == "/metrics"
 }
 
-// clientIP extracts the caller address.
+// TrustProxyHeaders controls whether X-Forwarded-For is honoured.
 //
-// X-Forwarded-For is only honoured when TrustProxyHeaders is set, because it is
-// client-controlled: trusting it unconditionally lets anyone forge the IP in
-// audit logs and bypass IP rate limits.
+// Off by default. The header is client-controlled: trusting it unconditionally
+// lets anyone forge the IP in audit logs and bypass IP rate limits. Turn it on
+// only where a proxy that overwrites the header is provably in front.
 var TrustProxyHeaders = false
 
-func clientIP(r *http.Request) string {
+// ClientIP extracts the caller address.
+//
+// ⚠ EXPORTED SO THERE IS ONE IMPLEMENTATION. The report service records this
+// in the share-link audit trail and rate-limits the anonymous download by it.
+// A second copy of the TrustProxyHeaders rule would eventually be written
+// without the guard, and a forged address in an incident log is worse than a
+// missing one.
+func ClientIP(r *http.Request) string {
 	if TrustProxyHeaders {
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 			if i := strings.IndexByte(xff, ','); i > 0 {
@@ -194,6 +201,9 @@ func clientIP(r *http.Request) string {
 	}
 	return r.RemoteAddr
 }
+
+// clientIP is the internal spelling, kept so existing call sites read the same.
+func clientIP(r *http.Request) string { return ClientIP(r) }
 
 // Metrics records request count and latency.
 //

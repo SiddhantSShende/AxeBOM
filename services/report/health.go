@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+
 	"github.com/encorebom/encorebom/libs/go-shared/platform/health"
 )
 
@@ -17,8 +19,19 @@ import (
 // blip that fails liveness gets the entire fleet killed and turns a short
 // outage into a long one.
 func registerHealthChecks(c *health.Checker, d *deps) {
-	// Phase 1 adds: c.Register("postgres", db.Ping)
-	// Phase 6 adds: c.Register("nats", bus.Ping)
-	//               c.RegisterOptional("s3", blob.Ping)
-	_, _ = c, d
+	// ⚠ CRITICAL. Every route in this service reads a report row, and without
+	// Postgres there is no tenant scope either — RLS fails closed, so the
+	// service would answer every request with an error that reads like a bug.
+	c.Register("postgres", func(ctx context.Context) error {
+		return d.pool.Ping(ctx)
+	})
+
+	// ⚠ ALSO CRITICAL, unlike in most services. Object storage is where every
+	// rendered artifact lives: without it downloads fail and renders cannot
+	// complete, which is the whole of what this service does. Marking it
+	// optional would keep an instance in the load balancer that can serve only
+	// metadata.
+	c.Register("object-storage", func(ctx context.Context) error {
+		return d.blob.Ping(ctx)
+	})
 }

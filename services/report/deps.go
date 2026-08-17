@@ -2,9 +2,24 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"strconv"
 
+	"github.com/encorebom/encorebom/libs/go-shared/auth"
+	"github.com/encorebom/encorebom/libs/go-shared/platform/blob"
 	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
+	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
+	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
 	"github.com/encorebom/encorebom/libs/go-shared/platform/httpx"
+	"github.com/encorebom/encorebom/libs/go-shared/platform/ratelimit"
+	"github.com/encorebom/encorebom/libs/go-shared/reportsig"
+	"github.com/encorebom/encorebom/libs/go-shared/vault"
+	"github.com/encorebom/encorebom/services/report/internal/handler"
+	"github.com/encorebom/encorebom/services/report/internal/service"
+	"github.com/encorebom/encorebom/services/report/internal/store"
 )
 
 // deps holds this service's constructed dependencies.
@@ -19,24 +34,165 @@ import (
 // Return an error rather than exiting: a service that cannot reach its database
 // must fail to START, not start and serve 500s while passing liveness.
 type deps struct {
-	cfg *config.Service
+	cfg     *config.Service
+	pool    *db.Pool
+	blob    *blob.Store
+	issuer  *auth.Issuer
+	handler *handler.Handler
+
+	// signer is nil when no signing key is configured. Reports still render;
+	// they are stored unsigned and say so.
+	signer *reportsig.VaultSigner
+
+	sharedBuckets *ratelimit.Buckets
 }
 
 // buildDeps constructs everything this service needs.
-// once it opens a pool, and changing the signature later would touch main.go
-// in all eight services at once.
-//
-//nolint:unparam // the error is the CONTRACT: every service returns a real one
 func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
-	// Phase 9 adds: pool, err := db.Open(ctx, cfg.Postgres)
-	_ = ctx
-	return &deps{cfg: cfg}, nil
+	pool, err := db.Open(ctx, cfg.Postgres)
+	if err != nil {
+		return nil, fmt.Errorf("open postgres: %w", err)
+	}
+
+	// Object storage is REQUIRED. Every rendered artifact lives there, so a
+	// service that started without it would accept render requests and fail
+	// every one of them at the last step, after doing all the work.
+	blobStore, err := blob.Open(ctx, cfg.S3)
+	if err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("open object storage: %w", err)
+	}
+
+	// The report service VERIFIES access tokens; auth mints them.
+	issuer, err := auth.NewIssuer(auth.TokenConfig{
+		SigningKey: []byte(cfg.Auth.JWTSigningKey.Reveal()),
+		Issuer:     cfg.Auth.JWTIssuer,
+		AccessTTL:  cfg.Auth.AccessTTL,
+		RefreshTTL: cfg.Auth.RefreshTTL,
+	})
+	if err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("token issuer: %w", err)
+	}
+
+	signer := buildSigner(ctx, cfg)
+
+	svc := service.New(store.New(pool), blobStore, nil, slog.Default())
+
+	return &deps{
+		cfg:           cfg,
+		pool:          pool,
+		blob:          blobStore,
+		issuer:        issuer,
+		handler:       handler.New(svc, nil),
+		signer:        signer,
+		sharedBuckets: ratelimit.New(nil),
+	}, nil
+}
+
+// buildSigner wires Vault Transit, or returns nil.
+//
+// ⚠ A MISSING SIGNING KEY DEGRADES LOUDLY AND NEVER SILENTLY.
+//
+// Refusing to start would turn a signing-key misconfiguration into a total
+// reporting outage, and reports are useful unsigned. But an unsigned report
+// that looks signed is worse than either, so the degradation is: WARN at
+// startup, `signing_key_id` empty on the row, and no signature endpoint for
+// that report. Nothing ever fabricates a local key in production — see
+// reportsig.LocalSigner, whose key id carries `insecure-local:` precisely so a
+// development signature cannot be mistaken for this.
+func buildSigner(ctx context.Context, cfg *config.Service) *reportsig.VaultSigner {
+	keyName := cfg.Report.SigningKey
+	if keyName == "" {
+		slog.Warn("no report signing key configured; reports will be stored unsigned",
+			"hint", "set REPORT_SIGNING_KEY to a Vault Transit ed25519 key name")
+		return nil
+	}
+
+	transit, err := vault.NewTransit(vault.TransitConfig{
+		Address: cfg.Vault.Address,
+		Token:   cfg.Vault.Token.Reveal(),
+		Mount:   cfg.Report.TransitMount,
+	})
+	if err != nil {
+		slog.Warn("vault transit is not configured; reports will be stored unsigned",
+			"cause", err.Error())
+		return nil
+	}
+
+	signer, err := reportsig.NewVaultSigner(ctx, transit, keyName)
+	if err != nil {
+		slog.Warn("the report signer could not be built; reports will be stored unsigned",
+			"cause", err.Error())
+		return nil
+	}
+
+	// ⚠ THE KEY IS READ AT STARTUP, and a wrong TYPE is fatal to signing.
+	//
+	// A transit mount can hold RSA and ECDSA keys. Pointing the report signer at
+	// one produces signatures nothing in the published verification procedure
+	// can check — and we would not find out until a customer ran
+	// `encorebom verify`. Better to know now and store unsigned.
+	if _, _, err := signer.PublicKey(); err != nil {
+		slog.Warn("the configured signing key is unusable; reports will be stored unsigned",
+			"key", keyName, "cause", err.Error())
+		return nil
+	}
+
+	return signer
+}
+
+// PublicKey returns the published verification key, or nil.
+func (d *deps) PublicKey() (ed25519.PublicKey, string, error) {
+	if d.signer == nil {
+		return nil, "", fmt.Errorf("no signing key is configured")
+	}
+	return d.signer.PublicKey()
+}
+
+// sharedLimiter rate-limits the one unauthenticated route by client address.
+//
+// ⚠ EVERY OTHER ROUTE IS BOUNDED BY A TOKEN THAT HAD TO BE ISSUED. This one is
+// reachable by anyone with the URL, so without a limit it is a free oracle: a
+// stranger can probe tokens as fast as the network allows, and each probe costs
+// us a database round trip and an audit row.
+//
+// The limit does not make a 256-bit token guessable — nothing does. What it
+// does is stop the endpoint being an amplifier and bound the audit-log volume a
+// stranger can force us to write.
+//
+// The budget is deliberately generous per address: a legitimate holder may open
+// the link, retry a failed download and share it with a colleague behind the
+// same NAT.
+func (d *deps) sharedLimiter(next http.Handler) http.Handler {
+	const (
+		rate  = 1.0 // sustained requests per second, per address
+		burst = 20
+	)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := "shared|" + httpx.ClientIP(r)
+		ok, wait := d.sharedBuckets.Allow(key, rate, burst)
+		if !ok {
+			// Retry-After is required: without it a client backs off by
+			// guessing, and one that guesses badly looks like an attacker.
+			w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())))
+			w.Header().Set("Cache-Control", "no-store")
+			errs.Write(w, r, errs.Newf(errs.RateLimitExceeded,
+				"too many requests; retry in %d seconds", int(wait.Seconds())))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // Close releases the dependencies, in reverse order of construction.
 func (d *deps) Close() {
 	if d == nil {
 		return
+	}
+	if d.pool != nil {
+		d.pool.Close()
 	}
 }
 

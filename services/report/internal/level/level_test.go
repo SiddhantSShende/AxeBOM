@@ -3,6 +3,8 @@ package level
 import (
 	"strings"
 	"testing"
+
+	"github.com/encorebom/encorebom/libs/go-shared/model"
 )
 
 func depth(n int) *int { return &n }
@@ -156,4 +158,49 @@ func keysOf(p Projection) []string {
 		out = append(out, c.Key)
 	}
 	return out
+}
+
+// TestLevelsMatchTheProfile is the guard for a bug that only a real database
+// would otherwise have found.
+//
+// ⚠ THE LEVEL STRING CROSSES THREE BOUNDARIES. This package uses it, the
+// database CHECK on report.reports.level accepts it, and both derive from
+// certin-v2.0.yaml via model.BOMLevels. These constants were spelled
+// `top-level` with a hyphen at first — which reads fine in Go, renders fine in
+// a report, and fails the CHECK constraint on the first INSERT with an error
+// pointing at the database rather than at the two spellings.
+//
+// Nothing in the Go build catches that, so this does.
+func TestLevelsMatchTheProfile(t *testing.T) {
+	for _, l := range []Level{TopLevel, Complete} {
+		if !Known(l) {
+			t.Errorf("level %q is not in model.BOMLevels (%v), so an INSERT using "+
+				"it will fail the CHECK constraint on report.reports.level",
+				l, model.BOMLevels)
+		}
+	}
+}
+
+// TestKnownAndValidAreDifferentQuestions.
+//
+// "we do not build that yet" and "that is not a BOM level" call for different
+// answers. A caller asking for `delivery` deserves the first; collapsing them
+// would have somebody spend an afternoon checking the spelling of a level that
+// this build genuinely does not produce.
+func TestKnownAndValidAreDifferentQuestions(t *testing.T) {
+	for _, l := range []Level{"n_level", "delivery", "transitive"} {
+		if !Known(l) {
+			t.Errorf("%q is defined by CERT-In §3.1 but Known() says otherwise", l)
+		}
+		if Valid(l) {
+			t.Errorf("%q is not produced by this build but Valid() accepts it; a "+
+				"report would be labelled with a level narrower than its contents", l)
+		}
+	}
+
+	for _, l := range []Level{"top-level", "", "nonsense"} {
+		if Known(l) {
+			t.Errorf("%q is not a CERT-In level but Known() accepts it", l)
+		}
+	}
 }
