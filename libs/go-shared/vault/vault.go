@@ -280,6 +280,17 @@ func (c *Client) metadataURL(path string) string {
 
 // do performs a request and normalizes the failure modes.
 func (c *Client) do(ctx context.Context, method, url string, body []byte) ([]byte, error) {
+	return vaultRequest(ctx, c.hc, c.cfg.Token, method, url, body)
+}
+
+// vaultRequest is the shared HTTP path for every Vault mount.
+//
+// Extracted so the KV and Transit clients cannot diverge on the part that
+// matters: the error handling below deliberately drops Vault's response text,
+// and a second copy would eventually be written without that.
+func vaultRequest(
+	ctx context.Context, hc *http.Client, token, method, url string, body []byte,
+) ([]byte, error) {
 	var rdr io.Reader
 	if body != nil {
 		rdr = bytes.NewReader(body)
@@ -288,12 +299,12 @@ func (c *Client) do(ctx context.Context, method, url string, body []byte) ([]byt
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("X-Vault-Token", c.cfg.Token)
+	req.Header.Set("X-Vault-Token", token)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := c.hc.Do(req)
+	resp, err := hc.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("vault request failed: %w", err)
 	}

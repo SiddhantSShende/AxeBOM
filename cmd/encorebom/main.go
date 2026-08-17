@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -36,6 +37,28 @@ type command struct {
 
 var commands []command
 
+// exitError lets a command choose the process exit code.
+//
+// It exists so a pipeline can distinguish a failed CHECK from a failed RUN:
+// `encorebom verify` exits 3 when a signature does not verify and 1 when the
+// file is missing, and conflating the two would have a broken path read as a
+// forgery.
+type exitError struct {
+	code int
+	// err is optional. When nil, the command has already reported the failure
+	// with the detail the user needs and main prints nothing further.
+	err error
+}
+
+func (e exitError) Error() string {
+	if e.err == nil {
+		return fmt.Sprintf("exit %d", e.code)
+	}
+	return e.err.Error()
+}
+
+func (e exitError) Unwrap() error { return e.err }
+
 func init() {
 	commands = []command{
 		{"preflight", "Report toolchain status and known environment gaps", 0, runPreflight},
@@ -46,6 +69,7 @@ func init() {
 		{"toolctl", "Fetch, verify and probe pinned scanner artifacts", 2, runToolctl},
 		{"schema", "Generate the published envelope JSON Schemas", 6, runSchema},
 		{"sandbox", "Run a command in the scan sandbox (the bridge Python workers call)", 7, runSandbox},
+		{"verify", "Check a report artifact against its detached signature", 9, runVerify},
 	}
 }
 
@@ -68,6 +92,15 @@ func main() {
 	for _, c := range commands {
 		if c.name == name {
 			if err := c.run(ctx, os.Args[2:]); err != nil {
+				var ee exitError
+				if errors.As(err, &ee) {
+					// The command has already reported the failure in its own
+					// words; a second, blunter line would bury it.
+					if ee.err != nil {
+						fmt.Fprintf(os.Stderr, "encorebom %s: %v\n", name, ee.err)
+					}
+					os.Exit(ee.code)
+				}
 				fmt.Fprintf(os.Stderr, "encorebom %s: %v\n", name, err)
 				os.Exit(1)
 			}
