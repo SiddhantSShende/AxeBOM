@@ -7,8 +7,8 @@ A session that writes code but does not update this file has failed — the next
 ---
 
 **Last updated:** 2026-08-17
-**Current phase:** Phase 10 — 🟡 **in progress** (five screens built and tested; Playwright E2E and the graph tab are not)
-**Next action:** `Continue Phase 10 of EncoreBOM. Read docs/phases/PHASE-10-dashboard-dependencies.md and the "Not yet built in Phase 10" list in STATE.md.`
+**Current phase:** Phase 11 — 🟡 **in progress** (crypto rules, CBOM normalization and QBOM derivation done; adapter unexercised, report/UI sections not built)
+**Next action:** `Continue Phase 11 of EncoreBOM. Read docs/phases/PHASE-11-cbom-qbom.md and the "Not yet built in Phase 11" list in STATE.md.`
 
 > ⚠ **Docker is still down**, so `migrations/report/0002` has never run and no
 > DB-backed or Playwright test has executed. That is the first thing to do when
@@ -1210,7 +1210,105 @@ feature is worth. A hand-rolled SVG is the intended implementation.
 - **The 50k-row performance claim is untested.** The table is virtualized and
   the memoization is correct by construction, but nothing has rendered 50k rows.
 
+---
+
+## What Phase 11 built (in progress)
+
+Cryptographic analysis, CBOM normalization with type-aware columns, and QBOM as
+derivation-plus-metadata. 96 Python tests.
+
+### Shor breaks; Grover resizes — and conflating them is the phase's central error
+
+A single boolean over "is it affected by quantum" is true of both families and
+produces a migration list containing every cipher a customer uses. A security
+team handed that list learns to ignore it, which costs them the RSA entries that
+matter.
+
+So symmetric primitives get a **note on effective strength and no flag**. The
+threshold is 128 bits of QUANTUM security, which is 256 classical — reversed, it
+puts AES-256 on the migration list and clears AES-128, and a test pins the
+direction.
+
+### Nine rules were written with a plain ``, and every one silently missed
+
+`rsa` does not match `rsaEncryption` (`E` is a word character) and does not
+match `sha1WithRSAEncryption` (no boundary before `R`). Those are the names
+these ACTUALLY carry in certificate signature algorithms. A SHA-1 certificate
+was reported `current`.
+
+**The first fix made it worse in a new way.** Tokenizing the name before
+matching fixed the camelCase cases and immediately broke four rules that were
+already right: `3DES` → `3 DES` reported `broken` instead of `weak`; `ChaCha20`
+→ `Cha Cha20` stopped being recognised at all.
+
+That is the general hazard of normalizing the input to a set of hand-written
+patterns: **the transform helps the wrong rules and breaks the right ones,
+silently.** `search_text` keeps BOTH forms, which is additive — a rule can only
+match more, and for a rule whose output is a migration list, more is the safe
+direction.
+
+### A design flaw introduced and then removed
+
+The QBOM readiness view first classified post-quantum assets by
+substring-matching `quantum_rationale` — the same "branch on the message text,
+never on the code" mistake the error taxonomy exists to prevent. A copy edit to
+the rationale would have silently emptied the "already post-quantum" list with
+nothing failing. It matches on `quantum_family` now.
+
+### The refusals
+
+| Situation | What happens, and why |
+|---|---|
+| No usable `assetType` | Counted as unidentified, **never** defaulted to `algorithm` — that scores it against the wrong CERT-In field set |
+| `related-crypto-material` | Becomes `key` only when the material type says so. A nonce is crypto material and is not a Table 9 key |
+| Unrecognised key state | `unknown`, not `active`. Defaulting to active reports a revoked key as live |
+| HMAC-SHA1 | `deprecated`, not `broken`. HMAC does not rest on collision resistance; condemning every SHA-1 fills a list with work nobody needs |
+| `weak` vs `broken` | Kept apart. SHA-1 collisions are cheap; 1024-bit RSA is within reach of a well-funded adversary and nobody else |
+| A family with no NIST replacement | Says so, rather than suggesting something plausible |
+
+### Two honest labels, enforced in code
+
+**QBOM references, never duplicates.** A QBOM that embedded the CBOM's assets
+would drift the moment either is re-normalized, and a reviewer comparing them
+would get two answers to one question.
+
+**`readiness_note()` never produces a score.** "Quantum readiness: 72%" would be
+a number we invented, weighted by judgements we did not publish, about a threat
+with no agreed timeline. The counts are the honest form.
+
+The device form carries `FORM_DISCLOSURE` — there is no quantum-hardware
+scanner — at the point of entry rather than as a coverage surprise weeks later.
+
+### Not yet built in Phase 11
+
+- **`cbomkit-theia` has never run.** The adapter is written and its parsing is
+  tested against hand-built CycloneDX, but no container has executed. Its real
+  output may differ from the fixture in ways only a run reveals — which is
+  exactly what Phase 7 learned about every SBOM engine.
+- **No `crypto-mixed` / `crypto-quantum` golden fixtures.** The unit tests build
+  their documents inline; there are no committed raw artifacts to replay.
+- **No report sections and no UI.** The crypto inventory, quantum-readiness view
+  and QBOM device form are not built. `render.FieldsFor` still REFUSES CBOM,
+  which is correct until the per-asset-type sheets exist.
+- **Nothing writes to `normalize.crypto_assets` or `normalize.quantum_components`.**
+  The normalizer produces rows; no bulk insert wires them to Postgres.
+
 ## Session log
+
+### 2026-08-17 (m) — Phase 11 crypto analysis
+
+Quantum rules, PQC guidance, deprecation assessment, CBOM normalization with
+type-aware columns, and QBOM derivation. 96 Python tests.
+
+The lesson worth carrying is about fixing a bug class rather than a bug. Nine
+rules used a plain `` and silently missed the concatenated names these
+algorithms actually carry. The obvious fix — normalize the input — repaired the
+broken rules and broke four working ones, just as silently. Keeping both forms
+is additive and cannot subtract a match.
+
+**Next session:** bring Docker up. Phase 9's migration and share-link tests,
+Phase 10's Playwright, and Phase 11's `cbomkit-theia` all need it — and Phase 7
+is the precedent for why an unexercised adapter is not a working one.
 
 ### 2026-08-17 (l) — Phase 9 completed, Phase 10 screens
 
