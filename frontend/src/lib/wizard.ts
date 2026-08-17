@@ -23,6 +23,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { BomType } from '../design/theme';
+import type { ApiError } from './api';
 
 export type Level = 'top_level' | 'complete';
 export type Standard = 'SPDX' | 'CycloneDX';
@@ -300,3 +301,47 @@ export const useWizard = create<WizardState>()(
     },
   ),
 );
+
+/**
+ * toCombinationErrors maps the API's 422 details onto wizard steps.
+ *
+ * ⚠ THE FALLBACK MATTERS AS MUCH AS THE MAPPING. A detail we cannot attribute
+ * to a step still has to reach the user — attached to Review, which is where
+ * they are standing. Dropping it would leave a disabled Run button with no
+ * explanation, which is the worst possible outcome for a validation error.
+ */
+export function toCombinationErrors(err: ApiError): CombinationError[] {
+  const out: CombinationError[] = [];
+
+  for (const detail of err.details) {
+    const field = readString(detail.field) || readString(detail.dimension);
+    const message = readString(detail.message) || readString(detail.reason) || err.message;
+    out.push({ step: stepForField(field), message });
+  }
+
+  if (out.length === 0) out.push({ step: 6, message: err.message });
+  return out;
+}
+
+function stepForField(field: string): StepId {
+  if (field.includes('project')) return 1;
+  if (field.includes('bom_type') || field.includes('classification')) return 2;
+  if (field.includes('level')) return 3;
+  if (field.includes('standard')) return 4;
+  if (field.includes('format')) return 5;
+  // Engine/source combination failures name neither; Review owns them, since
+  // that is where the user is when the server answers.
+  return 6;
+}
+
+/**
+ * readString takes a value only when it IS a string.
+ *
+ * ⚠ String(x) ON AN OBJECT PRODUCES "[object Object]", and an error detail is
+ * `Record<string, unknown>` — a nested object is entirely possible. Rendering
+ * that at the user is worse than rendering nothing, because it looks like a bug
+ * in our code rather than a validation failure in theirs.
+ */
+function readString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}

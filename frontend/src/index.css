@@ -1,81 +1,11 @@
 /*
- * Design tokens.
+ * Phase 4 module styles.
  *
- * Light is defined on bare :root; dark is a media override guarded so an
- * explicit [data-theme="light"] wins, plus a [data-theme="dark"] block so the
- * toggle wins in both directions. Defining a colour ONLY inside a media query
- * is how a theme ends up half-applied.
- *
- * docs/07-FRONTEND-SPEC.md §2. Phase 10 expands this into the full system.
+ * ⚠ THE TOKEN BLOCK THAT USED TO BE HERE MOVED TO design/tokens.css, and the
+ * shared primitives to design/app.css. Two files defining `--sbom` is how a
+ * theme ends up with one panel that never switches: whichever loads last wins,
+ * and nobody notices until a screenshot in dark mode has a white card in it.
  */
-
-:root {
-  --bg: #fbfbfd;
-  --surface: #ffffff;
-  --border: #e3e3e8;
-  --text: #16161a;
-  --text-muted: #5c5c66;
-
-  /* BOM-type accents. Paired with a glyph everywhere — never colour alone. */
-  --sbom: #4f46e5;
-  --cbom: #b45309;
-  --qbom: #7c3aed;
-  --aibom: #0f766e;
-  --hbom: #475569;
-
-  --ok: #15803d;
-  --down: #b91c1c;
-
-  --radius: 8px;
-  --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, 'Cascadia Code', Consolas, monospace;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --bg: #0e0e11;
-    --surface: #17171c;
-    --border: #2a2a33;
-    --text: #ececf1;
-    --text-muted: #a1a1ad;
-
-    --sbom: #a5b4fc;
-    --cbom: #fcd34d;
-    --qbom: #c4b5fd;
-    --aibom: #5eead4;
-    --hbom: #cbd5e1;
-
-    --ok: #4ade80;
-    --down: #fca5a5;
-  }
-}
-
-:root[data-theme='dark'] {
-  --bg: #0e0e11;
-  --surface: #17171c;
-  --border: #2a2a33;
-  --text: #ececf1;
-  --text-muted: #a1a1ad;
-  --sbom: #a5b4fc;
-  --cbom: #fcd34d;
-  --qbom: #c4b5fd;
-  --aibom: #5eead4;
-  --hbom: #cbd5e1;
-  --ok: #4ade80;
-  --down: #fca5a5;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font);
-  line-height: 1.55;
-}
 
 /* Visible focus everywhere. Every flow must be keyboard-operable (WCAG 2.4.7). */
 :focus-visible {

@@ -136,3 +136,41 @@ export async function upload<T>(path: string, form: FormData): Promise<T> {
   }
   return (await res.json()) as T;
 }
+
+/**
+ * A small verb-shaped surface over `request`.
+ *
+ * Every call site reads `api.get<T>(path)` rather than
+ * `request<T>(path, { method: 'GET' })`, which keeps the method next to the
+ * path where a reader looks for it — and makes a mutation impossible to write
+ * by accident when a query was meant.
+ */
+export const api = {
+  get: <T>(path: string, signal?: AbortSignal) => request<T>(path, signal ? { signal } : {}),
+  post: <T>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body }),
+  put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
+  del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+};
+
+/**
+ * A keyset page.
+ *
+ * ⚠ A CURSOR, NEVER AN OFFSET. `OFFSET 40000` is a table scan of forty
+ * thousand rows the database then throws away, and it also SKIPS or REPEATS
+ * rows when the underlying set changes between pages — which it does
+ * constantly here, because scans keep finishing. The cursor is the last id
+ * seen, and ids are UUIDv7, so ordering by id descending is chronological and
+ * stable (docs/07-FRONTEND-SPEC.md §8).
+ */
+export interface Page<T> {
+  items: T[];
+  /** Null when there is no next page. */
+  nextCursor: string | null;
+}
+
+/** pageParams builds the query string for a keyset page. */
+export function pageParams(limit: number, cursor?: string | null): string {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set('cursor', cursor);
+  return params.toString();
+}

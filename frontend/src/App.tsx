@@ -1,79 +1,127 @@
-import { BrowserRouter, Link, Route, Routes } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
+/**
+ * Application shell.
+ *
+ * ⚠ ROUTE-LEVEL CODE SPLITTING. The dependency explorer pulls in a virtualizer
+ * and the report viewer pulls in the share dialog; neither belongs in the
+ * bundle a user downloads to look at a project list. The budget is 250 KB
+ * gzipped for the initial load (docs/07-FRONTEND-SPEC.md §8).
+ */
+
+import { Suspense, lazy } from 'react';
+import { BrowserRouter, Link, NavLink, Route, Routes, useParams } from 'react-router';
+import { SkeletonRows } from './components/States';
+import { ThemeToggle } from './components/ThemeToggle';
 import { ProjectList } from './routes/projects/ProjectList';
 import { ProjectWizard } from './routes/projects/ProjectWizard';
 import { ProjectDetail } from './routes/projects/ProjectDetail';
 
-/**
- * Application shell.
- *
- * Phase 4 adds the projects module. Phase 10 replaces this shell with the full
- * application — dashboard, dependency explorer, findings, report viewer
- * (docs/07-FRONTEND-SPEC.md). The routes added here are the ones Phase 4 owns,
- * and they are built against the real API rather than mocked, so Phase 10
- * inherits working screens instead of a scaffold.
- */
-
-interface Health {
-  status: string;
-  service: string;
-  version?: string;
-}
-
-async function fetchHealth(): Promise<Health> {
-  const res = await fetch('/api/healthz');
-  if (!res.ok) throw Object.assign(new Error('gateway unhealthy'), { status: res.status });
-  return res.json() as Promise<Health>;
-}
-
-function GatewayStatus() {
-  const { data, isError } = useQuery({
-    queryKey: ['health'],
-    queryFn: fetchHealth,
-    retry: false,
-  });
-
-  if (isError) {
-    return (
-      <span className="status status-down" role="status">
-        Gateway unreachable — run <code>task dev</code>
-      </span>
-    );
-  }
-  if (!data) return null;
-  return (
-    <span className="status status-up" role="status">
-      {data.service} {data.status}
-    </span>
-  );
-}
+const GenerateFlow = lazy(() =>
+  import('./routes/generate/GenerateFlow').then((m) => ({ default: m.GenerateFlow })),
+);
+const ScanProgressRoute = lazy(() =>
+  import('./routes/scans/ScanProgress').then((m) => ({ default: m.ScanProgressRoute })),
+);
+const Dependencies = lazy(() =>
+  import('./routes/dependencies/Dependencies').then((m) => ({ default: m.Dependencies })),
+);
+const Findings = lazy(() =>
+  import('./routes/findings/Findings').then((m) => ({ default: m.Findings })),
+);
+const ReportViewer = lazy(() =>
+  import('./routes/reports/ReportViewer').then((m) => ({ default: m.ReportViewer })),
+);
 
 export function App() {
   return (
     <BrowserRouter>
-      <nav className="topbar">
-        <Link to="/projects" className="brand">
-          EncoreBOM
-        </Link>
-        <GatewayStatus />
-      </nav>
-
-      <Routes>
-        <Route path="/" element={<ProjectList />} />
-        <Route path="/projects" element={<ProjectList />} />
-        {/* Before /projects/:id, or "new" is read as an id. */}
-        <Route path="/projects/new" element={<ProjectWizard />} />
-        <Route path="/projects/:id" element={<ProjectDetail />} />
-        <Route
-          path="*"
-          element={
-            <main className="shell">
-              <h1>Not found</h1>
-              <Link to="/projects">Back to projects</Link>
-            </main>
-          }
-        />
-      </Routes>
+      <div className="app">
+        <Header />
+        <main>
+          {/*
+            The fallback is a skeleton, not a spinner: a chunk arriving over a
+            slow link should look like the page filling in, not like a stall.
+          */}
+          <Suspense fallback={<SkeletonRows rows={8} columns={4} />}>
+            <Routes>
+              <Route path="/" element={<ProjectList />} />
+              <Route path="/projects" element={<ProjectList />} />
+              <Route path="/projects/new" element={<ProjectWizard />} />
+              <Route path="/projects/:id" element={<ProjectDetail />} />
+              <Route
+                path="/projects/:id/dependencies"
+                element={
+                  <ProjectTabs>
+                    <Dependencies />
+                  </ProjectTabs>
+                }
+              />
+              <Route
+                path="/projects/:id/findings"
+                element={
+                  <ProjectTabs>
+                    <Findings />
+                  </ProjectTabs>
+                }
+              />
+              <Route path="/generate" element={<GenerateFlow />} />
+              <Route path="/scans/:id" element={<ScanProgressRoute />} />
+              <Route path="/reports/:id" element={<ReportViewer />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
+        </main>
+      </div>
     </BrowserRouter>
+  );
+}
+
+function Header() {
+  return (
+    <header className="app-header">
+      <Link to="/projects" className="brand">
+        EncoreBOM
+      </Link>
+      <nav aria-label="Primary">
+        <NavLink to="/projects">Projects</NavLink>
+        <NavLink to="/generate">Generate</NavLink>
+      </nav>
+      <ThemeToggle />
+    </header>
+  );
+}
+
+function ProjectTabs({ children }: { children: React.ReactNode }) {
+  const { id = '' } = useParams();
+  return (
+    <>
+      <nav className="tabs" aria-label="Project sections">
+        <NavLink to={`/projects/${id}`} end>
+          Overview
+        </NavLink>
+        <NavLink to={`/projects/${id}/dependencies`}>Dependencies</NavLink>
+        <NavLink to={`/projects/${id}/findings`}>Findings</NavLink>
+      </nav>
+      {children}
+    </>
+  );
+}
+
+/**
+ * NotFound is deliberately indistinguishable from a cross-tenant 404.
+ *
+ * A resource belonging to another tenant must look exactly like one that does
+ * not exist, or the difference becomes an oracle for enumerating ids.
+ */
+function NotFound() {
+  return (
+    <div className="state state-empty">
+      <h3 className="state-title">Not found</h3>
+      <p className="state-message">That page does not exist, or you do not have access to it.</p>
+      <div className="state-actions">
+        <Link className="btn" to="/projects">
+          Back to projects
+        </Link>
+      </div>
+    </div>
   );
 }

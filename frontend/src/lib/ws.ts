@@ -96,8 +96,8 @@ export function connectProgress(opts: ConnectOptions): () => void {
     handlers,
     factory = (u) => new WebSocket(u) as unknown as WebSocketLike,
     random = Math.random,
-    setTimeoutFn = ((fn, ms) => window.setTimeout(fn, ms)),
-    clearTimeoutFn = ((id) => window.clearTimeout(id)),
+    setTimeoutFn = (fn, ms) => window.setTimeout(fn, ms),
+    clearTimeoutFn = (id) => window.clearTimeout(id),
   } = opts;
 
   let socket: WebSocketLike | null = null;
