@@ -1073,18 +1073,60 @@ Neutering `safe.Cell` fails the injection suite on all eight payloads · droppin
 `MarshalIndent` fails the byte-identity test · removing `ed25519.Verify` fails
 four signature tests · a no-op `DummyVerify` still fails its timing test.
 
+### The service is wired end to end
+
+`POST /v1/reports` → 202 + `queued` → JetStream → worker claims → `rendering` →
+render + store + sign → `ready` → `GET .../download`.
+
+**The download permission is checked twice, deliberately.** The route carries
+(report, download), which every role from Viewer up holds;
+`authz.CanDownloadReport` then decides on the ROW, because CERT-In §5.3.2 gives
+a Viewer the public report and not the private one. That cannot be decided
+before the row is read.
+
+**Downloads carry `attachment` + `nosniff` + `no-store`.** A report is
+attacker-influenced content served from our origin: without the first, an HTML
+payload in a component description is stored XSS against the customer's own
+session. `no-store` is separate — a shared report that is later revoked must not
+survive in a cache, or revocation means "revoke, eventually".
+
+**`visibility` defaults to `private`.** The zero value has to be the safe one.
+
+The render consumer runs in the API process (a render is in-process work of
+seconds) and its failure is logged, not fatal.
+
+### Three guards this phase added, each after a real bug
+
+| Guard | The bug it caught |
+|---|---|
+| `routeguard` wrapper check | A route wrapped in a RATE LIMITER passed as "authenticated". The check asked "is it mounted with mux.Handle" and took yes to mean guarded. `/shared/{token}` is the first route with that shape. |
+| `TestEveryColumnThisPackageQueriesExists` | Four invented column names — `project.project_practices`, `p.distribution_delivery`, `parent_component_id`, `child_component_id`. All compile; all fail only against a live database. |
+| `TestLevelsMatchTheProfile` | `level.TopLevel` was `top-level`; the CHECK constraint accepts `top_level`. |
+
+All three are mutation-verified. The second is the one worth remembering: it is
+the same defect Phase 6 hit in the scan store, where invented columns left
+fan-out publishing **zero jobs silently**.
+
+`filename()` is a fourth, smaller instance: it claimed in a comment to be safe
+because it is built from a uuid. That is a fact about provenance, not a property
+of the function — and the test written to prove the claim failed. It restricts
+the character set now, so a quote or a CR cannot reach Content-Disposition
+whatever the id contains.
+
 ### Not yet built in Phase 9
 
-- **The report HTTP handlers** — get, download, share, revoke, `/shared/:token`.
-  The rate limiting, `Cache-Control: no-store`, `Content-Disposition:
-  attachment` and the Viewer-cannot-download-`private` rule land with them.
-- **The async render worker.** `status: queued → rendering → ready` is in the
-  schema; nothing drives it.
-- **The share store.** `share.go` is pure logic and the migration is written;
-  the Go code that calls `claim_share_download` is not.
 - **`migrations/report/0002` has never run.** Postgres is down with Docker.
-  Until it runs, `TestRLSCoverage` has not seen `report.share_access_log` and
-  the plpgsql is unverified.
+  Until it runs, `TestRLSCoverage` has not seen `report.share_access_log`, the
+  two plpgsql functions are unverified, and every query in
+  `services/report/internal/store` has only the static check above behind it.
+- **No DB-backed integration tests for the share link.** Expiry, the download
+  cap under concurrency, immediate revocation, the audit trail and the
+  cross-tenant 404 are all implemented and all need a database to exercise.
+  The concurrency one matters most: the cap is enforced by a conditional UPDATE,
+  and the property is that two simultaneous requests cannot both pass a cap of
+  one.
+- **No WebSocket render progress.** `status` moves through the row and a client
+  can poll; the phase file's "async render worker with progress" is half done.
 
 ---
 
