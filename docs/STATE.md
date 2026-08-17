@@ -7,7 +7,7 @@ A session that writes code but does not update this file has failed — the next
 ---
 
 **Last updated:** 2026-08-17
-**Current phase:** Phase 12 — 🟡 **in progress** (AIBOM discovery, enrichment, merge and normalization done; adapters unexercised, ML-BOM export and UI not built)
+**Current phase:** Phase 13 — 🟡 **in progress** (VEX resolution and CSAF generation done; storage, HTTP surface, comments and UI not built)
 **Next action:** `Bring Docker up and clear the unexercised backlog across Phases 9–12 before starting Phase 13.`
 
 > ⚠ **Docker is still down**, so `migrations/report/0002` has never run and no
@@ -1366,7 +1366,93 @@ can never acquire a `field_status` entry and start counting toward coverage.
 - **The per-project `--llm-enrich` setting is not surfaced or audited.** The
   adapter refuses it; the project-level toggle and its audit row do not exist.
 
+---
+
+## What Phase 13 built (in progress)
+
+VEX effective-status resolution and CSAF 2.0 generation, both pure and both
+mutation-verified.
+
+### The two rules, in this order
+
+1. **Most specific scope wins.**
+2. Latest timestamp wins within a scope, then highest version.
+
+Reversed, a sweeping project-wide "not affected" recorded today silently
+suppresses a specific, deliberate "affected" recorded yesterday. The narrower
+assertion was made by somebody looking at that component; the broader one by
+somebody looking at the estate.
+
+`Effective.Reason` says which rule decided, because a user who disagrees needs
+to know whether to write a **narrower** statement or a **newer** one.
+
+### The test that justifies attaching to a cluster
+
+When the alias graph absorbs an edge, a finding shown as `GHSA-xxxx` yesterday
+is shown as `CVE-2021-23337` today. A decision attached to the display id is
+silently orphaned by that — the customer's "not affected, code unreachable"
+stops applying and the finding reappears untriaged.
+
+The phase file says not to skip this test. It is there, and removing the cluster
+check fails it with *"a decision leaked onto another cluster"*.
+
+### Append-only, enforced rather than documented
+
+- `Supersede` returns a NEW statement; the predecessor is untouched.
+- A successor at a **different scope is refused** — that is a separate
+  assertion, and chaining it makes the history read as one evolving decision
+  when it is two decisions about different things.
+- Superseded statements are excluded from the decision and **kept in the
+  history**. Dropping them destroys the audit chain.
+- `Untriaged` is counted separately from `under_investigation`: "nobody has
+  looked" and "somebody is looking" are different facts.
+
+### CSAF round-trips including what we do not model
+
+`csaf_advisories.document` claims to store the full document "for round-trip
+fidelity". A parser that drops unmodelled fields makes that claim false, and the
+loss surfaces at whoever consumes the document next. `TestRoundTrip` puts
+`lang`, `distribution`, `aggregate_severity`, `discovery_date` and
+`involvements` through and compares the whole document.
+
+`Extra` never overwrites a modelled field — it records what we did not
+understand, not a shadow copy that can win.
+
+**CSAF's status spellings are not CERT-In's.** `not_affected` →
+`known_not_affected`. Emitting CERT-In's spelling produces a document a
+consumer's validator rejects, and a test asserts it never leaks.
+
+### Not yet built in Phase 13
+
+- **No storage layer and no HTTP surface.** `vex` and `csaf` are pure packages;
+  nothing writes `normalize.vex_statements` or `normalize.csaf_advisories`, and
+  there are no create/history/publish endpoints.
+- **No comments service.** Threading to depth 5, mentions, and audited
+  edit/delete are untouched — `services/comment` is still a scaffold.
+- **VEX is not wired into report rendering.** The Phase 9 stub is still a stub;
+  findings tables do not show effective status, and a `not_affected` finding is
+  not yet visibly de-emphasized.
+- **No UI**: inline triage, history timeline, CSAF viewer, comment rail.
+- **The RBAC rule is unproven.** "A Viewer can comment but cannot edit VEX" needs
+  the HTTP surface to exist before it can be tested.
+- **Cross-tenant isolation for VEX and comments is untested** — it needs a
+  database, like the rest of the Phase 9–12 backlog.
+
 ## Session log
+
+### 2026-08-17 (o) — Phase 13 VEX and CSAF
+
+Effective-status resolution and CSAF 2.0 generation. Both mutation-verified: the
+specificity-before-recency ordering and the cluster-not-display-id attachment
+each fail their test when neutered.
+
+Nothing new was broken this session — which, after four sessions of finding a
+silent defect in each, is worth stating plainly rather than assuming.
+
+**Next session:** Docker. The unexercised backlog is now five phases deep, and
+Phase 13 adds two pure packages with no storage behind them. Phase 7 remains the
+precedent: every SBOM engine behaved differently from its documentation, and
+none of that was visible until a container ran.
 
 ### 2026-08-17 (n) — Phase 12 AIBOM
 
