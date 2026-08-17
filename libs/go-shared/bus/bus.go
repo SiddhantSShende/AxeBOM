@@ -31,7 +31,22 @@ const (
 	StreamResults = "SCAN_RESULTS"
 	StreamDLQ     = "SCAN_DLQ"
 	StreamNotify  = "NOTIFY"
+	// StreamReports carries render jobs.
+	//
+	// ⚠ A SEPARATE STREAM FROM SCAN_JOBS, not another subject on it. Scan jobs
+	// run third-party scanners in a sandbox for minutes; render jobs build a
+	// document in-process in seconds. Sharing a stream would make them share
+	// AckWait — 30 minutes, sized for a container — so a render worker that
+	// died would hold its report hostage for half an hour.
+	StreamReports = "REPORT_JOBS"
 )
+
+// SubjectRender is the render-job subject.
+//
+// One subject, not one per format: a WorkQueue stream permits ONE consumer per
+// filter subject (Phase 6), so per-format subjects would mean per-format
+// consumer groups and a PDF backlog could not be drained by an idle worker.
+const SubjectRender = "report.render.requested"
 
 // Delivery policy, from the contract.
 const (
@@ -160,6 +175,20 @@ func (b *Bus) ensureStreams(ctx context.Context) error {
 			MaxAge:    7 * 24 * time.Hour,
 			Discard:   jetstream.DiscardOld,
 		},
+		{
+			Name:     StreamReports,
+			Subjects: []string{"report.render.>"},
+			// WorkQueue: one worker renders each report. Fanning out would have
+			// two workers race for the same storage key — and the conditional
+			// `status = queued` transition would make the loser do nothing,
+			// which is correct but wasteful at 3000 pages.
+			Retention: jetstream.WorkQueuePolicy,
+			Storage:   jetstream.FileStorage,
+			// 24 hours. A render job older than that describes a report the
+			// customer has given up on, and re-rendering it surprises them.
+			MaxAge:  24 * time.Hour,
+			Discard: jetstream.DiscardOld,
+		},
 	}
 
 	for _, cfg := range streams {
@@ -250,6 +279,14 @@ type ConsumerConfig struct {
 	// the concurrency limit: a worker that can run two containers must not be
 	// handed fifty jobs.
 	MaxAckPending int
+	// AckWait overrides the default. Zero uses AckWait, which is sized for a
+	// SANDBOXED SCAN — thirty minutes of container.
+	//
+	// ⚠ A CONSUMER OF SHORT WORK MUST NOT INHERIT IT. A render is seconds of
+	// in-process work; leaving it at thirty minutes means a worker that dies
+	// mid-render holds that report hostage for half an hour, and the customer
+	// sees `rendering` the whole time.
+	AckWait time.Duration
 }
 
 // EnsureConsumer creates or updates a durable pull consumer.
@@ -257,12 +294,16 @@ func (b *Bus) EnsureConsumer(ctx context.Context, cfg ConsumerConfig) (jetstream
 	if cfg.MaxAckPending <= 0 {
 		cfg.MaxAckPending = 8
 	}
+	ackWait := cfg.AckWait
+	if ackWait <= 0 {
+		ackWait = AckWait
+	}
 
 	c, err := b.js.CreateOrUpdateConsumer(ctx, cfg.Stream, jetstream.ConsumerConfig{
 		Durable:       cfg.Durable,
 		FilterSubject: cfg.FilterSubject,
 		AckPolicy:     jetstream.AckExplicitPolicy,
-		AckWait:       AckWait,
+		AckWait:       ackWait,
 		MaxDeliver:    MaxDeliver,
 		BackOff:       backoff,
 		MaxAckPending: cfg.MaxAckPending,

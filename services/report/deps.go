@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/encorebom/encorebom/libs/go-shared/auth"
+	"github.com/encorebom/encorebom/libs/go-shared/bus"
 	"github.com/encorebom/encorebom/libs/go-shared/platform/blob"
 	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
 	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
@@ -20,6 +21,7 @@ import (
 	"github.com/encorebom/encorebom/services/report/internal/handler"
 	"github.com/encorebom/encorebom/services/report/internal/service"
 	"github.com/encorebom/encorebom/services/report/internal/store"
+	"github.com/encorebom/encorebom/services/report/internal/worker"
 )
 
 // deps holds this service's constructed dependencies.
@@ -37,8 +39,15 @@ type deps struct {
 	cfg     *config.Service
 	pool    *db.Pool
 	blob    *blob.Store
+	bus     *bus.Bus
 	issuer  *auth.Issuer
 	handler *handler.Handler
+
+	// consumer drains render jobs. main.go runs it alongside the HTTP server:
+	// the same binary serves the API and renders, because a render is
+	// in-process work and a separate deployment would double the operational
+	// surface for no isolation gain.
+	consumer *worker.Consumer
 
 	// signer is nil when no signing key is configured. Reports still render;
 	// they are stored unsigned and say so.
@@ -75,17 +84,37 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 		return nil, fmt.Errorf("token issuer: %w", err)
 	}
 
+	// NATS is REQUIRED. Rendering is async by contract, so a service that
+	// started without a broker would accept every render request and queue none
+	// — the customer sees `queued` forever, which looks like a slow worker.
+	msgBus, err := bus.Connect(ctx, bus.Config{
+		URL:  cfg.NATS.URL,
+		Name: cfg.Name,
+	})
+	if err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("connect nats: %w", err)
+	}
+
 	signer := buildSigner(ctx, cfg)
 
-	svc := service.New(store.New(pool), blobStore, nil, slog.Default())
+	st := store.New(pool)
+	svc := service.New(st, blobStore, worker.NewPublisher(msgBus, nil), slog.Default())
+
+	var renderSigner worker.Signer
+	if signer != nil {
+		renderSigner = signer
+	}
 
 	return &deps{
 		cfg:           cfg,
 		pool:          pool,
 		blob:          blobStore,
+		bus:           msgBus,
 		issuer:        issuer,
 		handler:       handler.New(svc, nil),
 		signer:        signer,
+		consumer:      worker.NewConsumer(msgBus, worker.New(svc, st, blobStore, renderSigner, slog.Default()), slog.Default()),
 		sharedBuckets: ratelimit.New(nil),
 	}, nil
 }
@@ -190,6 +219,9 @@ func (d *deps) sharedLimiter(next http.Handler) http.Handler {
 func (d *deps) Close() {
 	if d == nil {
 		return
+	}
+	if d.bus != nil {
+		_ = d.bus.Close()
 	}
 	if d.pool != nil {
 		d.pool.Close()

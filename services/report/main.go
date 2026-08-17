@@ -99,6 +99,25 @@ func run() error {
 	chain := append(httpx.Default(metrics, cfg.WriteTimeout), serviceMiddleware(d)...)
 	handler := httpx.Chain(mux, chain...)
 
+	// ⚠ THE RENDER CONSUMER RUNS ALONGSIDE THE HTTP SERVER, IN THIS PROCESS.
+	//
+	// A render is in-process work of seconds, not a sandboxed container, so a
+	// separate deployment would double the operational surface for no isolation
+	// gain — and would need its own copy of the store, the blob client and the
+	// signer.
+	//
+	// It is started BEFORE the server so a queued backlog begins draining at
+	// once, and its failure is LOGGED rather than fatal: an instance that can
+	// still serve downloads and metadata is worth more than one that exits
+	// because NATS blinked. The reaper-style consequence — reports sitting at
+	// `queued` — is visible on the row, which is where an operator looks.
+	go func() {
+		if err := d.consumer.Run(ctx); err != nil && ctx.Err() == nil {
+			slog.Error("the render consumer stopped; queued reports will not render",
+				"error", err)
+		}
+	}()
+
 	return httpx.Run(ctx, httpx.ServerConfig{
 		Addr:          fmt.Sprintf(":%d", cfg.HTTPPort),
 		MetricsAddr:   fmt.Sprintf(":%d", cfg.MetricsPort),

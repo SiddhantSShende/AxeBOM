@@ -609,8 +609,19 @@ func mediaType(format string) string {
 //
 // ⚠ BUILT FROM THE REPORT ID AND THE FORMAT, NEVER FROM THE PROJECT NAME. A
 // project name is user-controlled, and a name containing a quote, a newline or
-// a path separator would break out of the Content-Disposition header — the
-// classic response-splitting and path-traversal pair, in one field.
+// a path separator would break out of the Content-Disposition header — response
+// splitting and path traversal in one field.
+//
+// ⚠ AND THE ID IS SANITIZED ANYWAY, BECAUSE PROVENANCE IS NOT A GUARANTEE.
+//
+// The id is a uuid from `app.uuid_v7()`, so today it cannot contain anything
+// dangerous. That is a fact about where the value comes from, not a property of
+// this function — and it stops being true the first time a report is imported,
+// or a custom filename is added, or somebody reuses this helper. Go's %q does
+// escape control characters, but relying on the caller's verb is exactly the
+// kind of implicit contract that gets broken by a switch to concatenation.
+//
+// So the character set is restricted here, where the claim is made.
 func filename(r store.Report) string {
 	ext := r.Format
 	switch r.Format {
@@ -619,7 +630,39 @@ func filename(r store.Report) string {
 	case "cyclonedx":
 		ext = "cdx.json"
 	}
-	return "encorebom-" + r.ID + "." + ext
+	return "encorebom-" + safeFilenamePart(r.ID) + "." + ext
+}
+
+// safeFilenamePart reduces a value to characters a filename may hold.
+//
+// Alphanumerics, hyphen and underscore. Everything else — quotes, CR, LF, path
+// separators, dots — becomes a hyphen, so a hostile value cannot escape the
+// header parameter, walk a path, or hide a second extension. Dots are replaced
+// too: `..` is traversal and `report.exe.pdf` is a lure.
+//
+// An empty result becomes "report" rather than producing a filename that starts
+// with the extension separator.
+func safeFilenamePart(s string) string {
+	if s == "" {
+		return "report"
+	}
+
+	const maxLen = 128 // a uuid is 36; anything longer is not an id
+	out := make([]byte, 0, len(s))
+	for i := 0; i < len(s) && len(out) < maxLen; i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9',
+			c == '-', c == '_':
+			out = append(out, c)
+		default:
+			out = append(out, '-')
+		}
+	}
+	if len(out) == 0 {
+		return "report"
+	}
+	return string(out)
 }
 
 // clientIP is what the audit row records and what the anonymous route is
