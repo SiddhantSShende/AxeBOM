@@ -7,8 +7,8 @@ A session that writes code but does not update this file has failed — the next
 ---
 
 **Last updated:** 2026-08-17
-**Current phase:** Phase 11 — 🟡 **in progress** (crypto rules, CBOM normalization and QBOM derivation done; adapter unexercised, report/UI sections not built)
-**Next action:** `Continue Phase 11 of EncoreBOM. Read docs/phases/PHASE-11-cbom-qbom.md and the "Not yet built in Phase 11" list in STATE.md.`
+**Current phase:** Phase 12 — 🟡 **in progress** (AIBOM discovery, enrichment, merge and normalization done; adapters unexercised, ML-BOM export and UI not built)
+**Next action:** `Bring Docker up and clear the unexercised backlog across Phases 9–12 before starting Phase 13.`
 
 > ⚠ **Docker is still down**, so `migrations/report/0002` has never run and no
 > DB-backed or Playwright test has executed. That is the first thing to do when
@@ -1293,7 +1293,95 @@ scanner — at the point of entry rather than as a coverage surprise weeks later
 - **Nothing writes to `normalize.crypto_assets` or `normalize.quantum_components`.**
   The normalizer produces rows; no bulk insert wires them to Postgres.
 
+---
+
+## What Phase 12 built (in progress)
+
+AIBOM discovery, model enrichment, the merge between them, and all nineteen
+Table-10 elements. 458 Python tests in total.
+
+### The two-tool split is a network boundary, not a preference
+
+| | Where | Network | Reads |
+|---|---|---|---|
+| `ai-bom` | in the sandbox | none | the customer's code |
+| `aibom-generator` | outside the sandbox | yes | **public model ids only** |
+
+What crosses the boundary is a model identifier discovery already found —
+`meta-llama/Llama-3-8B`, not a line of the customer's source. That is what makes
+an outbound call acceptable at the second step and unacceptable at the first.
+
+`--llm-enrich` is **refused inside the sandbox with an explanation** rather than
+passed through: engines have no network, so passing it produces a connection
+timeout deep inside the engine, reported as a failed scan with nothing
+indicating a SETTING caused it.
+
+### Two cache bugs, and the second is the instructive one
+
+1. **Write key ≠ read key.** Stored under the response's revision, read under
+   the request's. A lookup for "whatever is current" stored under `"main"` and
+   missed forever after.
+2. **`cache or ModelCache()` threw the caller's cache away.** `ModelCache`
+   defines `__len__`, so an EMPTY cache is **falsy**. The caller's cache stayed
+   empty, stayed falsy, and was discarded again next call.
+
+**Neither failed anything.** The only symptom is a fetch count, which is why the
+regression test counts fetches. In production this is a self-inflicted rate
+limit against an API that throttles anonymously — surfacing as intermittent
+enrichment failures rather than as a cache bug.
+
+### The merge rule follows from the question each tool answers
+
+Neither engine wins globally. Discovery wins on USAGE facts (it read the code);
+enrichment wins on MODEL facts (it read the card). A single precedence order is
+wrong in one direction or the other.
+
+Identity is the model REFERENCE, never the name — `Llama-3-8B` is a name several
+organisations publish variants under, and merging on it folds a customer's
+fine-tune into the upstream model and attributes the upstream licence to it.
+Same class as merging `npm/lodash` with `maven/lodash`.
+
+### A low coverage number is information
+
+Four Table-10 elements describe intent and policy that no tool reports.
+`coverage_note()` explains that rather than apologising for it: an AIBOM at 40%
+is reporting something true about the state of AI supply-chain metadata, and a
+reader who does not know that reads it as a defect in the scan.
+
+`risk_score` and `owasp_llm_top10` are written OUTSIDE the profile loop, so they
+can never acquire a `field_status` entry and start counting toward coverage.
+
+### Not yet built in Phase 12
+
+- **Neither adapter has ever run.** `ai-bom` and `aibom-generator` are written
+  and their parsing is tested against hand-built CycloneDX. Phase 7 is the
+  precedent for why that is not the same as working.
+- **No `ai-langchain` golden fixture** — the tests build their documents inline.
+- **No ML-BOM export.** `services/report/export/mlbom.go` is not written, so
+  nothing validates against the CycloneDX 1.6 ML-BOM schema.
+- **No report sections and no UI**: model inventory, dataset table, risk view,
+  and the form for the four user-supplied elements.
+- **Nothing writes to `normalize.ai_models`** or its dataset and dependency
+  tables.
+- **The per-project `--llm-enrich` setting is not surfaced or audited.** The
+  adapter refuses it; the project-level toggle and its audit row do not exist.
+
 ## Session log
+
+### 2026-08-17 (n) — Phase 12 AIBOM
+
+Discovery, enrichment, merge and normalization. 458 Python tests.
+
+Two cache bugs, neither of which failed anything. The second is worth carrying:
+`ModelCache` defines `__len__`, so an empty cache is FALSY, and
+`cache = cache or ModelCache()` silently discarded the caller's. Caching never
+worked — and the only observable symptom was a fetch count.
+
+**Next session:** bring Docker up. The unexercised backlog now spans four
+phases — Phase 9's migration and share-link concurrency test, Phase 10's
+Playwright, Phase 11's `cbomkit-theia`, Phase 12's two AIBOM adapters. Phase 7
+is the precedent: every SBOM engine behaved differently from its documentation,
+and none of that was visible until a container ran.
 
 ### 2026-08-17 (m) — Phase 11 crypto analysis
 
