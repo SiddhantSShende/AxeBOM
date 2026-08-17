@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
@@ -34,5 +35,17 @@ export default defineConfig({
         },
       },
     },
+  },
+
+  test: {
+    // jsdom, not the default node environment: the components under test are
+    // React, and the WebSocket client reaches for window.setTimeout.
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'],
+    // ⚠ EXCLUDE PLAYWRIGHT. Vitest would otherwise collect e2e/*.spec.ts and
+    // fail on `@playwright/test` imports it cannot satisfy — which reads as a
+    // broken unit suite rather than a misconfigured runner.
+    exclude: ['node_modules/**', 'dist/**', 'e2e/**'],
   },
 });

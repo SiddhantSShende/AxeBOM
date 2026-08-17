@@ -1,0 +1,213 @@
+/*
+ * Design tokens.
+ *
+ * ⚠ THREE THEME STATES, NOT TWO, AND ALL THREE MUST BE HANDLED.
+ *
+ *   1. No preference recorded  → follow prefers-color-scheme
+ *   2. data-theme="light"      → light, even in a dark OS
+ *   3. data-theme="dark"       → dark, even in a light OS
+ *
+ * So: light is defined on BARE :root, dark is a media override GUARDED against
+ * an explicit light choice, and dark is repeated under [data-theme="dark"] so
+ * the toggle wins in both directions.
+ *
+ * Defining a colour ONLY inside a media query is how a theme ends up
+ * half-applied: the token falls back to nothing, and the element inherits a
+ * colour from a parent that did define it. Every token below has a value on
+ * bare :root.
+ *
+ * docs/07-FRONTEND-SPEC.md §2.
+ */
+
+:root {
+  /* --- Surfaces ---------------------------------------------------------- */
+  --bg: #fbfbfd;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f4f4f7;
+  --border: #e3e3e8;
+  --border-strong: #c9c9d2;
+
+  /* --- Text -------------------------------------------------------------- */
+  --text: #16161a;
+  --text-muted: #55555f;
+  --text-faint: #76767f;
+  --text-inverse: #ffffff;
+
+  /* --- BOM-type accents --------------------------------------------------
+   * Five types appear together constantly. They must be distinguishable at a
+   * glance AND NEVER BY COLOUR ALONE (WCAG 1.4.1) — every chip carries a glyph
+   * and a label, and the colour is reinforcement.
+   */
+  --sbom: #4338ca;
+  --cbom: #a16207;
+  --qbom: #6d28d9;
+  --aibom: #0f766e;
+  --hbom: #475569;
+
+  /* Tinted backgrounds for the same five. Kept separate from the accent so a
+   * chip's text can meet 4.5:1 against its own background rather than against
+   * the page. */
+  --sbom-bg: #eef2ff;
+  --cbom-bg: #fef3c7;
+  --qbom-bg: #f3e8ff;
+  --aibom-bg: #ccfbf1;
+  --hbom-bg: #e2e8f0;
+
+  /* --- Severity ----------------------------------------------------------
+   * ⚠ ALWAYS RENDERED WITH THE WORD, NOT JUST A DOT. A colour-blind user
+   * reading a vulnerability report is a compliance risk, not an edge case.
+   */
+  --sev-critical: #9f1239;
+  --sev-high: #b91c1c;
+  --sev-medium: #b45309;
+  --sev-low: #1d4ed8;
+  --sev-none: #475569;
+  --sev-unknown: #6b7280;
+
+  --sev-critical-bg: #ffe4e6;
+  --sev-high-bg: #fee2e2;
+  --sev-medium-bg: #fef3c7;
+  --sev-low-bg: #dbeafe;
+  --sev-none-bg: #e2e8f0;
+  --sev-unknown-bg: #f1f5f9;
+
+  /* --- Status ------------------------------------------------------------ */
+  --ok: #15803d;
+  --warn: #b45309;
+  --down: #b91c1c;
+  --info: #1d4ed8;
+  --ok-bg: #dcfce7;
+  --warn-bg: #fef3c7;
+  --down-bg: #fee2e2;
+  --info-bg: #dbeafe;
+
+  /* --- Geometry ----------------------------------------------------------
+   * Enterprise-dense but legible. 32px rows carry a lot without shrinking
+   * type, which is the wrong lever — the screen exists to answer "what changed
+   * and what is broken" at a glance.
+   */
+  --radius: 8px;
+  --radius-sm: 5px;
+  --row-height: 32px;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, 'Cascadia Code', Consolas, monospace;
+
+  --shadow-drawer: 0 8px 40px rgba(0, 0, 0, 0.16);
+  --shadow-menu: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0e0e11;
+    --surface: #17171c;
+    --surface-raised: #1e1e25;
+    --surface-sunken: #101014;
+    --border: #2a2a33;
+    --border-strong: #3d3d49;
+
+    --text: #ececf1;
+    --text-muted: #a6a6b2;
+    --text-faint: #83838f;
+    --text-inverse: #0e0e11;
+
+    --sbom: #a5b4fc;
+    --cbom: #fcd34d;
+    --qbom: #c4b5fd;
+    --aibom: #5eead4;
+    --hbom: #cbd5e1;
+
+    --sbom-bg: #1e1b4b;
+    --cbom-bg: #422006;
+    --qbom-bg: #2e1065;
+    --aibom-bg: #042f2e;
+    --hbom-bg: #1e293b;
+
+    --sev-critical: #fda4af;
+    --sev-high: #fca5a5;
+    --sev-medium: #fcd34d;
+    --sev-low: #93c5fd;
+    --sev-none: #cbd5e1;
+    --sev-unknown: #9ca3af;
+
+    --sev-critical-bg: #4c0519;
+    --sev-high-bg: #450a0a;
+    --sev-medium-bg: #422006;
+    --sev-low-bg: #172554;
+    --sev-none-bg: #1e293b;
+    --sev-unknown-bg: #1f2937;
+
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --down: #fca5a5;
+    --info: #93c5fd;
+    --ok-bg: #052e16;
+    --warn-bg: #422006;
+    --down-bg: #450a0a;
+    --info-bg: #172554;
+
+    --shadow-drawer: 0 8px 40px rgba(0, 0, 0, 0.55);
+    --shadow-menu: 0 4px 16px rgba(0, 0, 0, 0.45);
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #0e0e11;
+  --surface: #17171c;
+  --surface-raised: #1e1e25;
+  --surface-sunken: #101014;
+  --border: #2a2a33;
+  --border-strong: #3d3d49;
+
+  --text: #ececf1;
+  --text-muted: #a6a6b2;
+  --text-faint: #83838f;
+  --text-inverse: #0e0e11;
+
+  --sbom: #a5b4fc;
+  --cbom: #fcd34d;
+  --qbom: #c4b5fd;
+  --aibom: #5eead4;
+  --hbom: #cbd5e1;
+
+  --sbom-bg: #1e1b4b;
+  --cbom-bg: #422006;
+  --qbom-bg: #2e1065;
+  --aibom-bg: #042f2e;
+  --hbom-bg: #1e293b;
+
+  --sev-critical: #fda4af;
+  --sev-high: #fca5a5;
+  --sev-medium: #fcd34d;
+  --sev-low: #93c5fd;
+  --sev-none: #cbd5e1;
+  --sev-unknown: #9ca3af;
+
+  --sev-critical-bg: #4c0519;
+  --sev-high-bg: #450a0a;
+  --sev-medium-bg: #422006;
+  --sev-low-bg: #172554;
+  --sev-none-bg: #1e293b;
+  --sev-unknown-bg: #1f2937;
+
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --down: #fca5a5;
+  --info: #93c5fd;
+  --ok-bg: #052e16;
+  --warn-bg: #422006;
+  --down-bg: #450a0a;
+  --info-bg: #172554;
+
+  --shadow-drawer: 0 8px 40px rgba(0, 0, 0, 0.55);
+  --shadow-menu: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
