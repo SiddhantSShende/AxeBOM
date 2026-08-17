@@ -6,9 +6,9 @@ A session that writes code but does not update this file has failed — the next
 
 ---
 
-**Last updated:** 2026-08-16
-**Current phase:** Phase 6 — ✅ **complete**
-**Next action:** `Implement Phase 7 of EncoreBOM. Read docs/phases/PHASE-07-sbom-adapters.md.`
+**Last updated:** 2026-08-17
+**Current phase:** Phase 9 — 🟡 **in progress** (exporters, renderers, signing and share tokens done; handlers and the render worker are not)
+**Next action:** `Continue Phase 9 of EncoreBOM. Read docs/phases/PHASE-09-reports.md and the "Not yet built in Phase 9" list in STATE.md.`
 
 > The Phase 1/2 disk blocker is **resolved** — 18 GB free. `task verify` completes end to end (exit 0), including the frontend build. Docker Desktop's daemon still stops between sessions; start it before running the DB-backed tests, which otherwise **skip** rather than fail.
 
@@ -840,7 +840,7 @@ reads the digest from the LOCATION.
 
 ---
 
-## What Phase 9 built (started)
+## What Phase 9 built (in progress)
 
 Two pieces, both chosen because they are structural and security-critical rather
 than because they are first in the phase file.
@@ -931,14 +931,189 @@ first.
 The helper deleted leftover CONSUMERS but not the BACKLOG. `Bus.PurgeSubject`
 now exists for that, and it carries a warning that it destroys unprocessed work.
 
+### `render` — XLSX, CSV and JSON, sharing one cell function
+
+XLSX and CSV are two writers over one `cell()`. Two escaping paths is two
+chances to get it wrong, and only one of them ends up in the test somebody
+remembered to write.
+
+`cell()` does three things, in this order, and the order matters:
+
+1. **Replaces characters XML cannot represent.** XLSX is zipped XML, so a NUL
+   in a package name — which a hostile package can have — produces a workbook
+   Excel calls corrupt: the whole report is lost, not one cell. Same class as
+   the NUL truncation the normalizer handles at the Postgres boundary.
+   **Replaced, not deleted:** deleting turns `lo\x00dash` into `lodash`, a real
+   package it is not.
+2. Escapes a leading formula character (`safe.Cell`).
+3. Truncates to the 32,767-character cell limit, **visibly**.
+
+All three are **counted and returned**. A non-zero escape count means something
+in the dependency tree is shaped like an attack, which a security team wants
+told rather than silently defused.
+
+**CSV is the sharper half of the injection problem, not the milder one.** An
+XLSX cell carries an explicit type, so a string stays a string; CSV carries no
+types at all and whatever imports it decides. Both halves are covered — the
+workbook is asserted to contain **no `<f>` elements at all**, checked against
+the raw sheet XML rather than through the library that would be hiding it.
+
+Columns come from `model.SBOMFields` at render time, so **no count appears in
+the code or in the test**. Asserting "want 21 columns" would be the same defect
+the invariant forbids: it agrees with the old count the day CERT-In revises.
+
+A **CBOM is refused**, not approximated — Table 9 discriminates by asset type
+and one flat column list would score a certificate against `key_size`.
+
+### The JSON bundle is deliberately not indented
+
+`json.MarshalIndent` reformats an embedded `json.RawMessage`, so the SPDX
+document inside the bundle would stop matching the signature issued for the
+standalone download. Proven by a test: mutating `Marshal` to `MarshalIndent`
+fails it, 728 → 1108 bytes.
+
+### `reportsig` — detached Ed25519 signatures
+
+Over a **statement** rather than over the file. A signature over raw bytes says
+"we produced these bytes"; over a statement it says "we produced this artifact,
+in this format, for this report, at this time" — so report A's valid SPDX cannot
+be presented as report B's.
+
+Three refusals, each with a test:
+
+- **The envelope does not carry the public key.** An attacker who can replace a
+  signature can replace an embedded key. The key comes from published material
+  or `encorebom verify` refuses to run.
+- **The algorithm is compared to a constant**, never used to select an
+  implementation. `alg: none` has shipped in real products more than once.
+- **Development signatures are marked** (`insecure-local:`) and report
+  `Trusted=false`. Verifying against a locally generated key is a correct
+  cryptographic result and a worthless assurance; the same clean pass would let
+  an unsigned pipeline look signed.
+
+**Check order is the security property**, and it has its own test: the signature
+is verified over the statement bytes as they arrived, and only then is the
+statement parsed and compared to the artifact.
+
+It lives in `libs/go-shared/` because Go's own internal rule rejected the CLI's
+import — correctly. The verification procedure is published; a customer must be
+able to check a report without our software.
+
+### PDF — the network guarantee is structural, not configured
+
+The requirement is that an `<img src="http://attacker/">` in a component
+description must not phone home. The usual answer is an HTML-to-PDF engine with
+remote loading switched off — a **setting**, one upgrade away from turning every
+render into an outbound request carrying the reader's identity.
+
+This renderer draws text directly (`go-pdf/fpdf`, MIT). No HTML parser, no URL
+resolution, no HTTP client. `TestThePDFRendererCannotReachTheNetwork` reads the
+package's own imports, because a behavioural test can only prove that ONE
+document triggered no request. It also fails if it scanned zero files.
+
+Two size regimes, because they need different answers:
+
+| | Behaviour |
+|---|---|
+| Far past the cap | **Refused before any work** — `REPORT_TOO_LARGE_FOR_PDF`, naming XLSX/JSON as the remedy |
+| Moderately past | Produced and **cut**, with the cut stated **in the document** and in the record |
+
+VEX and CSAF are **stubbed, not omitted**: a reader who sees no VEX section
+cannot tell "no statements" from "this tool does not do VEX".
+
+### Share links
+
+256-bit CSPRNG token, URL-safe base64, only the hash persisted.
+`Token.String()` **refuses to render the plaintext** — a token reaches a log
+through `fmt.Sprintf("%v", link)` far more often than through a deliberate log
+line. `ParseToken` checks **shape only**; rejecting a well-formed but unknown
+token would be a free oracle on an unauthenticated endpoint.
+
+**Revocation beats expiry**, and that ordering is a test: reporting a revoked
+link as expired hides that somebody withdrew access on purpose.
+
+`claim_share_download` does the cap check and the increment in **one**
+conditional `UPDATE … RETURNING`. Read-then-write loses the cap under
+concurrency — two requests both read count 4 against a max of 5 and the link
+serves six. `SECURITY DEFINER` for the same reason Phase 3 needed it at login:
+`/shared/:token` presents a token and nothing else, so there is no tenant in
+scope to satisfy RLS.
+
+### The recurring defect of this phase
+
+**Anything whose bytes are load-bearing must not be stored as live JSON.** It
+appeared three times:
+
+1. protobom's shuffled arrays inside each component (previous session).
+2. The JSON bundle re-indenting its embedded SPDX document.
+3. The signature envelope holding its statement as `json.RawMessage` — which
+   broke **every** signature the first time a real file was pretty-printed,
+   reporting "signature does not verify" on a good artifact, indistinguishable
+   from a forgery and pointing at the wrong half of the system.
+
+And its companion: **a small number of comparisons proves nothing about
+determinism.** A two-run check passed on protobom; 40 runs failed on the first
+iteration. fpdf's font-object ordering produced files of the same LENGTH with
+different bytes.
+
+### Bugs the tests found
+
+| Bug | Why it mattered |
+|---|---|
+| Signature envelope reformatted by `MarshalIndent` | Every signature failed on a good artifact |
+| A 64-char hex key is also valid base64 | "Try base64 first" decoded a hex key into 48 bytes and rejected it with a length complaint |
+| `os.Exit(3)` made `verify` untestable | Now `exitError`, so a pipeline can tell a failed CHECK (3) from a missing file (1) |
+| The PDF text extractor read only page one | Its scan left the cursor on `endstream`, so the next match was the `stream` INSIDE it; every "is section X present" assertion had been passing vacuously against an empty string |
+| `TestDummyVerifyBurnsComparableWork` flaked ~1 run in 5 | A single argon2 pass with `fastParams` is below Windows' timer granularity and reads as `0s`. Now 25 rounds. Mutation-verified. |
+
+### Guards mutation-tested in Phase 9
+
+Neutering `safe.Cell` fails the injection suite on all eight payloads · dropping
+`orNotProvided` fails the blank-cell test on every profile column ·
+`MarshalIndent` fails the byte-identity test · removing `ed25519.Verify` fails
+four signature tests · a no-op `DummyVerify` still fails its timing test.
+
 ### Not yet built in Phase 9
 
-The PDF and XLSX renderers, Ed25519 signing, share links, and the async render
-worker.
+- **The report HTTP handlers** — get, download, share, revoke, `/shared/:token`.
+  The rate limiting, `Cache-Control: no-store`, `Content-Disposition:
+  attachment` and the Viewer-cannot-download-`private` rule land with them.
+- **The async render worker.** `status: queued → rendering → ready` is in the
+  schema; nothing drives it.
+- **The share store.** `share.go` is pure logic and the migration is written;
+  the Go code that calls `claim_share_download` is not.
+- **`migrations/report/0002` has never run.** Postgres is down with Docker.
+  Until it runs, `TestRLSCoverage` has not seen `report.share_access_log` and
+  the plpgsql is unverified.
 
 ---
 
 ## Session log
+
+### 2026-08-17 (k) — Phase 9 renderers, signing and share tokens
+
+XLSX, CSV, JSON and PDF renderers; detached Ed25519 signing through Vault
+Transit; `encorebom verify`; share-link tokens and an atomic download claim.
+Full Go suite green across 27 packages, `golangci-lint` clean repo-wide.
+
+One defect recurred three times and is worth carrying forward: **anything whose
+bytes are load-bearing must not be stored as live JSON.** protobom's arrays, the
+JSON bundle's embedded SPDX, and the signature envelope's statement all broke
+the same way. The last one was the worst — pretty-printing the signature file
+broke every signature, and the failure read as a forgery.
+
+Its companion: **a small number of comparisons proves nothing about
+determinism.** fpdf produced files of the same length with different bytes,
+because it writes font objects in map order.
+
+The PDF's "cannot fetch a remote resource" guarantee is structural rather than
+configured: the renderer draws text directly, and a test reads the package's own
+imports to keep it that way.
+
+**Next session:** finish Phase 9 — the report handlers, the async render worker,
+and the share store. Then run `migrations/report/0002`, which has never
+executed. Note that `/shared/:token` is unauthenticated and the download cap is
+enforced by the database, not by Go.
 
 ### 2026-08-17 (j) — Phase 8 normalizer core
 
