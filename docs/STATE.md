@@ -7,8 +7,12 @@ A session that writes code but does not update this file has failed — the next
 ---
 
 **Last updated:** 2026-08-17
-**Current phase:** Phase 9 — 🟡 **in progress** (exporters, renderers, signing and share tokens done; handlers and the render worker are not)
-**Next action:** `Continue Phase 9 of EncoreBOM. Read docs/phases/PHASE-09-reports.md and the "Not yet built in Phase 9" list in STATE.md.`
+**Current phase:** Phase 10 — 🟡 **in progress** (five screens built and tested; Playwright E2E and the graph tab are not)
+**Next action:** `Continue Phase 10 of EncoreBOM. Read docs/phases/PHASE-10-dashboard-dependencies.md and the "Not yet built in Phase 10" list in STATE.md.`
+
+> ⚠ **Docker is still down**, so `migrations/report/0002` has never run and no
+> DB-backed or Playwright test has executed. That is the first thing to do when
+> it comes up — see "Not yet built" under Phases 9 and 10.
 
 > The Phase 1/2 disk blocker is **resolved** — 18 GB free. `task verify` completes end to end (exit 0), including the frontend build. Docker Desktop's daemon still stops between sessions; start it before running the DB-backed tests, which otherwise **skip** rather than fail.
 
@@ -1130,7 +1134,106 @@ whatever the id contains.
 
 ---
 
+---
+
+## What Phase 10 built (in progress)
+
+The five screens that make the product usable by someone who has not read the
+specs. 52 frontend tests; tsc, eslint and prettier clean; production build at
+**102 KB gzipped** for the initial load against a 250 KB budget, with every
+route code-split.
+
+### Two rules enforced by types rather than by review
+
+**Neither chip has an icon-only variant.** No `showLabel={false}`, no
+icon-only mode. The moment one exists somebody uses it in a dense table —
+exactly where a colour-blind reader most needs the word — and the WCAG 1.4.1
+failure ships inside a compliance report.
+
+**`severity: unknown` cannot collapse into `none`.** "Nobody asserted a
+severity" and "assessed as none" are different claims, and rendering the first
+as the second understates risk in a document a customer acts on.
+
+### The decision in each screen
+
+| Screen | The decision |
+|---|---|
+| Generate | A 422 maps onto the STEP that owns each offending pair, rendered inline with a "Go to step N" button. A toast leaves the user to work out which of five multi-selects to change. Only hard contradictions block Run. |
+| Progress | Per-engine rows. A single bar shows 100% for a scan that silently skipped an ecosystem. The announcer speaks TRANSITIONS — a live region on the percentage announces "forty-one, forty-two" and makes the page unusable. |
+| Dependencies | Virtualized; filters in the URL; sorted most-severe-first. An orphan renders `unplaced`, never `transitive` — that would assert a tree position no engine established. |
+| Drawer | Both identifiers side by side with a paragraph each. Every profile field listed present or not: a drawer showing only what it has looks complete at 30% coverage. |
+| Findings | One row per cluster. `severity_conflict` expands to who said what. `fix_version_ordering: unknown` renders "lowest unknown" rather than a version it cannot rank. |
+| Report | Both coverage numbers equally sized. **Engine Coverage is not behind a disclosure** — a reader who never expands it takes a partial scan for a complete one. |
+
+### The empty state that is really a correctness statement
+
+"No findings" does **not** mean "nothing wrong". An ecosystem with no available
+engine produces zero findings for an entirely different reason, so the empty
+state points at Engine Coverage instead of declaring the project clean.
+
+### A test that passed because the fake was unrealistic
+
+`FakeSocket.close()` did not fire `onclose`, so both of the WebSocket's disposal
+guards could be deleted and all 13 tests still passed — vacuous in exactly the
+way that looks green. Real sockets fire `onclose` after `close()`; the fake does
+now, and removing both guards fails.
+
+It also corrected an overclaim in the source. The comment said detaching the
+handlers is what prevents a stray reconnect; mutation showed the `disposed` flag
+alone suffices, and so does detaching alone. Both are kept — they fail
+differently — and the comment says so rather than asserting a causality that is
+not there.
+
+### Deviation from the spec, stated
+
+**`@xyflow/react` is not used**, and the dependency graph tab is not built. The
+spec's own reasoning — "at 50k nodes a force-directed graph is decoration" —
+argues for a subgraph of tens of nodes around a selected component, which does
+not need a graph library and would cost more of the bundle budget than the
+feature is worth. A hand-rolled SVG is the intended implementation.
+
+### Not yet built in Phase 10
+
+- **No Playwright E2E.** The seven flows in `07-FRONTEND-SPEC.md §9` need a
+  running stack. The two that matter most are the full connect→scan→download
+  path and "a Viewer cannot download a `private` report".
+- **No axe assertions in CI.** The accessibility properties are enforced by
+  hand-written component tests (label presence, `aria-expanded`, focus, Escape);
+  an automated sweep of every route is not wired.
+- **The dependency graph tab.**
+- **Projects list, connect wizard and practices screens are the Phase 4 ones.**
+  They work against the real API but predate this design system, so they do not
+  yet use the shared chips, states or tokens.
+- **No login, signup or invite-accept screens.** The backend contract is
+  complete and tested; the screens were deferred from Phase 3 to here and are
+  still outstanding.
+- **The 50k-row performance claim is untested.** The table is virtualized and
+  the memoization is correct by construction, but nothing has rendered 50k rows.
+
 ## Session log
+
+### 2026-08-17 (l) — Phase 9 completed, Phase 10 screens
+
+Phase 9 wired end to end: handlers, share store, render worker, NATS render
+queue, and the BOM source that assembles the canonical model out of three
+schemas without a cross-schema JOIN.
+
+Three guards added, each after a real bug, and all three mutation-verified:
+routeguard now checks WHAT wraps a route (a rate limiter is not authentication);
+a static check parses this package's SQL against migrations/ (four invented
+column names); and `level.TopLevel` now comes from the compliance profile
+rather than being spelled by hand.
+
+Phase 10's five screens built with 52 tests. The recurring lesson this session
+was about tests rather than code: **a fake that is unrealistic in the one way
+that matters makes a test vacuous while it looks green.** The WebSocket fake did
+not fire `onclose` on `close()`, and both disposal guards could be deleted with
+the suite still passing.
+
+**Next session:** bring Docker up. Run `migrations/report/0002`, then the
+DB-backed share-link tests — especially the download cap under CONCURRENCY,
+which is the one property a single-threaded test confirms while the product
+leaks. Then Playwright.
 
 ### 2026-08-17 (k) — Phase 9 renderers, signing and share tokens
 
