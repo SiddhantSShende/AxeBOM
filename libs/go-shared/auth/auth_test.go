@@ -367,21 +367,43 @@ func TestDefaultParamsAreNotTrivial(t *testing.T) {
 // costs ~50ms of argon2 — a measurable account-enumeration oracle.
 func TestDummyVerifyBurnsComparableWork(t *testing.T) {
 	p := fastParams()
+	hash, _ := HashPassword("pw", p)
+
+	// ⚠ REPEATED, BECAUSE ONE CALL IS BELOW THE CLOCK'S RESOLUTION.
+	//
+	// With fastParams a single argon2 pass finishes in well under a
+	// millisecond, and Windows' timer granularity reports that as exactly 0s —
+	// which fails a ratio test against a correct implementation. Measuring a
+	// batch puts both sides safely above the granularity and averages out a
+	// scheduling hiccup landing on one of them.
+	//
+	// This was a real flake: the guard failed roughly one run in five while
+	// DummyVerify was doing exactly the work it should. A security test that
+	// cries wolf gets re-run until it passes, which is the same as not having it.
+	const rounds = 25
 
 	start := time.Now()
-	DummyVerify(p)
+	for range rounds {
+		DummyVerify(p)
+	}
 	dummy := time.Since(start)
 
-	hash, _ := HashPassword("pw", p)
 	start = time.Now()
-	_ = VerifyPassword("wrong", hash)
+	for range rounds {
+		_ = VerifyPassword("wrong", hash)
+	}
 	real := time.Since(start)
 
-	// Wall-clock on a shared CI box is noisy, so this asserts the same order of
-	// magnitude rather than a tight bound — the point is that dummy is not zero.
+	if real == 0 {
+		t.Skip("the clock cannot resolve a real verify either; nothing to compare")
+	}
+
+	// Same order of magnitude rather than a tight bound — the point is that
+	// dummy is not free, not that the two match exactly.
 	if dummy < real/10 {
-		t.Errorf("DummyVerify (%v) is far cheaper than a real verify (%v); "+
-			"login timing would reveal which accounts exist", dummy, real)
+		t.Errorf("DummyVerify (%v for %d rounds) is far cheaper than a real "+
+			"verify (%v for %d rounds); login timing would reveal which accounts "+
+			"exist", dummy, rounds, real, rounds)
 	}
 }
 

@@ -103,7 +103,12 @@ const (
 
 // Report — 422 / 500.
 const (
-	ReportTooLargeForPDF  Code = "REPORT_TOO_LARGE_FOR_PDF"
+	ReportTooLargeForPDF Code = "REPORT_TOO_LARGE_FOR_PDF"
+	// ReportTooLargeForXLSX is a worksheet row-limit overflow. Distinct from
+	// the PDF cap: that one is a product decision about page count, this one
+	// is a hard format limit, and the remedy differs — JSON, not a narrower
+	// BOM level.
+	ReportTooLargeForXLSX Code = "REPORT_TOO_LARGE_FOR_XLSX"
 	ReportRenderFailed    Code = "REPORT_RENDER_FAILED"
 	ReportSignatureFailed Code = "REPORT_SIGNATURE_FAILED"
 	ReportShareExpired    Code = "REPORT_SHARE_EXPIRED"
