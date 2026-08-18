@@ -46,8 +46,34 @@ type Mount struct {
 	// service's rate-limited share-link route is exactly that shape and is what
 	// found the hole.
 	Wrapper string
+	// Args are the identifiers passed to the wrapper, as written — e.g.
+	// ["authz.ResourceCampaign", "authz.ActionRun", "h.RunNow"].
+	//
+	// A route's PERMISSION is data a test can assert on, not only prose in a
+	// comment. Two routes sharing a matrix cell when they should not is the
+	// kind of mistake that reads as correct in review: `guard(...)` is present
+	// on both, so the route-guard check passes, and only the specific cells
+	// tell you that editing a campaign and spending the scan queue became the
+	// same authorization.
+	Args []string
 	// Line is the 1-based line of the mounting call.
 	Line int
+}
+
+// Resource is the first argument to a two-cell guard wrapper, if present.
+func (m Mount) Resource() string {
+	if len(m.Args) > 0 {
+		return m.Args[0]
+	}
+	return ""
+}
+
+// Action is the second argument to a two-cell guard wrapper, if present.
+func (m Mount) Action() string {
+	if len(m.Args) > 1 {
+		return m.Args[1]
+	}
+	return ""
 }
 
 // Finding is one problem with a route table.
@@ -106,11 +132,55 @@ func ParseMounts(path string) ([]Mount, error) {
 		}
 		if len(call.Args) > 1 {
 			m.Wrapper = wrapperName(call.Args[1])
+			m.Args = wrapperArgs(call.Args[1])
 		}
 		mounts = append(mounts, m)
 		return true
 	})
 	return mounts, nil
+}
+
+// Permissions indexes a file's mounts by route pattern.
+func Permissions(path string) (map[string]Mount, error) {
+	mounts, err := ParseMounts(path)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]Mount, len(mounts))
+	for _, m := range mounts {
+		out[m.Pattern] = m
+	}
+	return out, nil
+}
+
+// wrapperArgs renders the arguments of the outermost wrapper call as source.
+func wrapperArgs(arg ast.Expr) []string {
+	call, ok := arg.(*ast.CallExpr)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(call.Args))
+	for _, a := range call.Args {
+		out = append(out, exprName(a))
+	}
+	return out
+}
+
+// exprName renders an identifier or selector as written. Anything else becomes
+// an empty string rather than a guess — a caller asserting on a permission
+// should see nothing rather than something wrong.
+func exprName(e ast.Expr) string {
+	switch v := e.(type) {
+	case *ast.Ident:
+		return v.Name
+	case *ast.SelectorExpr:
+		if x, ok := v.X.(*ast.Ident); ok {
+			return x.Name + "." + v.Sel.Name
+		}
+		return v.Sel.Name
+	default:
+		return ""
+	}
 }
 
 // wrapperName returns the name of the outermost function applied to a handler.

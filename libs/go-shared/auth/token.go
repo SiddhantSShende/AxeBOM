@@ -125,14 +125,29 @@ func (i *Issuer) IssueAccess(now time.Time, userID, tenantID, sessionID string, 
 		Issuer:    i.cfg.Issuer,
 	}
 
-	payload, err := json.Marshal(claims)
+	token, err := i.signClaims(claims)
 	if err != nil {
 		return "", Claims{}, err
 	}
-
-	signing := b64(header) + "." + b64(payload)
-	return signing + "." + b64(i.sign([]byte(signing))), claims, nil
+	return token, claims, nil
 }
+
+// signClaims serializes and signs a claim set.
+//
+// Extracted so service tokens go through exactly the same signing path as user
+// tokens — a second implementation is how one of them ends up with a different
+// header, a different algorithm, or no expiry check.
+func (i *Issuer) signClaims(claims Claims) (string, error) {
+	payload, err := json.Marshal(claims)
+	if err != nil {
+		return "", err
+	}
+	signing := b64(header) + "." + b64(payload)
+	return signing + "." + b64(i.sign([]byte(signing))), nil
+}
+
+// newJTI is the token id source, shared by both mint paths.
+func newJTI() string { return uuid.NewString() }
 
 // VerifyAccess checks the signature and the time-based claims.
 func (i *Issuer) VerifyAccess(token string, now time.Time) (Claims, error) {

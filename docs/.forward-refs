@@ -11,3 +11,4 @@
 
 libs/go-shared/model/certinid.go   # phase 1 — CERT-In identifier derivation
 docs/RUNBOOKS.md                   # phase 16 — expanded from 08-OPERATIONS §6
+services/report/internal/export/mlbom.go  # phase 12 owed — CycloneDX 1.6 ML-BOM export

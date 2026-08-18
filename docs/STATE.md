@@ -48,6 +48,9 @@ A session that writes code but does not update this file has failed — the next
 | **SBOM worker** | ✅ **7 adapters; 74 tests; syft/syft-spdx/grype/trivy-fs/osv-scanner exercised on 5 fixtures** |
 | **Engine databases** | ✅ **provisioned + stamped (grype, trivy, osv); a vuln engine cannot run without one** |
 | Python workers (other 4) | ⬜ directories only |
+| **Campaign service** | ✅ **cron+DST, scheduler, leader lock, idempotent dispatch, CRUD, run history** |
+| **Notification service** | ✅ **signed webhooks, SSRF-safe delivery, retry+dead-letter, email templates, subscriptions** |
+| **Service tokens** | ✅ **per-tenant, 2-minute TTL, analyst role, `service:` subject prefix** |
 | Frontend | ✅ scaffold builds; **Phase 10 replaces it** |
 | Boundary lint | ✅ configured and demonstrated failing |
 | CI (dual-OS) | ✅ written, **never run** — no remote |
@@ -1357,7 +1360,7 @@ can never acquire a `field_status` entry and start counting toward coverage.
   and their parsing is tested against hand-built CycloneDX. Phase 7 is the
   precedent for why that is not the same as working.
 - **No `ai-langchain` golden fixture** — the tests build their documents inline.
-- **No ML-BOM export.** `services/report/export/mlbom.go` is not written, so
+- **No ML-BOM export.** `services/report/internal/export/mlbom.go` is not written, so
   nothing validates against the CycloneDX 1.6 ML-BOM schema.
 - **No report sections and no UI**: model inventory, dataset table, risk view,
   and the form for the four user-supplied elements.
@@ -1438,7 +1441,189 @@ consumer's validator rejects, and a test asserts it never leaks.
 - **Cross-tenant isolation for VEX and comments is untested** — it needs a
   database, like the rest of the Phase 9–12 backlog.
 
+## What Phase 14 built (in progress)
+
+Scheduled scans that run unattended, and the notifications that report them.
+
+### The claim this phase is really about
+
+**The advisory lock is not what prevents a double fire.** It is a polling
+optimisation — it keeps N replicas from each running the due-campaign query
+every thirty seconds. What actually prevents a duplicate scan is one line of
+DDL: `UNIQUE (campaign_id, scheduled_for)`.
+
+That distinction is load-bearing because a lock held over a network is a LEASE,
+and a lease can be believed by a holder who has already lost it — a GC pause, a
+partition, a reset TCP connection. Postgres drops the lock, another instance
+legitimately takes it, and now two processes each believe they lead. No amount
+of re-checking "am I still the leader?" closes that, because the check and the
+dispatch cannot be made atomic across a network.
+
+So the scheduler is **correct with leader election removed entirely**; it would
+just do redundant work. `TestTwoInstancesProduceExactlyOneDispatch` runs two
+schedulers with **no lock at all** and asserts one dispatch. If a future change
+makes correctness depend on leadership, that test fails and `TestLeaderElection`
+still passes — which is the pair that keeps the property honest.
+
+Mutation-verified: removing the UNIQUE modelling from the fake store fails four
+tests, including the leader-takeover and restart cases.
+
+### DST, both hemispheres, real dates
+
+- spring forward: `02:30` on 2026-03-08 America/New_York resolved to `03:30-04:00`
+- fall back: one run at `2026-11-01T01:30-04:00`, next at `2026-11-02T01:30-05:00`
+
+Go normalizes New York's missing 02:30 **backwards** to 01:30 (fires early, and
+collides with the real 01:30 slot) but Sydney's **forwards** to 03:30. A fix
+that assumed a direction pushed Sydney onto the next day. The resolution takes
+the later of Go's answer and `dayStart + wall-clock minutes`.
+
+### Missed runs
+
+One catch-up, the rest recorded as `skipped` **with a reason**. Firing all 48
+missed hourly occurrences is a thundering herd; firing none makes the gap
+invisible, and a compliance customer discovers at audit that two days have no
+scan. The reason reaches the UI — `CampaignDetail` renders it in full.
+
+### No backfill on re-enable, and why there is no `enabled_at` column
+
+Enabling sets `next_run_at` to the next **future** occurrence, so there is
+nothing behind the cursor to catch up on. The alternative — an `enabled_at`
+column and a comparison in the scheduler — is a rule somebody can forget, in a
+path that only runs when a customer un-pauses something.
+
+### The scheduler's one cross-tenant read
+
+`campaign.due_campaigns(timestamptz, int)` — SECURITY DEFINER, empty
+`search_path`, **scheduling columns only**. It cannot reach a component, a
+finding or a report. Everything after the call runs inside `WithTenant` using
+the tenant it returned. Not BYPASSRLS, which would disable tenancy for every
+query the application makes in order to solve one.
+
+### Webhooks
+
+- Signature is `v1=<hmac>,t=<unix>` over `unix + "." + body`; **the timestamp is
+  inside the signed payload**, so rewriting it does not defeat the 5-minute
+  replay window. Verify checks signature, then age, then parses the body.
+- **The payload carries ids, counts, a status and a URL. Nothing else.**
+  `TestPayloadCarriesNoComponentOrFindingDetail` inspects the *serialized bytes*
+  against an **allow-list**, so a field added to a nested type cannot slip past.
+- `engines_unavailable` is included deliberately — a receiver seeing zero
+  findings must be able to tell "clean" from "nothing ran".
+- 4xx does not retry (408/429 excepted); 5xx retries to 1 h then dead-letters,
+  and the dead letter is **retained**.
+
+### The SSRF dialer moved to `go-shared`
+
+A webhook URL is an SSRF primitive: the platform makes an authenticated POST to
+whatever a customer types, from inside our network, on a schedule they control.
+That is the same problem the fetcher solved for clone URLs, so
+`libs/go-shared/platform/safedial` now holds the CIDR table and the
+resolve-once-dial-the-literal dialer; the fetcher aliases to it. Two copies is
+how one of them ends up missing a range.
+
+Parse-time validation rejects the obvious targets so the customer gets a clear
+error at the form; **connection time is the actual control**, because DNS
+rebinding defeats any parse-time check. A blocked address is **not retryable** —
+four more attempts change nothing, and each is another attacker-driven lookup.
+Redirects are refused outright rather than followed safely.
+
+### Secrets
+
+Webhook secrets go to Vault (`vault.KindWebhookSecret`); the row holds a path.
+The secret is returned **exactly once**, at creation, and there is no endpoint
+that reads it back — the frontend keeps it in component state, never in the
+query cache. Resolved per delivery, never cached in a struct.
+
+### Also built
+
+- `libs/go-shared/schemacheck` — the report store's static column check,
+  extracted so campaign and notify use one implementation, and **extended to
+  INSERT column lists and UPDATE SET clauses**, which the original missed.
+  Mutation-verified against three invented write-path columns.
+- `libs/go-shared/platform/leader` — advisory-lock election with a **registry**
+  of lock ids, because Postgres advisory locks are one global namespace and two
+  subsystems picking the same number silently serialise against each other.
+- `routeguard.Permissions` — a route's matrix cell is now assertable, which is
+  what `TestTriggeringIsADistinctPermissionFromEditing` uses.
+- Service-principal tokens: `service:<name>` subject, per-tenant, 2-minute TTL,
+  analyst role. **There is no cross-tenant service token.**
+- Email: both text and HTML parts always rendered, `html/template` (a project
+  name is user-controlled), subject sanitized against header injection and
+  truncated on **rune boundaries**.
+
+### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | ✅ green end to end |
+| `golangci-lint run ./...` | ✅ 0 issues |
+| Go tests | ✅ all packages |
+| Frontend `vitest` | ✅ 64 tests, 5 files |
+| `TestLeaderElection` | ✅ follower does not even run the query |
+| `TestDST*` | ✅ both directions, real transition dates |
+| Mutation: drop UNIQUE modelling | ✅ 4 tests fail |
+| Mutation: 3 invented write columns | ✅ all 3 caught |
+
+### What Phase 14 does NOT have
+
+- **Nothing has run against a database.** `migrations/campaign/0002` (the
+  SECURITY DEFINER function) has never been applied; `DueCampaigns`,
+  `ClaimRun` and every store method are unexercised against real Postgres. The
+  static schema check proves the columns exist — not that the SQL runs.
+- **`leader` has never held a real advisory lock.** Its semantics are modelled
+  by a fake in the scheduler tests; the reentrancy and dead-session behaviour it
+  documents are argued, not demonstrated.
+- **No webhook has been delivered to a real endpoint**, and no email has been
+  sent — there is no SMTP client wired, only templates. Mailpit is untouched.
+- **No delivery worker.** `delivery.Client` posts and classifies; nothing drains
+  `notify.deliveries` or acts on `next_retry_at`. Retries are a data model and a
+  policy, not a running loop.
+- **Nothing publishes notification events.** No scan completion or new-critical
+  detection calls `MatchingSubscriptions`.
+- **`RunNow` is wired but never executed** — it needs the scan service up.
+- **No campaign frontend tests beyond `campaigns.test.ts`** (presets, cron shape,
+  timezone). No Playwright, no axe pass on the new screens.
+
+---
+
 ## Session log
+
+### 2026-08-18 — Phase 14 implemented
+
+Campaigns and notifications. `task verify` green; `golangci-lint` 0 issues.
+
+**The central claim, and the test that keeps it honest:** the Postgres advisory
+lock is a polling optimisation, not the safety mechanism.
+`UNIQUE (campaign_id, scheduled_for)` is.
+`TestTwoInstancesProduceExactlyOneDispatch` proves it by running two schedulers
+with **no lock at all**; mutating the fake store to drop the constraint fails
+four tests.
+
+**DST was the hard part, and the first fix was wrong.** Go normalizes New York's
+non-existent 02:30 backwards and Sydney's forwards, so a direction-assuming fix
+pushed Sydney onto the next day. Resolved by taking the later of Go's answer and
+`dayStart + wall-clock minutes`.
+
+**Two shared packages came out of this phase, both because a second copy was
+about to exist:** `safedial` (the fetcher's SSRF dialer — a webhook URL is the
+same primitive as a clone URL) and `schemacheck` (the report store's column
+check, now extended to INSERT/UPDATE, which caught three invented write columns
+the original form would have missed).
+
+**Corrected a stale doc reference** rather than suppressing it: the Phase 12
+ML-BOM note named a path missing its `internal/` segment, so it pointed at a
+package that will never exist. Fixed to `services/report/internal/export/mlbom.go`
+and declared in `docs/.forward-refs` as owed work.
+
+**Next session:** Phase 15 (`docs/phases/PHASE-15-hbom.md`). HBOM is a
+structured CSV/form import plus a data model — label it that way, and **no GPL**:
+`django-bom` is a schema reference that is never installed or imported.
+
+**The untested backlog is now six phases deep** and every item needs Docker.
+Phase 14 adds: `migrations/campaign/0002`, every store method, the real advisory
+lock, webhook delivery to a real endpoint, SMTP, and the delivery worker that
+does not yet exist.
 
 ### 2026-08-17 (o) — Phase 13 VEX and CSAF
 

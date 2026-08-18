@@ -990,3 +990,196 @@
   background: var(--sbom-bg);
   color: var(--sbom);
 }
+
+/* ---------------------------------------------------------------------------
+   Campaigns and notification settings (Phase 14)
+   --------------------------------------------------------------------------- */
+
+/*
+ * `.muted` is secondary text inside a cell or a caption.
+ *
+ * ⚠ IT IS --text-muted, NOT --text-faint. Faint is for placeholder-weight
+ * content that carries no information; a skip reason, a timezone and a "not
+ * scheduled" state are all things somebody has to be able to READ. Muted stays
+ * above the 4.5:1 contrast floor in both themes; faint does not, and is used
+ * only where the text is decorative.
+ */
+.muted {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.page-header h1 {
+  margin: 0;
+}
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+.panel h2 {
+  margin-top: 0;
+}
+
+.field-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+}
+
+.field-hint {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin: var(--space-1) 0 0;
+}
+
+/*
+ * ⚠ AN ERROR IS NEVER SIGNALLED BY COLOUR ALONE. The border and the weight
+ * carry it too, because roughly one man in twelve cannot distinguish this red
+ * from the surrounding text — and a form that only turns red is, for them, a
+ * form that did nothing.
+ */
+.field-error {
+  color: var(--down);
+  border-left: 3px solid var(--down);
+  padding-left: var(--space-3);
+  font-weight: 500;
+  margin: var(--space-2) 0 0;
+}
+.field-error ul {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-5);
+}
+
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.btn-active {
+  background: var(--sbom-bg);
+  border-color: var(--sbom);
+  color: var(--sbom);
+}
+
+/*
+ * ⚠ THE DANGEROUS BUTTON IS NOT MERELY RED. It only ever appears behind an
+ * in-place confirmation that names what is lost, so the colour reinforces a
+ * decision the user has already been asked to make rather than being the only
+ * thing standing between a stray click and a deleted run history.
+ */
+.btn-danger {
+  border-color: var(--down);
+  color: var(--down);
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--down-bg);
+}
+
+.btn-sm {
+  padding: var(--space-1) var(--space-2);
+  font-size: 0.875rem;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.confirm-inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--down);
+  border-radius: var(--radius-sm);
+  background: var(--down-bg);
+}
+
+.checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.group-label {
+  flex-basis: 100%;
+  font-weight: 500;
+}
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-5);
+  margin: var(--space-5) 0;
+}
+.summary dt {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+.summary dd {
+  margin: 0;
+}
+
+.card-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--space-4);
+}
+.card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.wizard-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+/*
+ * Wide content scrolls inside its own container.
+ *
+ * The run-history and delivery tables can carry long reasons; the PAGE must
+ * never scroll horizontally, because on a phone that makes every other column
+ * unreachable.
+ */
+.table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}

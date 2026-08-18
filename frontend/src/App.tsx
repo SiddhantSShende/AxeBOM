@@ -30,6 +30,18 @@ const Findings = lazy(() =>
 const ReportViewer = lazy(() =>
   import('./routes/reports/ReportViewer').then((m) => ({ default: m.ReportViewer })),
 );
+const CampaignList = lazy(() =>
+  import('./routes/campaigns/CampaignList').then((m) => ({ default: m.CampaignList })),
+);
+const CampaignWizard = lazy(() =>
+  import('./routes/campaigns/CampaignWizard').then((m) => ({ default: m.CampaignWizard })),
+);
+const CampaignDetail = lazy(() =>
+  import('./routes/campaigns/CampaignDetail').then((m) => ({ default: m.CampaignDetail })),
+);
+const Notifications = lazy(() =>
+  import('./routes/settings/Notifications').then((m) => ({ default: m.Notifications })),
+);
 
 export function App() {
   return (
@@ -66,6 +78,10 @@ export function App() {
               <Route path="/generate" element={<GenerateFlow />} />
               <Route path="/scans/:id" element={<ScanProgressRoute />} />
               <Route path="/reports/:id" element={<ReportViewer />} />
+              <Route path="/campaigns" element={<CampaignList />} />
+              <Route path="/campaigns/new" element={<CampaignWizard />} />
+              <Route path="/campaigns/:id" element={<CampaignDetail />} />
+              <Route path="/settings/notifications" element={<Notifications />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
@@ -84,6 +100,8 @@ function Header() {
       <nav aria-label="Primary">
         <NavLink to="/projects">Projects</NavLink>
         <NavLink to="/generate">Generate</NavLink>
+        <NavLink to="/campaigns">Scheduled</NavLink>
+        <NavLink to="/settings/notifications">Notifications</NavLink>
       </nav>
       <ThemeToggle />
     </header>

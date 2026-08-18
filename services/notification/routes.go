@@ -2,21 +2,50 @@ package main
 
 import (
 	"net/http"
+
+	"github.com/encorebom/encorebom/libs/go-shared/auth"
+	"github.com/encorebom/encorebom/libs/go-shared/authz"
 )
 
 // registerRoutes mounts this service's HTTP surface.
 //
-// GENERATED SCAFFOLD, then hand-edited. The generator writes this file only if
-// it does not already exist, so your routes survive a re-run.
+// This service's surface is defined in docs/02-CONTRACTS.md §11.
 //
-// Route patterns use Go 1.22+ method-and-pattern syntax ("GET /projects/{id}").
-// The pattern — not the concrete path — is what reaches metrics as a label;
-// a concrete path would produce unbounded cardinality.
+// ⚠ NO PUBLIC ROUTES, AND NO INBOUND WEBHOOK ENDPOINT EITHER.
 //
-// This service's surface is defined in docs/02-CONTRACTS.md §8. Add routes as
-// the owning phase implements them; do not invent endpoints here.
+// This service SENDS webhooks; it does not receive them. An inbound callback
+// route is the shape that usually ends up unauthenticated ("the signature is
+// the auth"), and there is nothing here for one to do.
+var publicRoutes = map[string]string{}
+
 func registerRoutes(mux *http.ServeMux, d *deps) {
-	// Phase 14 adds this service's real routes.
 	// Health endpoints (/healthz, /readyz) are mounted separately in main.go.
-	_, _ = mux, d
+	h := d.handler
+	authenticated := auth.Authenticate(d.issuer, nil)
+
+	guard := func(res authz.Resource, act authz.Action, fn http.HandlerFunc) http.Handler {
+		return authenticated(auth.Authorize(res, act)(fn))
+	}
+
+	// ⚠ SUBSCRIPTIONS ARE A TENANT-LEVEL SETTING, NOT A PROJECT ONE, so they
+	// are guarded against `tenant` rather than a resource a project member
+	// holds. Creating one directs where this tenant's activity is reported —
+	// a decision at the level of the organisation, not of one repository.
+	mux.Handle("POST /v1/notifications/subscriptions",
+		guard(authz.ResourceTenant, authz.ActionUpdate, h.Create))
+	mux.Handle("GET /v1/notifications/subscriptions",
+		guard(authz.ResourceTenant, authz.ActionRead, h.List))
+	mux.Handle("POST /v1/notifications/subscriptions/{id}/enabled",
+		guard(authz.ResourceTenant, authz.ActionUpdate, h.SetEnabled))
+	mux.Handle("DELETE /v1/notifications/subscriptions/{id}",
+		guard(authz.ResourceTenant, authz.ActionUpdate, h.Delete))
+
+	// The delivery log is how an operator answers "why was I not told?".
+	mux.Handle("GET /v1/notifications/subscriptions/{id}/deliveries",
+		guard(authz.ResourceTenant, authz.ActionRead, h.Deliveries))
+
+	// The UI renders its event checkboxes from this rather than a hardcoded
+	// list, so adding an event to the product adds it to the settings screen.
+	mux.Handle("GET /v1/notifications/events",
+		guard(authz.ResourceTenant, authz.ActionRead, h.Events))
 }

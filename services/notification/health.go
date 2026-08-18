@@ -17,8 +17,11 @@ import (
 // blip that fails liveness gets the entire fleet killed and turns a short
 // outage into a long one.
 func registerHealthChecks(c *health.Checker, d *deps) {
-	// Phase 1 adds: c.Register("postgres", db.Ping)
-	// Phase 6 adds: c.Register("nats", bus.Ping)
-	//               c.RegisterOptional("s3", blob.Ping)
-	_, _ = c, d
+	c.Register("postgres", d.pool.Ping)
+
+	// ⚠ VAULT IS CRITICAL HERE, UNLIKE IN MOST SERVICES. Every webhook signing
+	// secret lives there, resolved per delivery. An instance that cannot reach
+	// Vault will accept subscriptions and fail every webhook — after telling the
+	// customer their endpoint was configured. Better to leave the load balancer.
+	c.Register("vault", d.vault.Ping)
 }

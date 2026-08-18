@@ -99,6 +99,23 @@ func run() error {
 	chain := append(httpx.Default(metrics, cfg.WriteTimeout), serviceMiddleware(d)...)
 	handler := httpx.Chain(mux, chain...)
 
+	// ⚠ EVERY INSTANCE RUNS THE SCHEDULER; ONLY THE LOCK HOLDER POLLS.
+	//
+	// The alternative — a separate "scheduler" deployment — is one more thing to
+	// deploy, one more thing to forget to deploy, and a single point of failure
+	// with no automatic successor. Here, if the leader dies another instance
+	// takes the advisory lock on its next tick.
+	//
+	// Its failure is LOGGED rather than fatal: an instance that can still serve
+	// campaign CRUD is worth more than one that exits because a tick failed, and
+	// leadership moves to a healthy instance either way.
+	go func() {
+		if err := d.scheduler.Run(ctx); err != nil && ctx.Err() == nil {
+			slog.Error("the campaign scheduler stopped; due campaigns will not fire "+
+				"from this instance", "error", err)
+		}
+	}()
+
 	return httpx.Run(ctx, httpx.ServerConfig{
 		Addr:          fmt.Sprintf(":%d", cfg.HTTPPort),
 		MetricsAddr:   fmt.Sprintf(":%d", cfg.MetricsPort),

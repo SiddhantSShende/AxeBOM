@@ -39,6 +39,19 @@ type Service struct {
 	Auth     Auth
 	Vault    Vault
 	Report   Report
+	Services Services
+}
+
+// Services are the base URLs of sibling services.
+//
+// ⚠ CONFIGURED, NEVER DISCOVERED FROM A REQUEST. A base URL taken from a header
+// or a database row turns any cross-service call into an SSRF: the campaign
+// service holds a service token, and pointing it at an attacker's host hands
+// that token over.
+type Services struct {
+	ScanOrchestrator string
+	Report           string
+	Notification     string
 }
 
 // Postgres carries TWO identities, and the separation is load-bearing.
@@ -220,6 +233,15 @@ func LoadService(name string) (*Service, error) {
 			Address: l.StringOr("VAULT_ADDR", "http://localhost:58200"),
 			Mount:   l.StringOr("VAULT_MOUNT", "secret"),
 		},
+		Services: Services{
+			// The defaults mirror servicePorts below. A URL that does not match
+			// a listening service fails at the first cross-service call, which
+			// for a scheduler is at 02:30 rather than at startup — so a test
+			// asserts the two stay in step.
+			ScanOrchestrator: l.StringOr("SCAN_ORCHESTRATOR_URL", localURL("scan-orchestrator")),
+			Report:           l.StringOr("REPORT_URL", localURL("report")),
+			Notification:     l.StringOr("NOTIFICATION_URL", localURL("notification")),
+		},
 		Report: Report{
 			// No default. A default key NAME would have every deployment sign
 			// with whatever happens to exist at that path — including nothing,
@@ -292,6 +314,13 @@ func sslDefault(env Env) string {
 // already runs other projects on 5432, 4222, 6379 and 9000. Colliding means
 // silently connecting to somebody else's database and getting an auth failure
 // that looks like a credential bug rather than a port clash.
+// localURL is the development address of a sibling service, derived from the
+// same port map its own process reads. Two hand-maintained lists of ports would
+// drift, and the symptom would be a cross-service call to a closed port.
+func localURL(name string) string {
+	return fmt.Sprintf("http://localhost:%d", defaultPort(name))
+}
+
 func defaultPort(name string) int {
 	if p, ok := servicePorts[name]; ok {
 		return p
