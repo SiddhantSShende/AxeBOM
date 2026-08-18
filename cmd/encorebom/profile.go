@@ -14,7 +14,7 @@ const defaultProfilePath = "docs/reference/certin-v2.0.yaml"
 
 func runProfile(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: encorebom profile <lint|gen|show> [flags]")
+		return fmt.Errorf("usage: encorebom profile <lint|gen|show|guardrails|evidence> [flags]")
 	}
 	switch args[0] {
 	case "lint":
@@ -23,6 +23,10 @@ func runProfile(ctx context.Context, args []string) error {
 		return profileGen(args[1:])
 	case "show":
 		return profileShow(args[1:])
+	case "guardrails":
+		return profileGuardrails(args[1:])
+	case "evidence":
+		return runEvidence(args[1:])
 	default:
 		return fmt.Errorf("unknown profile subcommand %q", args[0])
 	}
@@ -169,4 +173,64 @@ func resolveFromRepoRoot(p string) string {
 		return p
 	}
 	return filepath.Join(root, p)
+}
+
+// ─── guardrails ─────────────────────────────────────────────────────────────
+
+// auditRoots are the trees whose output a customer reads.
+//
+// ⚠ NOT THE WHOLE REPOSITORY, AND THAT IS A DELIBERATE NARROWING. Every
+// explanatory comment in this codebase discusses the numbers and the word these
+// rules forbid — including the rules themselves. A check that flags its own
+// documentation is a check somebody disables, and a disabled check is worse
+// than none because its absence is invisible.
+var auditRoots = []string{
+	"services",
+	"workers",
+	"libs/go-shared/model",
+	"libs/py-shared/encorebom_shared",
+	"frontend/src",
+}
+
+// profileGuardrails runs the Phase 16 §16.1 audit.
+//
+// The phase file asks for these to be grepped by hand. A hand-grep happens once,
+// performed by the person who already knows the rule — which is the person least
+// likely to have broken it. This runs in CI instead.
+func profileGuardrails(args []string) error {
+	fs := flag.NewFlagSet("profile guardrails", flag.ExitOnError)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	path := resolveFromRepoRoot(defaultProfilePath)
+	p, err := compliance.Load(path)
+	if err != nil {
+		return err
+	}
+
+	root := filepath.Dir(filepath.Dir(filepath.Dir(path)))
+	report, err := compliance.AuditGeneratedOutput(p, root, auditRoots)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("guardrail audit — %d files across %d trees\n", report.Scanned, len(auditRoots))
+	for _, bomType := range compliance.SortedKeys(report.CountsChecked) {
+		fmt.Printf("  %-6s element count %d must never be written as a literal\n",
+			bomType, report.CountsChecked[bomType])
+	}
+	fmt.Println()
+
+	if report.OK() {
+		fmt.Println("  no hardcoded field count")
+		fmt.Println("  no assertion of compliance in customer-facing output")
+		fmt.Println("\nguardrails: OK")
+		return nil
+	}
+
+	for _, f := range report.Findings {
+		fmt.Printf("  %s\n\n", f)
+	}
+	return fmt.Errorf("guardrails: %d violation(s)", len(report.Findings))
 }

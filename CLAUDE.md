@@ -177,6 +177,8 @@ Probed on the primary dev machine (Windows 11), and the reason for two design ch
 | `docs/08-OPERATIONS.md` | Local dev, compose, CI, runbooks |
 | `docs/09-GOLDEN-CORPUS.md` | Test fixtures and what each proves |
 | `docs/STATE.md` | ⚑ LIVING — read at start, update at end |
+| `docs/LIMITATIONS.md` | What the product does NOT do — boundaries and known gaps |
+| `docs/COMPLIANCE-REPORT.md` | Generated coverage evidence pack (`task profile:evidence`) |
 | `docs/ADR/` | One file per irreversible decision |
 | `docs/reference/certin-v2.0.yaml` | ⚑ The compliance profile |
 | `docs/reference/CERT-In_BOM_Guidelines_v2.0.pdf` | The source document |

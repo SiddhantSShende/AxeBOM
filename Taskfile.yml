@@ -56,6 +56,8 @@ tasks:
     cmds:
       - task: fmt:check
       - task: profile:lint
+      - task: profile:guardrails
+      - task: profile:evidence:check
       - task: docs:lint
       - task: lint
       - task: test
@@ -179,6 +181,28 @@ tasks:
       - go run ./tools/gen-service --all
 
   # ===================================================================== docs
+  profile:guardrails:
+    desc: "Fail on a hardcoded field count or an assertion of compliance"
+    # ⚠ THE TWO CHECKS PHASE 16 ASKS TO BE GREPPED BY HAND. A hand-grep happens
+    # once, performed by the person who already knows the rule — who is the
+    # person least likely to have broken it. Both guard failures that are
+    # invisible in normal operation: nothing crashes, no test goes red, and the
+    # wrong thing appears on a document somebody hands to a regulator.
+    cmds:
+      - go run ./cmd/encorebom profile guardrails
+
+  profile:evidence:
+    desc: Regenerate docs/COMPLIANCE-REPORT.md from the profile
+    cmds:
+      - go run ./cmd/encorebom profile evidence
+
+  profile:evidence:check:
+    desc: "Fail if the committed evidence pack no longer describes the product"
+    # A STALE PACK IS WORSE THAN AN ABSENT ONE: it is a document somebody hands
+    # to an auditor in good faith, describing a product that has moved.
+    cmds:
+      - go run ./cmd/encorebom profile evidence -check
+
   docs:lint:
     desc: Fail on broken cross-references between specification documents
     # Every phase file opens with a "Read first" list. A session that cannot
