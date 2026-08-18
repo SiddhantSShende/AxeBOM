@@ -1,0 +1,10 @@
+Level,Part Number,Description,Qty,Manufacturer,Manufacturer Location,Supplier,Supplier Location,Product Supplier,Product Supplier Location,Firmware Version,Origin,Criticality,Technology Node,Compliance,Serial Number
+0,ENC-GW-4400,EncoreBOM Edge Gateway 4400,1,Encore Systems Pvt Ltd,"Pune, India",,,Bharat Integrators Ltd,"New Delhi, India",4.2.1,India,critical,,"RoHS,CE",GW44-2026-000817
+1,ENC-MB-01,Mainboard assembly,1,Encore Systems Pvt Ltd,"Pune, India",Kaveri Electronics,"Chennai, India",,,3.0.4,India,high,,RoHS,
+2,STM32H753ZI,ARM Cortex-M7 microcontroller,1,STMicroelectronics,"Geneva, Switzerland",Arrow Electronics,"Bengaluru, India",,,,Switzerland,high,40nm,"RoHS,REACH",
+2,MT41K256M16,DDR3L SDRAM 4Gb,2,Micron Technology,"Boise, USA",Arrow Electronics,"Bengaluru, India",,,,USA,medium,20nm,RoHS,
+3,MT41K-DIE,Memory die,1,Micron Technology,"Boise, USA",,,,,,USA,medium,20nm,,
+2,W25Q128JV,128Mb serial NOR flash,1,Winbond,"Taichung, Taiwan",Mouser,"Mansfield, USA",,,1.0.0,Taiwan,high,45nm,RoHS,
+1,ENC-PSU-02,Power supply unit,1,Delta Electronics,"Taipei, Taiwan",Rashmi Power,"Mumbai, India",,,,Taiwan,high,,"RoHS,CE",PSU02-77213
+2,LM2596S-5.0,Step-down voltage regulator,2,Texas Instruments,"Dallas, USA",Mouser,"Mansfield, USA",,,,USA,medium,,RoHS,
+1,ENC-ENC-01,Enclosure and thermal assembly,1,Shakti Metals,"Rajkot, India",Shakti Metals,"Rajkot, India",,,,India,low,,RoHS,

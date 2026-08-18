@@ -142,12 +142,16 @@ tasks:
     # Update a golden only with `normalize_runner --write-expected` AND a
     # justification in the commit message.
     cmds:
-      - python -m pytest workers/sbom/test_golden.py -v -m golden
+      # ⚠ BOTH CORPORA. The SBOM goldens replay committed scanner JSON; the HBOM
+      # golden replays a committed parts list, because no engine produces
+      # hardware output — the customer's CSV IS the raw artifact. Same property
+      # either way: same input in, byte-identical canonical model out.
+      - '{{.PY}} -m pytest workers/sbom/test_golden.py workers/hbom/test_golden.py -v -m golden'
 
   normalize:
     desc: Normalize one fixture's stored artifacts and print the summary
     cmds:
-      - python -m workers.sbom.normalize_runner {{.CLI_ARGS}}
+      - '{{.PY}} -m workers.sbom.normalize_runner {{.CLI_ARGS}}'
 
   test:rls:
     desc: Assert every tenant-scoped table has RLS, and cross-tenant access fails

@@ -39,9 +39,13 @@ type BOM struct {
 	ToolVersion          string
 
 	Components []Component
-	Findings   []Finding
-	Licenses   []License
-	Engines    []EngineCoverage
+	// Hardware is populated for an HBOM only. It is the same data the
+	// component sheet renders as columns, kept as a tree so the assembly
+	// structure survives into the report.
+	Hardware []HardwareComponent
+	Findings []Finding
+	Licenses []License
+	Engines  []EngineCoverage
 	// EcosystemsWithNoEngine is the list this product exists to be honest
 	// about: something was detected and nothing we run can scan it.
 	EcosystemsWithNoEngine []string
@@ -202,7 +206,7 @@ func Sheets(b BOM) ([]Sheet, error) {
 		return nil, err
 	}
 
-	return []Sheet{
+	sheets := []Sheet{
 		summarySheet(b),
 		engineCoverageSheet(b),
 		fieldCoverageSheet(b, fields),
@@ -210,8 +214,17 @@ func Sheets(b BOM) ([]Sheet, error) {
 		componentSheet(b, fields),
 		findingSheet(b),
 		licenseSheet(b),
-		notesSheet(b),
-	}, nil
+	}
+
+	// ⚠ THE HARDWARE SHEETS GO BEFORE THE NOTES, NOT AFTER. The notes sheet
+	// carries the provenance line saying this BOM was imported rather than
+	// discovered; a reader who reaches the tree first and the caveat last has
+	// already formed an impression the caveat then has to undo.
+	if b.BOMType == model.BOMTypeHBOM {
+		sheets = append(sheets, HBOMSheets(b.Hardware)...)
+	}
+
+	return append(sheets, notesSheet(b)), nil
 }
 
 // ─── Summary ────────────────────────────────────────────────────────────────

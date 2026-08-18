@@ -42,6 +42,12 @@ const CampaignDetail = lazy(() =>
 const Notifications = lazy(() =>
   import('./routes/settings/Notifications').then((m) => ({ default: m.Notifications })),
 );
+const HardwareImport = lazy(() =>
+  import('./routes/hbom/HardwareImport').then((m) => ({ default: m.HardwareImport })),
+);
+const HardwareTree = lazy(() =>
+  import('./routes/hbom/HardwareTree').then((m) => ({ default: m.HardwareTree })),
+);
 
 export function App() {
   return (
@@ -82,6 +88,22 @@ export function App() {
               <Route path="/campaigns/new" element={<CampaignWizard />} />
               <Route path="/campaigns/:id" element={<CampaignDetail />} />
               <Route path="/settings/notifications" element={<Notifications />} />
+              <Route
+                path="/projects/:id/hardware"
+                element={
+                  <ProjectTabs>
+                    <HardwareTree />
+                  </ProjectTabs>
+                }
+              />
+              <Route
+                path="/projects/:id/hardware/import"
+                element={
+                  <ProjectTabs>
+                    <HardwareImport />
+                  </ProjectTabs>
+                }
+              />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
@@ -118,6 +140,11 @@ function ProjectTabs({ children }: { children: React.ReactNode }) {
         </NavLink>
         <NavLink to={`/projects/${id}/dependencies`}>Dependencies</NavLink>
         <NavLink to={`/projects/${id}/findings`}>Findings</NavLink>
+        {/*
+          ⚠ LABELLED "Hardware", NOT "Hardware scan". Nothing here discovers
+          anything — the tab leads to an import and a form.
+        */}
+        <NavLink to={`/projects/${id}/hardware`}>Hardware</NavLink>
       </nav>
       {children}
     </>

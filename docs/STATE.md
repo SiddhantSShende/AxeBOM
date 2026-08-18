@@ -47,7 +47,8 @@ A session that writes code but does not update this file has failed — the next
 | **Normalizer** | ✅ **identity, merge, graph, alias union-find, dedup, both coverage numbers, provenance; 151 tests + 43 golden** |
 | **SBOM worker** | ✅ **7 adapters; 74 tests; syft/syft-spdx/grype/trivy-fs/osv-scanner exercised on 5 fixtures** |
 | **Engine databases** | ✅ **provisioned + stamped (grype, trivy, osv); a vuln engine cannot run without one** |
-| Python workers (other 4) | ⬜ directories only |
+| Python workers (other 3) | ⬜ directories only |
+| **HBOM worker** | ✅ **CSV import, recursive model, form, providers, coverage — import only, never discovery** |
 | **Campaign service** | ✅ **cron+DST, scheduler, leader lock, idempotent dispatch, CRUD, run history** |
 | **Notification service** | ✅ **signed webhooks, SSRF-safe delivery, retry+dead-letter, email templates, subscriptions** |
 | **Service tokens** | ✅ **per-tenant, 2-minute TTL, analyst role, `service:` subject prefix** |
@@ -1587,7 +1588,196 @@ query cache. Resolved per delivery, never cached in a struct.
 
 ---
 
+## What Phase 15 built (in progress)
+
+Hardware BOMs: CSV import, a recursive model, manual entry, optional part
+enrichment, and the report sections — all of it honestly labelled.
+
+### The label, and how it is enforced
+
+**There is no open-source HBOM scanner.** Nothing discovers physical parts, and
+an "HBOM scan" button that reads a CSV is a lie the customer finds while
+assembling audit evidence, having assumed for months that something was watching
+their hardware.
+
+So the rule is enforced rather than remembered:
+`test_nothing_in_this_package_claims_to_scan` walks the worker's own source for
+discovery phrasing. It has a **negation filter**, because the package docstring
+says an "HBOM scan" button *is* a lie and a naive substring search would flag
+that sentence — making the rule unenforceable, so somebody deletes the test. A
+second test exercises the filter directly, since a filter that excused
+everything would leave a green test proving nothing. The frontend has the same
+pair, scoped to the strings it exports.
+
+### Zero GPL, verified rather than asserted
+
+`django-bom` is GPL-3.0 **and** a Django application rather than a library, so
+importing it would both create a derivative work and not function. It stays a
+schema reference. `task osint:licenses` reports no copyleft in any binary, and a
+test asserts no module in `workers/hbom/` imports it. Our model is ours: a
+recursive dataclass, ~300 lines.
+
+### Twenty-four elements, and Table 11 alone is not enough
+
+§10.4.1.4 (p.62) mandates `firmware_version`, `origin`, `criticality` and
+`vulnerabilities`. **None appears in Table 11.** A tool implementing Table 11
+and stopping reports itself as complete while missing four required elements.
+
+**Two supplier relationships, not one.** Table 11 lists "Supplier Information"
+and "Supplier Location" *twice*, with different descriptions: who sold the
+customer the PRODUCT, and who supplied a COMPONENT to that product's
+manufacturer. Collapsing them asserts that a distributor sold the customer a
+gateway — false, and unfalsifiable from the output. Mutation-verified: aliasing
+element 13 onto the product-supplier attribute fails the test.
+
+The count is never written. It renders from `len(HBOM_FIELDS)`, and a test
+greps the package for a hardcoded literal.
+
+### The importer
+
+`level` drives the tree, and its **sequence is validated**. A level-3 row after
+a level-1 row has no parent; accepting it silently reparents the part and
+produces a structurally valid BOM that is factually wrong, which nothing
+downstream can detect. The error names the row and both levels — a customer
+staring at a 400-line export needs to know it was line 217.
+
+Outline levels (`1.2.1`) are understood, because that is how most CAD and ERP
+exports write nesting. Depth is capped at 10 with a **diagnostic**, not silent
+truncation. Duplicate sibling parts **warn** rather than fail: the same
+capacitor legitimately appears in four sub-assemblies, and rejecting that would
+reject most real hardware.
+
+**Column mapping exists so nobody edits their file.** Requiring a customer to
+rename columns means they edit an export, make a mistake, and import something
+that no longer matches their source of truth. Header suggestions are a
+*proposal a human confirms* — silently deciding that a column called "Supplier"
+is the component supplier would put data in the wrong one of the two
+relationships.
+
+### What csv.DictReader actually yields
+
+A row with **more** fields than the header puts the surplus under a `None` key
+*as a list*; a **short** row yields `None` values. Both happen in real exports
+(a stray trailing comma, a truncated last line). The signature says so, because
+`dict[str, str]` is simply false and a false annotation is what makes a type
+checker call a live branch unreachable.
+
+⚠ **The None-handling branches are belt-and-braces, and the code says so.** A
+mutation removing any of them breaks nothing today: the `None` key is filtered
+because the mapping lookup misses, and the `None` value is flattened downstream.
+That was discovered by mutation testing an earlier comment that claimed
+otherwise, and the comment was corrected rather than the mutation ignored.
+
+### The form is a first-class input
+
+Warranty, licence terms, test result and criticality appear in **no** CAD or ERP
+export — they are judgements about the customer's own hardware. If the only way
+in is a CSV, those four are permanently `not-provided` and the coverage number
+is needlessly low for a reason nothing on screen explains. The form validates
+through the same code the importer does, and **refuses** an unrecognised
+criticality rather than coercing it: mapping "urgent" onto "critical" would be
+inventing a severity in a compliance document.
+
+### Enrichment is additive and never overwrites
+
+A parts database is a third party's opinion about an MPN; the customer's BOM is
+a statement about the hardware in front of them. When they disagree the
+customer's value goes in the document and the provider's is recorded as
+provenance. Compliance is a **union** — a customer asserting RoHS and a provider
+asserting CE are both true.
+
+`manual` is the default, is always configured, and is the tested path. Nexar and
+Mouser are **skipped cleanly when unconfigured** — no error, no empty-credential
+call that produces a 401 in somebody's logs about a feature they never enabled.
+Part numbers are deduped before a billable lookup.
+
+### Coverage
+
+Every node is scored, not just the root: a fully populated gateway over 200 bare
+leaf parts is not a well-documented BOM. The `hbom-nested` fixture scores
+**52.5% completeness against 100% declaration** — every field is declared, half
+carry substantive values. That gap is the two-number rule working.
+
+Diagnostics name origin, manufacturer location and the two supplier
+relationships **separately**, because a single percentage averages those gaps
+away across twenty other fields and §10.2.1 is the reason they exist.
+
+### Report
+
+Two hardware sheets on top of the standard set: a tree, and an origin/supplier
+view. **The indent is a separate column, not padding on the name** — a padded
+name no longer matches the component, so a filter or VLOOKUP against it fails,
+and a leading space is one of the characters formula-injection escaping has to
+consider. Escaping is inherited from `cell()` rather than re-applied, and a test
+proves the inheritance rather than assuming it.
+
+### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | ✅ green end to end |
+| `pytest workers/hbom` | ✅ 52 tests |
+| `task test:golden` | ✅ 58, incl. `hbom-nested` |
+| `task osint:licenses` | ✅ no copyleft in any binary |
+| `golangci-lint run ./...` | ✅ 0 issues |
+| `ruff check` + `mypy` | ✅ clean (bar pre-existing `py.typed` gap) |
+| Frontend `vitest` | ✅ 78 tests |
+| Mutation: 8 documented guarantees | ✅ all caught |
+
+### What Phase 15 does NOT have
+
+- **Nothing has run against a database.** No HBOM row has been written to
+  `normalize.hardware_components`; the recursive `parent_id` wiring, the
+  `criticality` CHECK and RLS on that table are all unexercised.
+- **No HTTP surface.** `/v1/hbom/preview`, `/import`, `/lookup`, `/provider` and
+  the component endpoints are called by the frontend and **do not exist** — the
+  UI is written against a contract nothing serves yet.
+- **Neither commercial provider has ever run.** Nexar and Mouser are written
+  against published schemas with parsing tested on hand-built responses. Phase 7
+  is the precedent for why that is not the same as working.
+- **No CycloneDX HBOM export** (§10.4.1.6). The XLSX/CSV sheets exist; the
+  extended-SBOM export does not.
+- **Vulnerability matching is not wired.** `findings[]` — §10.4.1.4's fourth
+  element — is modelled and rendered but nothing populates it.
+- **No frontend component tests** for the import wizard or tree editor, and no
+  axe pass on either screen.
+
+---
+
 ## Session log
+
+### 2026-08-18 (b) — Phase 15 implemented
+
+HBOM. `task verify` green; `task osint:licenses` confirms **zero copyleft in any
+binary**; `task test:golden` covers `hbom-nested`.
+
+**The honest label is enforced, not remembered.** A test walks the worker's own
+source for discovery phrasing — with a negation filter, because the package
+docstring says an "HBOM scan" button *is* a lie and a naive search would flag
+that sentence, making the rule unenforceable. A second test exercises the filter,
+since one that excused everything would be a green test proving nothing.
+
+**Table 11 alone is not compliant.** §10.4.1.4 mandates four elements that appear
+nowhere in it, and Table 11 lists the two supplier relationships *twice* with
+different meanings. Mutation-verified: aliasing element 13 onto the
+product-supplier attribute fails the test.
+
+**Mutation testing corrected a comment I had written.** Three `None`-handling
+branches in the CSV reader were documented as preventing a crash; removing any
+of them broke nothing, because the filtering happens elsewhere. The comment now
+says they are belt-and-braces and names what actually does the work.
+
+**Fixed two Taskfile targets** that called bare `python` rather than `{{.PY}}`,
+so `test:golden` and `normalize` only worked from an already-activated venv — a
+step the Taskfile exists to remove.
+
+**Next session:** Phase 16 (`docs/phases/PHASE-16-hardening-launch.md`) — CERT-In
+profile validation, hardening, perf, pen-test.
+
+**The untested backlog is now seven phases deep, and every item needs Docker.**
+Phase 15 adds: no HBOM row has ever been written, the HTTP surface the new UI
+calls does not exist, neither commercial provider has run, and there is no
+CycloneDX HBOM export.
 
 ### 2026-08-18 — Phase 14 implemented
 
