@@ -1,0 +1,148 @@
+{{/*
+  Engine workers — the untrusted-code boundary.
+
+  ⚠ EVERY SECURITY FIELD BELOW IS LOAD-BEARING, AND MOST OF THEM ARE THINGS
+  KUBERNETES DOES THE WRONG WAY BY DEFAULT.
+
+  These pods execute third-party scanners over code a customer uploaded. A
+  container escape here reaches whatever else shares the node and whatever
+  credential is mounted into the pod. Kubernetes will, unless told otherwise,
+  mount an API token, run as root, allow privilege escalation, and schedule the
+  pod next to the service holding the database password.
+
+  Read `docs/05-SECURITY-MODEL.md` §3 before changing anything in this file.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-engine-worker
+  labels:
+    app.kubernetes.io/name: engine-worker
+    app.kubernetes.io/part-of: encorebom
+    encorebom.io/trust: untrusted
+spec:
+  replicas: {{ .Values.engines.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: engine-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: engine-worker
+        encorebom.io/trust: untrusted
+    spec:
+      {{/*
+        ⚠ NO SERVICE-ACCOUNT TOKEN.
+
+        Kubernetes mounts one by default. Inside a process running untrusted
+        code, that token is a cluster API credential — the single thing that
+        turns a container escape into a cluster compromise. Nothing in an engine
+        worker talks to the Kubernetes API, so there is nothing to lose here and
+        everything to lose by leaving the default.
+      */}}
+      automountServiceAccountToken: {{ .Values.engines.automountServiceAccountToken }}
+
+      {{/*
+        ⚠ A DEDICATED NODE POOL. The pool is the blast-radius boundary: an escape
+        reaches its neighbours, and on a general pool the neighbours are the
+        services holding the JWT signing key and the Vault token.
+      */}}
+      {{- with .Values.engines.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.engines.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{/*
+        gVisor or Firecracker where the cluster provides one. Empty means the
+        node pool plus seccomp is the isolation — weaker, and `task preflight`
+        says so loudly rather than letting an operator assume otherwise.
+      */}}
+      {{- if .Values.engines.runtimeClassName }}
+      runtimeClassName: {{ .Values.engines.runtimeClassName }}
+      {{- end }}
+
+      securityContext:
+        runAsNonRoot: {{ .Values.engines.securityContext.runAsNonRoot }}
+        runAsUser: {{ .Values.engines.securityContext.runAsUser }}
+        seccompProfile:
+          {{- toYaml .Values.engines.securityContext.seccompProfile | nindent 10 }}
+
+      containers:
+        - name: engine-worker
+          image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}/engine-worker:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          securityContext:
+            readOnlyRootFilesystem: {{ .Values.engines.securityContext.readOnlyRootFilesystem }}
+            allowPrivilegeEscalation: {{ .Values.engines.securityContext.allowPrivilegeEscalation }}
+            capabilities:
+              {{- toYaml .Values.engines.securityContext.capabilities | nindent 14 }}
+
+          {{/*
+            ⚠ LIMITS, NOT JUST REQUESTS. A malicious repository is a resource
+            exhaustion vector: a zip bomb, a pathological lockfile, a
+            deliberately quadratic dependency graph. Without a limit the pod
+            takes the node down and every other tenant's scan with it.
+          */}}
+          resources:
+            {{- toYaml .Values.engines.resources | nindent 12 }}
+
+          volumeMounts:
+            - name: workdir
+              mountPath: /work
+
+          env:
+            {{/*
+              ⚠ NO DATABASE CREDENTIAL, NO VAULT TOKEN, NO GIT CREDENTIAL.
+              An engine worker receives a content-addressed archive and returns
+              raw output. Only the fetcher holds git credentials (ADR-0008), and
+              nothing that runs a scanner holds any secret at all. If a variable
+              carrying one ever appears here, the security model is gone and the
+              only evidence is this comment.
+            */}}
+            - name: ENCOREBOM_ROLE
+              value: engine-worker
+
+      volumes:
+        {{/*
+          tmpfs, with a size limit. A scanner writes here and nowhere else. The
+          limit is a quota rather than a hint: an unbounded tmpfs is node memory
+          that a crafted repository can exhaust.
+        */}}
+        - name: workdir
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.engines.workdir.sizeLimit }}
+
+{{- if .Values.engines.networkPolicy.enabled }}
+---
+{{/*
+  ⚠ DEFAULT-DENY EGRESS, AS A SECOND LAYER.
+
+  Engines already run `--network=none` inside the sandbox. This is the cluster
+  saying the same thing, because a sandbox misconfiguration should not be the
+  only thing between untrusted code and the network. The allowlist exists solely
+  for DB-backed engines reaching a vulnerability feed — and those databases are
+  pre-warmed, so the allowlist is a fallback rather than the normal path.
+*/}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-engine-worker-egress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: engine-worker
+  policyTypes:
+    - Egress
+  egress:
+    {{- with .Values.engines.networkPolicy.allowEgressTo }}
+    {{- toYaml . | nindent 4 }}
+    {{- else }}
+    []
+    {{- end }}
+{{- end }}

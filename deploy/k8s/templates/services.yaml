@@ -1,0 +1,133 @@
+{{/*
+  The eight stateless Go services.
+
+  One template rather than eight files: they differ only in name, port and
+  resources, and eight near-identical files is eight places for a security
+  setting to be applied seven times.
+
+  ⚠ THESE HOLD CREDENTIALS AND MUST NEVER SHARE A NODE WITH AN ENGINE WORKER.
+  The anti-affinity below is what says so to the scheduler; the engine pool's
+  taint is what says it from the other side. Both, because either alone is one
+  edit away from being wrong.
+*/}}
+{{- range $name, $svc := .Values.services }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $.Release.Name }}-{{ $name }}
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/part-of: encorebom
+    encorebom.io/trust: trusted
+spec:
+  replicas: {{ $svc.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $name }}
+        encorebom.io/trust: trusted
+    spec:
+      affinity:
+        podAntiAffinity:
+          {{/*
+            ⚠ HARD, NOT PREFERRED. A trusted service sharing a node with a
+            process running untrusted code puts the JWT signing key and the
+            Vault token one container escape away. "Preferred" means the
+            scheduler does it anyway when the cluster is busy — which is exactly
+            when nobody is watching.
+          */}}
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  encorebom.io/trust: untrusted
+              topologyKey: kubernetes.io/hostname
+          preferredDuringSchedulingIgnoredDuringExecution:
+            {{/*
+              Spread replicas across nodes so a single node loss is a degraded
+              service rather than an outage.
+            */}}
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: {{ $name }}
+                topologyKey: kubernetes.io/hostname
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: {{ $name }}
+          image: "{{ $.Values.image.registry }}/{{ $.Values.image.repository }}/{{ $name }}:{{ $.Values.image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+
+          ports:
+            - name: http
+              containerPort: {{ $svc.port }}
+            - name: metrics
+              containerPort: {{ add $svc.port 1000 }}
+
+          {{/*
+            ⚠ LIVENESS PERFORMS NO I/O, BY DESIGN.
+
+            A database blip that fails liveness gets the entire fleet killed and
+            turns a short outage into a long one. Readiness is where dependency
+            checks belong: a failing instance leaves the load balancer and comes
+            back when its dependency does.
+          */}}
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 5
+            failureThreshold: 2
+
+          resources:
+            {{- toYaml $svc.resources | nindent 12 }}
+
+          envFrom:
+            - secretRef:
+                name: {{ $.Release.Name }}-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $.Release.Name }}-{{ $name }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ $name }}
+  ports:
+    - name: http
+      port: {{ $svc.port }}
+      targetPort: http
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $.Release.Name }}-{{ $name }}
+spec:
+  {{/*
+    A voluntary disruption — a node drain, a cluster upgrade — must not take the
+    last replica. With replicas at 2, minAvailable 1 means a drain proceeds one
+    pod at a time instead of emptying the deployment.
+  */}}
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+{{- end }}

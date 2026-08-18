@@ -1,0 +1,12 @@
+apiVersion: v2
+name: encorebom
+description: EncoreBOM — BOM and SCA platform for CERT-In Technical Guidelines v2.0
+type: application
+# The chart's own version. Bumped when the templates change, independently of
+# the application, because a customer upgrading a chart is a different event
+# from a customer upgrading the product.
+version: 0.1.0
+# appVersion is a placeholder: the real value is injected at release time from
+# the same git describe that stamps the binaries, so a running pod and its
+# chart cannot disagree about which build is deployed.
+appVersion: "dev"

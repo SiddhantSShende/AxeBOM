@@ -1,0 +1,199 @@
+# EncoreBOM Helm values.
+#
+# ⚠ THE ENGINE NODE POOL IS THE MOST IMPORTANT BLOCK IN THIS FILE.
+#
+# Engine workers execute third-party scanners over untrusted customer code. That
+# is remote code execution by design, and the whole security model rests on those
+# processes sharing a kernel with nothing that holds a credential. Everything
+# under `engines:` exists to keep that true — see the comments there before
+# changing any of it.
+
+image:
+  registry: ghcr.io
+  repository: encorebom
+  # Overridden at release time. `latest` is deliberately not the default: a tag
+  # that moves makes a rollback impossible to describe.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# ---------------------------------------------------------------------------
+# Stateless services
+#
+# All eight scale horizontally. Two replicas is the floor, not a target: one
+# replica means every deploy is an outage and every node drain is an incident.
+# ---------------------------------------------------------------------------
+services:
+  gateway:
+    replicas: 2
+    port: 8080
+    resources:
+      requests: {cpu: 100m, memory: 128Mi}
+      limits: {cpu: 500m, memory: 256Mi}
+  auth:
+    replicas: 2
+    port: 8091
+    resources:
+      requests: {cpu: 100m, memory: 128Mi}
+      limits: {cpu: 500m, memory: 256Mi}
+  project:
+    replicas: 2
+    port: 8092
+    resources:
+      requests: {cpu: 100m, memory: 128Mi}
+      limits: {cpu: 500m, memory: 256Mi}
+  scan-orchestrator:
+    replicas: 2
+    port: 8093
+    resources:
+      requests: {cpu: 200m, memory: 256Mi}
+      limits: {cpu: 1000m, memory: 512Mi}
+  report:
+    replicas: 2
+    port: 8094
+    # A Complete BOM at the 250k-component cap is held in memory while the
+    # workbook streams. This limit is the reason the writer is a push iterator
+    # rather than a slice.
+    resources:
+      requests: {cpu: 200m, memory: 512Mi}
+      limits: {cpu: 2000m, memory: 2Gi}
+  campaign:
+    # ⚠ TWO REPLICAS IS SAFE BECAUSE DISPATCH IS IDEMPOTENT, NOT BECAUSE ONE OF
+    # THEM IS THE LEADER. `UNIQUE (campaign_id, scheduled_for)` is what prevents
+    # a duplicate scan; the advisory lock only stops both replicas polling. A
+    # single replica would make every deploy a window with no scheduler.
+    replicas: 2
+    port: 8095
+    resources:
+      requests: {cpu: 100m, memory: 128Mi}
+      limits: {cpu: 500m, memory: 256Mi}
+  comment:
+    replicas: 2
+    port: 8096
+    resources:
+      requests: {cpu: 100m, memory: 128Mi}
+      limits: {cpu: 500m, memory: 256Mi}
+  notification:
+    replicas: 2
+    port: 8097
+    resources:
+      requests: {cpu: 100m, memory: 128Mi}
+      limits: {cpu: 500m, memory: 256Mi}
+
+# ---------------------------------------------------------------------------
+# Engine workers — the untrusted-code boundary
+# ---------------------------------------------------------------------------
+engines:
+  replicas: 3
+
+  # ⚠ A DEDICATED NODE POOL, AND THIS IS NOT AN OPTIMISATION.
+  #
+  # These pods run third-party binaries over code a customer uploaded. A
+  # container escape on a shared node reaches whatever else runs there — which,
+  # on a general pool, includes the services holding database credentials, the
+  # JWT signing key and the Vault token. The pool is the blast-radius boundary.
+  nodeSelector:
+    encorebom.io/workload: engine
+  tolerations:
+    - key: encorebom.io/engine
+      operator: Exists
+      effect: NoSchedule
+
+  # gVisor or Firecracker where the cluster provides it. Absent, the pool plus
+  # the seccomp profile is the minimum — and `task preflight` says which you got,
+  # loudly, rather than letting an operator assume the stronger one.
+  runtimeClassName: ""
+
+  # ⚠ NO SERVICE-ACCOUNT TOKEN. A mounted token is an API credential inside the
+  # process running untrusted code — the one thing that turns a container escape
+  # into a cluster compromise. Kubernetes mounts one by default, so this must be
+  # set explicitly and must never be flipped for convenience.
+  automountServiceAccountToken: false
+
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+
+  resources:
+    requests: {cpu: 500m, memory: 1Gi}
+    limits: {cpu: 2000m, memory: 4Gi}
+
+  # tmpfs workdir. A scanner writes here and nowhere else; the size is a quota,
+  # because an unbounded tmpfs is node memory a malicious repository can exhaust.
+  workdir:
+    sizeLimit: 8Gi
+
+  # ⚠ DEFAULT-DENY EGRESS. Engines run `--network=none` in the sandbox; this is
+  # the second layer, at the cluster. The allowlist exists only for the
+  # DB-backed engines (grype, trivy, osv-scanner) that must reach a vulnerability
+  # feed — and those are pre-warmed, so the allowlist is a fallback rather than
+  # the normal path.
+  networkPolicy:
+    enabled: true
+    allowEgressTo: []
+
+# ---------------------------------------------------------------------------
+# Data
+# ---------------------------------------------------------------------------
+postgres:
+  # An operator-managed instance is expected; the chart does not run a database.
+  host: ""
+  port: 5432
+  database: encorebom
+  # ⚠ POINT-IN-TIME RECOVERY, 30-DAY WINDOW. A nightly dump loses a day; PITR
+  # loses a transaction. For a product whose value is defensible records, the
+  # difference is whether an incident costs a day of scans or nothing.
+  pitr:
+    enabled: true
+    retentionDays: 30
+
+objectStorage:
+  bucket: encorebom
+  # Versioning on, lifecycle rules on — with ONE exception, below.
+  versioning: true
+  lifecycle:
+    # ⚠ RAW SCAN ARTIFACTS ARE NEVER EXPIRED. They are the evidence that makes a
+    # report defensible six months later and the input that makes
+    # re-normalization possible (ADR-0003). A lifecycle rule that ages them out
+    # silently converts a replayable system into an unauditable one, and nothing
+    # fails when it happens.
+    rawArtifacts:
+      expireAfterDays: 0 # 0 means never. Do not set this.
+    renderedReports:
+      expireAfterDays: 365
+
+nats:
+  url: ""
+vault:
+  address: ""
+
+# ---------------------------------------------------------------------------
+# Observability
+#
+# The three that matter most in production, per docs/08-OPERATIONS.md §5.
+# ---------------------------------------------------------------------------
+observability:
+  serviceMonitor:
+    enabled: true
+  alerts:
+    # Silent coverage loss is the failure mode that hurts a compliance product,
+    # because nothing appears broken.
+    engineUnavailable:
+      enabled: true
+      severity: warning
+    # A rising tail is early warning of over-merge, which UNDER-REPORTS
+    # vulnerabilities.
+    aliasClusterSize:
+      enabled: true
+      severity: warning
+      p99Threshold: 25
+    # ⚠ SHOULD BE EXACTLY ZERO. One occurrence is an incident, not a metric.
+    crossTenantAttempt:
+      enabled: true
+      severity: critical
+      threshold: 0
