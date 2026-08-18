@@ -113,3 +113,17 @@ func serviceMiddleware(d *deps) []httpx.Middleware {
 	_ = d
 	return nil
 }
+
+// startBackground launches this service's long-running background workers.
+//
+// GENERATED SCAFFOLD, then hand-edited. Written only if absent.
+//
+// Called after buildDeps and before the HTTP server starts. Implementations
+// launch their own goroutines and RETURN — this must not block, or the service
+// never begins serving. ctx is cancelled on shutdown.
+//
+// A worker's failure belongs in a log, not in an exit: an instance that can
+// still serve HTTP is worth more than one that dies because NATS blinked.
+func startBackground(ctx context.Context, d *deps) {
+	_, _ = ctx, d
+}

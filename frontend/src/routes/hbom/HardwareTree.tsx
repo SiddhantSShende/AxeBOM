@@ -62,8 +62,8 @@ export function HardwareTree() {
         <div>
           <h1>Hardware</h1>
           <p className="muted">
-            {rows.length} components, imported from structured entry. Nothing here was
-            discovered by a scan.
+            {rows.length} components, imported from structured entry. Nothing here was discovered by
+            a scan.
           </p>
         </div>
 
@@ -122,11 +122,7 @@ export function HardwareTree() {
               <td>{component.criticality || <NotProvided />}</td>
               <td className="muted">{describeProvenance(component)}</td>
               <td>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  onClick={() => setEditing(component)}
-                >
+                <button type="button" className="btn btn-sm" onClick={() => setEditing(component)}>
                   Complete
                 </button>
               </td>
@@ -136,11 +132,7 @@ export function HardwareTree() {
       </table>
 
       {editing && (
-        <ComponentForm
-          projectId={projectId}
-          component={editing}
-          onDone={() => setEditing(null)}
-        />
+        <ComponentForm projectId={projectId} component={editing} onDone={() => setEditing(null)} />
       )}
     </section>
   );
@@ -169,9 +161,9 @@ function MissingJudgements({
     <div className="callout callout-warn">
       <h3>What a parts list cannot tell us</h3>
       <p>
-        These are judgements about your hardware, and they appear in no CAD or ERP export.
-        CERT-In §10.4.1.4 requires a criticality rating for hardware supplied to government
-        and public-sector entities.
+        These are judgements about your hardware, and they appear in no CAD or ERP export. CERT-In
+        §10.4.1.4 requires a criticality rating for hardware supplied to government and
+        public-sector entities.
       </p>
       <ul>
         {gaps.map((g) => (
@@ -280,8 +272,8 @@ function ComponentForm({
           onChange={(e) => set('component_supplier_info', e.target.value)}
         />
         <p className="field-hint">
-          Who supplied this part to the manufacturer of the larger product. A different
-          relationship — CERT-In Table 11 records both.
+          Who supplied this part to the manufacturer of the larger product. A different relationship
+          — CERT-In Table 11 records both.
         </p>
       </div>
 

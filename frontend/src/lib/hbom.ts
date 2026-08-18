@@ -78,27 +78,77 @@ export interface ImportError {
  * the resulting BOM says something false about how the hardware is assembled.
  */
 export const CANONICAL_COLUMNS = [
-  { id: 'level', label: 'Level', required: true, hint: 'Builds the sub-component tree. 0 or 1 is the product; 1.2.1 outline form also works.' },
+  {
+    id: 'level',
+    label: 'Level',
+    required: true,
+    hint: 'Builds the sub-component tree. 0 or 1 is the product; 1.2.1 outline form also works.',
+  },
   { id: 'part_number', label: 'Part number', required: false, hint: '' },
   { id: 'description', label: 'Description', required: false, hint: '' },
   { id: 'quantity', label: 'Quantity', required: false, hint: '' },
   { id: 'manufacturer', label: 'Manufacturer', required: false, hint: '' },
-  { id: 'manufacturer_location', label: 'Manufacturer location', required: false, hint: 'A supply-chain provenance signal (§10.2.1).' },
+  {
+    id: 'manufacturer_location',
+    label: 'Manufacturer location',
+    required: false,
+    hint: 'A supply-chain provenance signal (§10.2.1).',
+  },
   { id: 'mpn', label: 'Manufacturer part number', required: false, hint: '' },
-  { id: 'supplier', label: 'Component supplier', required: false, hint: 'Who supplied this part to the manufacturer of the larger product.' },
+  {
+    id: 'supplier',
+    label: 'Component supplier',
+    required: false,
+    hint: 'Who supplied this part to the manufacturer of the larger product.',
+  },
   { id: 'supplier_location', label: 'Component supplier location', required: false, hint: '' },
-  { id: 'product_supplier', label: 'Product supplier', required: false, hint: 'Who sold YOU the product. A different relationship from the component supplier.' },
-  { id: 'product_supplier_location', label: 'Product supplier location', required: false, hint: '' },
+  {
+    id: 'product_supplier',
+    label: 'Product supplier',
+    required: false,
+    hint: 'Who sold YOU the product. A different relationship from the component supplier.',
+  },
+  {
+    id: 'product_supplier_location',
+    label: 'Product supplier location',
+    required: false,
+    hint: '',
+  },
   { id: 'serial_number', label: 'Serial number', required: false, hint: '' },
-  { id: 'firmware_version', label: 'Firmware version', required: false, hint: 'Required by §10.4.1.4.' },
-  { id: 'origin', label: 'Origin', required: false, hint: 'Country or entity of origin. Required by §10.4.1.4.' },
-  { id: 'criticality', label: 'Criticality', required: false, hint: 'critical, high, medium or low. Required by §10.4.1.4.' },
+  {
+    id: 'firmware_version',
+    label: 'Firmware version',
+    required: false,
+    hint: 'Required by §10.4.1.4.',
+  },
+  {
+    id: 'origin',
+    label: 'Origin',
+    required: false,
+    hint: 'Country or entity of origin. Required by §10.4.1.4.',
+  },
+  {
+    id: 'criticality',
+    label: 'Criticality',
+    required: false,
+    hint: 'critical, high, medium or low. Required by §10.4.1.4.',
+  },
   { id: 'technology_node', label: 'Technology node', required: false, hint: 'For ICs: 7nm, 14nm…' },
-  { id: 'compliance', label: 'Compliance', required: false, hint: 'RoHS, CE, REACH — comma separated.' },
+  {
+    id: 'compliance',
+    label: 'Compliance',
+    required: false,
+    hint: 'RoHS, CE, REACH — comma separated.',
+  },
   { id: 'power_supply', label: 'Power supply', required: false, hint: '' },
   { id: 'technical_specification', label: 'Technical specification', required: false, hint: '' },
   { id: 'manufacturing_date', label: 'Manufacturing date', required: false, hint: '' },
-  { id: 'unit_cost', label: 'Unit cost', required: false, hint: 'Accepted and ignored — not a CERT-In element.' },
+  {
+    id: 'unit_cost',
+    label: 'Unit cost',
+    required: false,
+    hint: 'Accepted and ignored — not a CERT-In element.',
+  },
 ] as const;
 
 /**

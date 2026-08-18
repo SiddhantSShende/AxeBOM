@@ -11,6 +11,10 @@ license = { text = "Proprietary" }
 dependencies = [
     "pydantic>=2.9",
     "structlog>=24.4",
+    # The adapter registry and the sbom worker parse OSINT/tools.manifest.yaml
+    # at import time. Undeclared, this resolves only on a machine that happens
+    # to have PyYAML already — every clean install fails at `import yaml`.
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]

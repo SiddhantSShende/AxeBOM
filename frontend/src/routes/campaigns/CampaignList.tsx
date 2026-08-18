@@ -122,9 +122,7 @@ function CampaignRow({ campaign }: { campaign: Campaign }) {
           type="button"
           className="btn btn-sm"
           disabled={setEnabled.isPending}
-          onClick={() =>
-            setEnabled.mutate({ id: campaign.id, enabled: !campaign.enabled })
-          }
+          onClick={() => setEnabled.mutate({ id: campaign.id, enabled: !campaign.enabled })}
         >
           {campaign.enabled ? 'Pause' : 'Resume'}
         </button>
@@ -154,20 +152,12 @@ function CampaignRow({ campaign }: { campaign: Campaign }) {
             >
               Delete
             </button>
-            <button
-              type="button"
-              className="btn btn-sm"
-              onClick={() => setConfirmingDelete(false)}
-            >
+            <button type="button" className="btn btn-sm" onClick={() => setConfirmingDelete(false)}>
               Cancel
             </button>
           </span>
         ) : (
-          <button
-            type="button"
-            className="btn btn-sm"
-            onClick={() => setConfirmingDelete(true)}
-          >
+          <button type="button" className="btn btn-sm" onClick={() => setConfirmingDelete(true)}>
             Delete
           </button>
         )}
@@ -180,13 +170,7 @@ function CampaignRow({ campaign }: { campaign: Campaign }) {
  * NextRun shows the instant in the viewer's zone and, when they differ, the
  * campaign's.
  */
-export function NextRun({
-  at,
-  campaignZone,
-}: {
-  at: string | undefined;
-  campaignZone: string;
-}) {
+export function NextRun({ at, campaignZone }: { at: string | undefined; campaignZone: string }) {
   if (!at) {
     // A campaign that is enabled with no next run has nothing to show, and
     // saying "—" would look like a rendering bug rather than a state.

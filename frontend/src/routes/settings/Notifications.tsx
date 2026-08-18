@@ -40,8 +40,8 @@ export function Notifications() {
           in the code. Somebody configuring a webhook into a shared Slack channel
           should know what will and will not appear there before they do it.
         */}
-        Notifications carry ids, counts and a link — never a component name, a
-        version or an advisory id. Anyone following the link still has to sign in.
+        Notifications carry ids, counts and a link — never a component name, a version or an
+        advisory id. Anyone following the link still has to sign in.
       </p>
 
       <NewSubscription />
@@ -153,9 +153,7 @@ function NewSubscription() {
               checked={selected.includes(id)}
               onChange={() =>
                 setSelected(
-                  selected.includes(id)
-                    ? selected.filter((e) => e !== id)
-                    : [...selected, id],
+                  selected.includes(id) ? selected.filter((e) => e !== id) : [...selected, id],
                 )
               }
             />
@@ -213,9 +211,7 @@ function SubscriptionCard({ subscription }: { subscription: Subscription }) {
         <button
           type="button"
           className="btn btn-sm"
-          onClick={() =>
-            setEnabled.mutate({ id: subscription.id, enabled: !subscription.enabled })
-          }
+          onClick={() => setEnabled.mutate({ id: subscription.id, enabled: !subscription.enabled })}
         >
           {subscription.enabled ? 'Pause' : 'Resume'}
         </button>
@@ -227,11 +223,7 @@ function SubscriptionCard({ subscription }: { subscription: Subscription }) {
         >
           {showDeliveries ? 'Hide deliveries' : 'Deliveries'}
         </button>
-        <button
-          type="button"
-          className="btn btn-sm"
-          onClick={() => remove.mutate(subscription.id)}
-        >
+        <button type="button" className="btn btn-sm" onClick={() => remove.mutate(subscription.id)}>
           Delete
         </button>
       </div>

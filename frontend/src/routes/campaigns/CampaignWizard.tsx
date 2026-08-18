@@ -237,9 +237,7 @@ interface CheckboxGroupProps {
 
 function CheckboxGroup({ name, label, options, selected, onChange }: CheckboxGroupProps) {
   function toggle(value: string) {
-    onChange(
-      selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value],
-    );
+    onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
   }
 
   return (

@@ -184,3 +184,32 @@ func serviceMiddleware(d *deps) []httpx.Middleware {
 	_ = d
 	return nil
 }
+
+// startBackground launches this service's long-running background workers.
+//
+// GENERATED SCAFFOLD, then hand-edited. Written only if absent.
+//
+// Called after buildDeps and before the HTTP server starts. Implementations
+// launch their own goroutines and RETURN — this must not block, or the service
+// never begins serving. ctx is cancelled on shutdown.
+//
+// A worker's failure belongs in a log, not in an exit: an instance that can
+// still serve HTTP is worth more than one that dies because NATS blinked.
+func startBackground(ctx context.Context, d *deps) {
+	// ⚠ EVERY INSTANCE RUNS THE SCHEDULER; ONLY THE LOCK HOLDER POLLS.
+	//
+	// The alternative — a separate "scheduler" deployment — is one more thing to
+	// deploy, one more thing to forget to deploy, and a single point of failure
+	// with no automatic successor. Here, if the leader dies another instance
+	// takes the advisory lock on its next tick.
+	//
+	// Its failure is LOGGED rather than fatal: an instance that can still serve
+	// campaign CRUD is worth more than one that exits because a tick failed, and
+	// leadership moves to a healthy instance either way.
+	go func() {
+		if err := d.scheduler.Run(ctx); err != nil && ctx.Err() == nil {
+			slog.Error("the campaign scheduler stopped; due campaigns will not fire "+
+				"from this instance", "error", err)
+		}
+	}()
+}

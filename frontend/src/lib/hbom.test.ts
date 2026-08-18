@@ -54,8 +54,7 @@ describe('the honest label', () => {
   const claims = [/hbom scan/i, /scan (your )?hardware/i, /hardware scan/i, /discovers? parts/i];
   const negations = /\b(not|no|never|cannot|is a lie|rather than)\b/i;
 
-  const flagged = (text: string) =>
-    claims.some((c) => c.test(text)) && !negations.test(text);
+  const flagged = (text: string) => claims.some((c) => c.test(text)) && !negations.test(text);
 
   it('no exported label or hint claims discovery', () => {
     const strings = [

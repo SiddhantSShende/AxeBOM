@@ -24,7 +24,7 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: '1.24'
+  GO_VERSION: '1.26' # must track the go directive in go.mod
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.11'
 
@@ -51,8 +51,18 @@ jobs:
           # runner's autocrlf rewrites them, every golden test fails for a
           # reason unrelated to the code — the exact failure mode that wasted
           # time locally. Catch it here, not in a confusing test report.
-          if git ls-files --eol | grep -E 'w/crlf' | grep -vE '\.(ps1|bat|cmd)$'; then
+          # Only files git is ALLOWED to convert can fail this check:
+          #   attr/-text  — goldens and standards artifacts, byte-exact by
+          #                 policy (.gitattributes). Their bytes are whatever
+          #                 was committed, and converting them is the bug this
+          #                 repo guards against, not the fix.
+          #   eol=crlf    — *.ps1 / *.bat / *.cmd, CRLF on purpose.
+          # Filtering by extension instead — as this did — flagged all five
+          # fixtures/**/expected/canonical.json goldens on every single run.
+          bad=$(git ls-files --eol                 | grep 'w/crlf'                 | grep -v 'attr/-text'                 | grep -v 'eol=crlf' || true)
+          if [ -n "$bad" ]; then
             echo "::error::CRLF found in a file that must be LF"
+            echo "$bad"
             exit 1
           fi
           echo "line endings OK"
@@ -94,9 +104,14 @@ jobs:
       # This step is the mechanical guard from ADR-0001 mitigation 3.
       # A cross-service import COMPILES CLEANLY; only depguard rejects it.
       # If this job is ever disabled, the service boundary stops existing.
-      - uses: golangci/golangci-lint-action@v6
+      # ⚠ THE ACTION MAJOR AND THE LINTER MAJOR ARE COUPLED.
+      # Action v6 supports golangci-lint v1 only; v2 needs action v7+. Pinning
+      # action v6 with version v2.12 is unsatisfiable — this job failed on
+      # install, which means depguard never ran and the service boundary was
+      # unguarded for as long as that pairing was in place.
+      - uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.12
+          version: v2.12.2
           args: --timeout=5m
 
   generator-drift:
@@ -227,16 +242,34 @@ jobs:
       - uses: bufbuild/buf-action@v1
         with:
           setup_only: true
-      - name: Lint
-        run: buf lint
-        working-directory: proto
-      - name: Breaking-change check
-        # Skipped until proto/ has files; the gate is wired up first so it is
-        # never retrofitted after a consumer already depends on a contract.
+      # Both steps are skipped until proto/ actually has files. The gate is
+      # wired up first so it is never retrofitted after a consumer already
+      # depends on a contract.
+      #
+      # buf treats a module with no .proto files as a hard error ("Module
+      # "path: \".\"" had no .proto files"), so `buf lint` needs the SAME guard
+      # the breaking check already had — without it this job fails on an empty
+      # proto tree, which is exactly the state Phases 0-16 are in.
+      #
+      # `find` rather than `compgen -G`: globstar is off by default in bash, so
+      # "proto/**/*.proto" silently means "proto/*/*.proto" and would miss the
+      # nested proto/encorebom/scan/v1/ layout the envelopes will land in.
+      - name: Detect .proto files
+        id: detect
         run: |
-          if compgen -G "proto/**/*.proto" > /dev/null; then
-            buf breaking --against "https://github.com/${{ github.repository }}.git#branch=main,subdir=proto"
+          if [ -n "$(find proto -name '*.proto' -print -quit)" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
           else
+            echo "found=false" >> "$GITHUB_OUTPUT"
             echo "no .proto files yet — Phase 6 adds the scan envelopes"
           fi
+
+      - name: Lint
+        if: steps.detect.outputs.found == 'true'
+        run: buf lint
+        working-directory: proto
+
+      - name: Breaking-change check
+        if: steps.detect.outputs.found == 'true'
+        run: buf breaking --against "https://github.com/${{ github.repository }}.git#branch=main,subdir=proto"
         working-directory: .

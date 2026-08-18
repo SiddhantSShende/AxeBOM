@@ -6,13 +6,22 @@ A session that writes code but does not update this file has failed — the next
 
 ---
 
-**Last updated:** 2026-08-17
+**Last updated:** 2026-08-18
 **Current phase:** Phase 13 — 🟡 **in progress** (VEX resolution and CSAF generation done; storage, HTTP surface, comments and UI not built)
 **Next action:** `Bring Docker up and clear the unexercised backlog across Phases 9–12 before starting Phase 13.`
 
 > ⚠ **Docker is still down**, so `migrations/report/0002` has never run and no
 > DB-backed or Playwright test has executed. That is the first thing to do when
 > it comes up — see "Not yet built" under Phases 9 and 10.
+
+> ✅ **CI on `main` is green again.** It had been red since 2026-08-17 —
+> seven of eight jobs failing from six independent causes, none of them a
+> defect in product code. Details in the session log for 2026-08-18 (d).
+>
+> ⚠ **The boundary guard had not run for as long as CI was red.** `lint +
+> boundaries` was failing at tool install, not at analysis, so depguard —
+> the only mechanical enforcement of the service boundary (ADR-0001
+> mitigation 3) — was silently absent. It now runs and reports 0 issues.
 
 > The Phase 1/2 disk blocker is **resolved** — 18 GB free. `task verify` completes end to end (exit 0), including the frontend build. Docker Desktop's daemon still stops between sessions; start it before running the DB-backed tests, which otherwise **skip** rather than fail.
 
@@ -1922,6 +1931,75 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-08-18 (d) — CI repaired: seven red jobs, six distinct causes
+
+No product code was wrong. Every failure was in the gate itself or in the
+declared environment, which is the more dangerous kind: a red CI that everyone
+learns to ignore stops being a gate at all.
+
+**The boundary guard had not been running.** `golangci/golangci-lint-action@v6`
+supports golangci-lint **v1 only**; the workflow asked it for `v2.12`. That is
+unsatisfiable, so the job died at install and depguard never analysed anything.
+The service boundary — the one thing ADR-0001 says discipline cannot maintain
+across context resets — was unenforced for the whole window. Now on action `v8`
+with `v2.12.2` pinned, and it reports 0 issues.
+
+**The line-ending guard did not understand its own `.gitattributes`.** It
+flagged every file whose worktree copy was CRLF, excluding only `*.ps1/bat/cmd`
+by extension. But `.gitattributes` marks `fixtures/**/expected/**` as `-text`
+precisely so git never converts them — they are byte-exact goldens. All five
+`canonical.json` files tripped the check on every run, on both runners, killing
+the `go` jobs at step 4 before a single test ran. The guard now filters on the
+attribute (`attr/-text`, `eol=crlf`) rather than on the file extension. The
+goldens were **not** modified: their bytes are the contract, and rewriting them
+to satisfy a broken check would have been the actual bug.
+
+**`buf lint` fails on a module with no `.proto` files** — `Failure: Module
+"path: "."" had no .proto files`. The breaking-change step already guarded for
+the empty tree; the lint step did not. Both are now guarded by one detect step.
+The old guard also used `compgen -G "proto/**/*.proto"`, which without
+`shopt -s globstar` silently means `proto/*/*.proto` — it would have missed the
+nested `proto/encorebom/scan/v1/` layout Phase 6 will introduce. Replaced with
+`find`.
+
+**PyYAML was imported but never declared.** `encorebom_shared.adapters.registry`,
+`workers/sbom/adapters/common.py` and `workers/sbom/normalize_runner.py` all
+`import yaml` at module scope, but `pyproject.toml` listed only pydantic and
+structlog. It resolved on this machine because PyYAML was already present, and
+failed on every clean CI install at collection. Verified by building a venv from
+scratch: `pip install -e ".[dev]"` now pulls PyYAML 6.0.3 and all tests pass.
+
+**Two generated `main.go` files had been hand-edited**, which is exactly what
+the generator-drift job exists to catch — it was doing its job. `campaign` had
+its scheduler goroutine and `report` its render consumer inlined into generated
+scaffold. Rather than surrender the check, the generator gained a
+`startBackground(ctx, d)` hook: called from `main.go` before the server starts,
+defined in `deps.go`, which is **preserved**. Both workers moved there verbatim,
+their reasoning comments intact. The other six services carry the generated
+no-op. Regeneration is now idempotent.
+
+**`GO_VERSION` was `1.24` while `go.mod` requires `go 1.26.2`.** Every job was
+downloading a second toolchain through `GOTOOLCHAIN=auto` before it could run
+anything. Pinned to `1.26` to match. Confirmed the prebuilt golangci-lint
+v2.12.2 binary is itself built with go1.26.2 — read from the release's own
+CycloneDX SBOM — so it can type-check this module.
+
+Frontend was a plain prettier drift across nine files from Phases 14–16.
+
+**Verified locally before pushing:** `go build`, `go vet`, `go test ./...`,
+`gofmt`, `golangci-lint run` (0 issues), generator idempotency, `docs lint`
+(105 refs), frontend lint + format + build, and pytest in a from-scratch venv.
+
+**Not verified:** the runners themselves. Python CI is 3.11 and this machine is
+3.14 — the missing-dependency fix is version-independent, but a 3.11-specific
+runtime failure would not have been caught here. Docker is still down, so
+nothing DB-backed ran.
+
+**Left undone, deliberately:** `docs/08-OPERATIONS.md` §4 names five workflows —
+`verify`, `golden`, `e2e`, `osint-contract`, `security`. Only `verify` exists.
+The other four are unwritten, not broken, and creating them is phase work with
+its own scope, not part of turning the gate green.
 
 ### 2026-08-18 (c) — Phase 16, the buildable half
 

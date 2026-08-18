@@ -43,9 +43,7 @@ export function HardwareImport() {
   // which for a file that cannot be read is the least useful outcome available.
   function handleFile(event: ChangeEvent<HTMLInputElement>) {
     void readHeaders(event).catch((err: unknown) => {
-      setHeaderError(
-        err instanceof Error ? err.message : 'That file could not be read.',
-      );
+      setHeaderError(err instanceof Error ? err.message : 'That file could not be read.');
     });
   }
 
@@ -90,8 +88,8 @@ export function HardwareImport() {
             Not buried in a tooltip, and not only in the generated report.
           */}
           <p className="muted">
-            Hardware is not discoverable by any scanner — this reads a parts list you
-            already have. Anything it cannot find, you can add by hand afterwards.
+            Hardware is not discoverable by any scanner — this reads a parts list you already have.
+            Anything it cannot find, you can add by hand afterwards.
           </p>
         </div>
       </header>
@@ -106,9 +104,8 @@ export function HardwareImport() {
             </p>
           )}
           <p className="field-hint">
-            Your own export works as it is — the next step maps your column names. Do not
-            edit the file to match ours; an edited export no longer matches your source of
-            truth.
+            Your own export works as it is — the next step maps your column names. Do not edit the
+            file to match ours; an edited export no longer matches your source of truth.
           </p>
         </div>
       </div>
@@ -117,9 +114,8 @@ export function HardwareImport() {
         <div className="panel">
           <h2>Map your columns</h2>
           <p className="field-hint">
-            Only <strong>Level</strong> is required. It is what builds the sub-component
-            tree; without it every part becomes a sibling of the product rather than a part
-            of it.
+            Only <strong>Level</strong> is required. It is what builds the sub-component tree;
+            without it every part becomes a sibling of the product rather than a part of it.
           </p>
 
           <table className="table">
@@ -143,9 +139,7 @@ export function HardwareImport() {
                     <select
                       id={`map-${header}`}
                       value={mapping[header] ?? ''}
-                      onChange={(e) =>
-                        setMapping({ ...mapping, [header]: e.target.value })
-                      }
+                      onChange={(e) => setMapping({ ...mapping, [header]: e.target.value })}
                     >
                       <option value="">— ignore this column —</option>
                       {CANONICAL_COLUMNS.map((c) => (
@@ -166,8 +160,8 @@ export function HardwareImport() {
 
           {missingLevel && (
             <p className="field-error" role="alert">
-              No column is mapped to <strong>Level</strong>. Without it the import cannot
-              build the sub-component tree.
+              No column is mapped to <strong>Level</strong>. Without it the import cannot build the
+              sub-component tree.
             </p>
           )}
 
@@ -188,8 +182,8 @@ export function HardwareImport() {
         <div className="panel">
           <h2>Preview</h2>
           <p className="muted">
-            {preview.data.component_count} components, {preview.data.max_depth + 1} levels.
-            Nothing has been saved yet.
+            {preview.data.component_count} components, {preview.data.max_depth + 1} levels. Nothing
+            has been saved yet.
           </p>
 
           {/*
@@ -201,8 +195,8 @@ export function HardwareImport() {
             <div className="callout callout-warn">
               <h3>Columns that were not imported</h3>
               <p>
-                {preview.data.unmapped_headers.join(', ')} — map them above if they hold
-                data you need, or leave them if they do not.
+                {preview.data.unmapped_headers.join(', ')} — map them above if they hold data you
+                need, or leave them if they do not.
               </p>
             </div>
           )}
@@ -257,10 +251,10 @@ export function HardwareImport() {
           <div className="callout">
             <h3>What a parts list cannot tell us</h3>
             <p>
-              {JUDGEMENT_FIELDS.map((f) => f.label).join(', ')} appear in no CAD or ERP
-              export — they are judgements about your hardware. CERT-In §10.4.1.4 requires
-              a criticality rating for hardware supplied to government and public-sector
-              entities. Add them per component after importing.
+              {JUDGEMENT_FIELDS.map((f) => f.label).join(', ')} appear in no CAD or ERP export —
+              they are judgements about your hardware. CERT-In §10.4.1.4 requires a criticality
+              rating for hardware supplied to government and public-sector entities. Add them per
+              component after importing.
             </p>
           </div>
 

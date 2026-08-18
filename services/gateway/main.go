@@ -99,6 +99,14 @@ func run() error {
 	chain := append(httpx.Default(metrics, cfg.WriteTimeout), serviceMiddleware(d)...)
 	handler := httpx.Chain(mux, chain...)
 
+	// Background workers start BEFORE the server, so a queued backlog begins
+	// draining at once rather than after the first request arrives.
+	//
+	// This hook lives in deps.go — a PRESERVED file — because a service that
+	// needs a consumer or a scheduler must not hand-edit this generated one
+	// (ADR-0001 mitigation 1). A service with no workers keeps the no-op.
+	startBackground(ctx, d)
+
 	return httpx.Run(ctx, httpx.ServerConfig{
 		Addr:          fmt.Sprintf(":%d", cfg.HTTPPort),
 		MetricsAddr:   fmt.Sprintf(":%d", cfg.MetricsPort),
