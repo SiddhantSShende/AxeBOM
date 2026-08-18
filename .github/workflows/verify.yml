@@ -75,13 +75,43 @@ jobs:
       # not. Linux always runs it, so races are caught on every PR — Windows
       # runs the same tests without it, which still catches logic errors and
       # platform differences.
+      # ⚠ FAILURES GO TO THE JOB SUMMARY, NOT ONLY THE LOG.
+      #
+      # Downloading a job log through the API requires ADMIN rights on the
+      # repository; the job summary and annotations do not. A failure visible
+      # only in the log is therefore invisible to a contributor, to a reviewer
+      # on a fork, and to any tooling without an admin token — which is exactly
+      # the position this repository was in when the windows job started
+      # failing. Surfacing the failing test names costs nothing and removes it.
       - name: Test (linux, with race detector)
         if: runner.os == 'Linux'
-        run: go test ./... -race -count=1
+        shell: bash
+        run: |
+          set -o pipefail
+          go test ./... -race -count=1 2>&1 | tee test-output.txt && exit 0
+          {
+            echo '### `go test -race` failed on linux'
+            echo
+            echo '```'
+            grep -E '^(--- )?FAIL|^panic:|^\s+.*_test\.go:[0-9]+|^WARNING: DATA RACE' test-output.txt | head -80
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
 
       - name: Test (windows)
         if: runner.os == 'Windows'
-        run: go test ./... -count=1
+        shell: bash
+        run: |
+          set -o pipefail
+          go test ./... -count=1 2>&1 | tee test-output.txt && exit 0
+          {
+            echo '### `go test` failed on windows'
+            echo
+            echo '```'
+            grep -E '^(--- )?FAIL|^panic:|^\s+.*_test\.go:[0-9]+' test-output.txt | head -80
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
 
       - name: gofmt
         shell: bash

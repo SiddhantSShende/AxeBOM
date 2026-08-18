@@ -43,8 +43,15 @@ func newRunner(t *testing.T) *sandbox.DockerRunner {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	if err := r.Ping(ctx); err != nil {
+	osType, err := r.DaemonOS(ctx)
+	if err != nil {
 		t.Skipf("docker daemon unreachable (%v) — start Docker Desktop", err)
+	}
+	// A Windows-mode daemon answers Ping and then cannot pull a Linux image or
+	// honour any of the policy this suite exists to verify. Skipping is honest;
+	// running would fail for a reason that has nothing to do with the sandbox.
+	if osType != "linux" {
+		t.Skipf("docker daemon is in %s-container mode; the sandbox is linux-only", osType)
 	}
 
 	pullCtx, pullCancel := context.WithTimeout(t.Context(), 3*time.Minute)

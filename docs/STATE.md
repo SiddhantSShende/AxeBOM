@@ -14,9 +14,13 @@ A session that writes code but does not update this file has failed — the next
 > DB-backed or Playwright test has executed. That is the first thing to do when
 > it comes up — see "Not yet built" under Phases 9 and 10.
 
-> ✅ **CI on `main` is green again.** It had been red since 2026-08-17 —
-> seven of eight jobs failing from six independent causes, none of them a
-> defect in product code. Details in the session log for 2026-08-18 (d).
+> ✅ **CI on `main` is green.** It had been red since 2026-08-17 — seven of
+> eight jobs failing from six independent causes, none of them a defect in
+> product code. A seventh cause surfaced only once the gate started working:
+> the windows `go` job, which had never reached its tests. See the session log
+> for 2026-08-18 (d) and (e).
+>
+> `go test -race` has now run for the first time (ubuntu) and is clean.
 >
 > ⚠ **The boundary guard had not run for as long as CI was red.** `lint +
 > boundaries` was failing at tool install, not at analysis, so depguard —
@@ -1931,6 +1935,37 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-08-18 (e) — the windows job, running for the first time
+
+Fixing the line-ending guard let the `go` jobs reach their tests at all. Ubuntu
+passed, **including `-race`** — which had never once executed: the Taskfile skips
+it on Windows (no C toolchain, `CGO_ENABLED=0`) and CI died at step 4 on every
+run. The race detector has now actually run on this codebase and found nothing.
+
+Windows failed, and the cause is a gap in how the Docker tests decide to skip.
+
+**`Ping` succeeding does not mean the sandbox can run.** Both helpers —
+`sandbox.newRunner` and the fetcher's `newSandbox` — treated a reachable daemon
+as "Docker is available". On `windows-latest` the daemon is reachable, but it
+serves **Windows containers**, and every control the sandbox is built from
+(`--network=none`, `--cap-drop ALL`, seccomp, read-only rootfs, tmpfs workdirs,
+pid/memory quotas) is Linux container semantics with no Windows equivalent. The
+daemon answers Ping, then fails on the first Linux image.
+
+This never showed locally because Docker Desktop's daemon is stopped here, so
+the helpers skipped at the Ping. It could only appear on a machine where Docker
+runs in Windows mode — i.e. the runner.
+
+`DockerRunner.DaemonOS` now reports the daemon's container platform, and both
+helpers skip when it is not `linux`. `sandbox/runner_test.go` was already
+partly protected by its `EnsureImage` guard; the fetcher helper had none.
+
+**CI logs need admin rights; job summaries do not.** Diagnosing this was slower
+than it should have been because `GET /actions/jobs/{id}/logs` returns 403
+without admin, leaving only "Process completed with exit code 1" in the
+annotations. Both test steps now write failing test names to
+`$GITHUB_STEP_SUMMARY`, which is readable by anyone — including from a fork.
 
 ### 2026-08-18 (d) — CI repaired: seven red jobs, six distinct causes
 

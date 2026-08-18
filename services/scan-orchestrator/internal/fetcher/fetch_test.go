@@ -34,8 +34,12 @@ func newSandbox(t *testing.T) *sandbox.DockerRunner {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	if err := r.Ping(ctx); err != nil {
+	osType, err := r.DaemonOS(ctx)
+	if err != nil {
 		t.Skipf("docker daemon unreachable (%v)", err)
+	}
+	if osType != "linux" {
+		t.Skipf("docker daemon is in %s-container mode; the fetcher is linux-only", osType)
 	}
 	return r
 }

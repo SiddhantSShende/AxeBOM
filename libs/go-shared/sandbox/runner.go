@@ -143,6 +143,25 @@ func (r *DockerRunner) Ping(ctx context.Context) error {
 	return err
 }
 
+// DaemonOS reports which container platform the daemon serves — "linux" or
+// "windows".
+//
+// ⚠ REACHABLE IS NOT THE SAME AS USABLE. Every control this sandbox depends on
+// — --network=none, --cap-drop ALL, seccomp, a read-only rootfs, tmpfs
+// workdirs, pid and memory quotas — is Linux container semantics with no
+// Windows-container equivalent. A daemon in Windows mode answers Ping happily
+// and then fails on the first Linux image, so Ping alone is not a precondition
+// anything should branch on.
+//
+// Callers that need the sandbox should treat a non-linux daemon as absent.
+func (r *DockerRunner) DaemonOS(ctx context.Context) (string, error) {
+	p, err := r.cli.Ping(ctx)
+	if err != nil {
+		return "", err
+	}
+	return p.OSType, nil
+}
+
 func (r *DockerRunner) Close() error { return r.cli.Close() }
 
 // ErrSecretInEnvironment is returned when a spec carries something that looks
