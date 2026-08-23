@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/encorebom/encorebom/libs/go-shared/fetcher"
 	"github.com/encorebom/encorebom/libs/go-shared/sandbox"
 	"github.com/encorebom/encorebom/libs/go-shared/toolctl"
 )
@@ -74,6 +75,16 @@ func toolctlPull(ctx context.Context, args []string) error {
 			continue
 		}
 		jobs = append(jobs, job{id: t.ID, ref: r.ImageRef})
+	}
+
+	// The fetcher's git image is NOT in the manifest — it is not a scanner, it
+	// is how source is materialized — but it is pulled here for exactly the
+	// same reason: the clone runs in a container that cannot fetch its own
+	// image. Omitting it made every scan fail at the first step with
+	// "No such image: alpine/git:latest", after the fetch job had already been
+	// queued and retried three times.
+	if *only == "" || *only == "fetcher" {
+		jobs = append(jobs, job{id: "fetcher-git", ref: fetcher.GitImage})
 	}
 
 	if len(jobs) == 0 {

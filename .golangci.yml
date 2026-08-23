@@ -117,6 +117,12 @@ linters:
           allow: [github.com/encorebom/encorebom/services/notification]
           deny: *cross-service-deny
 
+        service-boundaries-fetcher:
+          list-mode: lax
+          files: ["**/services/fetcher/**"]
+          allow: [github.com/encorebom/encorebom/services/fetcher]
+          deny: *cross-service-deny
+
         # ------------------------------------------------------------------
         # Workers are scan engines. They run untrusted code in a sandbox and
         # hold no credentials (ADR-0008), so they must not reach into service

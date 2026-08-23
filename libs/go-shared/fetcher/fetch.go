@@ -6,6 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"fmt"
+	"os"
+	"path/filepath"
+
 	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
 	"github.com/encorebom/encorebom/libs/go-shared/sandbox"
 )
@@ -22,6 +26,29 @@ import (
 // Pinned by tag here; production pins by DIGEST, because a mutable reference
 // means the provenance recorded in a report may not describe what actually ran.
 const GitImage = "alpine/git:latest"
+
+// cloneOutPath is where the clone is written when DestDir is set.
+//
+// /tmp, and the reason is ownership rather than convention: the copy-out mount
+// is a fresh anonymous volume, which inherits the ownership and mode of the
+// image path it covers. Over a path the image does not have, that is root:root
+// 0755 and the sandbox's uid 65534 cannot write to it. /tmp is 1777.
+const cloneOutPath = "/tmp"
+
+// cloneSubdir is the directory INSIDE the copy-out volume that the clone lands
+// in.
+//
+// ⚠ NOT the volume root, and git is the reason. A fresh volume inherits /tmp's
+// root:root 1777, so uid 65534 can create files there but does not OWN the
+// directory. Cloning straight into it makes git refuse the follow-up
+// `rev-parse`:
+//
+//	fatal: detected dubious ownership in repository at '/tmp'
+//
+// The alternative — `-c safe.directory=/tmp` — silences the check rather than
+// removing the cause, and that check exists for a good reason. A subdirectory
+// the process creates itself is owned by it, so the question never arises.
+const cloneSubdir = cloneOutPath + "/src"
 
 // CloneRequest describes one clone.
 type CloneRequest struct {
@@ -40,6 +67,24 @@ type CloneRequest struct {
 
 	// Timeout bounds the clone. Defeats slow-loris.
 	Timeout time.Duration
+
+	// DestDir, when set, materializes the cloned tree at this HOST path.
+	//
+	// ⚠ WITHOUT IT, Clone PRODUCES NO FILES — and that was the original bug.
+	//
+	// The clone runs entirely inside a container whose /workspace is a tmpfs,
+	// and the tmpfs dies with the container. Clone nonetheless returned
+	// WorkspacePath: policy.WorkspacePath — "/workspace" — a path that had only
+	// ever existed inside a container that no longer exists. Every unit test
+	// passed, because they assert on argv and on the parsed commit sha, and
+	// nothing consumed the tree until the fetch worker tried to archive it and
+	// got `lstat /workspace: no such file or directory`.
+	//
+	// With DestDir set, the tree is copied out of the finished container as a
+	// tar and extracted through ExtractTar's guards. Left empty, Clone behaves
+	// as before: it validates, runs and reports the commit, and produces no
+	// files — which is all its own tests need.
+	DestDir string
 }
 
 // CloneResult is what a clone produced.
@@ -164,6 +209,10 @@ func Clone(ctx context.Context, runner sandbox.Runner, req CloneRequest,
 	// mean two workspaces, and the second could not see what the first wrote.
 	script := strings.Join(quoteArgs(argv), " ") +
 		" && git rev-parse HEAD"
+	if req.DestDir != "" {
+		// Create and enter the subdirectory first; the clone's target is ".".
+		script = "mkdir -p " + cloneSubdir + " && cd " + cloneSubdir + " && " + script
+	}
 
 	spec := sandbox.Spec{
 		Image: GitImage,
@@ -185,6 +234,39 @@ func Clone(ctx context.Context, runner sandbox.Runner, req CloneRequest,
 	// exactly one call site.
 	spec.CredentialsPermitted = req.Token != ""
 	spec.Labels = map[string]string{"encorebom.role": "fetcher"}
+
+	// The tree comes back as a tar, copied from the finished container. There
+	// is no writable host mount at any point — see sandbox.CopyOut.
+	var tarPath string
+	if req.DestDir != "" {
+		f, err := os.CreateTemp("", "encorebom-clone-*.tar")
+		if err != nil {
+			return CloneResult{}, fmt.Errorf("clone: staging file: %w", err)
+		}
+		tarPath = f.Name()
+		_ = f.Close()
+		defer func() { _ = os.Remove(tarPath) }()
+
+		// ⚠ NOT policy.WorkspacePath. The workspace is a TMPFS, and `docker cp`
+		// does not descend into one — copying it yields a tar containing the
+		// empty directory and nothing else, so the archive came out with 0
+		// files while every step reported success.
+		//
+		// The copy-out path gets an anonymous VOLUME instead (see
+		// sandbox.mountsFor), and it must be /tmp specifically: a fresh volume
+		// inherits the ownership of the image path it covers, and /tmp is the
+		// one directory the image reliably makes world-writable, so a process
+		// running as uid 65534 can write there.
+		spec.WorkingDir = cloneOutPath
+		spec.CopyOut = &sandbox.CopyOut{
+			// Mount the volume at /tmp so it inherits the image's 1777, and
+			// copy from the subdirectory the clone owns.
+			MountPath:     cloneOutPath,
+			ContainerPath: cloneSubdir,
+			HostTarPath:   tarPath,
+			MaxBytes:      DefaultArchiveLimits().MaxBytes,
+		}
+	}
 
 	started := time.Now()
 	res, err := runner.Run(ctx, spec)
@@ -209,9 +291,23 @@ func Clone(ctx context.Context, runner sandbox.Runner, req CloneRequest,
 			"the clone did not report a valid commit id (got %q)", truncateForError(sha))
 	}
 
+	workspace := policy.WorkspacePath
+	if req.DestDir != "" {
+		// Extracted through the SAME hardened path as any other untrusted
+		// archive: SafeJoin against traversal, plus size, inode and inflation
+		// caps. A cloned repository is untrusted content — it is the whole
+		// reason the sandbox exists — and a tar copied out of it is no more
+		// trustworthy than one uploaded by a user.
+		extracted, err := materialize(tarPath, req.DestDir, cloneSubdir)
+		if err != nil {
+			return CloneResult{}, err
+		}
+		workspace = extracted
+	}
+
 	return CloneResult{
 		CommitSHA:     sha,
-		WorkspacePath: policy.WorkspacePath,
+		WorkspacePath: workspace,
 		Duration:      time.Since(started),
 	}, nil
 }
@@ -313,4 +409,34 @@ func FetcherPolicy() sandbox.Policy {
 	// Recorded as a known gap in docs/STATE.md; the fix is the Phase 16 proxy.
 	p.Network = sandbox.NetworkEgress
 	return p
+}
+
+// materialize extracts the copied-out tar into dest.
+//
+// Docker's CopyFromContainer tars the directory itself, so the entries are
+// prefixed with its base name — copying /workspace yields `workspace/...`. The
+// caller wants the CONTENTS at dest, so the prefix is stripped by descending
+// into it after extraction rather than by rewriting paths mid-stream, which
+// would fight ExtractTar's traversal guards for no benefit.
+func materialize(tarPath, dest, containerPath string) (string, error) {
+	// #nosec G304 -- tarPath is a temp file this process created.
+	f, err := os.Open(tarPath)
+	if err != nil {
+		return "", fmt.Errorf("clone: opening the copied tree: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	// Uncompressed: CopyFromContainer emits a plain tar. Passing nil for the
+	// compressed reader means the inflation-ratio check is skipped, which is
+	// correct — there is no compression to have a ratio against.
+	if _, err := ExtractTar(f, nil, dest, DefaultExtractLimits()); err != nil {
+		return "", fmt.Errorf("clone: extracting the copied tree: %w", err)
+	}
+
+	// Descend into the tar's top-level directory when it is there.
+	inner := filepath.Join(dest, filepath.Base(containerPath))
+	if fi, err := os.Stat(inner); err == nil && fi.IsDir() {
+		return inner, nil
+	}
+	return dest, nil
 }

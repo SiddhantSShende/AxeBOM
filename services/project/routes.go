@@ -76,6 +76,13 @@ func registerRoutes(mux *http.ServeMux, d *deps) {
 	// --- Repository connections --------------------------------------------
 	mux.Handle("POST /v1/projects/{id}/connections",
 		guard(authz.ResourceRepoConn, authz.ActionCreate, h.Connect))
+	// SERVICE PRINCIPALS ONLY — see handler.Source. RequireService sits inside
+	// Authenticate and alongside Authorize: it narrows WHO may call, it does
+	// not replace the permission check.
+	mux.Handle("GET /v1/projects/{id}/source",
+		authenticated(auth.RequireService(
+			auth.Authorize(authz.ResourceProject, authz.ActionRead)(http.HandlerFunc(h.Source)))))
+
 	mux.Handle("GET /v1/projects/{id}/connections",
 		guard(authz.ResourceRepoConn, authz.ActionRead, h.ListConnections))
 	mux.Handle("GET /v1/github/repos",

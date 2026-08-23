@@ -8,7 +8,7 @@ A session that writes code but does not update this file has failed — the next
 
 **Last updated:** 2026-08-23
 **Current phase:** Deployment — 🟢 **the stack runs end to end for the first time**
-**Next action:** `Subscribe the fetcher to scan.job.fetch. Three worker families now consume, but the fan-out never starts because nothing materializes source.`
+**Next action:** `Make the engine workers materialize the source archive. Fan-out works, but nothing downloads and extracts scan.source_archive_ref into the worker workspace, so engines scan an empty tree.`
 
 > ✅ **DOCKER IS UP, AND THE WHOLE BACKLOG THAT DEPENDED ON IT HAS RUN.**
 > `migrations/report/0002` applied; the 12 DB-backed RLS tests executed for the
@@ -28,6 +28,13 @@ A session that writes code but does not update this file has failed — the next
 > Register → authenticate → read across upstreams works through the real browser
 > path (nginx → gateway → service). Before this session **nothing above the
 > infrastructure layer was wired to start at all.**
+
+> 🟢 **A SCAN NOW RUNS END TO END.** `POST /v1/scans` → `scan.job.fetch` →
+> the fetcher clones and archives → `scan.result.fetch` → the orchestrator pins
+> `source_commit_sha` and fans out 6 engine jobs → workers consume → results →
+> status derived. Observed: `completed_with_errors`, progress 100%. Engine
+> output is still empty because nothing extracts the archive into the worker
+> workspace — see "Archive → worker" above.
 
 > 🟢 **DISPATCH WORKS.** A job published to `scan.job.sbom` is consumed by the
 > worker, runs syft in the sandbox, and its result lands on `scan.result.sbom`
@@ -111,7 +118,8 @@ A session that writes code but does not update this file has failed — the next
 | **Raw artifact evidence** | ✅ **now actually written; the worker was discarding it (ADR-0003)** |
 | **Credentials guide** | ✅ **`docs/CREDENTIALS.md` — NVD, GitHub, Mouser, Nexar, HF; all free** |
 | **Worker → NATS** | 🟢 **WIRED — sbom, cbom, aibom consume `scan.job.*` and publish results, proven live** |
-| **Fetcher → NATS** | ⬜ **still unconsumed: 75 jobs sat on `scan.job.fetch` with no subscriber** |
+| **Fetcher → NATS** | 🟢 **WIRED — a 9th service; clone → archive → fan-out proven end to end** |
+| **Archive → worker** | ⬜ **NOT WIRED — engines run against an empty workspace; nothing extracts the archive** |
 
 ---
 
@@ -1972,6 +1980,163 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-08-23 (c) — the fetcher is wired; a clone that produced no files
+
+**Goal:** subscribe something to `scan.job.fetch` so the fan-out can start.
+
+#### The fetcher became the ninth service, and that was not a preference
+
+The consumer could not live in the orchestrator. It needs Vault, object
+storage, a Docker runner and a repository credential, and the orchestrator is
+reachable from the gateway — putting them together would give a request-path
+service a Vault token with repository access, which is precisely what ADR-0008
+and invariant 7 forbid. The README's architecture diagram already showed the
+fetcher as a separate box.
+
+`services/scan-orchestrator/internal/fetcher` moved to `libs/go-shared/fetcher`
+(nothing outside its own tests imported it, so the move was free), and
+`gen-service` produced the scaffold — which is what that tool exists for.
+
+Source resolution is an HTTP call to a new **service-principals-only** route,
+`GET /v1/projects/{id}/source`. It returns `credential_ref`, and a Vault path is
+a read primitive, so `project:read` is not sufficient to reach it:
+`auth.RequireService` answers 404 to anyone who is not a service. The public
+connections endpoint still returns only `has_credential: bool`. The fetcher
+re-derives the Vault path from (tenant, kind, connection id) rather than
+trusting the stored one, so a tampered row cannot become a cross-tenant read.
+
+`ScanResultV1` gained `source_meta`. The orchestrator had been reading the
+commit sha out of `engine_db_version` — a field documented as the
+vulnerability-database vintage — which made a fetch result claim a database it
+had never consulted and hid the commit sha where nobody would look.
+
+#### ⚠ THE CLONE PRODUCED NO FILES, AND EVERY STEP REPORTED SUCCESS
+
+`Clone` ran entirely inside a container whose `/workspace` is a tmpfs, and
+returned `WorkspacePath: policy.WorkspacePath` — `/workspace`, a path that had
+only ever existed inside a container that no longer existed. Every unit test
+passed, because they assert on argv and on the parsed commit sha. Nothing
+consumed the tree until this worker tried to archive it:
+
+	walk source: lstat /workspace: no such file or directory
+
+Fixing it took four measured findings, each of which looked like success:
+
+1. **`docker cp` does not descend into a tmpfs.** Measured directly: a file
+   written to a tmpfs mount and copied out yields a tar containing only the
+   empty directory. The first copy-out therefore produced an archive of
+   **0 files** while reporting `source materialized`.
+2. **A writable host bind is not an option** — `mountsFor` forces ReadOnly on
+   every bind, deliberately. The answer is an anonymous VOLUME, copied out
+   through the Docker API after the process exits, so the running container
+   never holds a writable handle to the host.
+3. **A fresh volume is root-owned.** Over a path absent from the image it is
+   root:root 0755, and the sandbox runs as uid 65534. Docker seeds a new volume
+   with the ownership of the image path it covers, so the mount target must be
+   one the image already makes world-writable — `/tmp`, 1777. Hence
+   `CopyOut.MountPath` separate from `CopyOut.ContainerPath`.
+4. **git refuses to work in a directory it does not own** — *"detected dubious
+   ownership in repository at '/tmp'"*. The clone goes into a subdirectory it
+   creates itself rather than silencing the check with `safe.directory`.
+
+The copied tar is extracted through the existing hardened `ExtractTar`
+(traversal, size, inode and inflation guards) — which until now also had no
+production caller.
+
+#### ⚠ backoff DESTROYS ack_wait — and max_ack_pending=1 turns that into an outage
+
+Already fixed in the previous session for the workers; the fetcher hit the
+consequence. With `ack_wait=30m` and `max_ack_pending=1`, a worker restarted
+while holding a message blocks **every scan in the system** until ack_wait
+expires — observed as `Outstanding Acks: 1 out of maximum 1` with no log line
+at all. Raised to 4.
+
+#### Silent retries, and the one-line fix that found three bugs
+
+The handler returned `bus.ErrRetry` without logging, and `bus.dispatch` does not
+log the retry path either. A message naking every 30 seconds produced **no
+output whatsoever** — the queue showed one outstanding ack and the log showed
+nothing. Adding a log on entry and on every retryable return immediately
+surfaced, in order: a `permission denied` on the workspace, a missing
+`alpine/git` image, and the S3 key defect below.
+
+Corollaries fixed at the same time:
+
+- **The shared workspace must be mode 1777.** The fetcher runs as distroless
+  `nonroot` while the workers run as root, and both write there.
+- **`toolctl pull` now pulls `alpine/git`.** It is not a scanner and not in the
+  manifest, but the clone container cannot fetch its own image either.
+- **An object key is not a URI.** `ArtifactPrefix` defaults to `s3://encorebom`,
+  so the key literally began `s3://` and MinIO rejected it with *"Object name
+  contains unsupported characters"* — naming neither the key nor the colon.
+  `objectKeyPrefix` strips the scheme and any leading slash, with a test.
+
+#### A poison message can saturate a consumer
+
+`handleFetchResult` treated a result for a NON-EXISTENT scan as retryable. Test
+leftovers filled every slot — `Outstanding Acks: 16 out of maximum 16,
+Unprocessed: 42` — and every real scan sat at `queued` behind them. An unknown
+scan is permanent: it now terminates to the DLQ.
+
+#### Integration tests were fighting the running application
+
+Three orchestrator pipeline tests took 45–60 seconds and failed with
+`scan status = "failed", want completed`. Two distinct causes, neither a product
+defect:
+
+- The fake worker claimed `scan.job.sbom` with `ReleaseFilterSubject`, which
+  claims a subject by **deleting whatever consumer is already there** — silently
+  dropping a live worker's in-flight deliveries, after which the two compete
+  anyway.
+- A test calling `ConsumeResults` creates the durable `orchestrator-fetch` —
+  the same name the running orchestrator uses. On a WorkQueue that is a consumer
+  GROUP, so NATS load-balanced the test's own messages to a process it could not
+  observe.
+
+Both now detect and **skip with a remedy**, via the new non-destructive
+`bus.ConsumersOn`. A test that cannot run should say why, not fight the
+application and report a defect that is not there. Note the trap in the first
+attempt: `t.Skipf` was called from the worker goroutine, where it does not skip
+anything — the test carried on and failed later for an unrelated-looking reason.
+
+**The durable fix is an isolated broker per test run.** Not done.
+
+#### Also
+
+The Python worker never recovered from a deleted consumer: it retried `fetch()`
+forever against a dead subscription while the process looked healthy and the log
+said "consuming". It now re-establishes after three consecutive failures.
+
+`KnownServices()` was a second hardcoded service list beside `servicePorts` —
+exactly the drift its own test guards against, and it caught it: adding the
+fetcher left the list at eight, which would have defaulted the ninth service to
+port 8080 and collided with the gateway. Now derived.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | exit 0, with the full stack running, `-race` included |
+| End-to-end scan | `POST /v1/scans` → fetch → archive → fan-out (6 jobs) → results → `completed_with_errors`, 100% |
+| Commit pinned | `7fd1a60b…`, the real Hello-World master commit |
+| Archive | 1 file (README); `.git` correctly excluded |
+| Orchestrator tests | pass with the stack live; pipeline tests skip with a remedy |
+
+#### What is still NOT wired
+
+- **The engine workers do not materialize the archive.** This is the next gap
+  and the reason the scan above reported empty results: the fetcher uploads a
+  content-addressed `source.tar.zst` and pins `source_archive_ref`, but nothing
+  downloads and extracts it into `<workspace_root>/<scan_id>`, so every engine
+  scans a tree that is not there. syft and trivy-fs returned `partial`,
+  osv-scanner `failed`.
+- `ai-bom` still cannot resolve (pip-only in the manifest, container-only
+  adapter).
+- `/v1/hbom/*` is still implemented by no service.
+- Frontend auth is still unwired; seeded users still have no password hash.
+- The orchestrator still fans out to engines flagged `derived` /
+  `requires_import`, which have no worker by design.
 
 ### 2026-08-23 (b) — the workers consume NATS; two more silent defects
 

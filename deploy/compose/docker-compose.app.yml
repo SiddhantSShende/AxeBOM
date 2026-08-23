@@ -179,6 +179,43 @@ services:
     environment:
       <<: *service-env
 
+  # ------------------------------------------------------------------ fetcher
+  # ⚠ THE ONLY SERVICE THAT HOLDS A GIT CREDENTIAL (ADR-0008).
+  #
+  # Deliberately NOT published to the host and not reachable from the gateway:
+  # work arrives only over the queue. A service holding repository tokens should
+  # not also sit behind the request path.
+  #
+  # It needs the Docker socket because the clone runs in a container — the one
+  # sandboxed operation that must reach the network. fetcher.FetcherPolicy()
+  # names that exception; everything else in the policy (read-only rootfs,
+  # dropped capabilities, non-root, seccomp, quotas) is unchanged.
+  fetcher:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.fetcher
+    image: encorebom/fetcher:dev
+    environment:
+      <<: *service-env
+    group_add: ["${DOCKER_GID:-986}"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Clones land here before being archived. Identical host and container
+      # paths, for the same sibling-container reason as the workers: the daemon
+      # resolves mount paths host-side.
+      #
+      # ⚠ THE DIRECTORY MUST BE MODE 1777 ON THE HOST.
+      #
+      # This service runs as distroless `nonroot` (uid 65532) while the scan
+      # workers run as root, and both write here. A directory owned by either
+      # one leaves the other unable to create its per-scan subdirectory, and the
+      # failure is a bare "permission denied" from mkdir on a retryable path —
+      # so the job naks, redelivers, and naks forever while the queue stalls.
+      # Sticky, like /tmp: each writer owns its own subtree and cannot remove
+      # another's.
+      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/workspaces:/var/lib/encorebom/workspaces
+
   # ----------------------------------------------------------- scan workers
   # ⚠ THE WORKER MOUNTS THE DOCKER SOCKET. See deploy/docker/Dockerfile.worker
   # for why that is accepted and what bounds it. Short version: engines run as

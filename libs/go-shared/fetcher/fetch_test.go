@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/encorebom/encorebom/libs/go-shared/fetcher"
 	"github.com/encorebom/encorebom/libs/go-shared/platform/blob"
 	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
 	"github.com/encorebom/encorebom/libs/go-shared/sandbox"
-	"github.com/encorebom/encorebom/services/scan-orchestrator/internal/fetcher"
 )
 
 // Clone tests against a real container runtime.

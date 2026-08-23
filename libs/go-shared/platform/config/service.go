@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -358,6 +359,7 @@ var servicePorts = map[string]int{
 	"campaign":          8095,
 	"comment":           8096,
 	"notification":      8097,
+	"fetcher":           8098,
 }
 
 // defaultMetricsPort gives each service its OWN metrics port.
@@ -388,10 +390,20 @@ func defaultMetricsPort(name string) int {
 
 // KnownServices lists every Go service. Used by the generator and by preflight.
 func KnownServices() []string {
-	return []string{
-		"gateway", "auth", "project", "scan-orchestrator",
-		"report", "campaign", "comment", "notification",
+	// DERIVED from servicePorts, not a second literal.
+	//
+	// It used to be its own hardcoded slice, which is precisely the drift
+	// TestRegistryMatchesConfig exists to catch — and it caught it: adding the
+	// fetcher to the port map left this list at eight, so the ninth service
+	// would have fallen back to defaultPort's 8080 and collided with the
+	// gateway. That presents as "the gateway is flaky", not as "two lists
+	// disagree".
+	out := make([]string, 0, len(servicePorts))
+	for name := range servicePorts {
+		out = append(out, name)
 	}
+	sort.Strings(out) // map order is randomised; callers deserve stability
+	return out
 }
 
 // IsKnownService reports whether name is a registered service.

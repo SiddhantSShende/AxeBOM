@@ -112,6 +112,12 @@
     "schema_version": {
       "type": "string"
     },
+    "source_meta": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
     "status": {
       "type": "string"
     },

@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/encorebom/encorebom/libs/go-shared/fetcher"
 	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/services/scan-orchestrator/internal/fetcher"
 )
 
 // ---------------------------------------------------------------------------

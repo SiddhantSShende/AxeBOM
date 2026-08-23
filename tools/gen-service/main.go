@@ -128,6 +128,15 @@ var services = []serviceSpec{
 	{"campaign", "Campaigns: cron scheduling, recurring scan triggers, run history.", 8095, 14},
 	{"comment", "Threaded comments on reports.", 8096, 13},
 	{"notification", "Email and webhook delivery.", 8097, 14},
+	// ⚠ SEPARATE FROM scan-orchestrator ON PURPOSE (ADR-0008, invariant 7).
+	//
+	// The fetcher is the ONLY component that holds git credentials and the only
+	// one that touches the network on a user's behalf. Consuming scan.job.fetch
+	// inside the orchestrator would have given the orchestrator a Vault token
+	// with repository access — and the orchestrator is reachable from the
+	// gateway, so that token would sit behind the request path rather than
+	// behind a queue.
+	{"fetcher", "Materializes source exactly once per scan; holds the only git credentials.", 8098, 5},
 }
 
 // generated files are always rewritten; preserved files are written once.

@@ -3,6 +3,7 @@ package orchestr
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -77,6 +78,28 @@ func (o *Orchestrator) handleResultMessage(ctx context.Context, msg jetstream.Ms
 // is empty — and a report that cannot name the commit it describes is not
 // evidence of anything.
 func (o *Orchestrator) handleFetchResult(ctx context.Context, result events.ScanResultV1) error {
+	// ⚠ AN UNKNOWN SCAN IS PERMANENT, NOT TRANSIENT.
+	//
+	// A result naming a scan that does not exist for this tenant will never
+	// become processable: the row is not coming back. Returning a plain error
+	// terminates the message to the DLQ; returning ErrRetry would nak it, and
+	// that is not a theoretical distinction.
+	//
+	// Observed on this stack: results left behind by a test run saturated the
+	// consumer — "Outstanding Acks: 16 out of maximum 16, Unprocessed: 42" —
+	// because every one of them naked, waited out the backoff, and naked again.
+	// A single class of poison message stalled every real scan behind it, and
+	// the only symptom was scans sitting at `queued`.
+	if _, _, err := o.store.GetScan(ctx, result.TenantID, result.ScanID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			o.log.Warn("fetch result for an unknown scan; discarding",
+				"scan_id", result.ScanID, "job_id", result.JobID)
+			return fmt.Errorf("no such scan %s for this tenant", result.ScanID)
+		}
+		// A real database problem IS transient.
+		return fmt.Errorf("%w: loading scan: %w", bus.ErrRetry, err)
+	}
+
 	if result.Status == events.StatusFailed || result.Status == events.StatusTimeout {
 		// Nothing to scan. Mark every engine run and the scan itself failed:
 		// leaving them queued would make the reaper report a timeout in half an
@@ -98,7 +121,7 @@ func (o *Orchestrator) handleFetchResult(ctx context.Context, result events.Scan
 	// Idempotent by construction: a redelivered fetch result writes nothing and
 	// reports that it wrote nothing, which is success rather than a conflict.
 	wrote, err := o.store.SetSourceOnce(ctx, result.TenantID, result.ScanID,
-		result.EngineDBVersion, archiveRef, archiveSHA)
+		commitSHAFrom(result), archiveRef, archiveSHA)
 	if err != nil {
 		return fmt.Errorf("%w: pinning source: %w", bus.ErrRetry, err)
 	}
@@ -113,6 +136,26 @@ func (o *Orchestrator) handleFetchResult(ctx context.Context, result events.Scan
 	}
 	o.log.Info("fanned out engine jobs", "scan_id", result.ScanID, "jobs", published)
 	return nil
+}
+
+// commitSHAFrom reads the commit the fetcher pinned.
+//
+// ⚠ THIS USED TO READ EngineDBVersion, AND THAT WAS A LIE IN BOTH DIRECTIONS.
+//
+// ScanResultV1 had no home for a commit sha, so the fetch path borrowed the
+// vulnerability-database vintage field. A fetch result therefore claimed a
+// database version it had never consulted, and the commit sha — which appears
+// in every report and is the thing that stops a scan describing a codebase that
+// never existed — lived in a field nobody would think to look in.
+//
+// SourceMeta now carries it. The fallback stays because a fetcher deployed
+// before that field existed is still correct, and losing the commit sha would
+// silently produce reports that cannot name what they describe.
+func commitSHAFrom(result events.ScanResultV1) string {
+	if result.SourceMeta != nil && result.SourceMeta.CommitSHA != "" {
+		return result.SourceMeta.CommitSHA
+	}
+	return result.EngineDBVersion
 }
 
 // archiveFrom extracts the source archive from a fetch result.

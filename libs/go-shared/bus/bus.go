@@ -569,3 +569,36 @@ func sanitizeHeader(s string) string {
 	}
 	return string(out)
 }
+
+// ConsumersOn lists the durable names bound to a filter subject.
+//
+// Exists so a test can DETECT a live fleet instead of destroying it.
+// ReleaseFilterSubject is the only other way to claim a subject on a WorkQueue
+// stream, and it works by deleting whatever consumer is already there — which,
+// on a developer's machine with the stack running, means silently dropping a
+// real worker's in-flight deliveries and then producing a confusing test
+// failure when that worker competes for the same jobs.
+//
+// A test that cannot run should say so, not win a fight with the application.
+func (b *Bus) ConsumersOn(ctx context.Context, stream, subject string) ([]string, error) {
+	s, err := b.js.Stream(ctx, stream)
+	if err != nil {
+		return nil, fmt.Errorf("bus: stream %s: %w", stream, err)
+	}
+
+	var found []string
+	names := s.ConsumerNames(ctx)
+	for name := range names.Name() {
+		info, err := s.Consumer(ctx, name)
+		if err != nil {
+			continue
+		}
+		if info.CachedInfo().Config.FilterSubject == subject {
+			found = append(found, name)
+		}
+	}
+	if err := names.Err(); err != nil {
+		return nil, fmt.Errorf("bus: listing consumers on %s: %w", stream, err)
+	}
+	return found, nil
+}

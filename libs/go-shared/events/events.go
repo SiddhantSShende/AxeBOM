@@ -460,6 +460,18 @@ type ScanResultV1 struct {
 	// Validate, which enforces it.
 	EngineDBVersion string `json:"engine_db_version,omitempty"`
 
+	// SourceMeta is what the FETCHER pinned: the exact commit it materialized.
+	//
+	// It exists because the orchestrator previously read the commit sha out of
+	// EngineDBVersion — a field documented as the vulnerability-database
+	// vintage. That overload worked, and it made both fields dishonest: a fetch
+	// result claimed a database version it had never consulted, and the commit
+	// sha lived somewhere nobody would look for it.
+	//
+	// Optional, so every existing engine result is unaffected. Only the fetch
+	// family populates it.
+	SourceMeta *SourceMeta `json:"source_meta,omitempty"`
+
 	Invocation Invocation   `json:"invocation"`
 	Status     EngineStatus `json:"status"`
 

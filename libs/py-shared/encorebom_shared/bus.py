@@ -304,17 +304,51 @@ class WorkerBus:
 
         log.info("worker consuming", extra={"family": family})
 
+        consecutive_failures = 0
+
         while not self._stopping.is_set():
             try:
                 msgs = await sub.fetch(batch=1, timeout=5)
             except TimeoutError:
                 # An idle queue is the normal case, not a problem.
+                consecutive_failures = 0
                 continue
             except Exception:
-                log.exception("fetch failed; retrying", extra={"family": family})
+                # ⚠ RE-ESTABLISH, DO NOT MERELY RETRY.
+                #
+                # A durable consumer can vanish underneath a running worker — an
+                # operator retiring a fleet, or an integration test claiming the
+                # subject. Retrying fetch() against a subscription whose consumer
+                # no longer exists fails forever, and the worker looks perfectly
+                # healthy throughout: the process is up, the log says
+                # "consuming", and not one job is ever handled.
+                #
+                # Observed exactly that: a test run deleted worker-sbom's
+                # consumer and the worker sat dead until restarted by hand.
+                consecutive_failures += 1
+                log.exception(
+                    "fetch failed",
+                    extra={"family": family, "consecutive": consecutive_failures},
+                )
+                if consecutive_failures >= 3:
+                    log.warning(
+                        "re-establishing the consumer after repeated failures",
+                        extra={"family": family},
+                    )
+                    try:
+                        await self.ensure_consumer()
+                        sub = await js.pull_subscribe(
+                            job_subject(family),
+                            durable=durable_name(family),
+                            stream=STREAM_JOBS,
+                        )
+                        consecutive_failures = 0
+                    except Exception:
+                        log.exception("could not re-establish", extra={"family": family})
                 await asyncio.sleep(2)
                 continue
 
+            consecutive_failures = 0
             for msg in msgs:
                 await self._dispatch(msg, handler)
 

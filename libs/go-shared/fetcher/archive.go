@@ -130,7 +130,8 @@ func CreateArchive(ctx context.Context, store *blob.Store, srcDir, keyPrefix str
 
 	result.SHA256 = hex.EncodeToString(hasher.Sum(nil))
 	result.SizeBytes = size
-	result.Key = fmt.Sprintf("%s/%s/source.tar.zst", strings.TrimRight(keyPrefix, "/"), result.SHA256)
+	result.Key = fmt.Sprintf("%s/%s/source.tar.zst",
+		objectKeyPrefix(keyPrefix), result.SHA256)
 
 	// CONTENT ADDRESSING MEANS DEDUPLICATION IS FREE: an identical commit
 	// archived again produces the same key, so the upload can be skipped.
@@ -295,3 +296,37 @@ func (z *zstdReadCloser) Close() error {
 // Not time.Time{}: some tar readers reject a zero year. The Unix epoch is
 // unambiguous and produces a stable archive for identical content.
 var zeroTime = time.Unix(0, 0).UTC()
+
+// objectKeyPrefix turns a job's output prefix into a bucket-relative key.
+//
+// ⚠ A URI IS NOT AN OBJECT KEY, AND THE DEFAULT PREFIX IS A URI.
+//
+// The orchestrator builds Output.Prefix as
+// "<ArtifactPrefix>/scans/<id>/raw/<engine>/<job>/", and ArtifactPrefix
+// defaults to "s3://encorebom" — documented as "the object-storage root".
+// Passed through unchanged, the object name literally began "s3://encorebom/",
+// and MinIO rejected it:
+//
+//	Object name contains unsupported characters
+//
+// which names neither the key nor the colon that caused it. The upload sits on
+// a RETRYABLE path, so the fetch job naked and redelivered indefinitely and the
+// scan never progressed past `queued`.
+//
+// The store is already bucket-scoped, so the bucket must not appear in the key.
+// Normalising here rather than at the one caller because every caller would
+// otherwise have to know it: a key carrying a scheme is never correct.
+func objectKeyPrefix(prefix string) string {
+	if i := strings.Index(prefix, "://"); i >= 0 {
+		rest := prefix[i+len("://"):]
+		// Drop the bucket/host segment too; what follows is the key.
+		if j := strings.Index(rest, "/"); j >= 0 {
+			prefix = rest[j+1:]
+		} else {
+			prefix = ""
+		}
+	}
+	// A leading slash is equally invalid, and an empty ArtifactPrefix produces
+	// one.
+	return strings.Trim(prefix, "/")
+}
