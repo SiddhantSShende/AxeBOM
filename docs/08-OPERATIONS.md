@@ -59,6 +59,34 @@ stated reason; nothing is silently omitted.
 
 **The seed creates two tenants deliberately.** Isolation bugs are invisible with one. Every manual test should be performed as a user of tenant A while tenant B's data exists.
 
+#### Signing in to a seeded database
+
+Every seeded account uses the same password, **`encorebom-dev-only`**. It is
+named so it cannot be mistaken for a credential, and the seed loader refuses any
+host that is not local, so these hashes cannot reach a remote database by
+accident (`libs/go-shared/platform/db/seed.go`).
+
+| Email | Password | Tenant | Role |
+|---|---|---|---|
+| `alice@acme.test` | `encorebom-dev-only` | Acme Industries | owner |
+| `aaron@acme.test` | `encorebom-dev-only` | Acme Industries | analyst |
+| `bob@beta.test` | `encorebom-dev-only` | Beta Corp | owner |
+| `carol@both.test` | — **SSO only** | Acme *and* Beta | analyst / viewer |
+
+⚠ **carol has no password on purpose.** She is the only fixture that reaches
+`Service.Login`'s empty-hash branch, which returns the same generic error as a
+wrong password rather than "use GitHub instead" — saying so would confirm the
+address is registered. She reaches her two tenants through the OAuth path.
+
+Sign in as **alice** to see Acme's two projects, then as **bob** to see Beta's
+one. Both tenants have a project called `payments-api`, so a cross-tenant leak
+shows up as a duplicate rather than as nothing.
+
+`TestSeededUsersCanLogIn` verifies each hash against that password on every run.
+The seed shipped with no `password_hash` at all for a long time and nothing
+caught it: every automated test used a service token or registered its own
+account, so the one path a person actually takes was the one nothing exercised.
+
 ### Windows notes
 
 - Work inside the repository on the **Windows filesystem**, with Docker using the WSL2 backend. Crossing the 9p filesystem boundary in the other direction (repo in WSL, tooling on Windows) is where the pathological I/O slowness lives.

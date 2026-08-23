@@ -34,13 +34,53 @@ ON CONFLICT (id) DO NOTHING;
 -- ---------------------------------------------------------------------------
 -- Users. GLOBAL — note carol belongs to BOTH tenants, which is the case that
 -- would break if users were tenant-scoped.
+--
+-- ⚠ THE PASSWORD IS `encorebom-dev-only` AND IT IS THE SAME FOR EVERY USER.
+--
+-- Named so that it cannot be mistaken for a credential. This file is loaded
+-- only by `Migrator.Seed`, which refuses any host that is not localhost,
+-- 127.0.0.1 or `postgres` (libs/go-shared/platform/db/seed.go) — the hashes
+-- below cannot be installed into a remote database by accident.
+--
+-- Publishing the hash costs nothing that publishing the password does not
+-- already cost: a seed nobody can log into is not a seed. What matters is that
+-- these are REAL argon2id hashes at the parameters the service uses, not a
+-- placeholder — a seed whose users cannot authenticate leaves the whole login
+-- path untested by hand, which is exactly how it stayed broken.
+--
+--   $argon2id$v=19$m=19456,t=2,p=1$...
+--
+-- Generated with libs/go-shared/auth.HashPassword, one distinct salt each, and
+-- p=1 rather than DefaultArgon2Params() so the committed artifact does not
+-- depend on the CPU count of the machine that produced it. Verification reads
+-- the parameters back out of the encoded hash, so this verifies anywhere, and
+-- NeedsRehash leaves it alone.
+--
+-- ⚠ carol has NO PASSWORD, DELIBERATELY. Her `auth_provider` is `github`, so
+-- she is the SSO-only account: `Service.Login` has a branch for a user with an
+-- empty hash and returns the same generic error as a wrong password, because
+-- answering "use GitHub instead" would confirm the address is registered.
+-- Giving her a local password would delete the only fixture that reaches that
+-- branch. She reaches her two tenants through the OAuth path, which is what
+-- she is here to exercise.
 -- ---------------------------------------------------------------------------
-INSERT INTO auth.users (id, email, name, auth_provider, status) VALUES
-    ('01900000-0000-7000-8000-0000000000a1', 'alice@acme.test',  'Alice Owner',   'local', 'active'),
-    ('01900000-0000-7000-8000-0000000000a2', 'aaron@acme.test',  'Aaron Analyst', 'local', 'active'),
-    ('01900000-0000-7000-8000-0000000000b1', 'bob@beta.test',    'Bob Owner',     'local', 'active'),
-    ('01900000-0000-7000-8000-0000000000c1', 'carol@both.test',  'Carol Consultant', 'github', 'active')
-ON CONFLICT (id) DO NOTHING;
+INSERT INTO auth.users (id, email, name, auth_provider, status, password_hash) VALUES
+    ('01900000-0000-7000-8000-0000000000a1', 'alice@acme.test',  'Alice Owner',   'local', 'active',
+     '$argon2id$v=19$m=19456,t=2,p=1$wtUzSH1FRdGYWPCRatJvUA$aocdY1t5nNscZeUX+4MO7LWRI+SuKgLzYii0yFPadSk'),
+    ('01900000-0000-7000-8000-0000000000a2', 'aaron@acme.test',  'Aaron Analyst', 'local', 'active',
+     '$argon2id$v=19$m=19456,t=2,p=1$BrQEsX/pCy0WgdenyVMXJg$hl+ww8o2xK2gmn7s2EuUz2VovXMxdEHb2NPHr3XlOUM'),
+    ('01900000-0000-7000-8000-0000000000b1', 'bob@beta.test',    'Bob Owner',     'local', 'active',
+     '$argon2id$v=19$m=19456,t=2,p=1$2GhfE24SgQOIuH7dNJt+7Q$/KEM+LsNtpPvdNqTnQMtAurZDaJZaXXvmHqRqiMP+Qs'),
+    ('01900000-0000-7000-8000-0000000000c1', 'carol@both.test',  'Carol Consultant', 'github', 'active',
+     NULL)
+-- ⚠ DO UPDATE, not DO NOTHING, for password_hash ALONE.
+--
+-- The seed is idempotent and every other row here is DO NOTHING, but these
+-- users already exist in every database seeded before the hashes were added —
+-- and DO NOTHING would leave every one of those developers unable to log in,
+-- with a seed that looks like it ran. Only the hash is written back: a name or
+-- a status changed by hand while testing is left alone.
+ON CONFLICT (id) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 
 INSERT INTO auth.memberships (tenant_id, user_id, role, accepted_at) VALUES
     ('01900000-0000-7000-8000-00000000000a', '01900000-0000-7000-8000-0000000000a1', 'owner',   now()),

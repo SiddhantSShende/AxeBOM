@@ -10,6 +10,10 @@ A session that writes code but does not update this file has failed — the next
 **Current phase:** Deployment — 🟢 **the stack runs end to end for the first time**
 **Next action:** `Set invocation.started_at / finished_at in the worker envelope. Every engine run in the API reports null for both, so a report cannot say when an engine ran — only how long it took.`
 
+> 🟢 **THE SEEDED USERS CAN LOG IN.** `alice@acme.test` / `aaron@acme.test` /
+> `bob@beta.test`, password `encorebom-dev-only`. carol stays SSO-only on
+> purpose. See docs/08-OPERATIONS.md and the 2026-08-23 (g) session entry.
+
 > ✅ **DOCKER IS UP, AND THE WHOLE BACKLOG THAT DEPENDED ON IT HAS RUN.**
 > `migrations/report/0002` applied; the 12 DB-backed RLS tests executed for the
 > first time (all pass, no skips); the 12-case sandbox escape suite executed for
@@ -1986,6 +1990,85 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-08-23 (g) — the seeded users can log in
+
+**Goal:** `migrations/seed/0001_dev_tenants.sql` inserted four users and no
+`password_hash`, so `task db:reset` produced a database nobody could sign into.
+
+#### Why nothing caught it
+
+The seed reported success. The users were there. Every automated test either
+minted a service token or registered its own account through
+`POST /v1/auth/register`, so **the one path a person actually takes was the one
+path nothing exercised.** It surfaced when someone opened the UI.
+
+#### What changed
+
+Real argon2id hashes for alice, aaron and bob, generated with
+`auth.HashPassword` (`libs/go-shared/auth/password.go`) at the parameters the service uses, one
+distinct salt each. Password: **`encorebom-dev-only`**, named so it cannot be
+mistaken for a credential.
+
+⚠ **`p=1` explicitly, not `DefaultArgon2Params()`.** The default derives
+parallelism from `runtime.NumCPU()`, so a committed artifact would depend on the
+machine that produced it — this one would have shipped `p=4`. Verification reads
+the parameters back out of the encoded hash, so a fixed `p` verifies anywhere,
+and `NeedsRehash` leaves it alone.
+
+⚠ **`ON CONFLICT (id) DO UPDATE SET password_hash`, not `DO NOTHING`.** Every
+other row in the seed is `DO NOTHING` and that is right, but these users already
+exist in every database seeded before today — `DO NOTHING` would leave those
+developers unable to log in with a seed that looks like it ran. Only the hash is
+written back, so a name or status changed by hand while testing survives.
+Verified: re-running `db seed` against the live database installed the hashes
+without a reset.
+
+⚠ **carol keeps no password, deliberately.** Her `auth_provider` is `github`, and
+`Service.Login` has a branch for a user with an empty hash that returns the same
+generic error as a wrong password — answering "use GitHub instead" would confirm
+the address is registered. She is the only fixture that reaches it. Giving her a
+local password would have made every seeded user log in and deleted that case,
+which is why the obvious version of this fix is the wrong one.
+
+**Publishing the hashes is safe and the reasoning is written into the seed
+header.** The password has to be public for the seed to be usable, so the hash
+adds no secret; and `Migrator.Seed` already refuses any host that is not
+`localhost`, `127.0.0.1` or `postgres`, so these cannot reach a remote database
+by accident.
+
+#### The durability fix
+
+`libs/go-shared/platform/db/seed_login_test.go`, three tests:
+
+- **`TestSeededUsersCanLogIn`** — every local account's hash is VERIFIED against
+  the documented password, not merely checked for presence. A hash of the wrong
+  password is indistinguishable from a correct one until someone tries to log
+  in. Also asserts the wrong password fails, that the hash is not below current
+  policy, and that carol still has none.
+- **`TestSeededHashesUseDistinctSalts`** — identical hashes would mean a shared
+  salt. Irrelevant for a published dev password, and the wrong pattern to copy
+  out of this file into anything that matters.
+- **`TestSeededUsersHaveMemberships`** — a login that succeeds still lands
+  nowhere without one. ⚠ Counted PER TENANT through `WithTenant`: `auth.memberships`
+  is tenant-scoped, so an unscoped count raises `unrecognized configuration
+  parameter` — RLS failing closed, correctly. The first draft of this test hit
+  exactly that.
+
+Verified to FAIL on the defect: nulling alice's hash produces *"alice@acme.test
+has no password_hash, so nobody can log into a freshly seeded database"*, and
+re-seeding restores it.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | exit 0 |
+| Login, all three local users | 200 with the right role and tenant on the JWT — owner/A, analyst/A, owner/B |
+| carol | 401 `AUTH_INVALID_CREDENTIALS`, same error as a wrong password |
+| Wrong password | 401, indistinguishable — no enumeration oracle |
+| Tenant isolation after login | alice sees Acme's 2 projects, bob sees Beta's 1; both named `payments-api` |
+| Regression guard | verified to fail on a nulled hash, then pass after re-seeding |
 
 ### 2026-08-23 (f) — the summary is populated, and null is not zero
 
