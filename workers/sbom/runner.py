@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -278,6 +279,10 @@ class SBOMWorker:
             )
         generated.duration_ms = generated.duration_ms or int((time.time() - started) * 1000)
 
+        # Before the manifest, so a job that is later re-emitted from its
+        # manifest has already left its output where a consumer can find it.
+        self._publish_to_workspace(adapter, ctx, generated)
+
         result = self._result(ctx, generated)
 
         # Written LAST, after the result is complete: the manifest is the
@@ -303,6 +308,65 @@ class SBOMWorker:
             image_digest=ctx.image_digest,
             sbom_path=sbom_path,
             engine_config=ctx.engine_config or {},
+        )
+
+    def _publish_to_workspace(
+        self, adapter: Any, ctx: JobContext, generated: GenerateResult
+    ) -> None:
+        """Put an engine's output where the engine that consumes it will look.
+
+        ⚠ THE WORKSPACE IS PER-SCAN; THE OUTPUT DIRECTORY IS PER-JOB.
+
+        grype matches against OUR syft SBOM rather than re-cataloguing the tree,
+        and it runs as a SEPARATE JOB with its own job id — so it cannot address
+        syft's output directory. _build_target reads the shared per-scan
+        workspace, so that is where a consumed artifact has to land. Until it
+        did, grype reported ENGINE_INPUT_MISSING on every real scan while the
+        SBOM sat one directory away.
+
+        Written atomically and world-readable: engine containers run as uid
+        65534 and mount the workspace read-only, so a 0600 file would be
+        invisible to them — and an engine that cannot read its input reports a
+        clean project rather than an error.
+        """
+        name = getattr(adapter, "workspace_artifact_name", None)
+        if not name:
+            return
+        if generated.status not in (ResultStatus.SUCCEEDED, ResultStatus.PARTIAL):
+            return
+
+        source_path = next((a.path for a in generated.artifacts if a.role == "native_output"), None)
+        if source_path is None or not Path(source_path).is_file():
+            return
+
+        target = ctx.workspace / name
+        try:
+            ctx.workspace.mkdir(parents=True, exist_ok=True)
+            # Same directory, so the replace is atomic: a consumer never sees a
+            # half-written document.
+            tmp = ctx.workspace / f".{name}.{ctx.job_id}"
+            shutil.copyfile(source_path, tmp)
+            tmp.chmod(0o644)
+            tmp.replace(target)
+        except OSError as exc:
+            # Not fatal to THIS engine — its own result is complete and stored.
+            # The consumer reports ENGINE_INPUT_MISSING, which is the honest
+            # outcome, and this line is what explains it.
+            log.error(
+                "could not publish output to the workspace; the consuming engine "
+                "will report its input as missing",
+                extra={
+                    "job_id": ctx.job_id,
+                    "engine": ctx.engine,
+                    "artifact": name,
+                    "cause": str(exc),
+                },
+            )
+            return
+
+        log.info(
+            "published output for a consuming engine",
+            extra={"job_id": ctx.job_id, "engine": ctx.engine, "artifact": str(target)},
         )
 
     def _read_manifest(self, ctx: JobContext) -> dict[str, Any] | None:

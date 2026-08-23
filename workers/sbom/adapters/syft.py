@@ -43,6 +43,11 @@ CAPABILITIES = Capabilities(
 class SyftAdapter(SandboxedAdapter):
     """Runs syft over a directory."""
 
+    #: grype matches against THIS document rather than re-cataloguing the tree,
+    #: so it is published into the shared per-scan workspace under the name
+    #: _build_target looks for.
+    workspace_artifact_name = "sbom.cdx.json"
+
     media_type = "application/vnd.cyclonedx+json; version=1.6"
 
     def __init__(self, **kwargs: Any) -> None:
@@ -136,6 +141,18 @@ class SyftSPDXAdapter(SyftAdapter):
     """
 
     media_type = "application/spdx+json"
+
+    #: ⚠ EXPLICITLY None, BECAUSE THIS CLASS INHERITS FROM SyftAdapter.
+    #:
+    #: The parent publishes its CycloneDX to the shared workspace as
+    #: sbom.cdx.json for grype to match against. Inheriting that would make this
+    #: pass overwrite it with an SPDX document under a CycloneDX name — grype
+    #: would then either fail to parse it or, worse, parse it partially and
+    #: report vulnerabilities against an inventory nobody produced.
+    #:
+    #: Nothing consumes the SPDX pass's output; it exists because CERT-In's
+    #: Automation Support element requires both formats.
+    workspace_artifact_name = None
 
     def build_argv(self, target: ScanTarget, layout: WorkspaceLayout) -> list[str]:
         return [f"dir:{layout.container_source}", "-o", "spdx-json", "-q"]

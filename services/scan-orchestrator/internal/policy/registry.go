@@ -64,6 +64,22 @@ type Engine struct {
 	// quantum-vulnerability rules applied. There is no quantum-hardware
 	// scanner.
 	Derived bool `json:"derived,omitempty"`
+
+	// ConsumesOutputOf names an engine whose output this one reads.
+	//
+	// ⚠ DISTINCT FROM Requires, WHICH IS A CAPABILITY ("vuln_db"). This is an
+	// ORDERING constraint between two jobs in the same scan, and it changes
+	// when the job may be published rather than whether the engine can run.
+	//
+	// grype is the case: it matches against OUR syft SBOM rather than
+	// cataloguing the tree itself, because re-scanning would produce a second,
+	// subtly different component inventory to reconcile — exactly the work the
+	// normalizer exists to avoid.
+	//
+	// Without this the fan-out published all six jobs at once and grype
+	// routinely ran BEFORE syft, reporting `skipped` on every real scan for an
+	// input that was still being produced.
+	ConsumesOutputOf string `json:"consumes_output_of,omitempty"`
 }
 
 // Supports reports whether this engine can read a source kind.
@@ -110,15 +126,18 @@ func DefaultRegistry() *Registry {
 			GraphTrust:    map[string]int{"npm": 2, "pypi": 2, "golang": 3, "maven": 2},
 		},
 		{
-			ID:            "grype",
-			Families:      []events.Family{events.FamilySBOM},
-			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload, events.SourceImage},
-			Ecosystems:    []string{"npm", "pypi", "maven", "golang", "gem", "cargo", "nuget", "deb", "rpm", "apk"},
-			Produces:      []string{"vulnerabilities"},
-			NativeFormat:  "cyclonedx-json-1.6",
-			Requires:      []string{"vuln_db"},
-			DBBacked:      true,
-			DefaultWeight: 3,
+			ID:           "grype",
+			Families:     []events.Family{events.FamilySBOM},
+			SourceKinds:  []events.SourceKind{events.SourceGit, events.SourceUpload, events.SourceImage},
+			Ecosystems:   []string{"npm", "pypi", "maven", "golang", "gem", "cargo", "nuget", "deb", "rpm", "apk"},
+			Produces:     []string{"vulnerabilities"},
+			NativeFormat: "cyclonedx-json-1.6",
+			Requires:     []string{"vuln_db"},
+			// grype matches against OUR SBOM, never a re-scan. Its job is held
+			// back until syft reports.
+			ConsumesOutputOf: "syft",
+			DBBacked:         true,
+			DefaultWeight:    3,
 		},
 		{
 			// trivy-fs and trivy-image are SEPARATE engines: different

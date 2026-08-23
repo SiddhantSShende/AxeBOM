@@ -272,6 +272,19 @@ func (o *Orchestrator) FanOut(ctx context.Context, tenantID, scanID string) (int
 			continue
 		}
 
+		// ⚠ AN ENGINE THAT READS ANOTHER'S OUTPUT IS HELD BACK.
+		//
+		// Publishing all six jobs at once meant grype was routinely delivered
+		// before syft had produced the SBOM it matches against, so it reported
+		// `skipped` on every real scan for an input that was still being
+		// produced. Its run stays `queued` here and is published by
+		// releaseDependents when its producer reports.
+		if e, ok := o.registry.Get(run.EngineID); ok && e.ConsumesOutputOf != "" {
+			o.log.Info("holding an engine job until its producer reports",
+				"scan_id", scanID, "engine", run.EngineID, "waits_for", e.ConsumesOutputOf)
+			continue
+		}
+
 		// The family is DERIVED from the registry, not stored on the row.
 		//
 		// engine_runs has no family column — the engine id determines it, and a
@@ -418,6 +431,17 @@ func (o *Orchestrator) HandleResult(ctx context.Context, result events.ScanResul
 	// recorded at create time; together they are the Engine Coverage denominator.
 	for _, eco := range result.EcosystemsCovered {
 		_ = o.store.RecordEcosystem(ctx, result.TenantID, result.ScanID, eco, result.Engine, true)
+	}
+
+	// ⚠ BEFORE RecomputeScanStatus, NOT AFTER.
+	//
+	// Recompute asks whether every run is terminal. A dependent run that is
+	// still `queued` keeps the scan `running`, which is correct — but if this
+	// ran afterwards, a producer arriving last would recompute against a run
+	// that had not yet been published and the scan would sit at `running`
+	// until the reaper, with nothing in flight.
+	if err := o.releaseDependents(ctx, result); err != nil {
+		return err
 	}
 
 	return o.RecomputeScanStatus(ctx, result.TenantID, result.ScanID)

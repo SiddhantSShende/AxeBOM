@@ -367,6 +367,20 @@ class SandboxedAdapter(ToolAdapterBase):
         """
         return frozenset({0})
 
+    #: File name to publish this engine's native output under, inside the SHARED
+    #: per-scan workspace, when another engine consumes it.
+    #:
+    #: ⚠ THE WORKSPACE, NOT THE OUTPUT DIRECTORY, AND THE DIFFERENCE IS THE BUG.
+    #:
+    #: Raw artifacts go to <output_root>/<job_id>/, which is per-JOB — grype has
+    #: its own job id and cannot know syft's. The workspace is per-SCAN and is
+    #: what _build_target reads, so an engine whose output another engine needs
+    #: must publish it there. Until it did, grype was `skipped` on every real
+    #: scan with ENGINE_INPUT_MISSING while syft's SBOM sat one directory away.
+    #:
+    #: None means nothing else reads this engine's output.
+    workspace_artifact_name: str | None = None
+
     def artifact_name(self) -> str:
         """File name for this engine's raw output."""
         return f"{self.engine_id}.json"

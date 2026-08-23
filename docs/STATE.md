@@ -8,7 +8,7 @@ A session that writes code but does not update this file has failed — the next
 
 **Last updated:** 2026-08-23
 **Current phase:** Deployment — 🟢 **the stack runs end to end for the first time**
-**Next action:** `Hand syft's SBOM to grype. grype matches against OUR SBOM rather than re-cataloguing, and DEPENDS_ON records that — but nothing copies syft.cdx.json into the shared workspace, so grype is skipped on every scan.`
+**Next action:** `Populate ScanResultV1.summary. syft inventories 21 components and the envelope reports 0, so progress weighting and Engine Coverage understate every scan.`
 
 > ✅ **DOCKER IS UP, AND THE WHOLE BACKLOG THAT DEPENDED ON IT HAS RUN.**
 > `migrations/report/0002` applied; the 12 DB-backed RLS tests executed for the
@@ -33,11 +33,12 @@ A session that writes code but does not update this file has failed — the next
 > the fetcher clones and archives → `scan.result.fetch` → the orchestrator pins
 > `source_commit_sha` and fans out 6 engine jobs → workers consume → results →
 > status derived. Observed: `completed_with_errors`, progress 100%. Engine
-> Engines now scan the real tree: syft **succeeded with 21 components** against
-> expressjs/express. No engine reports `failed` — every non-success carries a
-> stated reason (grype `skipped` pending syft's SBOM, dependency-check
-> `unavailable` pending the free NVD key, osv-scanner and trivy-fs `partial`
-> because express commits no lockfile).
+> Engines now scan the real tree, and the engine graph works: against
+> expressjs/express **syft and grype both succeed**, with grype matching against
+> syft's SBOM rather than re-cataloguing. No engine reports `failed` — every
+> non-success carries a stated reason (dependency-check `unavailable` pending
+> the free NVD key; osv-scanner and trivy-fs `partial` because express commits
+> no lockfile).
 
 > 🟢 **DISPATCH WORKS.** A job published to `scan.job.sbom` is consumed by the
 > worker, runs syft in the sandbox, and its result lands on `scan.result.sbom`
@@ -123,7 +124,8 @@ A session that writes code but does not update this file has failed — the next
 | **Worker → NATS** | 🟢 **WIRED — sbom, cbom, aibom consume `scan.job.*` and publish results, proven live** |
 | **Fetcher → NATS** | 🟢 **WIRED — a 9th service; clone → archive → fan-out proven end to end** |
 | **Archive → worker** | 🟢 **WIRED — `encorebom source materialize`; syft inventories 21 components live** |
-| **syft → grype handoff** | ⬜ **NOT WIRED — grype is `skipped`; syft's SBOM never reaches the workspace** |
+| **syft → grype handoff** | 🟢 **WIRED — fan-out holds grype; syft publishes to the workspace; grype succeeds** |
+| **Engine `summary` counts** | ⬜ **always 0 — syft reports 21 components and the envelope says 0** |
 
 ---
 
@@ -1984,6 +1986,91 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-08-23 (e) — syft's SBOM reaches grype
+
+**Goal:** wire syft's SBOM to grype, which was `skipped` on every real scan.
+
+#### It was two problems, not one
+
+The obvious one was location: syft writes its raw artifact to
+`<output_root>/<job_id>/`, which is per-JOB, while `_build_target` reads
+`sbom.cdx.json` from the per-SCAN workspace. grype has its own job id and cannot
+address syft's output directory, so the SBOM sat one directory away.
+
+The one underneath was **ordering**, and it would have survived fixing the first.
+`Requires: ["vuln_db"]` in the registry is a CAPABILITY, not an engine
+dependency, and nothing sequenced the two: `FanOut` published all six jobs at
+once, so grype was routinely delivered before syft had produced anything.
+`DEPENDS_ON = {"grype": "syft"}` existed only in the Python worker, where it
+turns a missing input into `skipped` — it reports the problem, it does not
+prevent it.
+
+#### The dependency is now modelled and enforced by the orchestrator
+
+`policy.Engine.ConsumesOutputOf` names a producing engine — distinct from
+`Requires`, because it constrains WHEN a job may be published rather than
+whether the engine can run. `FanOut` holds those jobs back; `releaseDependents`
+publishes them when the producer reports.
+
+Observed on a live scan:
+
+	holding an engine job until its producer reports  engine=grype waits_for=syft
+	fanned out engine jobs                            jobs=5
+	published output for a consuming engine           artifact=.../sbom.cdx.json
+	released a dependent engine job                   engine=grype after=syft
+	job complete                                      engine=grype status=succeeded
+
+**A producer that produced nothing must not leave its consumer queued.** If syft
+fails, grype can never run; leaving it `queued` means the scan never reaches a
+terminal state and the reaper reports a timeout half an hour later — a
+misleading cause for a straightforward one. The dependent is marked `skipped`
+immediately with `ENGINE_INPUT_MISSING` naming the producer and its status.
+
+`releaseDependents` runs BEFORE `RecomputeScanStatus`, deliberately: recompute
+asks whether every run is terminal, and a producer arriving last would otherwise
+recompute against a run that had not yet been published.
+
+#### The worker publishes what another engine consumes
+
+`workspace_artifact_name` on the adapter base; `"sbom.cdx.json"` on
+`SyftAdapter`. The worker copies the native output into the shared workspace
+after a successful run, atomically (write-then-replace, same directory) and
+world-readable — engine containers run as uid 65534 and mount the workspace
+read-only, and a 0600 file would be invisible to them.
+
+⚠ **`SyftSPDXAdapter` inherits from `SyftAdapter`**, so it would have written an
+SPDX document over `sbom.cdx.json`. grype would then either fail to parse it or,
+worse, parse it partially and report vulnerabilities against an inventory nobody
+produced. It sets `workspace_artifact_name = None` explicitly, with a test.
+
+A failed or unavailable run publishes nothing: a truncated SBOM becoming
+grype's input would produce findings for a subset of the project while looking
+like a complete scan.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | exit 0, full stack running, `-race` included |
+| Live scan, expressjs/express | **syft and grype both `succeeded`** |
+| Ordering | fan-out published 5, held grype, released it after syft |
+| Producer failure | consumer `skipped` with `ENGINE_INPUT_MISSING`, not left queued |
+| New tests | 5 worker + 3 orchestrator; the orchestrator ones skip when a live worker holds the subject |
+
+#### What is still NOT wired
+
+- **`ScanResultV1.summary` is never populated.** syft reports 21 components and
+  the envelope carries `{"components": 0, ...}`, so progress weighting and
+  Engine Coverage understate every scan. **This is the next task.**
+- Raw artifacts are stored to LOCAL disk, not object storage — the result's
+  artifact URI is a filesystem path. It works because every worker shares the
+  bind mount, and it will not survive a distributed deployment (ADR-0003 wants
+  them in object storage).
+- Everything from the previous entries: `ai-bom` cannot resolve, `/v1/hbom/*`
+  is unimplemented, frontend auth is unwired, integration tests still need an
+  isolated broker, and the orchestrator still fans out to engines flagged
+  `derived` / `requires_import`.
 
 ### 2026-08-23 (d) — the source reaches the engines
 
