@@ -25,7 +25,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from encorebom_shared import source
 from encorebom_shared.adapters.base import GenerateResult, RawArtifact, ResultStatus, ScanTarget
+from encorebom_shared.errors import EngineUnavailableError
 from encorebom_shared.logging import get_logger
 from encorebom_shared.sandbox import Sandbox
 from encorebom_shared.worker_runtime import run_worker
@@ -201,6 +203,39 @@ class SBOMWorker:
                                 "component inventory to reconcile, which is the work the "
                                 "normalizer exists to avoid"
                             ),
+                        }
+                    ],
+                ),
+            )
+
+        # ⚠ MATERIALIZE THE SOURCE BEFORE THE ENGINE STARTS.
+        #
+        # The fetcher uploads a content-addressed archive and the fan-out puts
+        # its reference on every job, but until this call nothing downloaded it:
+        # engines ran against an empty directory and reported honestly on
+        # nothing. The dispatch chain was complete and the source never arrived.
+        #
+        # Failure is UNAVAILABLE, never a scan of whatever happens to be there.
+        # An engine that runs against a missing tree reports a clean project,
+        # and a false all-clear in a compliance artifact is the worst outcome
+        # this codebase has.
+        try:
+            source.materialize(job, ctx.workspace)
+        except EngineUnavailableError as exc:
+            log.error(
+                "source could not be materialized; refusing to scan",
+                extra={"job_id": ctx.job_id, "engine": ctx.engine, "cause": str(exc)},
+            )
+            return self._result(
+                ctx,
+                GenerateResult(
+                    status=ResultStatus.UNAVAILABLE,
+                    diagnostics=[
+                        {
+                            "severity": "error",
+                            "code": "SOURCE_UNAVAILABLE",
+                            "message": str(exc),
+                            "hint": "the engine was not run; this appears in Engine Coverage",
                         }
                     ],
                 ),

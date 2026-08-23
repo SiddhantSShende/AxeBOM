@@ -280,6 +280,16 @@ class SandboxedAdapter(ToolAdapterBase):
         self._artifact_dir = artifact_dir
         self._database_root = database_root
 
+    def classify_nonzero(self, result: SandboxResult) -> tuple[ResultStatus, str, str] | None:
+        """Reclassify an unacceptable exit code, if this engine knows better.
+
+        Returns (status, code, message), or None to accept the default
+        `failed` / ENGINE_NONZERO_EXIT. Overridden by engines whose error codes
+        are ambiguous — see OSVScannerAdapter.
+        """
+        _ = result
+        return None
+
     def input_gap(self, target: ScanTarget) -> str | None:
         """Why this engine cannot run against this target, if it cannot.
 
@@ -631,6 +641,30 @@ class SandboxedAdapter(ToolAdapterBase):
                     base.status = ResultStatus.UNAVAILABLE
                     base.diagnostics.append(self.db_stale_diagnostic(reason))
                     return base
+
+            # An engine may know that one of its own error codes is not
+            # actually an error for this project. osv-scanner's 128 is the
+            # case: "no package sources found" covers both a repository that
+            # commits no lockfile and a workspace the engine could not read,
+            # and those deserve opposite statuses.
+            #
+            # Only the adapter can tell them apart, and only from the stderr —
+            # so the decision is delegated rather than guessed at here. A
+            # non-answer falls through to `failed`, which overstates the
+            # problem visibly rather than understating it.
+            special = self.classify_nonzero(result)
+            if special is not None:
+                status, code, message = special
+                base.status = status
+                base.diagnostics.append(
+                    {
+                        "severity": "error" if status is ResultStatus.FAILED else "warn",
+                        "code": code,
+                        "message": message,
+                        "hint": _tail(result.stderr),
+                    }
+                )
+                return base
 
             base.status = ResultStatus.FAILED
             base.diagnostics.append(

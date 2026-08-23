@@ -90,8 +90,9 @@ type SkippedEntry struct {
 // biases the computed ratio UPWARD and could reject a legitimate archive, or,
 // with different interleaving, delay the check on a hostile one.
 type CountingReader struct {
-	r io.Reader
-	n atomic.Int64
+	r   io.Reader
+	n   atomic.Int64
+	tee io.Writer
 }
 
 // NewCountingReader wraps r.
@@ -102,8 +103,26 @@ func NewCountingReader(r io.Reader) *CountingReader {
 func (c *CountingReader) Read(p []byte) (int, error) {
 	n, err := c.r.Read(p)
 	c.n.Add(int64(n))
+	if n > 0 && c.tee != nil {
+		// Errors are ignored deliberately: the tee is an observer (a hasher),
+		// and failing the extraction because an observer complained would let a
+		// diagnostic break the thing it observes. A hash.Hash never errors.
+		_, _ = c.tee.Write(p[:n])
+	}
 	return n, err
 }
+
+// Tee sends every byte read to w as well.
+//
+// Used to hash the COMPRESSED stream while extracting it, which is the only way
+// to verify a content-addressed archive without reading it twice — the key is
+// derived from the compressed bytes, and they are consumed by the decompressor
+// as they arrive.
+//
+// ⚠ MUST BE SET BEFORE THE FIRST READ. There is no synchronisation here: the
+// reader is driven by the decompressor's goroutine, so setting the tee mid-
+// stream would be a data race AND would silently hash a suffix.
+func (c *CountingReader) Tee(w io.Writer) { c.tee = w }
 
 // Count returns the compressed bytes read so far.
 func (c *CountingReader) Count() int64 { return c.n.Load() }

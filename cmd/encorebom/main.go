@@ -71,6 +71,7 @@ func init() {
 		{"toolctl", "Fetch, verify and probe pinned scanner artifacts", 2, runToolctl},
 		{"schema", "Generate the published envelope JSON Schemas", 6, runSchema},
 		{"sandbox", "Run a command in the scan sandbox (the bridge Python workers call)", 7, runSandbox},
+		{"source", "Materialize a scan's source archive into a worker workspace", 7, runSource},
 		{"verify", "Check a report artifact against its detached signature", 9, runVerify},
 	}
 }

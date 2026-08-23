@@ -8,7 +8,7 @@ A session that writes code but does not update this file has failed — the next
 
 **Last updated:** 2026-08-23
 **Current phase:** Deployment — 🟢 **the stack runs end to end for the first time**
-**Next action:** `Make the engine workers materialize the source archive. Fan-out works, but nothing downloads and extracts scan.source_archive_ref into the worker workspace, so engines scan an empty tree.`
+**Next action:** `Hand syft's SBOM to grype. grype matches against OUR SBOM rather than re-cataloguing, and DEPENDS_ON records that — but nothing copies syft.cdx.json into the shared workspace, so grype is skipped on every scan.`
 
 > ✅ **DOCKER IS UP, AND THE WHOLE BACKLOG THAT DEPENDED ON IT HAS RUN.**
 > `migrations/report/0002` applied; the 12 DB-backed RLS tests executed for the
@@ -33,8 +33,11 @@ A session that writes code but does not update this file has failed — the next
 > the fetcher clones and archives → `scan.result.fetch` → the orchestrator pins
 > `source_commit_sha` and fans out 6 engine jobs → workers consume → results →
 > status derived. Observed: `completed_with_errors`, progress 100%. Engine
-> output is still empty because nothing extracts the archive into the worker
-> workspace — see "Archive → worker" above.
+> Engines now scan the real tree: syft **succeeded with 21 components** against
+> expressjs/express. No engine reports `failed` — every non-success carries a
+> stated reason (grype `skipped` pending syft's SBOM, dependency-check
+> `unavailable` pending the free NVD key, osv-scanner and trivy-fs `partial`
+> because express commits no lockfile).
 
 > 🟢 **DISPATCH WORKS.** A job published to `scan.job.sbom` is consumed by the
 > worker, runs syft in the sandbox, and its result lands on `scan.result.sbom`
@@ -119,7 +122,8 @@ A session that writes code but does not update this file has failed — the next
 | **Credentials guide** | ✅ **`docs/CREDENTIALS.md` — NVD, GitHub, Mouser, Nexar, HF; all free** |
 | **Worker → NATS** | 🟢 **WIRED — sbom, cbom, aibom consume `scan.job.*` and publish results, proven live** |
 | **Fetcher → NATS** | 🟢 **WIRED — a 9th service; clone → archive → fan-out proven end to end** |
-| **Archive → worker** | ⬜ **NOT WIRED — engines run against an empty workspace; nothing extracts the archive** |
+| **Archive → worker** | 🟢 **WIRED — `encorebom source materialize`; syft inventories 21 components live** |
+| **syft → grype handoff** | ⬜ **NOT WIRED — grype is `skipped`; syft's SBOM never reaches the workspace** |
 
 ---
 
@@ -1980,6 +1984,112 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-08-23 (d) — the source reaches the engines
+
+**Goal:** make the engine workers materialize the source archive.
+
+#### What now works
+
+`encorebom source materialize --uri --sha256 --dest` downloads the
+content-addressed archive, verifies the digest, and extracts it through the
+SAME hardened `fetcher.ExtractTar` the fetcher uses — traversal, size, inode and
+inflation guards. A second extractor in Python would have been a second thing to
+get right, and the second one would be the weaker; the workers already shell out
+to this binary for the sandbox bridge.
+
+`SBOMWorker.handle` calls it before every engine. Measured on
+expressjs/express: **213 files materialized, syft succeeded with 21 components**,
+and the 2nd and 3rd engines log `already materialized` rather than re-downloading.
+
+Idempotency is by **atomic rename**, not a lock: six engines share one scan
+workspace and may race, so each extracts to a sibling staging directory and
+renames into place. The loser sees the winner's finished tree, and there is no
+lock file to leak when a worker is killed mid-extraction. The stamp is written
+LAST, so a directory without one is treated as absent.
+
+#### ⚠ A 0700 WORKSPACE MADE EVERY ENGINE REPORT NOTHING
+
+`os.MkdirTemp` creates 0700 and rename preserves it, so the published workspace
+was root-owned and unreadable by the engine containers, which run as uid 65534.
+They did not fail — they walked a directory they could not enter, found nothing,
+and reported `partial`. **express materialized 213 files and syft still reported
+zero packages.**
+
+This is the same rule the engine-database provisioner already applies
+(`_make_world_readable`, and the `_readable_as_scan_user` check that proves it),
+for the same reason: a tree the scanner cannot read is indistinguishable, in the
+output, from a project with nothing in it.
+
+The chmod is **root-scoped and by descriptor**. The tree is a customer's
+repository, so `filepath.Walk` + `os.Chmod` is a symlink TOCTOU — an entry that
+was a regular file at Lstat can be a symlink by the time chmod runs, and the
+chmod lands outside the tree. Traversal goes through `os.Root` and every chmod
+is applied to an `O_NOFOLLOW` descriptor. `os.Root.Chmod` alone is not enough;
+its own documentation records that it stays racy on Unix.
+
+#### osv-scanner's exit 128 means two opposite things
+
+*"No package sources found"* is emitted both when a repository genuinely commits
+no lockfile — express — and when the workspace was never materialized. Both were
+observed here; the second while the archive was being mounted from a tmpfs the
+daemon could not read.
+
+Reporting the first as `failed` puts a false alarm in a compliance document.
+Reporting the second as zero coverage would hide a real defect. The only signal
+separating them is osv-scanner's own walk summary:
+
+	End status: 69 dirs visited, 283 inodes visited, 0 Extract calls
+
+A walk that visited a real tree and found no manifests is a **coverage gap**
+(`partial` + `ENGINE_ZERO_RESULTS`). A walk that visited nothing **did not see
+the source** (`failed` + `ENGINE_INPUT_UNREADABLE`). Parsing stderr is fragile
+against upstream rewording, so an unparsed count falls through to `failed` —
+overstating the problem visibly rather than understating it. Added
+`classify_nonzero` to the adapter base for this; every other exit code keeps the
+default.
+
+#### The distinction the tests pin
+
+A job with **no** archive reference is a legitimate shape — an upload or manual
+scan has nothing to fetch, and refusing it would break every non-repository
+source kind. A job that **names** an archive which cannot be materialized is a
+real failure, and the engine must not run: an engine pointed at a missing tree
+reports a clean project, which is the worst outcome this codebase has. Failure
+is `unavailable` + `SOURCE_UNAVAILABLE`, carrying the CLI's own reason (digest
+mismatch, missing object, extraction guard) so the report names the cause rather
+than saying the engine found nothing.
+
+Writing those tests caught a bug in the new code immediately:
+`EngineUnavailableError` takes `(engine, reason)` and was being raised with one
+argument.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | exit 0, full stack running, `-race` included |
+| Live scan, expressjs/express | syft **succeeded**, 21 components; 213 files materialized |
+| Idempotency | 2nd and 3rd engines log `already materialized` |
+| No engine `failed` | every non-success carries a stated reason |
+| Python suite | passes, including 10 new tests |
+
+#### What is still NOT wired
+
+- **syft's SBOM never reaches grype.** grype matches against OUR SBOM rather
+  than re-cataloguing the tree, and `DEPENDS_ON` records the dependency, but
+  syft writes its artifact to the OUTPUT directory while `_build_target` looks
+  for `sbom.cdx.json` in the WORKSPACE. So grype is `skipped` on every real
+  scan — correctly, and for a reason nothing yet resolves. **This is the next
+  task.**
+- `summary.components` stays 0 even when syft reports 21 — the count is not
+  propagated into the result envelope, so progress and coverage numbers
+  understate what was found.
+- trivy-fs reports `partial` on express because it needs a lockfile; that is
+  honest, not a defect.
+- Everything from the previous entries: `ai-bom` cannot resolve, `/v1/hbom/*`
+  is unimplemented, frontend auth is unwired, and integration tests still need
+  an isolated broker.
 
 ### 2026-08-23 (c) — the fetcher is wired; a clone that produced no files
 
