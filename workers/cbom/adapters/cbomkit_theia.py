@@ -26,6 +26,7 @@ from __future__ import annotations
 from typing import Any
 
 from encorebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
+from encorebom_shared.adapters.summary import count_cyclonedx, summarize
 from encorebom_shared.sandbox import SandboxResult, WorkspaceLayout
 
 from ...sbom.adapters.common import SandboxedAdapter
@@ -152,6 +153,13 @@ class CBOMkitTheiaAdapter(SandboxedAdapter):
 
         # Discovery surfaces, not package ecosystems.
         base.ecosystems_covered = sorted({a["surface"] for a in assets if a.get("surface")})
+
+        # Counted from the DOCUMENT, not from `assets`. The summary describes
+        # the raw artifact, which is the immutable evidence (ADR-0003);
+        # normalization is a separate replayable pass, and an asset this
+        # adapter skipped today may be understood by a later ruleset. The
+        # diagnostics above already say how many were skipped.
+        base.summary = summarize(self.capabilities, count_cyclonedx(payload))
 
         if not assets:
             # ⚠ ZERO CRYPTO ASSETS IS `partial`, NOT `succeeded`.

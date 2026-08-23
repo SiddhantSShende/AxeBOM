@@ -205,7 +205,8 @@ func loadRuns(ctx context.Context, tx db.Tx, scanID string) ([]EngineRun, error)
 		       COALESCE(engine_version,''), COALESCE(engine_db_version,''),
 		       started_at, finished_at, deadline_at,
 		       COALESCE(error_code,''), COALESCE(error_message,''),
-		       COALESCE(diagnostics, '[]'::jsonb)
+		       COALESCE(diagnostics, '[]'::jsonb),
+		       COALESCE(summary, '{}'::jsonb)
 		  FROM scan.engine_runs
 		 WHERE scan_id = $1
 		 ORDER BY engine_id, attempt`, scanID)
@@ -218,17 +219,24 @@ func loadRuns(ctx context.Context, tx db.Tx, scanID string) ([]EngineRun, error)
 	for rows.Next() {
 		var r EngineRun
 		var status string
-		var diagnostics []byte
+		var diagnostics, summary []byte
 		if err := rows.Scan(&r.ID, &r.ScanID, &r.TenantID, &r.JobID, &r.EngineID,
 			&r.Attempt, &status, &r.Weight, &r.EcosystemsCovered,
 			&r.EngineVersion, &r.EngineDBVersion,
 			&r.StartedAt, &r.FinishedAt, &r.DeadlineAt,
-			&r.ErrorCode, &r.ErrorMessage, &diagnostics); err != nil {
+			&r.ErrorCode, &r.ErrorMessage, &diagnostics, &summary); err != nil {
 			return nil, err
 		}
 		r.Status = events.EngineStatus(status)
 		if len(diagnostics) > 0 {
 			_ = json.Unmarshal(diagnostics, &r.Diagnostics)
+		}
+		// The column was written from the first engine result and read by
+		// nothing, so the counts existed only in the database. A null
+		// dimension unmarshals to a nil pointer, which is the point: it means
+		// the engine does not measure it, not that it measured zero.
+		if len(summary) > 0 {
+			_ = json.Unmarshal(summary, &r.Summary)
 		}
 		out = append(out, r)
 	}

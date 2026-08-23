@@ -122,7 +122,7 @@ func (w *fakeWorker) run(ctx context.Context, durable string) {
 			Engine: job.Engine, EngineVersion: "0.0.1-test",
 			Status:            w.status,
 			EcosystemsCovered: []string{"npm"},
-			Summary:           events.Summary{Components: 7},
+			Summary:           events.Summary{Components: events.Count(7)},
 			Invocation: events.Invocation{
 				ArgvRedacted: []string{job.Engine},
 				StartedAt:    time.Now().UTC(), FinishedAt: time.Now().UTC(),

@@ -76,6 +76,15 @@ type engineRunDTO struct {
 	ErrorCode   string              `json:"error_code,omitempty"`
 	ErrorDetail string              `json:"error_message,omitempty"`
 	Diagnostics []events.Diagnostic `json:"diagnostics,omitempty"`
+
+	// Summary is what this engine counted. Every field is nullable, and null
+	// is NOT zero: it means the engine does not measure that dimension. syft
+	// catalogues components and matches no vulnerabilities, so rendering
+	// "syft: 0 vulnerabilities" would answer a question syft was never asked.
+	//
+	// Never omitempty — a client must be able to tell "not measured" from a
+	// field this server did not send.
+	Summary events.Summary `json:"summary"`
 }
 
 type scanDTO struct {
@@ -415,6 +424,7 @@ func toRunDTOs(runs []orchestr.EngineRun) []engineRunDTO {
 			ErrorCode:         r.ErrorCode,
 			ErrorDetail:       r.ErrorMessage,
 			Diagnostics:       r.Diagnostics,
+			Summary:           r.Summary,
 		})
 	}
 	return out

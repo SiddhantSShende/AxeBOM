@@ -28,6 +28,7 @@ from typing import Any
 
 from encorebom_shared import source
 from encorebom_shared.adapters.base import GenerateResult, RawArtifact, ResultStatus, ScanTarget
+from encorebom_shared.adapters.summary import EngineSummary
 from encorebom_shared.errors import EngineUnavailableError
 from encorebom_shared.logging import get_logger
 from encorebom_shared.sandbox import Sandbox
@@ -387,6 +388,21 @@ class SBOMWorker:
 
     def _result(self, ctx: JobContext, generated: GenerateResult) -> dict[str, Any]:
         """Build the ScanResultV1 envelope."""
+        # ⚠ A RUN THAT WAS REFUSED REPORTS NO COUNTS.
+        #
+        # `unavailable`, `skipped`, `failed` and `timeout` all mean the output
+        # was not accepted, and several adapters compute their counts before
+        # they reach the check that refuses the run — osv-scanner counts every
+        # finding, then declares itself unavailable because it cannot date
+        # them. Publishing those numbers on a refused run would let a consumer
+        # sum findings the engine itself declined to stand behind.
+        #
+        # Enforced here rather than in each adapter: this is the one place
+        # every family's envelope is built, so a new adapter cannot forget it.
+        summary = generated.summary
+        if generated.status not in (ResultStatus.SUCCEEDED, ResultStatus.PARTIAL):
+            summary = EngineSummary()
+
         artifacts = []
         for artifact in generated.artifacts:
             artifacts.append(
@@ -416,12 +432,14 @@ class SBOMWorker:
             },
             "artifacts": artifacts,
             "ecosystems_covered": generated.ecosystems_covered,
-            "summary": {
-                "components": 0,
-                "vulnerabilities": 0,
-                "licenses": 0,
-                "crypto_assets": 0,
-            },
+            # ⚠ null IS NOT 0 HERE. This was four hardcoded zeros on every
+            # job, so syft inventoried 21 components in expressjs/express and
+            # `scan.engine_runs.summary` recorded nothing — for every scan ever
+            # run. Filling all four in unconditionally would have been the same
+            # bug wearing a number: the adapter reports only the dimensions its
+            # manifest entry claims, and null says "this engine does not
+            # measure this" where 0 says "it measured, and found none".
+            "summary": summary.as_dict(),
             "diagnostics": generated.diagnostics,
         }
 

@@ -49,9 +49,7 @@ def test_stream_names_match(bus_go: str) -> None:
     ]:
         m = re.search(rf'{const}\s*=\s*"([A-Z_]+)"', bus_go)
         assert m, f"could not find {const} in bus.go"
-        assert m.group(1) == want, (
-            f"{const} is {m.group(1)!r} in Go but {want!r} in Python"
-        )
+        assert m.group(1) == want, f"{const} is {m.group(1)!r} in Go but {want!r} in Python"
 
 
 def test_max_deliver_matches(bus_go: str) -> None:

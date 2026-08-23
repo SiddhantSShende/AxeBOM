@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from encorebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
+from encorebom_shared.adapters.summary import count_cyclonedx, summarize
 from encorebom_shared.sandbox import SandboxResult, WorkspaceLayout
 
 from .common import SandboxedAdapter, ecosystems_from_purls
@@ -204,6 +205,7 @@ class TrivyImageAdapter(SandboxedAdapter):
             if isinstance(c, dict) and isinstance(c.get("purl"), str)
         ]
         base.ecosystems_covered = ecosystems_from_purls(purls)
+        base.summary = summarize(self.capabilities, count_cyclonedx(payload))
 
         if not components:
             base.status = ResultStatus.PARTIAL

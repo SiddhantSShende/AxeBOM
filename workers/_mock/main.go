@@ -190,7 +190,7 @@ func (w *worker) buildResult(job events.ScanJobV1, attempt int) events.ScanResul
 		},
 		Status:            events.StatusSucceeded,
 		EcosystemsCovered: []string{"npm", "pypi"},
-		Summary:           events.Summary{Components: 42, Licenses: 7},
+		Summary:           events.Summary{Components: events.Count(42), Licenses: events.Count(7)},
 	}
 
 	switch w.behaviour {
@@ -199,7 +199,7 @@ func (w *worker) buildResult(job events.ScanJobV1, attempt int) events.ScanResul
 		// reach the report.
 		result.Status = events.StatusPartial
 		result.EcosystemsCovered = []string{"npm"}
-		result.Summary.Components = 21
+		result.Summary.Components = events.Count(21)
 		result.Diagnostics = []events.Diagnostic{{
 			Severity: "warn", Code: "ENGINE_PARTIAL_ECOSYSTEM", Ecosystem: "pypi",
 			Message: "requirements.txt failed to parse",

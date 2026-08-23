@@ -125,16 +125,28 @@
       "additionalProperties": true,
       "properties": {
         "components": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "crypto_assets": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "licenses": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "vulnerabilities": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
       "type": "object"

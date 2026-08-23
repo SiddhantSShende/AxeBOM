@@ -237,7 +237,7 @@ func TestDuplicateResultConvergesRatherThanDuplicating(t *testing.T) {
 		Engine: "syft", EngineVersion: "1.51.0",
 		Status:            events.StatusSucceeded,
 		EcosystemsCovered: []string{"npm", "pypi"},
-		Summary:           events.Summary{Components: 412},
+		Summary:           events.Summary{Components: events.Count(412)},
 		Invocation: events.Invocation{
 			ArgvRedacted: []string{"syft"},
 			StartedAt:    time.Now().UTC(), FinishedAt: time.Now().UTC(),

@@ -8,7 +8,7 @@ A session that writes code but does not update this file has failed — the next
 
 **Last updated:** 2026-08-23
 **Current phase:** Deployment — 🟢 **the stack runs end to end for the first time**
-**Next action:** `Populate ScanResultV1.summary. syft inventories 21 components and the envelope reports 0, so progress weighting and Engine Coverage understate every scan.`
+**Next action:** `Set invocation.started_at / finished_at in the worker envelope. Every engine run in the API reports null for both, so a report cannot say when an engine ran — only how long it took.`
 
 > ✅ **DOCKER IS UP, AND THE WHOLE BACKLOG THAT DEPENDED ON IT HAS RUN.**
 > `migrations/report/0002` applied; the 12 DB-backed RLS tests executed for the
@@ -1987,6 +1987,148 @@ mind**, because a claim about limits should be falsifiable.
 
 ## Session log
 
+### 2026-08-23 (f) — the summary is populated, and null is not zero
+
+**Goal:** populate `ScanResultV1.summary`. syft inventoried 21 components on a
+live scan and the envelope carried `{"components": 0, ...}`.
+
+#### ⚠ The obvious fix would have introduced three new lies
+
+Filling the four fields in unconditionally replaces one false zero with three.
+syft catalogues components and matches no vulnerabilities; grype matches
+vulnerabilities and catalogues no licences. "grype found 0 licences" reads as a
+clean result and is really a question grype was never asked — the same failure
+this codebase refuses everywhere else, where an unknown must never present as a
+measured zero (invariant 3) and an unscanned ecosystem must be declared rather
+than omitted (invariant 12).
+
+So `events.Summary` is now four **pointers**, and the two states are distinct on
+the wire:
+
+	null   this engine does not measure this dimension
+	0      it measured, and there were none
+
+Not `omitempty`: an explicit null says "not measured", where an absent key says
+only that the publisher might be old. `events.Count(n)` boxes a measured value
+so a call site reads as what it means.
+
+#### The manifest decides what an engine may report
+
+Not this code's opinion. `OSINT/tools.manifest.yaml` already declares
+`produces:` per engine, and `summarize()` reports exactly those dimensions —
+adding an engine or changing what one produces is a manifest edit, not a code
+edit. `secrets` is mapped deliberately to nothing: a leaked secret is a finding,
+not an inventory count, and folding it into `vulnerabilities` would put a number
+in a compliance report that no CVE backs.
+
+⚠ **The adapters restate `produces` and one copy had already drifted.**
+`dependency-check` said `(vulnerabilities,)` where the manifest says
+`[components, vulnerabilities]`, so its component count would have been dropped
+from every envelope and looked exactly like an engine that does not catalogue
+components. Corrected, and `test_an_adapters_produces_matches_the_manifest`
+now pins every adapter against the manifest — verified to fail on the drift
+before it was fixed.
+
+#### Counting rules worth knowing
+
+- **Findings are not vulnerabilities.** grype emits one match per
+  (vulnerability, package) pair; trivy emits one entry per vulnerability with an
+  `affects` list. Counting rows would make the same project look three times
+  worse under grype than under trivy, in a field both publish under the same
+  name. All engines count DISTINCT identifiers; an unidentified finding still
+  counts, because dropping it would understate.
+- **CycloneDX nests**, and trivy uses that for multi-root repositories. The
+  counter recurses — counting only the top level would report a monorepo's four
+  roots as four components.
+- **A cryptographic asset is a component with a distinct type**, counted in
+  `crypto_assets` and not in `components`; counting both would render a 40-asset
+  CBOM as 40 components AND 40 crypto assets in one envelope.
+- **Licences count real assertions only.** `NOASSERTION`, `unknown` and `""` are
+  not assertions (invariant 3). ⚠ `NONE` is dropped here and still counts as
+  present for COVERAGE scoring — invariant 3's deliberate exception makes it a
+  substantive answer to "what licence is this", and it remains no answer at all
+  to "how many distinct licences were identified".
+
+#### A refused run publishes no counts
+
+`unavailable`, `skipped`, `failed` and `timeout` all mean the output was not
+accepted, and several adapters count before they reach the check that refuses
+the run — osv-scanner counts every finding, then declares itself unavailable
+because it cannot date them. Publishing those numbers would let a consumer sum
+findings the engine itself declined to stand behind. Cleared centrally in
+`_result()`, the one place every family's envelope is built, so a new adapter
+cannot forget it.
+
+#### The column was written from the first result and read by nothing
+
+`scan.engine_runs.summary` has existed since `migrations/scan/0001`. Nothing
+selected it, so even a correct count would have stopped at the database.
+`loadRuns` now reads it and `GET /v1/scans/{id}/engine-runs` returns it.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | exit 0, full stack running, `-race` included |
+| Python suite | 597 pass (`workers/` + `libs/py-shared`) |
+| Live scan, expressjs/express | **syft `components: 21`** — the number the envelope had been reporting as 0 |
+| null vs zero, live | syft `vulnerabilities: null`, grype `vulnerabilities: 0`, trivy-fs `components: 0` |
+| Refused runs, live | dependency-check `unavailable`, mock-engine `skipped`, osv-scanner `partial` — all four dimensions null |
+| Manifest-parity guard | verified to FAIL on the dependency-check drift before the fix |
+| Schema | `proto/schemas/scan-result-v1.schema.json` regenerated; the four fields are `["integer","null"]` |
+
+Live output:
+
+	dependency-check   unavailable  {components: null, vulnerabilities: null, licenses: null, crypto_assets: null}
+	grype              succeeded    {components: null, vulnerabilities: 0,    licenses: null, crypto_assets: null}
+	mock-engine        skipped      {components: null, vulnerabilities: null, licenses: null, crypto_assets: null}
+	osv-scanner        partial      {components: null, vulnerabilities: null, licenses: null, crypto_assets: null}
+	syft               succeeded    {components: 21,   vulnerabilities: null, licenses: 0,    crypto_assets: null}
+	trivy-fs           partial      {components: 0,    vulnerabilities: 0,    licenses: 0,    crypto_assets: null}
+
+#### ⚠ A pre-existing test flake surfaced, and it is NOT this change
+
+`task verify` failed once on `TestReaperTimesOutOverdueJobs` ("the reaper found
+no overdue jobs") and once on `TestScanStatusDerivesFromEngineResults` (scan
+status `failed`, want `completed_with_errors`). Both reproduce on the CLEAN tree
+at `7f05652` with this work stashed — measured, 1 failure in 10 runs of
+`go test ./services/...`.
+
+The cause is the same class already recorded for the bus and pipeline tests,
+now visible in the database: `Reaper.Sweep` is deliberately GLOBAL across every
+tenant (it goes through SECURITY DEFINER functions because `engine_runs` has
+FORCE RLS), it runs on a 20-second ticker in every orchestrator instance, and
+the DB-backed tests share one database with whatever else is running. A sweep
+landing between a test's backdate and its own assertion reaps the row first —
+or times out another test's runs and turns its scan `failed`.
+
+`task verify` passes on a rerun. **The real fix is an isolated database per
+test run, the same conclusion the broker reached; not done, and recorded here
+rather than left as an intermittent mystery.**
+
+#### Corrections to the previous entry
+
+- **Progress weighting never used the summary.** `orchestr.Progress` is a
+  weighted mean over ENGINE WEIGHTS and is unaffected by counts. The previous
+  entry named it as a victim of the zeroed summary; it was not.
+- **The report's Engine Coverage section does not read the summary either.**
+  `loadEngineCoverage` selects engine, version, status, database version,
+  ecosystems and error code — no counts. Surfacing them in the generated report
+  is a separate change with a golden-file cost, and is NOT done.
+
+#### What is still NOT wired
+
+- **`invocation.started_at` / `finished_at` are never set** by the Python
+  worker, so every engine run reports null for both through the API. Only
+  `duration_ms` survives, which says how long an engine took and not when it
+  ran. Visible on any scan now that the runs render. **This is the next task.**
+- The report's Engine Coverage section does not carry the counts (above).
+- Raw artifacts are stored to LOCAL disk, not object storage (ADR-0003).
+- Everything from the previous entries: `ai-bom` cannot resolve, `/v1/hbom/*`
+  is unimplemented, frontend auth is unwired, integration tests still need an
+  isolated broker, and the orchestrator still fans out to engines flagged
+  `derived` / `requires_import`.
+
 ### 2026-08-23 (e) — syft's SBOM reaches grype
 
 **Goal:** wire syft's SBOM to grype, which was `skipped` on every real scan.
@@ -2061,8 +2203,9 @@ like a complete scan.
 #### What is still NOT wired
 
 - **`ScanResultV1.summary` is never populated.** syft reports 21 components and
-  the envelope carries `{"components": 0, ...}`, so progress weighting and
-  Engine Coverage understate every scan. **This is the next task.**
+  the envelope carries `{"components": 0, ...}`. *Done in (f) — and the claim
+  about progress weighting and Engine Coverage was wrong; see the corrections
+  in that entry.*
 - Raw artifacts are stored to LOCAL disk, not object storage — the result's
   artifact URI is a filesystem path. It works because every worker shares the
   bind mount, and it will not survive a distributed deployment (ADR-0003 wants

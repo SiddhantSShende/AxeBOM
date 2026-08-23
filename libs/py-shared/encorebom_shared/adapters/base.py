@@ -23,9 +23,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from encorebom_shared.errors import EngineUnavailableError
+
+if TYPE_CHECKING:
+    from .summary import EngineSummary
 
 
 class EngineMode(StrEnum):
@@ -139,6 +142,11 @@ class GenerateResult:
     status: ResultStatus
     artifacts: list[RawArtifact] = field(default_factory=list)
     ecosystems_covered: list[str] = field(default_factory=list)
+    #: Headline counts. Every field defaults to None — "not measured" — so a
+    #: run that produced no output reports nothing rather than a row of zeros
+    #: that reads as a clean result. Adapters set this in `interpret()`, where
+    #: the payload is already parsed; see adapters/summary.py.
+    summary: EngineSummary = field(default_factory=lambda: _EngineSummary())
     diagnostics: list[dict[str, Any]] = field(default_factory=list)
     engine_version: str | None = None
     # REQUIRED for vulnerability engines. Without it a finding cannot be dated,
@@ -148,6 +156,19 @@ class GenerateResult:
     duration_ms: int = 0
     exit_code: int | None = None
     argv_redacted: list[str] = field(default_factory=list)
+
+
+def _EngineSummary() -> Any:  # noqa: N802 - a factory named for what it builds
+    """Build an empty EngineSummary without a circular import.
+
+    summary.py imports Capabilities from this module, so the dependency can
+    only run one way at import time. Deferring the import to first use keeps
+    the default value real rather than making it a plain dict that would drift
+    from the dataclass.
+    """
+    from .summary import EngineSummary
+
+    return EngineSummary()
 
 
 @runtime_checkable

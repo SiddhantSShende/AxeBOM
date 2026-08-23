@@ -26,6 +26,7 @@ from __future__ import annotations
 from typing import Any
 
 from encorebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
+from encorebom_shared.adapters.summary import count_cyclonedx, summarize
 from encorebom_shared.sandbox import SandboxResult, WorkspaceLayout
 
 from ...sbom.adapters.common import SandboxedAdapter
@@ -104,6 +105,10 @@ class AIBomAdapter(SandboxedAdapter):
         discovery = extract_discovery(payload)
         base.diagnostics.extend(discovery["diagnostics"])
         base.ecosystems_covered = sorted(discovery["surfaces"])
+        # Models, frameworks and MCP servers each arrive as one CycloneDX
+        # component, which is why the manifest's ai_models / ai_dependencies
+        # both map onto `components` rather than inventing an envelope field.
+        base.summary = summarize(self.capabilities, count_cyclonedx(payload))
 
         if not discovery["models"] and not discovery["frameworks"]:
             # ⚠ A REPOSITORY WITH NO AI IN IT IS THE COMMON CASE, so an empty

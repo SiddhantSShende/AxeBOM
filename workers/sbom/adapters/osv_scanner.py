@@ -18,6 +18,7 @@ import re
 from typing import Any
 
 from encorebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
+from encorebom_shared.adapters.summary import count_distinct_vulnerabilities, summarize
 from encorebom_shared.sandbox import SandboxResult, WorkspaceLayout
 
 from .common import SandboxedAdapter
@@ -186,6 +187,7 @@ class OSVScannerAdapter(SandboxedAdapter):
             results = []
 
         ecosystems: set[str] = set()
+        vuln_ids: list[Any] = []
         vuln_count = 0
         alias_count = 0
         vulns_without_aliases = 0
@@ -207,6 +209,7 @@ class OSVScannerAdapter(SandboxedAdapter):
                     if not isinstance(vuln, dict):
                         continue
                     vuln_count += 1
+                    vuln_ids.append(vuln.get("id"))
 
                     # ⚠ THE ALIAS EDGES. Phase 8's union-find is built on these.
                     aliases = vuln.get("aliases")
@@ -216,6 +219,12 @@ class OSVScannerAdapter(SandboxedAdapter):
                         vulns_without_aliases += 1
 
         base.ecosystems_covered = sorted(ecosystems)
+        # osv-scanner nests findings per package, so the same advisory against
+        # two packages appears twice. Counted DISTINCT, as everywhere else.
+        base.summary = summarize(
+            self.capabilities,
+            {"vulnerabilities": count_distinct_vulnerabilities(vuln_ids)},
+        )
 
         # ⚠ THE ENGINE MUST PROVE IT LOADED A DATABASE, NOT MERELY THAT ONE
         # EXISTS ON DISK.

@@ -285,7 +285,7 @@ func validResult() events.ScanResultV1 {
 			ArgvRedacted: []string{"syft", "dir:/workspace"},
 			StartedAt:    time.Now().UTC(), FinishedAt: time.Now().UTC(),
 		},
-		Summary: events.Summary{Components: 412},
+		Summary: events.Summary{Components: events.Count(412)},
 	}
 }
 
@@ -497,5 +497,76 @@ func TestEnvelopesRoundTrip(t *testing.T) {
 	}
 	if len(backResult.Diagnostics) != 1 {
 		t.Errorf("diagnostics did not round-trip: %+v", backResult.Diagnostics)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Summary
+// ---------------------------------------------------------------------------
+
+// ⚠ null AND 0 ARE DIFFERENT CLAIMS, AND THE WIRE FORMAT HAS TO KEEP THEM APART.
+//
+// The workers published four hardcoded zeros on every job, so syft inventoried
+// 21 components in expressjs/express and the envelope said none. Filling the
+// fields in unconditionally would have been the same bug wearing a number:
+// syft does not match vulnerabilities and grype does not catalogue licences, so
+// a 0 in either states a fact the engine never established.
+func TestSummaryDistinguishesNotMeasuredFromMeasuredZero(t *testing.T) {
+	r := validResult()
+	r.Summary = events.Summary{Components: events.Count(21), Licenses: events.Count(0)}
+
+	b, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var wire struct {
+		Summary map[string]any `json:"summary"`
+	}
+	if err := json.Unmarshal(b, &wire); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, want := range map[string]any{
+		"components": float64(21), // measured
+		"licenses":   float64(0),  // measured, none found
+		// syft matches no vulnerabilities and looks for no crypto. Not the
+		// same statement as "found none".
+		"vulnerabilities": nil,
+		"crypto_assets":   nil,
+	} {
+		got, present := wire.Summary[name]
+		if !present {
+			t.Errorf("summary.%s is absent; a consumer cannot tell "+
+				"'not measured' from 'older publisher'", name)
+			continue
+		}
+		if got != want {
+			t.Errorf("summary.%s = %v, want %v", name, got, want)
+		}
+	}
+}
+
+func TestSummaryMeasured(t *testing.T) {
+	if (events.Summary{}).Measured() {
+		t.Error("an empty summary claims to have measured something")
+	}
+	if !(events.Summary{Licenses: events.Count(0)}).Measured() {
+		t.Error("a measured zero was treated as nothing measured")
+	}
+}
+
+// A negative count is a parser that subtracted, not a measurement. Rejected
+// here because it would otherwise reach a report as a plausible number.
+func TestNegativeCountsAreRejected(t *testing.T) {
+	r := validResult()
+	r.Summary = events.Summary{Components: events.Count(-1)}
+
+	err := r.Validate()
+	if err == nil {
+		t.Fatal("a negative component count was accepted")
+	}
+	if !strings.Contains(err.Error(), "summary.components") {
+		t.Errorf("the error does not name the field: %v", err)
 	}
 }
