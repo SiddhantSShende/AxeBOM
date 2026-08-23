@@ -8,7 +8,7 @@ A session that writes code but does not update this file has failed — the next
 
 **Last updated:** 2026-08-23
 **Current phase:** Deployment — 🟢 **the stack runs end to end for the first time**
-**Next action:** `Wire the Python workers to NATS. Nothing consumes scan.job.* or scan.job.fetch, so scans cannot be dispatched — only driven directly.`
+**Next action:** `Subscribe the fetcher to scan.job.fetch. Three worker families now consume, but the fan-out never starts because nothing materializes source.`
 
 > ✅ **DOCKER IS UP, AND THE WHOLE BACKLOG THAT DEPENDED ON IT HAS RUN.**
 > `migrations/report/0002` applied; the 12 DB-backed RLS tests executed for the
@@ -28,6 +28,12 @@ A session that writes code but does not update this file has failed — the next
 > Register → authenticate → read across upstreams works through the real browser
 > path (nginx → gateway → service). Before this session **nothing above the
 > infrastructure layer was wired to start at all.**
+
+> 🟢 **DISPATCH WORKS.** A job published to `scan.job.sbom` is consumed by the
+> worker, runs syft in the sandbox, and its result lands on `scan.result.sbom`
+> where the orchestrator's consumer picks it up. Same proven for `scan.job.cbom`.
+> Before this, no Python worker consumed anything and there was no `nats`
+> dependency at all.
 
 > 🟢 **SIX OF SEVEN SBOM ENGINES VERIFIED LIVE** against
 > `fixtures/monorepo-multiroot` through the real sandbox: syft, syft-spdx,
@@ -104,7 +110,8 @@ A session that writes code but does not update this file has failed — the next
 | **Engines verified LIVE** | 🟢 **6/7 — syft, syft-spdx, trivy-fs, osv-scanner, grype, trivy-image** |
 | **Raw artifact evidence** | ✅ **now actually written; the worker was discarding it (ADR-0003)** |
 | **Credentials guide** | ✅ **`docs/CREDENTIALS.md` — NVD, GitHub, Mouser, Nexar, HF; all free** |
-| **Worker → NATS** | ⬜ **NOT WIRED — no consumer, no `nats` dependency. The next task.** |
+| **Worker → NATS** | 🟢 **WIRED — sbom, cbom, aibom consume `scan.job.*` and publish results, proven live** |
+| **Fetcher → NATS** | ⬜ **still unconsumed: 75 jobs sat on `scan.job.fetch` with no subscriber** |
 
 ---
 
@@ -1965,6 +1972,127 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-08-23 (b) — the workers consume NATS; two more silent defects
+
+**Goal:** wire the Python workers to JetStream so scans can be dispatched
+rather than only driven directly.
+
+#### What now works
+
+`libs/py-shared/encorebom_shared/bus.py` (the consumer loop) and
+`worker_runtime.py` (the process lifecycle). Three families consume their own
+subject with their own durable — `worker-sbom`, `worker-cbom`, `worker-aibom` —
+and publish to `scan.result.<family>`. Proven end to end: a job published to
+`scan.job.sbom` ran syft in the sandbox and its result reached the
+orchestrator's consumer; the same for `cbomkit-theia` on `scan.job.cbom`.
+
+`SBOMWorker` gained optional `adapters`/`depends_on` parameters so CBOM and
+AIBOM reuse its job path rather than copying it. The sequence that matters —
+idempotency check first, manifest written LAST — is identical per family, and a
+copy is how one worker ends up acking before it has stored its evidence while
+still passing its own tests. All 142 sbom tests pass unchanged.
+
+#### ⚠ `backoff` SILENTLY DESTROYS `ack_wait`, ON BOTH SIDES
+
+nats-server overrides AckWait with `backoff[0]` whenever a backoff list is set.
+Measured against the running server:
+
+| consumer | reported Ack Wait |
+|---|---|
+| `ack_wait=30m` + `backoff=[30s,2m,8m]` | **30.00s** |
+| `ack_wait=30m`, no backoff | 30m0s |
+
+So `bus.go` has documented a thirty-minute ack window since Phase 6 and every
+consumer it created has really had thirty seconds. For the results consumers
+that is harmless — processing a result is milliseconds. For a **scan job** it is
+not: scans are minutes of container, so the message is redelivered while the
+first worker is still running it, producing duplicate engine containers for one
+job and, after four deliveries, a DLQ entry for work that was succeeding.
+
+Idempotency does not rescue it. The manifest is written LAST — deliberately, so
+a crash mid-run does not look complete — so a redelivery at thirty seconds finds
+no manifest and starts the engine again.
+
+Fixed in both languages by dropping the consumer-level backoff. Nothing is lost:
+the schedule is still applied explicitly via `NakWithDelay` / `nak(delay=...)`,
+which is the path that actually matters. The Go redelivery test still measures
+30.001s, confirming it was never the consumer setting driving it.
+
+#### ⚠ A DATA RACE ON THE DECOMPRESSION-BOMB GUARD
+
+`go test -race` (which `task verify` runs, and which had never run on this
+machine) found `CountingReader.n` written by the **zstd decoder's own goroutine**
+and read by `ExtractTar` on the caller's. Nothing in `extract.go` suggests
+concurrency; the second goroutine belongs to klauspost/compress.
+
+It is not merely a detector complaint. That counter is the inflation-ratio guard
+against decompression bombs, and an unsynchronised read can evaluate the ratio
+against fewer compressed bytes than were actually consumed. Now `atomic.Int64`,
+read once per check and only after the nil test.
+
+#### The bus tests claimed production subjects
+
+`bus_test.go` used `scan.job.sbom`, `scan.job.cbom`, `scan.job.aibom` and
+`scan.job.hbom`. A WorkQueue stream permits ONE consumer per filter subject, so
+every one of those tests failed at setup with *"filtered consumer not unique on
+workqueue stream"* the moment a real worker was running — which is now the
+normal state of a dev machine. The available workaround, `ReleaseFilterSubject`,
+would have passed by deleting the live worker's consumer and dropping its
+in-flight deliveries. Moved to dedicated families (`testpub`, `testdedup`,
+`testretry`, `testdlq`) instead: the tests now pass with the stack running.
+
+#### `cbomkit-theia`'s argv was wrong and had never been run
+
+It built `dir get <path> --quiet`. There is no `get` subcommand and no `--quiet`
+flag; the real form is `cbomkit-theia dir <path>`. The engine printed its usage
+text and exited 1, reported as `ENGINE_NONZERO_EXIT: exited 1` — accurate, and
+useless for working out that the command itself was malformed. Corrected against
+the pinned image's own `--help`, and `HOME` now points at the writable tmpfs so
+its startup warning about a read-only application folder cannot become fatal.
+
+It now returns `partial` on the monorepo fixture with two honest diagnostics —
+no `components` array, and `ENGINE_ZERO_RESULTS` — rather than claiming success
+on a tree that genuinely contains no crypto assets.
+
+#### Drift guards added
+
+`test_bus_contract.py` parses `bus.go` and asserts the stream names, MaxDeliver,
+AckWait and the backoff schedule match the Python constants. Two runtimes cannot
+share a constant, and duplication without a guard is how they diverge — the
+divergence here would be invisible in both codebases. Mutation-tested: setting
+`MAX_DELIVER = 7` fails the test with a message naming both values.
+
+The result envelope is validated against `proto/schemas/scan-result-v1.schema.json`,
+which is generated from the Go types, so worker/orchestrator drift is reported
+rather than silently dropped on the far side.
+
+Also corrected two Python config defaults that pointed at ports the stack does
+not publish: `NATS_URL` (4222 → 54222) and `S3_ENDPOINT` (9000 → 59000).
+
+#### No qbom or hbom worker, deliberately
+
+Neither family is a scan, so neither has an engine to dispatch. QBOM is a
+derivation from CBOM crypto assets plus Table 8 device metadata captured by
+form; HBOM is a CSV/form import. Adding a worker for either would mean inventing
+a scan where none exists.
+
+**The real gap is on the Go side:** the orchestrator's fan-out does not skip
+engines flagged `derived` or `requires_import`, so it would publish jobs nobody
+should consume. `registry.go` carries both flags; `orchestr` never reads them.
+
+#### Still not wired
+
+- **`scan.job.fetch` has no consumer.** 75 jobs were sitting on it from the
+  orchestrator's own tests. The fetcher has hardened clone logic and no
+  subscription, so the fan-out never starts and a scan cannot be triggered from
+  the API — only by publishing a job with a pre-staged workspace, which is how
+  the dispatch above was proven.
+- `ai-bom` still cannot resolve: its adapter subclasses `SandboxedAdapter`
+  (needs a container image) while the manifest declares it pip-only. The
+  manifest is SSOT, so that contradiction has to be settled there first.
+- `/v1/hbom/*` is still called by the frontend and implemented by no service.
+- Frontend auth is still unwired, and seeded users still have no password hash.
 
 ### 2026-08-23 — the stack runs; six engines verified live; five real defects found
 

@@ -15,6 +15,10 @@ dependencies = [
     # at import time. Undeclared, this resolves only on a machine that happens
     # to have PyYAML already — every clean install fails at `import yaml`.
     "pyyaml>=6.0",
+    # JetStream client for the worker consumer loop. The topology is owned by
+    # libs/go-shared/bus/bus.go (docs/02-CONTRACTS.md §2 is the SSOT); this side
+    # only attaches consumers and publishes results to it.
+    "nats-py>=2.9",
 ]
 
 [project.optional-dependencies]

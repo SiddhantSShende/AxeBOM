@@ -221,6 +221,53 @@ services:
       - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/workspaces:/var/lib/encorebom/workspaces
       - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/artifacts:/var/lib/encorebom/artifacts
 
+  # One image, one process per family — NOT one process consuming five
+  # subjects. A WorkQueue consumer is per filter subject, and mixing families in
+  # one process would make a slow SBOM scan block a CBOM job behind it while
+  # both shared one max_ack_pending budget.
+  cbom-worker:
+    <<: *service-defaults
+    image: encorebom/worker:dev
+    environment:
+      <<: *service-env
+      ENCOREBOM_WORKER_FAMILY: cbom
+    group_add: ["${DOCKER_GID:-986}"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/enginedb:/var/lib/encorebom/enginedb
+      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/workspaces:/var/lib/encorebom/workspaces
+      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/artifacts:/var/lib/encorebom/artifacts
+
+  aibom-worker:
+    <<: *service-defaults
+    image: encorebom/worker:dev
+    environment:
+      <<: *service-env
+      ENCOREBOM_WORKER_FAMILY: aibom
+    group_add: ["${DOCKER_GID:-986}"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/enginedb:/var/lib/encorebom/enginedb
+      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/workspaces:/var/lib/encorebom/workspaces
+      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/artifacts:/var/lib/encorebom/artifacts
+
+  # ⚠ NO qbom-worker OR hbom-worker, DELIBERATELY.
+  #
+  # Neither family is a scan, so neither has a sandboxed engine to dispatch:
+  #
+  #   qbom  is a DERIVATION from CBOM crypto assets with quantum-vulnerability
+  #         rules applied, plus Table 8 device metadata captured by form. There
+  #         is no quantum-hardware scanner. The registry marks qbom-derive
+  #         `derived: true`.
+  #   hbom  is a CSV/form IMPORT. There is no open-source HBOM scanner. The
+  #         registry marks hbom-csv `requires_import: true`.
+  #
+  # Adding a worker for either would mean inventing a scan where none exists —
+  # exactly the overselling CLAUDE.md's honest-labels section forbids. The real
+  # gap is on the Go side: the orchestrator's fan-out does not currently skip
+  # engines flagged `derived` or `requires_import`, so it would publish jobs
+  # nobody should consume. That is recorded in docs/STATE.md.
+
   # ----------------------------------------------------------------- frontend
   frontend:
     restart: unless-stopped

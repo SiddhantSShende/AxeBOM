@@ -58,6 +58,22 @@ func uniqueDurable(t *testing.T) string {
 // so a durable left behind by an earlier run blocks the next one. Each test
 // therefore uses its OWN family subject and a stable durable name, and deletes
 // it on cleanup.
+//
+// ⚠ TESTS USE DEDICATED FAMILIES (scan.job.testpub, testdedup, testretry,
+// testdlq), NEVER A PRODUCTION ONE.
+//
+// A WorkQueue stream permits exactly ONE consumer per filter subject. These
+// tests used scan.job.sbom and scan.job.cbom, so the moment a real worker was
+// running against the same NATS — which is now the normal state of a dev
+// machine — every one of them failed at setup with
+//
+//	filtered consumer not unique on workqueue stream
+//
+// The alternative, ReleaseFilterSubject, would pass by DELETING THE LIVE
+// WORKER'S CONSUMER and dropping its in-flight deliveries. A test suite that
+// only passes when the application is stopped, and whose fix is to break the
+// application, is the wrong shape. The stream filter is scan.job.> so any
+// suffix is valid, and no worker consumes these.
 func exclusiveConsumer(t *testing.T, b *bus.Bus, stream, subject, durable string) jetstream.Consumer {
 	t.Helper()
 
@@ -90,10 +106,10 @@ func TestPublishAndConsume(t *testing.T) {
 	b := newBus(t)
 	durable := uniqueDurable(t)
 
-	consumer := exclusiveConsumer(t, b, bus.StreamJobs, "scan.job.sbom", "test-publish-consume")
+	consumer := exclusiveConsumer(t, b, bus.StreamJobs, "scan.job.testpub", "test-publish-consume")
 
 	payload, _ := json.Marshal(map[string]string{"job_id": durable})
-	if err := b.Publish(t.Context(), "scan.job.sbom", durable, payload); err != nil {
+	if err := b.Publish(t.Context(), "scan.job.testpub", durable, payload); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 
@@ -102,7 +118,7 @@ func TestPublishAndConsume(t *testing.T) {
 	defer cancel()
 
 	go func() {
-		_ = b.Consume(ctx, consumer, "scan.dlq.sbom", func(_ context.Context, msg jetstream.Msg) error {
+		_ = b.Consume(ctx, consumer, "scan.dlq.testpub", func(_ context.Context, msg jetstream.Msg) error {
 			received <- msg.Data()
 			return nil
 		})
@@ -129,14 +145,14 @@ func TestDuplicatePublishIsDeduplicatedByMessageID(t *testing.T) {
 	b := newBus(t)
 	durable := uniqueDurable(t)
 
-	consumer := exclusiveConsumer(t, b, bus.StreamJobs, "scan.job.cbom", "test-dedup")
+	consumer := exclusiveConsumer(t, b, bus.StreamJobs, "scan.job.testdedup", "test-dedup")
 
 	payload := []byte(`{"work":"once"}`)
 	msgID := "dedup-" + durable
 
 	// The same message id, published three times — the crash-retry loop.
 	for i := 0; i < 3; i++ {
-		if err := b.Publish(t.Context(), "scan.job.cbom", msgID, payload); err != nil {
+		if err := b.Publish(t.Context(), "scan.job.testdedup", msgID, payload); err != nil {
 			t.Fatalf("publish %d: %v", i, err)
 		}
 	}
@@ -165,9 +181,9 @@ func TestRetryableFailureIsRedelivered(t *testing.T) {
 	b := newBus(t)
 	durable := uniqueDurable(t)
 
-	consumer := exclusiveConsumer(t, b, bus.StreamJobs, "scan.job.aibom", "test-retry")
+	consumer := exclusiveConsumer(t, b, bus.StreamJobs, "scan.job.testretry", "test-retry")
 
-	if err := b.Publish(t.Context(), "scan.job.aibom", durable, []byte(`{"x":1}`)); err != nil {
+	if err := b.Publish(t.Context(), "scan.job.testretry", durable, []byte(`{"x":1}`)); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 
@@ -177,7 +193,7 @@ func TestRetryableFailureIsRedelivered(t *testing.T) {
 	defer cancel()
 
 	go func() {
-		_ = b.Consume(ctx, consumer, "scan.dlq.aibom", func(_ context.Context, _ jetstream.Msg) error {
+		_ = b.Consume(ctx, consumer, "scan.dlq.testretry", func(_ context.Context, _ jetstream.Msg) error {
 			n := attempts.Add(1)
 			if n == 1 {
 				return bus.ErrRetry // transient
@@ -221,9 +237,9 @@ func TestRetryableFailureIsRedelivered(t *testing.T) {
 func TestPermanentFailureGoesStraightToTheDLQ(t *testing.T) {
 	b := newBus(t)
 	durable := uniqueDurable(t)
-	dlqSubject := "scan.dlq.hbom"
+	dlqSubject := "scan.dlq.testdlq"
 
-	consumer := exclusiveConsumer(t, b, bus.StreamJobs, "scan.job.hbom", "test-dlq-source")
+	consumer := exclusiveConsumer(t, b, bus.StreamJobs, "scan.job.testdlq", "test-dlq-source")
 
 	// A DLQ consumer, to observe what lands there. The DLQ is a Limits stream,
 	// so it has no one-consumer-per-subject restriction — but the same helper
@@ -231,7 +247,7 @@ func TestPermanentFailureGoesStraightToTheDLQ(t *testing.T) {
 	dlqConsumer := exclusiveConsumer(t, b, bus.StreamDLQ, dlqSubject, "test-dlq-sink")
 
 	marker := []byte(`{"poison":"` + durable + `"}`)
-	if err := b.Publish(t.Context(), "scan.job.hbom", durable, marker); err != nil {
+	if err := b.Publish(t.Context(), "scan.job.testdlq", durable, marker); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 
@@ -268,7 +284,7 @@ func TestPermanentFailureGoesStraightToTheDLQ(t *testing.T) {
 		if reason := msg.Headers().Get("Encorebom-Dlq-Reason"); reason == "" {
 			t.Error("the DLQ message carries no reason; it is a bug report with the bug removed")
 		}
-		if orig := msg.Headers().Get("Encorebom-Original-Subject"); orig != "scan.job.hbom" {
+		if orig := msg.Headers().Get("Encorebom-Original-Subject"); orig != "scan.job.testdlq" {
 			t.Errorf("original subject = %q", orig)
 		}
 	case <-ctx.Done():

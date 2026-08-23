@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"unicode/utf8"
 
 	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
@@ -68,9 +69,29 @@ type SkippedEntry struct {
 // Exported because the caller has to wrap the compressed source BEFORE handing
 // it to the decompressor — the ratio needs both numbers, and only the caller
 // can see both sides of the decompression.
+// ⚠ THE COUNTER IS ATOMIC BECAUSE IT IS WRITTEN AND READ ON DIFFERENT
+// GOROUTINES, AND THAT IS NOT OBVIOUS FROM THE CALL SITE.
+//
+// The caller wraps the compressed source and then hands it to a zstd Decoder.
+// klauspost/compress runs its stream decoder on ITS OWN GOROUTINE, so Read is
+// driven from there while ExtractTar evaluates the ratio from the caller's
+// goroutine. Nothing in this file suggests concurrency; the second goroutine
+// belongs to a dependency.
+//
+// Caught by `go test -race`:
+//
+//	Read at ... by goroutine 75:  fetcher.ExtractTar()
+//	Previous write by goroutine 84: fetcher.(*CountingReader).Read()
+//	  ... zstd.(*Decoder).startStreamDecoder()
+//
+// This is not merely a detector complaint. The counter is the DECOMPRESSION
+// BOMB GUARD: an unsynchronised read can observe a stale value, so the ratio is
+// evaluated against fewer compressed bytes than were actually consumed — which
+// biases the computed ratio UPWARD and could reject a legitimate archive, or,
+// with different interleaving, delay the check on a hostile one.
 type CountingReader struct {
 	r io.Reader
-	n int64
+	n atomic.Int64
 }
 
 // NewCountingReader wraps r.
@@ -80,12 +101,12 @@ func NewCountingReader(r io.Reader) *CountingReader {
 
 func (c *CountingReader) Read(p []byte) (int, error) {
 	n, err := c.r.Read(p)
-	c.n += int64(n)
+	c.n.Add(int64(n))
 	return n, err
 }
 
 // Count returns the compressed bytes read so far.
-func (c *CountingReader) Count() int64 { return c.n }
+func (c *CountingReader) Count() int64 { return c.n.Load() }
 
 // ExtractTar extracts a tar stream into dest, enforcing every guard.
 //
@@ -185,7 +206,7 @@ func ExtractTar(r io.Reader, compressed *CountingReader, dest string, lim Extrac
 	}
 
 	if compressed != nil {
-		result.CompressedB = compressed.n
+		result.CompressedB = compressed.Count()
 	}
 	return result, nil
 }
@@ -272,8 +293,18 @@ func copyGuarded(src io.Reader, path string, compressed *CountingReader,
 			// the first check. Measured at 32% of a 200 MB bomb before this
 			// changed. Gating on 1 MiB written bounds the damage to roughly
 			// that, and no legitimate source tree trips a 100:1 ratio at 1 MiB.
-			if compressed != nil && result.UncompressedB > ratioCheckFloor && compressed.n > 0 {
-				ratio := result.UncompressedB / compressed.n
+			// Read the counter ONCE, and only after the nil check. It is
+			// written concurrently by the decompressor's goroutine, so loading
+			// it twice — once for the guard, once for the division — could see
+			// two different values and divide by a zero the guard had just
+			// cleared. `compressed` is nil for an uncompressed stream, where
+			// there is no ratio to evaluate.
+			var compressedB int64
+			if compressed != nil {
+				compressedB = compressed.Count()
+			}
+			if compressedB > 0 && result.UncompressedB > ratioCheckFloor {
+				ratio := result.UncompressedB / compressedB
 				if ratio > lim.MaxInflationRatio {
 					abort()
 					return written, errs.Newf(errs.FetchInflationRatio,

@@ -96,8 +96,8 @@ class WorkerConfig:
     log_level: str = "info"
     log_format: str = "json"
 
-    nats_url: str = "nats://localhost:4222"
-    s3_endpoint: str = "http://localhost:9000"
+    nats_url: str = "nats://localhost:54222"
+    s3_endpoint: str = "http://localhost:59000"
     s3_bucket: str = "encorebom"
     s3_region: str = "us-east-1"
 
@@ -121,8 +121,8 @@ def load_worker_config(name: str) -> WorkerConfig:
         env=loader.enum("ENCOREBOM_ENV", ("development", "staging", "production"), "development"),
         log_level=loader.enum("LOG_LEVEL", ("debug", "info", "warn", "error"), "info"),
         log_format=loader.enum("LOG_FORMAT", ("json", "text"), "json"),
-        nats_url=loader.string_or("NATS_URL", "nats://localhost:4222"),
-        s3_endpoint=loader.string_or("S3_ENDPOINT", "http://localhost:9000"),
+        nats_url=loader.string_or("NATS_URL", "nats://localhost:54222"),
+        s3_endpoint=loader.string_or("S3_ENDPOINT", "http://localhost:59000"),
         s3_bucket=loader.string_or("S3_BUCKET", "encorebom"),
         s3_region=loader.string_or("S3_REGION", "us-east-1"),
         tools_dir=loader.string_or("OSINT_TOOLS_DIR", ".encorebom/tools"),

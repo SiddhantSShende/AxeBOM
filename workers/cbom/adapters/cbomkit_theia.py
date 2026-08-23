@@ -68,11 +68,46 @@ class CBOMkitTheiaAdapter(SandboxedAdapter):
         self.mode = mode
         super().__init__(CAPABILITIES, **kwargs)
 
+    def extra_env(self, layout: WorkspaceLayout) -> dict[str, str]:
+        """Give the tool a writable HOME on the tmpfs.
+
+        cbomkit-theia creates an application folder under $HOME on startup. The
+        sandbox rootfs is read-only and the engine runs as uid 65534, so the
+        default resolves somewhere unwritable and it prints
+
+            could not create application folder '/root/.cbomkit-theia':
+            read-only file system
+
+        It currently continues and still writes its CBOM to stdout, so this is a
+        warning rather than a failure today — which is exactly why it is worth
+        fixing now. It is one upstream change away from being fatal, and at that
+        point the symptom would be an engine that had "always worked" suddenly
+        exiting non-zero for a reason unrelated to any scan.
+        """
+        return {"HOME": layout.container_scratch}
+
     def build_argv(self, target: ScanTarget, layout: WorkspaceLayout) -> list[str]:
         """Discover crypto assets and write CycloneDX to stdout.
 
         The sandbox has no writable host mount — every mount is read-only,
-        deliberately — so stdout is the only channel out.
+        deliberately — so stdout is the only channel out. cbomkit-theia writes
+        the enriched CBOM to stdout natively, which suits that exactly.
+
+        ⚠ THE ARGV WAS WRONG FOR v1.1.2 AND HAD NEVER BEEN RUN.
+
+        It built ``dir get <path> --quiet``. There is no ``get`` subcommand and
+        no ``--quiet`` flag; the real form is ``cbomkit-theia dir <path>``. The
+        engine printed its usage text and exited 1, which the adapter reported
+        as ``ENGINE_NONZERO_EXIT: exited 1`` — accurate, and useless for working
+        out that the command itself was malformed.
+
+        Verified against the pinned image:
+
+            $ cbomkit-theia dir --help
+            Usage:
+              cbomkit-theia dir [flags]
+            Examples:
+              cbomkit-theia dir my/cool/directory
         """
         if self.mode == "image":
             # ScanTarget has image_digest, never image_ref. This read
@@ -91,8 +126,8 @@ class CBOMkitTheiaAdapter(SandboxedAdapter):
                 raise ValueError(
                     f"cbomkit-theia requires a DIGEST-pinned reference, got {digest!r}"
                 )
-            return ["image", "get", digest, "--quiet"]
-        return ["dir", "get", layout.container_source, "--quiet"]
+            return ["image", digest]
+        return ["dir", layout.container_source]
 
     def interpret(
         self,

@@ -299,13 +299,37 @@ func (b *Bus) EnsureConsumer(ctx context.Context, cfg ConsumerConfig) (jetstream
 		ackWait = AckWait
 	}
 
+	// ⚠ BackOff IS DELIBERATELY NOT SET, AND THAT IS NOT AN OVERSIGHT.
+	//
+	// nats-server OVERRIDES AckWait with backoff[0] whenever a backoff list is
+	// present. Measured against a real server on this stack: a consumer
+	// configured AckWait=30m together with BackOff=[30s,2m,8m] reports
+	//
+	//	Ack Wait: 30.00s
+	//
+	// while the identical consumer without BackOff reports 30m0s. So setting
+	// both silently discarded the AckWait this function documents, and every
+	// consumer created here has really been running a 30-second ack window.
+	//
+	// For the RESULTS consumers that happens to be harmless — processing a
+	// result is milliseconds. For a SCAN JOB it is not: scans are minutes of
+	// container, so the message would be redelivered while the first worker was
+	// still running it, producing duplicate engine containers for one job and,
+	// after four deliveries, a DLQ entry for work that was succeeding.
+	// Idempotency does not rescue it, because the manifest is written LAST — by
+	// design, so a crash mid-run does not look complete — and a redelivery at
+	// 30 seconds therefore finds no manifest and starts the engine again.
+	//
+	// Nothing is lost. `backoff` is still the schedule; dispatch applies it
+	// explicitly via NakWithDelay, which is the path that actually matters. The
+	// consumer-level setting only governed ack-wait expiry, and buying that at
+	// the cost of the ack window is a bad trade.
 	c, err := b.js.CreateOrUpdateConsumer(ctx, cfg.Stream, jetstream.ConsumerConfig{
 		Durable:       cfg.Durable,
 		FilterSubject: cfg.FilterSubject,
 		AckPolicy:     jetstream.AckExplicitPolicy,
 		AckWait:       ackWait,
 		MaxDeliver:    MaxDeliver,
-		BackOff:       backoff,
 		MaxAckPending: cfg.MaxAckPending,
 		// DeliverAll: a consumer that starts fresh must pick up work already
 		// queued, not only what arrives after it connects.

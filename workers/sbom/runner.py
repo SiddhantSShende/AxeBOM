@@ -20,8 +20,6 @@ from __future__ import annotations
 
 import json
 import os
-import signal
-import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,6 +28,7 @@ from typing import Any
 from encorebom_shared.adapters.base import GenerateResult, RawArtifact, ResultStatus, ScanTarget
 from encorebom_shared.logging import get_logger
 from encorebom_shared.sandbox import Sandbox
+from encorebom_shared.worker_runtime import run_worker
 
 from .adapters import (
     DependencyCheckAdapter,
@@ -112,7 +111,20 @@ class SBOMWorker:
         workspace_root: Path | None = None,
         output_root: Path | None = None,
         sandbox: Sandbox | None = None,
+        adapters: dict[str, type] | None = None,
+        depends_on: dict[str, str] | None = None,
     ) -> None:
+        """
+        `adapters` and `depends_on` default to the SBOM family's, so existing
+        callers and every test are unaffected.
+
+        They are parameters because the job path — idempotency check first,
+        unknown-engine handling, envelope construction, artifact persistence,
+        manifest written last — is identical for every family. Copying it per
+        family is how one worker ends up acking before it has stored its
+        evidence, with nothing to catch it because each worker passes its own
+        tests. CBOM and AIBOM reuse this class with their own engine maps.
+        """
         self._workspace_root = workspace_root or Path(
             os.environ.get("ENCOREBOM_WORKSPACE_ROOT", "/var/lib/encorebom/workspaces")
         )
@@ -120,6 +132,8 @@ class SBOMWorker:
             os.environ.get("ENCOREBOM_OUTPUT_ROOT", "/var/lib/encorebom/artifacts")
         )
         self._sandbox = sandbox or Sandbox()
+        self._adapters = adapters if adapters is not None else ADAPTERS
+        self._depends_on = depends_on if depends_on is not None else DEPENDS_ON
 
     @property
     def sandbox(self) -> Sandbox:
@@ -145,7 +159,7 @@ class SBOMWorker:
             )
             return stored
 
-        adapter_cls = ADAPTERS.get(ctx.engine)
+        adapter_cls = self._adapters.get(ctx.engine)
         if adapter_cls is None:
             # An engine this worker does not implement. `skipped`, not failed:
             # the orchestrator dispatched it, so the mismatch is a configuration
@@ -169,7 +183,7 @@ class SBOMWorker:
         target = self._build_target(ctx)
 
         # ⚠ grype NEEDS syft's SBOM. No fallback to scanning the directory.
-        dependency = DEPENDS_ON.get(ctx.engine)
+        dependency = self._depends_on.get(ctx.engine)
         if dependency and target.sbom_path is None:
             return self._result(
                 ctx,
@@ -349,41 +363,27 @@ def _first_message(diagnostics: list[dict[str, Any]]) -> str:
 
 
 def main() -> int:
-    """Entry point.
+    """Entry point: preflight the sandbox, then consume scan.job.sbom.
 
-    The NATS subscription loop lands with the worker deployment; today this
-    validates the sandbox and reports what it can run, which is what a worker
-    should do FIRST on start — a worker that cannot reach Docker should say so
-    once, clearly, rather than failing every job with the same error.
+    Preflight runs FIRST and refuses to attach a consumer if it fails. A
+    WorkQueue delivers each job to exactly one consumer, so a worker that cannot
+    reach Docker must not claim jobs — claiming one hides it from a replica that
+    could have done the work, and the scan reports a failure that was really a
+    deployment problem.
     """
     worker = SBOMWorker()
 
-    try:
-        info = worker.sandbox.check()
-    except Exception as exc:
-        log.error("the sandbox is not usable; no engine can run", extra={"cause": str(exc)})
-        return 1
-
-    log.info(
-        "sbom worker ready",
-        extra={"runtime": info.get("runtime"), "engines": sorted(ADAPTERS)},
+    return run_worker(
+        "sbom",
+        worker.handle,
+        preflight=lambda: {**worker.sandbox.check(), "engines": len(ADAPTERS)},
+        # One container at a time per replica. This is a concurrency limit, not
+        # a throughput setting: scans are minutes of container, and handing a
+        # replica more than it can run just means messages sitting unacked
+        # against a thirty-minute ack_wait.
+        max_ack_pending=2,
     )
-
-    stopping = False
-
-    def _stop(*_: object) -> None:
-        nonlocal stopping
-        stopping = True
-
-    signal.signal(signal.SIGINT, _stop)
-    signal.signal(signal.SIGTERM, _stop)
-
-    while not stopping:
-        time.sleep(1)
-
-    log.info("sbom worker stopped")
-    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())
