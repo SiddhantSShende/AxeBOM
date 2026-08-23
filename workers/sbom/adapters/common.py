@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,10 +47,37 @@ from encorebom_shared.enginedb import EngineDatabase, database_root
 from encorebom_shared.enginedb import resolve as enginedb_resolve
 from encorebom_shared.sandbox import Mount, Sandbox, SandboxLimits, SandboxResult, WorkspaceLayout
 
+
 #: Where the pinned engine versions and images live. ONE source of truth for
 #: what actually runs — a hardcoded image tag in an adapter would drift from the
 #: manifest the supply-chain checks verify.
-MANIFEST_PATH = Path("OSINT/tools.manifest.yaml")
+def _default_manifest_path() -> Path:
+    """Locate OSINT/tools.manifest.yaml regardless of the working directory.
+
+    This was the bare relative Path("OSINT/tools.manifest.yaml"), resolved
+    against the CWD. The failure mode is the dangerous kind: _load() catches
+    OSError and returns an empty map, so a wrong CWD does not raise — it
+    reports EVERY ENGINE UNAVAILABLE, which reads as a correctly-detected gap
+    rather than as a misconfiguration.
+
+    Resolution order matches registry.py, which already did this properly:
+      1. $OSINT_MANIFEST, if set
+      2. the repo root, found by walking up to the directory holding go.mod
+      3. the CWD-relative path, so an unusual layout still has a last resort
+    """
+    override = os.environ.get("OSINT_MANIFEST", "").strip()
+    if override:
+        return Path(override)
+
+    here = Path(__file__).resolve()
+    for candidate in here.parents:
+        if (candidate / "go.mod").exists():
+            return candidate / "OSINT" / "tools.manifest.yaml"
+
+    return Path("OSINT/tools.manifest.yaml")
+
+
+MANIFEST_PATH = _default_manifest_path()
 
 
 @dataclass
@@ -252,6 +280,17 @@ class SandboxedAdapter(ToolAdapterBase):
         self._artifact_dir = artifact_dir
         self._database_root = database_root
 
+    def input_gap(self, target: ScanTarget) -> str | None:
+        """Why this engine cannot run against this target, if it cannot.
+
+        Returns None when the engine has everything it needs. Overridden by
+        engines that depend on an artefact the fetcher produces — currently
+        trivy-image, which needs an exported image tarball because a sandboxed
+        container can reach neither the daemon nor a registry.
+        """
+        _ = target
+        return None
+
     # -- availability -------------------------------------------------------
 
     def available(self) -> Availability:
@@ -391,6 +430,32 @@ class SandboxedAdapter(ToolAdapterBase):
                         f"availability check and the run",
                     }
                 ],
+            )
+
+        # ⚠ NO REQUIRED INPUT, NO RUN — and `unavailable`, not `failed`.
+        #
+        # Some engines need something the fetcher must produce first. Letting
+        # them start anyway means the engine fails deep inside its own error
+        # handling, and what reaches the report is a bare
+        # "ENGINE_NONZERO_EXIT: exited 1" that names neither the missing input
+        # nor who was supposed to supply it.
+        #
+        # A stated gap is the useful outcome here: a `failed` engine reads as a
+        # defect to debug, while `unavailable` with a reason reads as reduced
+        # coverage, which is what it actually is.
+        gap = self.input_gap(target)
+        if gap is not None:
+            return GenerateResult(
+                status=ResultStatus.UNAVAILABLE,
+                diagnostics=[
+                    {
+                        "severity": "warn",
+                        "code": "ENGINE_INPUT_MISSING",
+                        "message": gap,
+                        "hint": "the scan continues; this appears in Engine Coverage",
+                    }
+                ],
+                engine_version=availability.version,
             )
 
         # ⚠ NO DATABASE, NO RUN. CHECKED BEFORE THE CONTAINER STARTS.

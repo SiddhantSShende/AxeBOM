@@ -61,6 +61,17 @@ class DependencyCheckAdapter(SandboxedAdapter):
     media_type = "application/json"
     requires_db_version = True
 
+    # The NVD/CPE database, provisioned by `python -m workers.sbom.dbsync nvd`.
+    #
+    # This was missing, and its absence made the adapter permanently dead:
+    # database() returns None without it, and generate() refuses any adapter
+    # with requires_db_version before the container starts. The resulting
+    # message read "no provisioned None database was found", which looks like an
+    # unprovisioned engine rather than the bug it was. There was also no
+    # DatabaseSpec for it in dbsync, so nothing could have provisioned it even
+    # if the id had been set.
+    database_id = "nvd"
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(CAPABILITIES, **kwargs)
 
@@ -97,6 +108,12 @@ class DependencyCheckAdapter(SandboxedAdapter):
             "JSON",
             "--out",
             REPORT_DIR,
+            # Read the database we provisioned, mounted read-only at /enginedb.
+            # Without this dependency-check looks in its image default
+            # (/usr/share/dependency-check/data), which is empty, and then
+            # --noupdate means it reports a clean project instead of failing.
+            "--data",
+            "/enginedb",
             "--noupdate",
             "--disableAssembly",
             "--prettyPrint",

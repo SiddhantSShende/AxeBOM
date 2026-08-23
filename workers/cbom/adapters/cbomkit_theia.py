@@ -75,7 +75,23 @@ class CBOMkitTheiaAdapter(SandboxedAdapter):
         deliberately — so stdout is the only channel out.
         """
         if self.mode == "image":
-            return ["image", "get", target.image_ref or "", "--quiet"]
+            # ScanTarget has image_digest, never image_ref. This read
+            # `target.image_ref`, which raises AttributeError rather than
+            # returning None — the `or ""` fallback next to it could never fire.
+            # Image mode had simply never been executed; the dir-mode tests all
+            # take the branch below.
+            digest = target.image_digest
+            if not digest:
+                raise ValueError(
+                    "cbomkit-theia image mode requires an image digest; none was supplied"
+                )
+            if "@sha256:" not in digest:
+                # Same rule as trivy-image, for the same reason: a tag is
+                # mutable, so a report naming one cannot say what was examined.
+                raise ValueError(
+                    f"cbomkit-theia requires a DIGEST-pinned reference, got {digest!r}"
+                )
+            return ["image", "get", digest, "--quiet"]
         return ["dir", "get", layout.container_source, "--quiet"]
 
     def interpret(

@@ -192,7 +192,25 @@ class SBOMWorker:
                 ),
             )
 
-        adapter = adapter_cls(sandbox=self._sandbox)
+        # ⚠ artifact_dir MUST be passed, or raw output is never persisted.
+        #
+        # SandboxedAdapter treats artifact_dir=None as "the caller collects the
+        # output from the result instead" — which is right for the fixture
+        # generator and for tests, and silently wrong here. The worker omitted
+        # it, so every live scan ran the engine, parsed its output, and then
+        # discarded the bytes.
+        #
+        # That is not a cosmetic loss. Raw scanner output is the immutable
+        # evidence a report rests on (ADR-0003, CLAUDE.md invariant 10):
+        # normalization is a pure function of it, so fixing a parser bug means
+        # re-normalizing stored artifacts rather than re-running the scanners.
+        # With nothing stored there is nothing to re-normalize, nothing to
+        # re-parse when a mapping is corrected, and nothing to show six months
+        # later when someone asks what the report was derived from.
+        #
+        # The path embeds job_id, and ArtifactWriter refuses to overwrite, so a
+        # redelivered job cannot mutate evidence already written.
+        adapter = adapter_cls(sandbox=self._sandbox, artifact_dir=ctx.output_dir)
         started = time.time()
         try:
             generated = adapter.generate(target)

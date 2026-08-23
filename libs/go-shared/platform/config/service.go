@@ -49,8 +49,12 @@ type Service struct {
 // service holds a service token, and pointing it at an attacker's host hands
 // that token over.
 type Services struct {
+	Auth             string
+	Project          string
 	ScanOrchestrator string
 	Report           string
+	Campaign         string
+	Comment          string
 	Notification     string
 }
 
@@ -238,8 +242,12 @@ func LoadService(name string) (*Service, error) {
 			// a listening service fails at the first cross-service call, which
 			// for a scheduler is at 02:30 rather than at startup — so a test
 			// asserts the two stay in step.
+			Auth:             l.StringOr("AUTH_URL", localURL("auth")),
+			Project:          l.StringOr("PROJECT_URL", localURL("project")),
 			ScanOrchestrator: l.StringOr("SCAN_ORCHESTRATOR_URL", localURL("scan-orchestrator")),
 			Report:           l.StringOr("REPORT_URL", localURL("report")),
+			Campaign:         l.StringOr("CAMPAIGN_URL", localURL("campaign")),
+			Comment:          l.StringOr("COMMENT_URL", localURL("comment")),
 			Notification:     l.StringOr("NOTIFICATION_URL", localURL("notification")),
 		},
 		Report: Report{
@@ -326,6 +334,19 @@ func defaultPort(name string) int {
 		return p
 	}
 	return 8080
+}
+
+// ServicePorts returns a copy of the service port registry.
+//
+// Exported so operator tooling (encorebom health) probes the same table the
+// services themselves bind, rather than a second list that would drift the
+// first time a port changed.
+func ServicePorts() map[string]int {
+	out := make(map[string]int, len(servicePorts))
+	for k, v := range servicePorts {
+		out[k] = v
+	}
+	return out
 }
 
 var servicePorts = map[string]int{

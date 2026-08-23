@@ -1,0 +1,46 @@
+# OpenTelemetry Collector — local development only.
+#
+# Referenced by the `otel-collector` service in docker-compose.yml, which sits
+# behind `profiles: [observability]`. Nothing starts it by default; services
+# leave OTEL_EXPORTER_OTLP_ENDPOINT unset and skip tracing entirely.
+#
+# Bring it up with:
+#   docker compose -f deploy/compose/docker-compose.yml --profile observability up -d
+# then point services at it with OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:54317
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Bound memory before the collector becomes the thing that OOMs the laptop.
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+exporters:
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  debug:
+    verbosity: normal
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/jaeger]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug]

@@ -30,6 +30,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -76,6 +77,17 @@ class DatabaseSpec:
     #: finds vulnerabilities, and the warm tree is deliberately vulnerable, so
     #: 1 is the EXPECTED outcome there rather than an error.
     ok_exit_codes: tuple[int, ...] = (0,)
+    #: Flags whose VALUES come from the host environment at provision time,
+    #: as (flag, env-var) pairs.
+    #:
+    #: Secrets never live in this file and never reach a scan. Provisioning is
+    #: the one operation that legitimately needs network and a credential — it
+    #: mounts no user repository and is run by an operator, not by a scan — so a
+    #: key here is a different risk from a key in an engine container, which
+    #: ADR-0008 forbids outright. argv is never logged, so the value does not
+    #: leak through the provisioning record either.
+    env_flags: tuple[tuple[str, str], ...] = ()
+
     #: Download inside the container and copy the result out, instead of writing
     #: straight to a bind mount.
     #:
@@ -132,6 +144,27 @@ SPECS: dict[str, DatabaseSpec] = {
         engine_id="trivy-fs",
         argv=["image", "--download-db-only", "--cache-dir", "/enginedb"],
         timeout_min=30,
+    ),
+    # ------------------------------------------------------------------ nvd
+    # ⚠ THIS ONE TAKES 30-60 MINUTES ON A COLD START, and needs a free NVD API
+    # key. Without a key the NVD throttles hard enough that the sync can run for
+    # many hours, which presents as a hang rather than an error — so provision()
+    # refuses to start rather than appearing to work.
+    #
+    # Until this ran, dependency-check had no DatabaseSpec at all, so nothing
+    # could provision it and the engine was permanently unavailable no matter
+    # what an operator did.
+    "nvd": DatabaseSpec(
+        database_id="nvd",
+        engine_id="dependency-check",
+        argv=[
+            "--updateonly",
+            "--data",
+            "/enginedb",
+        ],
+        env_flags=(("--nvdApiKey", "NVD_API_KEY"),),
+        # The image's entrypoint is already the tool.
+        timeout_min=90,
     ),
 }
 
@@ -201,13 +234,44 @@ def provision(database_id: str, *, root: Path | None = None, force: bool = False
         shutil.rmtree(destination, ignore_errors=True)
     destination.mkdir(parents=True, exist_ok=True)
 
-    with tempfile.TemporaryDirectory(prefix="encorebom-warm-") as tmp:
+    # ⚠ THE WARM TREE MUST LIVE WHERE THE DAEMON CAN SEE IT.
+    #
+    # It is mounted into the provisioning container with -v, and -v paths are
+    # resolved by the DOCKER DAEMON against the HOST filesystem — not against
+    # this process's filesystem. When the provisioner itself runs in a
+    # container (which it does: the enginedb volume is mounted there), a
+    # default /tmp directory exists only inside this container, so the daemon
+    # mounts an empty host path of the same name.
+    #
+    # osv-scanner then reports, truthfully and uselessly:
+    #     1 dirs visited, 1 inodes visited, 0 Extract calls
+    #     No package sources found
+    # and exits 128 — a failure whose message says nothing about mounts.
+    #
+    # Siting the tree beside the database root works because that path is a
+    # bind mount with an IDENTICAL path on both sides, so it means the same
+    # thing to this process and to the daemon.
+    # Sited INSIDE the database root, not beside it. Only the root itself is
+    # bind-mounted with an identical path; its parent is an ordinary directory
+    # in the container, so a sibling of the root is invisible to the daemon and
+    # the mount silently resolves to an empty host directory.
+    warm_parent = database_root(root) / ".warm"
+    warm_parent.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(prefix="encorebom-warm-", dir=warm_parent) as tmp:
         mounts: list[str] = []
         if not spec.stage_in_container:
             mounts += ["-v", f"{destination.resolve()}:{spec.target}"]
         if spec.needs_warm_tree:
             tree = Path(tmp)
             warm_tree(tree)
+            # TemporaryDirectory is 0700 by default. The engine container runs
+            # as a different uid, so it would see the mount and be unable to
+            # read it — the same "no package sources found" symptom, from a
+            # different cause.
+            tree.chmod(0o755)
+            for child in tree.rglob("*"):
+                child.chmod(0o755 if child.is_dir() else 0o644)
             mounts += ["-v", f"{tree.resolve()}:/warm:ro"]
 
         log.info(
@@ -230,6 +294,23 @@ def provision(database_id: str, *, root: Path | None = None, force: bool = False
                 argv += ["--entrypoint", spec.entrypoint[0]]
             argv.append(image.reference)
             argv += spec.argv
+
+            for flag, var in spec.env_flags:
+                value = os.environ.get(var, "").strip()
+                if not value:
+                    log.error(
+                        "provisioning needs a credential that is not set; refusing to "
+                        "start rather than run unauthenticated, which throttles to many "
+                        "hours and looks like a hang",
+                        extra={
+                            "database_id": database_id,
+                            "env_var": var,
+                            "how": "see docs/CREDENTIALS.md — the key is free",
+                        },
+                    )
+                    return False
+                argv += [flag, value]
+
             ok, proc = _run(argv, spec.timeout_min)
 
         if not ok or proc is None:

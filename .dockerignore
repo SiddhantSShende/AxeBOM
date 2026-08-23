@@ -1,0 +1,75 @@
+# Build context exclusions.
+#
+# Every Dockerfile here does `COPY . .`, so without this file the context is the
+# entire working tree — .git history, a 4 GB engine-database directory,
+# node_modules, the Python venv. That is slow, and worse it makes the layer
+# cache useless: touching any ignored file invalidates the COPY layer and forces
+# a full rebuild of eight images.
+#
+# ---------------------------------------------------------------------------
+# WHAT MUST NOT BE EXCLUDED, and why
+#
+#   go.mod, go.sum      the dependency layer
+#   migrations/**       EMBEDDED via go:embed in migrations/embed.go. Excluding
+#                       these fails the BUILD, not the run — go:embed cannot
+#                       find the pattern and the compile errors.
+#   docs/reference/     the CERT-In profile YAML, read at runtime
+#   OSINT/              tools.manifest.yaml, read at runtime by the workers
+#
+# Anything added under a go:embed pattern in future must be checked against
+# this list.
+# ---------------------------------------------------------------------------
+
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Secrets — never bake an env file into an image layer
+.env
+.env.*
+!.env.example
+
+# Python
+.venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+
+# Node — the frontend image runs its own npm ci
+node_modules
+frontend/node_modules
+frontend/dist
+
+# Go build artefacts
+*.exe
+*.test
+*.out
+
+# Downloaded scanner binaries and provisioned engine databases (multi-GB).
+# These are mounted at runtime, never built in.
+.encorebom
+enginedb
+
+# Local state
+*.log
+tmp/
+.idea
+.vscode
+
+# Test fixtures are large and only used by the test suite, which does not run
+# inside these images. The GOLDEN CORPUS stays out of production images.
+fixtures
+
+# Documentation, except the reference data that is read at runtime.
+docs/phases
+docs/ADR
+docs/*.md
+
+# Deployment descriptors do not belong inside the images they describe
+deploy/compose
+deploy/k8s
+perf

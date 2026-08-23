@@ -264,7 +264,18 @@ tools:
     version: "1.1.2"
     container:
       image: ghcr.io/cbomkit/cbomkit-theia
-      image_tag: "v1.1.2"
+      # NO `v` PREFIX. This read "v1.1.2" and 404'd at the registry.
+      #
+      # The two cbomkit repositories disagree with each other: cbomkit-theia
+      # publishes 1.0.3 / 1.1.2, while its sibling cbomkit publishes 2.1.11 /
+      # 2.2.0 — same org, same release tooling, and only one of them would have
+      # matched a `v`-prefixed guess. The version itself was correct all along,
+      # so the failure looked like a withdrawn release rather than a typo.
+      #
+      # Same class of trap as Trivy's Linux-64bit / windows-64bit asset naming,
+      # already recorded in docs/STATE.md: never assume a project is internally
+      # consistent about its own naming. Probe it.
+      image_tag: "1.1.2"
       image_digest: null
     binary: null
     container_only: true

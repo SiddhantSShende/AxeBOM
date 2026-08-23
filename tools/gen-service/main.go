@@ -31,6 +31,7 @@ import (
 	"go/format"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"text/template"
 )
@@ -45,6 +46,77 @@ type serviceSpec struct {
 	Summary string
 	Port    int
 	Phase   int
+}
+
+// MetricsPort is the service's own metrics listener.
+//
+// Derived, never listed in the registry above. A second hand-maintained column
+// would drift from config.defaultMetricsPort, and the symptom is a container
+// that EXPOSEs one port while the process binds another — which looks correct
+// in the Dockerfile and fails only when something tries to scrape it.
+func (s serviceSpec) MetricsPort() int { return s.Port + 10000 }
+
+// GoVersion is the toolchain minor version, read from go.mod.
+//
+// It is NOT written in the Dockerfile template. The build image and the module
+// must agree: a module declaring `go 1.26.2` cannot be built by golang:1.24,
+// and the failure is `go.mod requires go >= 1.26.2` at `go mod download` —
+// after the layer cache has already been invalidated, so it reads as a network
+// or cache problem rather than a version mismatch. Reading go.mod means a
+// toolchain bump regenerates the Dockerfiles, and CI's generator-diff job
+// fails if someone forgets.
+func (s serviceSpec) GoVersion() string {
+	v, err := goVersion()
+	if err != nil {
+		// Reached only from a template, where returning an error is not an
+		// option. Rendering an obviously-invalid tag beats rendering a
+		// plausible wrong one: `FROM golang:UNKNOWN-alpine` fails the docker
+		// build immediately and says why, whereas a silently stale default
+		// would produce an image that builds and then cannot compile the
+		// module.
+		return "UNKNOWN"
+	}
+	return v
+}
+
+var goDirective = regexp.MustCompile(`(?m)^go\s+(\d+)\.(\d+)`)
+
+// goVersion reads the toolchain minor version from go.mod.
+//
+// Resolved by walking UP from the working directory, not by reading "go.mod"
+// relative to it. `go test` runs with the package directory as the working
+// directory, so a bare relative read works under `go run ./tools/gen-service`
+// from the repo root and fails under `go test ./tools/gen-service` — and doing
+// it in an init() turned that into a panic at package import, taking down the
+// whole test binary before a single test ran.
+//
+// Lazy, and returns an error rather than panicking: a code generator that
+// cannot be imported is worse than one that reports a bad configuration.
+func goVersion() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	for {
+		// #nosec G304 -- dir starts at the working directory and only ever
+		// walks toward the filesystem root; the filename is the constant
+		// "go.mod". No caller-controlled input reaches this path.
+		b, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+		if err == nil {
+			m := goDirective.FindSubmatch(b)
+			if m == nil {
+				return "", fmt.Errorf("gen-service: no `go` directive in %s/go.mod", dir)
+			}
+			return fmt.Sprintf("%s.%s", m[1], m[2]), nil
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("gen-service: no go.mod found above %q", dir)
+		}
+		dir = parent
+	}
 }
 
 var services = []serviceSpec{

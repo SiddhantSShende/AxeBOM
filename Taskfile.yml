@@ -19,8 +19,12 @@
 version: '3'
 
 vars:
-  COMPOSE: docker compose -f deploy/compose/docker-compose.yml
-  COMPOSE_HEAVY: docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.heavy.yml
+  # The full system: infrastructure plus the application tier. The two files
+  # are layered rather than merged so `dev:infra` can still bring up only the
+  # backing stores — the shape you want when running services from an IDE.
+  COMPOSE: docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.app.yml
+  COMPOSE_INFRA: docker compose -f deploy/compose/docker-compose.yml
+  COMPOSE_HEAVY: docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.app.yml -f deploy/compose/docker-compose.heavy.yml
   # Python lives in a venv on Windows (Scripts/) and Linux (bin/).
   PY: '{{if eq OS "windows"}}.venv/Scripts/python.exe{{else}}.venv/bin/python{{end}}'
 
@@ -212,11 +216,40 @@ tasks:
 
   # ================================================================= local dev
   dev:
-    desc: Bring up the core stack (laptop-friendly, ~4GB)
+    desc: Bring up the whole system — infra + 8 services + workers + frontend
     deps: [preflight]
     cmds:
-      - '{{.COMPOSE}} up -d'
+      - '{{.COMPOSE}} up -d --build'
       - '{{.COMPOSE}} ps'
+      - cmd: echo ""
+        silent: true
+      - cmd: echo "  frontend  http://localhost:5173"
+        silent: true
+      - cmd: echo "  api       http://localhost:8080"
+        silent: true
+      - cmd: echo "  minio     http://localhost:59001   (minioadmin/minioadmin)"
+        silent: true
+      - cmd: echo "  mailpit   http://localhost:58025"
+        silent: true
+      - cmd: echo ""
+        silent: true
+      - cmd: echo "  task health   # per-service readiness"
+        silent: true
+
+  dev:infra:
+    desc: Bring up ONLY the backing stores (run services from your IDE)
+    deps: [preflight]
+    cmds:
+      - '{{.COMPOSE_INFRA}} up -d'
+      - '{{.COMPOSE_INFRA}} ps'
+
+  health:
+    desc: Report readiness of every running service
+    # Runs INSIDE the compose network. Only the gateway is published to the
+    # host, so probing from outside would report the other seven as unreachable
+    # even when they are perfectly healthy.
+    cmds:
+      - '{{.COMPOSE}} run --rm --no-deps -T migrate health --in-cluster {{.CLI_ARGS}}'
 
   dev:heavy:
     desc: Core stack plus Dependency-Track and SonarQube (needs ~12GB free RAM)
@@ -303,6 +336,14 @@ tasks:
     cmds:
       - go run ./cmd/encorebom toolctl dryrun
       - go run ./cmd/encorebom toolctl dryrun --force-mode binary
+
+  osint:pull:
+    desc: Pre-pull every container-mode engine image (REQUIRED before scanning)
+    # Engines run with --network=none, so a container cannot fetch its own
+    # image. Without this every container engine reports "No such image" as an
+    # honest but entirely avoidable gap.
+    cmds:
+      - go run ./cmd/encorebom toolctl pull {{.CLI_ARGS}}
 
   osint:sync:
     desc: Download and verify pinned scanner binaries

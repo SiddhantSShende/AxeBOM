@@ -1,0 +1,237 @@
+# ============================================================================
+# EncoreBOM — application tier
+# ============================================================================
+#   task dev         -> docker-compose.yml + THIS FILE   (infra + the product)
+#   task dev:infra   -> docker-compose.yml only          (infra alone)
+#
+# Layered as an overlay rather than merged into docker-compose.yml so the
+# infrastructure file keeps its stated scope and can still be run alone —
+# useful when running services from an IDE against real backing stores.
+#
+# ---------------------------------------------------------------------------
+# WHY THERE ARE NO HEALTHCHECK BLOCKS ON THE GO SERVICES
+#
+# They run on distroless/static: no shell, no curl, no wget. A Docker
+# HEALTHCHECK needs a command inside the container, so there is nothing to run.
+# The alternative — a debug base image with busybox — would put a shell into
+# every production container to satisfy a status column, which is a bad trade.
+#
+# Readiness is still real and still exposed: every service serves /readyz, the
+# gateway probes all seven upstreams and reports each one by name, and
+# `task health` curls them. `docker compose ps` will say "Up", not "healthy",
+# and that is the honest limit of what the container runtime can observe here.
+# ---------------------------------------------------------------------------
+
+name: encorebom
+
+# --------------------------------------------------------------- shared env
+# Inside the compose network, services reach each other by SERVICE NAME on the
+# UPSTREAM port — not by localhost on the published 5xxxx port. The 5xxxx
+# mapping exists for the host only.
+x-service-env: &service-env
+  ENCOREBOM_ENV: ${ENCOREBOM_ENV:-development}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  LOG_FORMAT: ${LOG_FORMAT:-json}
+
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: 5432
+  POSTGRES_DB: ${POSTGRES_DB:-encorebom}
+  POSTGRES_USER: ${POSTGRES_USER:-encorebom}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-encorebom}
+  POSTGRES_APP_ROLE: ${POSTGRES_APP_ROLE:-encorebom_app}
+  POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-encorebom_app}
+  POSTGRES_SSLMODE: disable
+
+  NATS_URL: nats://nats:4222
+  REDIS_URL: redis://redis:6379/0
+
+  S3_ENDPOINT: http://minio:9000
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_BUCKET: ${S3_BUCKET:-encorebom}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
+  S3_FORCE_PATH_STYLE: "true"
+
+  VAULT_ADDR: http://vault:8200
+  VAULT_TOKEN: ${VAULT_TOKEN:-dev-root-token}
+
+  JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-dev-only-insecure-signing-key-do-not-use-in-production}
+  JWT_ISSUER: ${JWT_ISSUER:-encorebom}
+
+  GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+  GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+  GITHUB_REDIRECT_URL: ${GITHUB_REDIRECT_URL:-http://localhost:5173/auth/github/callback}
+  FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+
+  # Upstreams, by service name. NEVER derived from a request header.
+  AUTH_URL: http://auth:8091
+  PROJECT_URL: http://project:8092
+  SCAN_ORCHESTRATOR_URL: http://scan-orchestrator:8093
+  REPORT_URL: http://report:8094
+  CAMPAIGN_URL: http://campaign:8095
+  COMMENT_URL: http://comment:8096
+  NOTIFICATION_URL: http://notification:8097
+
+  # METRICS_PORT is deliberately NOT set. It is a single global; setting it
+  # here would put all eight services on one port and every one after the
+  # first would die with "address already in use". Each derives HTTP+10000.
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+  networks: [default]
+
+services:
+
+  # -------------------------------------------------------------- migrations
+  # One-shot. Everything else waits for it to exit 0, so no service can start
+  # against a schema that does not exist yet, and eight services never race to
+  # apply the same goose migrations.
+  migrate:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.cli
+    image: encorebom/cli:dev
+    environment:
+      <<: *service-env
+    command: ["db", "migrate"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  # ------------------------------------------------------------------ gateway
+  # The ONLY service published to the host on its own port. Everything else is
+  # reachable only inside the compose network — a service that cannot be
+  # addressed directly cannot have its authentication bypassed by addressing it
+  # directly.
+  gateway:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.gateway
+    image: encorebom/gateway:dev
+    environment:
+      <<: *service-env
+    ports: ["${GATEWAY_PORT:-8080}:8080"]
+
+  auth:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.auth
+    image: encorebom/auth:dev
+    environment:
+      <<: *service-env
+
+  project:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.project
+    image: encorebom/project:dev
+    environment:
+      <<: *service-env
+
+  scan-orchestrator:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.scan-orchestrator
+    image: encorebom/scan-orchestrator:dev
+    environment:
+      <<: *service-env
+
+  report:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.report
+    image: encorebom/report:dev
+    environment:
+      <<: *service-env
+
+  campaign:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.campaign
+    image: encorebom/campaign:dev
+    environment:
+      <<: *service-env
+
+  comment:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.comment
+    image: encorebom/comment:dev
+    environment:
+      <<: *service-env
+
+  notification:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.notification
+    image: encorebom/notification:dev
+    environment:
+      <<: *service-env
+
+  # ----------------------------------------------------------- scan workers
+  # ⚠ THE WORKER MOUNTS THE DOCKER SOCKET. See deploy/docker/Dockerfile.worker
+  # for why that is accepted and what bounds it. Short version: engines run as
+  # sibling containers with --network=none, a read-only rootfs, all caps
+  # dropped and uid 65534, and the worker holds no credentials to leak.
+  #
+  # group_add gives the container the host's docker group so it can reach the
+  # socket without running privileged. DOCKER_GID differs per host; find it
+  # with `getent group docker | cut -d: -f3`.
+  sbom-worker:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.worker
+    image: encorebom/worker:dev
+    environment:
+      <<: *service-env
+      ENCOREBOM_WORKER_FAMILY: sbom
+    group_add: ["${DOCKER_GID:-986}"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+      # ⚠ HOST PATH AND CONTAINER PATH MUST BE IDENTICAL. These are bind
+      # mounts, not named volumes, and that is forced by how engines run.
+      #
+      # The worker starts engines as SIBLING containers on the host daemon. Any
+      # -v it passes is resolved by the DAEMON, against the HOST filesystem —
+      # not inside this container. With a named volume mounted at
+      # /var/lib/encorebom/enginedb, the worker would ask the daemon to mount
+      # that path from the host, where nothing exists, and the daemon would
+      # silently create an empty directory. The engine then starts with no
+      # database and osv-scanner reports {"results": []} and exits 0 — a clean
+      # bill of health for a scan that checked nothing.
+      #
+      # Identical paths on both sides make the worker's view and the daemon's
+      # view the same, so a path is meaningful wherever it is used.
+      #
+      # ~4.5 GB once provisioned (`task osint:dbsync`).
+      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/enginedb:/var/lib/encorebom/enginedb
+      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/workspaces:/var/lib/encorebom/workspaces
+      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/artifacts:/var/lib/encorebom/artifacts
+
+  # ----------------------------------------------------------------- frontend
+  frontend:
+    restart: unless-stopped
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.frontend
+    image: encorebom/frontend:dev
+    depends_on: [gateway]
+    ports: ["${FRONTEND_PORT:-5173}:8085"]
+    networks: [default]
+
+networks:
+  default:
+    name: encorebom

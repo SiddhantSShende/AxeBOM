@@ -20,13 +20,15 @@ const defaultManifestPath = "OSINT/tools.manifest.yaml"
 
 func runToolctl(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: encorebom toolctl <list|dryrun|sync|verify|licenses> [flags]")
+		return fmt.Errorf("usage: encorebom toolctl <list|dryrun|pull|sync|verify|licenses> [flags]")
 	}
 	switch args[0] {
 	case "list":
 		return toolctlList(args[1:])
 	case "dryrun":
 		return toolctlDryRun(ctx, args[1:])
+	case "pull":
+		return toolctlPull(ctx, args[1:])
 	case "sync":
 		return toolctlSync(ctx, args[1:])
 	case "verify":
@@ -251,8 +253,14 @@ func toolctlSync(ctx context.Context, args []string) error {
 
 		switch r.Mode {
 		case toolctl.ModeInternal, toolctl.ModeUnavailable, toolctl.ModeContainer, toolctl.ModePip:
-			// Containers are pulled by the sandbox at run time; pip packages are
-			// installed into the worker image. Neither is fetched here.
+			// Container images are pulled by `toolctl pull`, NOT here and NOT by
+			// the sandbox: engines run with --network=none, so a container
+			// cannot fetch its own image. This comment used to say the sandbox
+			// pulled them at run time, which is impossible by construction —
+			// and the symptom was every container engine reporting
+			// "No such image" as an honest but entirely avoidable gap.
+			//
+			// pip packages are installed into the worker image at build time.
 			skipped++
 			continue
 		}

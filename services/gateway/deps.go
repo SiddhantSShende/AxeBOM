@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/encorebom/encorebom/libs/go-shared/auth"
 	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
 	"github.com/encorebom/encorebom/libs/go-shared/platform/httpx"
 	"github.com/encorebom/encorebom/services/gateway/internal/middleware"
+	"github.com/encorebom/encorebom/services/gateway/internal/proxy"
 )
 
 // deps holds this service's constructed dependencies.
@@ -29,6 +31,7 @@ type deps struct {
 	cfg     *config.Service
 	issuer  *auth.Issuer
 	limiter *middleware.Limiter
+	router  *proxy.Router
 }
 
 // buildDeps constructs everything this service needs.
@@ -53,7 +56,15 @@ func buildDeps(_ context.Context, cfg *config.Service) (*deps, error) {
 	// that overwrites the header is actually in front.
 	limiter := middleware.NewLimiter(middleware.RateLimitConfig{})
 
-	return &deps{cfg: cfg, issuer: issuer, limiter: limiter}, nil
+	// Upstream URLs are parsed here so a malformed one stops the process at
+	// boot. Deferring it to the first request would turn an operator's typo
+	// into a user's 500, hours later and on somebody else's shift.
+	router, err := proxy.New(cfg.Services, slog.Default())
+	if err != nil {
+		return nil, fmt.Errorf("proxy router: %w", err)
+	}
+
+	return &deps{cfg: cfg, issuer: issuer, limiter: limiter, router: router}, nil
 }
 
 // Close releases the dependencies, in reverse order of construction.
