@@ -53,9 +53,11 @@ export class ApiError extends Error {
  * The in-memory access token.
  *
  * Memory ONLY. Not localStorage, not a readable cookie: anything JavaScript can
- * read, an XSS can exfiltrate. The refresh token lives in an HttpOnly cookie the
- * page cannot see, which is what makes a page reload able to recover a session
- * without the token ever being scriptable.
+ * read, an XSS can exfiltrate. AuthProvider writes it here on every user change,
+ * so a renewal reaches the next request without a re-render.
+ *
+ * A reload recovers the session from the OIDC library's session storage, which
+ * is per tab and discarded when the tab closes.
  */
 let accessToken: string | null = null;
 
@@ -67,6 +69,69 @@ export function getAccessToken(): string | null {
   return accessToken;
 }
 
+/**
+ * Which organisation this session is acting in.
+ *
+ * ⚠ A HINT, NOT A GRANT, AND THE SERVER TREATS IT THAT WAY. The middleware
+ * honours the header only when the VERIFIED token already carries a role in the
+ * organisation named — a header that could select a tenant on its own would be
+ * the entire tenancy boundary, handed to the client.
+ *
+ * It has to be sent because a person who holds a role in two organisations
+ * carries BOTH grants in one token, and the server refuses to guess: naming
+ * neither is AUTH_ORG_AMBIGUOUS, because picking one would make the answer
+ * depend on map iteration order and show a consultant whichever customer's data
+ * came up first.
+ */
+let orgId: string | null = null;
+
+export function setOrgId(id: string | null): void {
+  orgId = id;
+}
+
+export function getOrgId(): string | null {
+  return orgId;
+}
+
+/** The header name, matching oidcauth.HeaderOrg. */
+export const ORG_HEADER = 'X-EncoreBOM-Org';
+
+/**
+ * How to obtain a fresh access token when one has expired.
+ *
+ * ⚠ INJECTED, NOT IMPORTED. This module would otherwise pull the whole OIDC
+ * library into every unit test that touches an API call, and the api client
+ * would know which identity provider is in use — which is the coupling that
+ * made replacing local JWTs with ZITADEL a change across every screen instead
+ * of one.
+ */
+type Refresher = () => Promise<string | null>;
+
+let refresher: Refresher | null = null;
+
+export function setTokenRefresher(fn: Refresher | null): void {
+  refresher = fn;
+}
+
+/**
+ * ⚠ ONE RENEWAL AT A TIME, SHARED BY EVERY WAITING REQUEST.
+ *
+ * A page typically fires several queries at once, and they expire together.
+ * Without this, each would start its own renewal: N redirects to the token
+ * endpoint, N refresh-token rotations, and — because ZITADEL rotates refresh
+ * tokens — all but one of them invalid, which ends the session it was trying
+ * to save.
+ */
+let inFlight: Promise<string | null> | null = null;
+
+function renew(): Promise<string | null> {
+  if (!refresher) return Promise.resolve(null);
+  inFlight ??= refresher().finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
+
 interface RequestOptions {
   method?: string | undefined;
   body?: unknown;
@@ -75,11 +140,27 @@ interface RequestOptions {
   signal?: AbortSignal | undefined;
 }
 
-/** request performs one API call and normalizes the failure modes. */
+/**
+ * request performs one API call and normalizes the failure modes.
+ *
+ * A 401 is retried ONCE after a silent renewal, and only once: a second 401
+ * with a token minted seconds earlier is not an expiry, it is a rejection, and
+ * retrying it in a loop turns a configuration error into a hammering client.
+ */
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
-  const headers: Record<string, string> = { ...opts.headers };
+  try {
+    return await send<T>(path, opts);
+  } catch (err) {
+    if (!(err instanceof ApiError) || err.status !== 401) throw err;
+    const fresh = await renew();
+    if (!fresh) throw err;
+    return await send<T>(path, opts);
+  }
+}
+
+async function send<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  const headers: Record<string, string> = { ...opts.headers, ...identityHeaders() };
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
-  if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 
   // Built incrementally rather than with `body: undefined`: under
   // exactOptionalPropertyTypes an explicit undefined is not the same as an
@@ -87,7 +168,10 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   const init: RequestInit = {
     method: opts.method ?? 'GET',
     headers,
-    // Send the HttpOnly refresh cookie on same-origin calls.
+    // Same-origin only. There is no session cookie of ours to send — ZITADEL
+    // owns sessions now — but the gateway and the identity provider share this
+    // origin, and defaulting to omit would break nothing today and something
+    // subtle later.
     credentials: 'same-origin',
   };
   if (opts.body !== undefined) init.body = JSON.stringify(opts.body);
@@ -111,16 +195,44 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   return (await res.json()) as T;
 }
 
-/** upload posts multipart form data. Used for manifests and archives. */
-export async function upload<T>(path: string, form: FormData): Promise<T> {
+/**
+ * identityHeaders is who the caller is and who they are acting for.
+ *
+ * One function so an endpoint can never be reached through a path that forgot
+ * one of them — which is how the organisation header ended up being computed by
+ * the switcher and sent by nobody.
+ */
+function identityHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
   if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+  if (orgId) headers[ORG_HEADER] = orgId;
+  return headers;
+}
+
+/**
+ * upload posts multipart form data. Used for manifests and archives.
+ *
+ * Retried on a 401 exactly like `request`: a hardware import is the longest
+ * thing a user does on one screen, so it is the request most likely to be
+ * holding a token that expired while they filled the form in.
+ */
+export async function upload<T>(path: string, form: FormData): Promise<T> {
+  try {
+    return await sendUpload<T>(path, form);
+  } catch (err) {
+    if (!(err instanceof ApiError) || err.status !== 401) throw err;
+    const fresh = await renew();
+    if (!fresh) throw err;
+    return await sendUpload<T>(path, form);
+  }
+}
+
+async function sendUpload<T>(path: string, form: FormData): Promise<T> {
   // Content-Type is deliberately NOT set: the browser must add the multipart
   // boundary, and setting it by hand produces a body the server cannot parse.
-
   const res = await fetch(`/api${path}`, {
     method: 'POST',
-    headers,
+    headers: identityHeaders(),
     body: form,
     credentials: 'same-origin',
   });

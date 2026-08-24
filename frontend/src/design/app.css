@@ -1183,3 +1183,39 @@
   overflow-x: auto;
   max-width: 100%;
 }
+
+/* --- Identity in the header ---------------------------------------------- */
+/*
+ * The nav uses `flex: 1` to push everything after it to the right, so these
+ * controls group together at the end rather than each claiming their own gap.
+ */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.session {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.session-name {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  /* A long email must not push Sign out off the header on a narrow window. */
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.org-switcher select {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: var(--space-1) var(--space-2);
+  color: var(--text);
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+}

@@ -24,6 +24,29 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
 COPY frontend/ ./
+
+# ⚠ THE SPA'S OIDC IDENTITY IS BAKED IN AT BUILD TIME.
+#
+# Vite substitutes `import.meta.env.VITE_*` during the build, so these must be
+# present HERE and not merely in the container's environment — a runtime env var
+# reaches nginx and never reaches the bundle. `encorebom iam bootstrap` prints
+# both values and compose passes them from .env.
+#
+# Neither is a secret. The application is registered with AUTH_METHOD_NONE
+# precisely because a browser cannot hold one, so the client id is public by
+# design; the project id appears in every token's audience.
+#
+# ⚠ AN EMPTY CLIENT ID PRODUCES A BUILD THAT CANNOT SIGN ANYONE IN. It is not
+# a build failure — the app says so on its sign-in screen and names the fix —
+# because failing the image build would make `task dev` unusable before the
+# identity tier has ever been bootstrapped.
+ARG VITE_OIDC_ISSUER
+ARG VITE_OIDC_CLIENT_ID
+ARG VITE_OIDC_PROJECT_ID
+ENV VITE_OIDC_ISSUER=$VITE_OIDC_ISSUER \
+    VITE_OIDC_CLIENT_ID=$VITE_OIDC_CLIENT_ID \
+    VITE_OIDC_PROJECT_ID=$VITE_OIDC_PROJECT_ID
+
 RUN npm run build
 
 # ---- runtime ---------------------------------------------------------------

@@ -58,6 +58,30 @@ x-service-env: &service-env
   JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-dev-only-insecure-signing-key-do-not-use-in-production}
   JWT_ISSUER: ${JWT_ISSUER:-encorebom}
 
+  # --- Identity ------------------------------------------------------------
+  # ⚠ TWO ADDRESSES FOR ONE SERVER, AND THEY ARE NOT INTERCHANGEABLE.
+  #
+  # ZITADEL_ISSUER is the PUBLIC origin. ZITADEL bakes it into the `iss` claim
+  # of every token it mints, so it is what services must validate against —
+  # even though they cannot reach it.
+  #
+  # ZITADEL_INTERNAL_URL is how a service actually reaches ZITADEL from inside
+  # this network, where localhost:5173 resolves to the container itself. Keys
+  # are fetched over it, and the service-token minter calls it while
+  # overriding the Host header so the token still carries the public issuer.
+  #
+  # Set them to the same value and either tokens cannot be verified or the IdP
+  # cannot be reached.
+  ZITADEL_ISSUER: ${ZITADEL_ISSUER:-http://localhost:5173}
+  ZITADEL_INTERNAL_URL: http://zitadel-api:8080
+  # Written by `encorebom iam bootstrap`, which prints it as a pasteable line.
+  # Empty means every service refuses to start rather than answering 401 to
+  # every request — see oidcauth.NewVerifier.
+  ZITADEL_PROJECT_ID: ${ZITADEL_PROJECT_ID:-}
+  # Read only by the gateway, which publishes it at GET /v1/auth/config so the
+  # browser bundle stays environment-neutral. Harmless everywhere else.
+  ZITADEL_SPA_CLIENT_ID: ${ZITADEL_SPA_CLIENT_ID:-}
+
   GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
   GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
   GITHUB_REDIRECT_URL: ${GITHUB_REDIRECT_URL:-http://localhost:5173/auth/github/callback}
@@ -160,6 +184,21 @@ services:
     image: encorebom/campaign:dev
     environment:
       <<: *service-env
+      # campaign -> scan-orchestrator. One of only two services that PRESENT a
+      # credential rather than merely verifying one.
+      ZITADEL_SERVICE_KEY_PATH: /var/run/encorebom/service-keys/svc-campaign.json
+    # ⚠ NEEDED TO READ THE KEY ABOVE. It is written 0640 by
+    # `encorebom iam bootstrap` under the developer's own uid; this container
+    # runs as distroless nonroot. Joining the file's group is what lets it read
+    # without the key being made world-readable — which on a shared machine is
+    # the same as publishing it.
+    group_add: ["${HOST_GID:-1000}"]
+    volumes:
+      # Read-only: this process must never rewrite its own key. Minted by
+      # `encorebom iam bootstrap`; the service refuses to start without it,
+      # because a campaign that cannot trigger a scan is a scheduler that
+      # silently does nothing.
+      - ./.data/zitadel-bootstrap/service-keys:/var/run/encorebom/service-keys:ro
 
   comment:
     <<: *service-defaults
@@ -198,9 +237,15 @@ services:
     image: encorebom/fetcher:dev
     environment:
       <<: *service-env
-    group_add: ["${DOCKER_GID:-986}"]
+      # fetcher -> project, to resolve where a scan's code lives.
+      ZITADEL_SERVICE_KEY_PATH: /var/run/encorebom/service-keys/svc-fetcher.json
+    # DOCKER_GID for the socket below; HOST_GID to read the service key above.
+    # See the campaign service for why the key is group-readable.
+    group_add: ["${DOCKER_GID:-986}", "${HOST_GID:-1000}"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      # Read-only. See the campaign service above.
+      - ./.data/zitadel-bootstrap/service-keys:/var/run/encorebom/service-keys:ro
       # Clones land here before being archived. Identical host and container
       # paths, for the same sibling-container reason as the workers: the daemon
       # resolves mount paths host-side.
@@ -311,6 +356,14 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.frontend
+      # Vite inlines these during the build, so they cannot be passed as
+      # runtime environment. Changing one changes the build args, which is what
+      # makes compose rebuild the image after `task iam:bootstrap` mints new
+      # ids — without that, the SPA keeps a client id ZITADEL has forgotten.
+      args:
+        VITE_OIDC_ISSUER: ${ZITADEL_ISSUER:-http://localhost:5173}
+        VITE_OIDC_CLIENT_ID: ${ZITADEL_SPA_CLIENT_ID:-}
+        VITE_OIDC_PROJECT_ID: ${ZITADEL_PROJECT_ID:-}
     image: encorebom/frontend:dev
     depends_on: [gateway]
     ports: ["${FRONTEND_PORT:-5173}:8085"]

@@ -7,10 +7,14 @@
  * gzipped for the initial load (docs/07-FRONTEND-SPEC.md §8).
  */
 
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, type ReactNode } from 'react';
 import { BrowserRouter, Link, NavLink, Route, Routes, useParams } from 'react-router';
 import { SkeletonRows } from './components/States';
 import { ThemeToggle } from './components/ThemeToggle';
+import { AuthProvider } from './lib/AuthContext';
+import { useAuth } from './lib/useAuth';
+import { AuthCallback, NoAccess, SignIn, SilentCallback } from './routes/auth/AuthRoutes';
+import { OrgSwitcher } from './components/OrgSwitcher';
 import { ProjectList } from './routes/projects/ProjectList';
 import { ProjectWizard } from './routes/projects/ProjectWizard';
 import { ProjectDetail } from './routes/projects/ProjectDetail';
@@ -52,14 +56,53 @@ const HardwareTree = lazy(() =>
 export function App() {
   return (
     <BrowserRouter>
-      <div className="app">
-        <Header />
-        <main>
+      <AuthProvider>
+        <Routes>
           {/*
+            ⚠ MOUNTED OUTSIDE THE SHELL AND OUTSIDE RequireAuth.
+            The callback routes are how a user BECOMES authenticated; putting
+            them behind the gate is a redirect loop, and rendering the header
+            around the silent iframe boots a second application inside it.
+          */}
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/auth/silent" element={<SilentCallback />} />
+          <Route path="*" element={<Shell />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  );
+}
+
+/**
+ * RequireAuth gates everything the API backs.
+ *
+ * ⚠ IT RENDERS NOTHING WHILE THE SESSION IS BEING PROBED. Rendering the
+ * children first and correcting afterwards means every screen fires its
+ * queries with no token, collects a 401, and shows an error for a session that
+ * was about to resume — which is exactly what `no bearer token` on a reload
+ * looked like.
+ */
+function RequireAuth({ children }: { children: ReactNode }) {
+  const { loading, user, memberships } = useAuth();
+  if (loading) return <SkeletonRows rows={6} columns={4} />;
+  if (!user) return <SignIn />;
+  // Authenticated, but granted nothing here. Rendering the app anyway would
+  // show a full console where every screen fails on its own.
+  if (memberships.length === 0) return <NoAccess />;
+  return <>{children}</>;
+}
+
+function Shell() {
+  return (
+    <div className="app">
+      <Header />
+      <main>
+        {/*
             The fallback is a skeleton, not a spinner: a chunk arriving over a
             slow link should look like the page filling in, not like a stall.
           */}
-          <Suspense fallback={<SkeletonRows rows={8} columns={4} />}>
+        <Suspense fallback={<SkeletonRows rows={8} columns={4} />}>
+          <RequireAuth>
             <Routes>
               <Route path="/" element={<ProjectList />} />
               <Route path="/projects" element={<ProjectList />} />
@@ -106,10 +149,10 @@ export function App() {
               />
               <Route path="*" element={<NotFound />} />
             </Routes>
-          </Suspense>
-        </main>
-      </div>
-    </BrowserRouter>
+          </RequireAuth>
+        </Suspense>
+      </main>
+    </div>
   );
 }
 
@@ -125,8 +168,34 @@ function Header() {
         <NavLink to="/campaigns">Scheduled</NavLink>
         <NavLink to="/settings/notifications">Notifications</NavLink>
       </nav>
-      <ThemeToggle />
+      <div className="header-actions">
+        <OrgSwitcher />
+        <ThemeToggle />
+        <SessionMenu />
+      </div>
     </header>
+  );
+}
+
+/**
+ * SessionMenu shows who is signed in and offers the way out.
+ *
+ * Renders nothing when signed out — a "Sign out" control on the sign-in screen
+ * is noise, and the screen itself already says the state.
+ */
+function SessionMenu() {
+  const { user, name, activeOrg, signOut } = useAuth();
+  if (!user) return null;
+
+  return (
+    <div className="session">
+      <span className="session-name" title={activeOrg ? `${name} — ${activeOrg.role}` : name}>
+        {name}
+      </span>
+      <button className="btn btn-quiet" onClick={signOut}>
+        Sign out
+      </button>
+    </div>
   );
 }
 
