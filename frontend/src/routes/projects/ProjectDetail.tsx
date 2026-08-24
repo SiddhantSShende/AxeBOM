@@ -21,18 +21,18 @@ export function ProjectDetail() {
 
   if (project.isPending) {
     return (
-      <main className="shell">
+      <div className="shell">
         <p className="status" aria-live="polite">
           Loading…
         </p>
-      </main>
+      </div>
     );
   }
 
   if (project.isError) {
     const notFound = project.error instanceof ApiError && project.error.isNotFound;
     return (
-      <main className="shell">
+      <div className="shell">
         <p className="status status-down" role="alert">
           {notFound
             ? 'No such project.'
@@ -41,7 +41,7 @@ export function ProjectDetail() {
               : 'Could not load the project'}
         </p>
         <Link to="/projects">Back to projects</Link>
-      </main>
+      </div>
     );
   }
 
@@ -49,13 +49,13 @@ export function ProjectDetail() {
   const warning = validityWarning(p.validity_end);
 
   return (
-    <main className="shell">
+    <div className="shell">
       <header className="page-header">
         <div>
           <h1>{p.name}</h1>
           {p.description && <p className="tagline">{p.description}</p>}
         </div>
-        <Link className="button" to="/projects">
+        <Link className="btn" to="/projects">
           All projects
         </Link>
       </header>
@@ -154,7 +154,7 @@ export function ProjectDetail() {
           </>
         )}
       </section>
-    </main>
+    </div>
   );
 }
 

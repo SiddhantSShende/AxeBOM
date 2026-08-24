@@ -89,7 +89,31 @@
    */
   --radius: 8px;
   --radius-sm: 5px;
+  --radius-lg: 12px;
   --row-height: 32px;
+
+  /* --- Primary action --------------------------------------------------
+   * Distinct from --sbom, deliberately. --sbom is TUNED for small text on a
+   * tinted chip background; a primary button is a large filled surface with a
+   * different contrast requirement, and light/dark need genuinely different
+   * hues here (a pastel dark-mode --sbom washes out as a button fill). Every
+   * primary CTA and the focus ring read this token, never --sbom directly.
+   */
+  --primary: #4338ca;
+  --primary-hover: #3730a3;
+  --primary-active: #312e81;
+  --primary-text: #ffffff;
+
+  /* --- Elevation -----------------------------------------------------------
+   * Two tiers: -xs for controls (buttons, inputs), -sm/-card-hover for
+   * surfaces that sit above the page (cards, the header). Kept subtle on
+   * purpose — this is a dense compliance dashboard read for hours at a time,
+   * not a marketing page; a heavy shadow reads as decoration and starts to
+   * hurt on screen 40.
+   */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-card-hover: 0 8px 20px rgba(15, 23, 42, 0.1), 0 2px 6px rgba(15, 23, 42, 0.06);
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -155,8 +179,19 @@
     --down-bg: #450a0a;
     --info-bg: #172554;
 
+    /* A pastel --sbom works as small text on a dark chip; it is too washed
+     * out to read as a confident primary-button fill, so dark mode gets its
+     * own more saturated indigo rather than inheriting --sbom. */
+    --primary: #6366f1;
+    --primary-hover: #818cf8;
+    --primary-active: #4f46e5;
+    --primary-text: #ffffff;
+
     --shadow-drawer: 0 8px 40px rgba(0, 0, 0, 0.55);
     --shadow-menu: 0 4px 16px rgba(0, 0, 0, 0.45);
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.35);
+    --shadow-card-hover: 0 10px 24px rgba(0, 0, 0, 0.5);
   }
 }
 
@@ -208,6 +243,14 @@
   --down-bg: #450a0a;
   --info-bg: #172554;
 
+  --primary: #6366f1;
+  --primary-hover: #818cf8;
+  --primary-active: #4f46e5;
+  --primary-text: #ffffff;
+
   --shadow-drawer: 0 8px 40px rgba(0, 0, 0, 0.55);
   --shadow-menu: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.35);
+  --shadow-card-hover: 0 10px 24px rgba(0, 0, 0, 0.5);
 }

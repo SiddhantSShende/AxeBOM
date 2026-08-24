@@ -5,6 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <title>EncoreBOM</title>
+    <script>
+      // ⚠ BLOCKING, AND DELIBERATELY SO. Set data-theme before first paint, not
+      // after React hydrates: the theme store's default is 'light' (design/theme.ts),
+      // but a dark-OS visitor would otherwise see one dark frame from the
+      // prefers-color-scheme media query before the store applied — a real,
+      // visible flash, not a cosmetic nicety. Mirrors the zustand persist key
+      // and shape exactly, and fails silently to 'light' (the default) on any
+      // parse error rather than block the page on a storage exception.
+      (function () {
+        try {
+          var raw = localStorage.getItem('encorebom.theme');
+          var choice = raw ? JSON.parse(raw).state.choice : 'light';
+          if (choice && choice !== 'system') {
+            document.documentElement.setAttribute('data-theme', choice);
+          }
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

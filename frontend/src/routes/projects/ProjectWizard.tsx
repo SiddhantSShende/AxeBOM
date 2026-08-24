@@ -133,7 +133,7 @@ export function ProjectWizard() {
       : true;
 
   return (
-    <main className="shell">
+    <div className="shell">
       <header>
         <h1>Register a project</h1>
         <ol className="steps" aria-label="Progress">
@@ -165,6 +165,7 @@ export function ProjectWizard() {
       <nav className="wizard-nav">
         <button
           type="button"
+          className="btn"
           onClick={() => setStep((s) => (s > 1 ? ((s - 1) as Step) : s))}
           disabled={step === 1}
         >
@@ -173,7 +174,7 @@ export function ProjectWizard() {
         {step < 3 ? (
           <button
             type="button"
-            className="primary"
+            className="btn btn-primary"
             onClick={() => setStep((s) => (s + 1) as Step)}
             disabled={!canAdvance}
           >
@@ -182,7 +183,7 @@ export function ProjectWizard() {
         ) : (
           <button
             type="button"
-            className="primary"
+            className="btn btn-primary"
             onClick={() => void submit()}
             disabled={createProject.isPending || draft.classifications.length === 0}
           >
@@ -190,7 +191,7 @@ export function ProjectWizard() {
           </button>
         )}
       </nav>
-    </main>
+    </div>
   );
 }
 

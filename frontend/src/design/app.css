@@ -6,12 +6,100 @@
  * with one stubbornly white panel.
  */
 
+/* --- Foundation ------------------------------------------------------------
+ *
+ * ⚠ `--font` WAS A TOKEN NOBODY APPLIED. Every screen rendered in the
+ * browser's UA default serif, because nothing in this file or index.css ever
+ * set `font-family` on `html`/`body` — the one rule that makes every other
+ * rule in this file mean what it says. This is that rule.
+ */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--primary);
+}
+
+/* Page titles and the uppercase section eyebrow used throughout — "Owner and
+ * validity", "Practices and processes" — are the two headings every screen
+ * reaches for, so they are defined once here rather than per route. */
+h1 {
+  margin: 0;
+  font-size: 1.7rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  margin: var(--space-6) 0 var(--space-2);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+h3 {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+p {
+  margin: 0 0 var(--space-3);
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.1em 0.4em;
+}
+
 /* --- Accessibility ------------------------------------------------------- */
 
 /* Visible focus everywhere. Every flow must be keyboard-operable (WCAG 2.4.7),
  * and that includes the generate wizard and the dependency table. */
 :focus-visible {
-  outline: 2px solid var(--sbom);
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
@@ -40,6 +128,18 @@
 }
 
 /* --- Chips --------------------------------------------------------------- */
+
+/* The list wrapper. Was defined only in index.css — deleting that file without
+ * moving this turns every chip list (BOM-type badges on a project card, the
+ * classification picker) into a bare, bulleted <ul>. */
+.chips {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: 0;
+  margin: 0;
+}
 
 .chip {
   display: inline-flex;
@@ -188,28 +288,59 @@
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text);
+  /* ⚠ `.btn` IS APPLIED TO <Link> AS OFTEN AS <button>. Without this, every
+   * link-flavoured button in the app (Register a project, All projects, the
+   * sign-in/not-found actions) kept the browser's default underline — visible
+   * proof this class had never been used on an anchor before now. */
+  text-decoration: none;
   font: inherit;
   font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
+  box-shadow: var(--shadow-xs);
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.05s ease;
 }
 .btn:hover:not(:disabled) {
   background: var(--surface-sunken);
+  border-color: var(--border-strong);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: none;
 }
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: none;
 }
 .btn-primary {
-  background: var(--sbom);
-  border-color: var(--sbom);
-  color: var(--text-inverse);
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-text);
+  box-shadow: var(--shadow-xs);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+.btn-primary:active:not(:disabled) {
+  background: var(--primary-active);
+  border-color: var(--primary-active);
 }
 .btn-quiet {
   border-color: transparent;
   background: transparent;
   color: var(--text-muted);
   font-weight: 500;
+  box-shadow: none;
+}
+.btn-quiet:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--surface-sunken);
 }
 
 .copyable {
@@ -576,6 +707,321 @@
   border-top: 1px solid var(--border);
 }
 
+/* --- Page & content primitives --------------------------------------------
+ *
+ * Migrated from index.css, which the Phase 4 header comment there already
+ * flagged as owing this move ("the shared primitives to design/app.css") and
+ * never made. Two consequences of the delay, both fixed here rather than
+ * merely relocated:
+ *
+ *   - ProjectList/ProjectDetail/ProjectWizard used `.button` and a bare,
+ *     UNSTYLED native <button> (ProjectWizard's "Back") instead of `.btn` —
+ *     a second button system, visually and structurally different from every
+ *     other screen. They are migrated onto `.btn` in the same change.
+ *   - `.chip`/`.chips` were DEFINED TWICE — once here, once in index.css,
+ *     which loaded last and silently won. The duplicate is gone; this is the
+ *     one definition now.
+ * --------------------------------------------------------------------------- */
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-6);
+}
+.page-header h1 {
+  margin: 0;
+}
+.tagline {
+  margin: var(--space-1) 0 0;
+  color: var(--text-muted);
+}
+
+.cards {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-sm);
+  transition:
+    box-shadow 0.15s ease,
+    transform 0.1s ease,
+    border-color 0.15s ease;
+}
+/* A card that links somewhere behaves like the button it stands in for — it
+ * should feel liftable before the click, not just clickable after it. Cards
+ * that are purely informational (none currently) simply omit :has(a) support
+ * and stay flat; this degrades gracefully where :has is unsupported. */
+.card:has(a:hover) {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
+}
+.card h2 {
+  margin: 0 0 var(--space-3);
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 1.05rem;
+  font-weight: 650;
+  color: var(--text);
+}
+.card h2 a {
+  color: inherit;
+  text-decoration: none;
+}
+.card h2 a:hover {
+  color: var(--primary);
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: var(--space-3) var(--space-4);
+  margin: var(--space-4) 0 0;
+}
+.meta-stacked {
+  grid-template-columns: 1fr;
+}
+.meta dt {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.meta dd {
+  margin: 0.2rem 0 0;
+  font-size: 0.92rem;
+}
+/* An absent value is stated, never left blank: a blank is indistinguishable
+   from a rendering bug, and this product's whole argument is that an unknown
+   must be visible rather than omitted. */
+.meta dd.unset {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.gaps {
+  margin: var(--space-2) 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.92rem;
+}
+.gaps li {
+  margin: var(--space-1) 0;
+}
+
+.chips-selectable .chip {
+  cursor: pointer;
+  transition: outline-color 0.1s ease;
+}
+.chips-selectable .chip[data-selected='true'] {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+.chip-note {
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.note {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  max-width: 44rem;
+}
+/* The practices explainer is the point of that step, so it is set apart. */
+.note-important {
+  color: var(--text);
+  border-left: 3px solid var(--primary);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+}
+
+/* --- Inline status lines --------------------------------------------------
+ * Distinct from `.state`: a `.state` is a full block for an empty or error
+ * SCREEN; `.status` is one line inside a screen that already has content —
+ * "loading", a validity warning under a card. Tinted like `.conn`, for the
+ * same reason: a flat white line with only a coloured hairline is easy to
+ * miss, and a warning that is easy to miss is not a warning.
+ */
+.status {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  margin: 0 0 var(--space-3);
+  font-size: 0.88rem;
+}
+.status-up {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+.status-warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.status-down {
+  background: var(--down-bg);
+  color: var(--down);
+}
+
+.empty {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+  padding: var(--space-7) var(--space-5);
+  text-align: center;
+}
+.empty h2 {
+  margin-top: 0;
+  color: var(--text);
+  font-size: 1.05rem;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 650;
+}
+
+/* --- A simple numbered stepper ---------------------------------------------
+ * The project wizard's stepper. Deliberately plainer than `.stepper` /
+ * `.step-pip` above — three fixed steps rather than a dynamic, skippable
+ * flow — but built from the same visual language: a filled primary circle
+ * for the current step, a filled ok circle for a done one, connected by a
+ * line so it reads as ONE path rather than three unrelated numbers.
+ */
+.steps {
+  display: flex;
+  list-style: none;
+  padding: 0;
+  margin: var(--space-5) 0 0;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+.steps li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.steps li:not(:last-child) {
+  flex: 1;
+}
+.steps li:not(:last-child)::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  margin: 0 var(--space-3);
+  background: var(--border);
+}
+.steps li[aria-current='step'] {
+  color: var(--text);
+  font-weight: 650;
+}
+.steps li[data-done='true'] .step-n {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #fff;
+}
+.step-n {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 0.78rem;
+  font-weight: 650;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.steps li[aria-current='step'] .step-n {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-text);
+}
+
+/* --- Form fields ------------------------------------------------------- */
+
+.field {
+  display: block;
+  margin: var(--space-4) 0;
+}
+.field > span {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: var(--space-1);
+}
+.field input,
+.field textarea,
+.field select {
+  width: 100%;
+  max-width: 34rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.field input:focus,
+.field textarea:focus,
+.field select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+.field input[aria-invalid='true'] {
+  border-color: var(--down);
+}
+.field small {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  max-width: 34rem;
+}
+.field-row {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+fieldset {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-4) 0;
+}
+fieldset legend {
+  padding: 0 var(--space-2);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.radio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-right: var(--space-5);
+}
+
 /* --- Progress ------------------------------------------------------------ */
 
 .progress-overall {
@@ -929,6 +1375,30 @@
 
 /* --- Shell --------------------------------------------------------------- */
 
+/*
+ * ⚠ THE OUTER <main> IS THE ONE PLACE PAGE PADDING AND MAX-WIDTH LIVE.
+ *
+ * Every route used to bring its own — some via `.shell` (which duplicated
+ * this padding one level further in, on a SECOND nested <main>, an invalid
+ * landmark a screen reader announces twice for one page), some with no
+ * wrapper at all and no padding whatsoever. Defining it once here means every
+ * route gets the same dashboard-consistent margins for free, and a new route
+ * cannot forget to add them.
+ */
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--bg);
+}
+.app > main {
+  flex: 1;
+  width: 100%;
+  max-width: 78rem;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-5) var(--space-7);
+}
+
 .app-header {
   display: flex;
   align-items: center;
@@ -936,39 +1406,61 @@
   padding: var(--space-3) var(--space-5);
   border-bottom: 1px solid var(--border);
   background: var(--surface);
+  box-shadow: var(--shadow-xs);
   position: sticky;
   top: 0;
   z-index: 40;
 }
 .brand {
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 1.05rem;
+  font-weight: 750;
   letter-spacing: -0.02em;
   color: var(--text);
   text-decoration: none;
 }
+/* A small brand mark rather than an image asset: the product has no logo file
+ * to ship, and a plain wordmark reads as unfinished next to five colour-coded
+ * BOM chips a few pixels below it. */
+.brand::before {
+  content: '';
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 2px;
+  background: var(--primary);
+}
 .app-header nav {
   display: flex;
-  gap: var(--space-4);
+  gap: var(--space-5);
   flex: 1;
 }
 .app-header nav a,
 .tabs a {
   color: var(--text-muted);
   text-decoration: none;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
+  font-weight: 550;
   padding: var(--space-1) 0;
   border-bottom: 2px solid transparent;
+  transition: color 0.15s ease;
+}
+.app-header nav a:hover,
+.tabs a:hover {
+  color: var(--text);
 }
 .app-header nav a.active,
 .tabs a.active {
   color: var(--text);
-  border-bottom-color: var(--sbom);
-  font-weight: 600;
+  border-bottom-color: var(--primary);
+  font-weight: 650;
 }
 .tabs {
   display: flex;
-  gap: var(--space-4);
-  padding: 0 var(--space-5);
+  gap: var(--space-5);
+  margin: 0 0 var(--space-6);
+  padding-bottom: var(--space-2);
   border-bottom: 1px solid var(--border);
 }
 
@@ -985,10 +1477,14 @@
   color: var(--text-muted);
   font: inherit;
   cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.theme-option:hover {
+  background: var(--surface-sunken);
 }
 .theme-option[aria-pressed='true'] {
-  background: var(--sbom-bg);
-  color: var(--sbom);
+  background: var(--primary);
+  color: var(--primary-text);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1215,7 +1711,12 @@
   font-size: 0.85rem;
   padding: var(--space-1) var(--space-2);
   color: var(--text);
-  background: var(--surface-2, var(--surface));
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.org-switcher select:hover {
+  border-color: var(--border-strong);
 }

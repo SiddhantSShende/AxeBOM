@@ -18,13 +18,13 @@ export function ProjectList() {
   const { data, isPending, isError, error } = useProjects();
 
   return (
-    <main className="shell">
+    <div className="shell">
       <header className="page-header">
         <div>
           <h1>Projects</h1>
           <p className="tagline">Everything EncoreBOM tracks for your organisation</p>
         </div>
-        <Link className="button primary" to="/projects/new">
+        <Link className="btn btn-primary" to="/projects/new">
           Register a project
         </Link>
       </header>
@@ -50,7 +50,7 @@ export function ProjectList() {
             Connect a GitHub repository, upload a manifest or lockfile, or register hardware
             manually.
           </p>
-          <Link className="button primary" to="/projects/new">
+          <Link className="btn btn-primary" to="/projects/new">
             Register the first one
           </Link>
         </section>
@@ -63,7 +63,7 @@ export function ProjectList() {
           ))}
         </ul>
       )}
-    </main>
+    </div>
   );
 }
 

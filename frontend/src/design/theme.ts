@@ -167,14 +167,19 @@ interface ThemeState {
  * Query and nowhere else; Zustand holds only state that never round-trips —
  * theme, sidebar, and the generate-wizard draft.
  *
- * `system` is the default and is NOT the same as reading the OS preference
- * once. It means "keep following the OS", so a user who changes their OS theme
- * at dusk sees the app follow without touching a setting.
+ * `system` means "keep following the OS", not "read the OS preference once" —
+ * a user who changes their OS theme at dusk sees the app follow without
+ * touching a setting.
+ *
+ * ⚠ THE DEFAULT IS `light`, NOT `system`. This is a compliance dashboard read
+ * during a work day, and a dark shell is not this product's identity — it is
+ * an accommodation for a user who asks for one, via the toggle, not the mode a
+ * first visitor is dropped into because their OS happens to be in dark mode.
  */
 export const useTheme = create<ThemeState>()(
   persist(
     (set) => ({
-      choice: 'system',
+      choice: 'light',
       setChoice: (choice) => {
         set({ choice });
         applyTheme(choice);
