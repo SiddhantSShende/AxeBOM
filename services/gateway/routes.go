@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/encorebom/encorebom/libs/go-shared/platform/httpx"
+	"github.com/encorebom/encorebom/services/gateway/internal/authconfig"
 	"github.com/encorebom/encorebom/services/gateway/internal/proxy"
 )
 
@@ -45,4 +46,19 @@ func registerRoutes(mux *http.ServeMux, d *deps) {
 		mux.HandleFunc(proxy.APIPrefix+prefix, forward)
 		mux.HandleFunc(proxy.APIPrefix+prefix+"/", forward)
 	}
+
+	// The one endpoint the gateway answers itself.
+	//
+	// It tells a browser where to log in, so it cannot require being logged in,
+	// and it cannot be proxied to a service that only talks to authenticated
+	// callers. See internal/authconfig for why it is served rather than
+	// compiled into the bundle.
+	//
+	// ⚠ MORE SPECIFIC THAN THE /v1/auth SUBTREE ABOVE, AND THAT IS WHAT MAKES
+	// IT REACHABLE. ServeMux prefers the most specific pattern, so this wins
+	// over the proxy's registration and keeps winning after the auth service is
+	// removed and that prefix disappears entirely.
+	identity := authconfig.Handler(d.cfg.OIDC)
+	mux.HandleFunc("GET /v1/auth/config", identity)
+	mux.HandleFunc("GET "+proxy.APIPrefix+"/v1/auth/config", identity)
 }
