@@ -28,6 +28,7 @@ import os
 import shutil
 import subprocess
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -83,6 +84,15 @@ class SandboxResult:
     oom_killed: bool = False
     output_truncated: bool = False
 
+    #: ⚠ THESE BRACKET EXACTLY THE INTERVAL ``duration_ms`` MEASURES.
+    #:
+    #: They travel together on purpose. A reader who cannot reconcile
+    #: finished - started against duration cannot trust any of the three, and
+    #: provenance that cannot be checked is not provenance. None means the run
+    #: was never attempted — inventing a timestamp would be worse.
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
     duration_ms: int = 0
     disk_quota_enforced: bool = True
     container_id: str = ""
@@ -111,11 +121,29 @@ class SandboxResult:
             timed_out=bool(payload.get("timed_out", False)),
             oom_killed=bool(payload.get("oom_killed", False)),
             output_truncated=bool(payload.get("output_truncated", False)),
+            started_at=_parse_ts(payload.get("started_at")),
+            finished_at=_parse_ts(payload.get("finished_at")),
             duration_ms=int(payload.get("duration_ms", 0)),
             disk_quota_enforced=bool(payload.get("disk_quota_enforced", True)),
             container_id=str(payload.get("container_id", "")),
             error=str(payload.get("error", "")),
         )
+
+
+def _parse_ts(raw: Any) -> datetime | None:
+    """Read an RFC3339 timestamp from the bridge, defensively.
+
+    Returns None rather than raising on anything unreadable: a timestamp is
+    provenance, and losing a scan's results because a clock field drifted would
+    trade something that matters for something that does not.
+    """
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        # fromisoformat handles the trailing Z from Python 3.11 on.
+        return datetime.fromisoformat(raw).astimezone(UTC)
+    except ValueError:
+        return None
 
 
 class Sandbox:

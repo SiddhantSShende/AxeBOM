@@ -23,6 +23,7 @@ import os
 import shutil
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -262,6 +263,7 @@ class SBOMWorker:
         # The path embeds job_id, and ArtifactWriter refuses to overwrite, so a
         # redelivered job cannot mutate evidence already written.
         adapter = adapter_cls(sandbox=self._sandbox, artifact_dir=ctx.output_dir)
+        started_at = _now()
         started = time.time()
         try:
             generated = adapter.generate(target)
@@ -278,7 +280,19 @@ class SBOMWorker:
                     }
                 ],
             )
-        generated.duration_ms = generated.duration_ms or int((time.time() - started) * 1000)
+        # ⚠ THE THREE FIELDS FALL BACK TOGETHER, NEVER SEPARATELY.
+        #
+        # The sandbox stamps all three when an engine actually ran, and its
+        # interval is the narrower, truer one. When it did not run — a refused
+        # database, an adapter that raised, an engine this worker does not
+        # implement — the worker's own clock supplies all three. Mixing them
+        # would publish a duration from one interval next to timestamps from
+        # another, and `finished - started != duration_ms` makes a reader
+        # rightly distrust every number in the block.
+        if generated.started_at is None or generated.finished_at is None:
+            generated.started_at = started_at
+            generated.finished_at = _now()
+            generated.duration_ms = int((time.time() - started) * 1000)
 
         # Before the manifest, so a job that is later re-emitted from its
         # manifest has already left its output where a consumer can find it.
@@ -427,6 +441,16 @@ class SBOMWorker:
                 # Redacted at build time by the adapter. argv is world-readable
                 # in /proc and this copy is persisted in the provenance manifest.
                 "argv_redacted": generated.argv_redacted,
+                # ⚠ WHEN, not just how long. Both were absent from every
+                # envelope, so `scan.engine_runs.started_at` and `finished_at`
+                # were NULL on every run ever recorded and a report could say
+                # how long an engine took but never when it ran — which is the
+                # half that makes a result datable.
+                #
+                # Omitted rather than zeroed when unknown: Go decodes a missing
+                # time to the zero value and HandleResult already skips it, so
+                # an absent stamp stays absent instead of becoming year 1.
+                **_timestamps(generated),
                 "exit_code": generated.exit_code if generated.exit_code is not None else 0,
                 "duration_ms": generated.duration_ms,
             },
@@ -463,6 +487,31 @@ class SBOMWorker:
     ) -> RawArtifact:
         """Store one raw artifact. Immutable once written (ADR-0003)."""
         return ArtifactWriter(output_dir=ctx.output_dir).write(name, content, media_type)
+
+
+def _now() -> datetime:
+    """UTC, always. No local time anywhere, ever (CLAUDE.md §Conventions)."""
+    return datetime.now(UTC)
+
+
+def _rfc3339z(ts: datetime) -> str:
+    """RFC3339 with a LITERAL Z, which is what every consumer expects.
+
+    Python renders UTC as `+00:00`; Go's time.RFC3339 parser accepts it, but the
+    contract and every other timestamp this system emits use `Z`, and a stored
+    provenance record that is formatted two ways is one a human has to reconcile
+    by eye.
+    """
+    return ts.astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _timestamps(generated: GenerateResult) -> dict[str, str]:
+    if generated.started_at is None or generated.finished_at is None:
+        return {}
+    return {
+        "started_at": _rfc3339z(generated.started_at),
+        "finished_at": _rfc3339z(generated.finished_at),
+    }
 
 
 def _first_code(diagnostics: list[dict[str, Any]]) -> str:

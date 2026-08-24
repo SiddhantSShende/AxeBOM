@@ -98,6 +98,12 @@ type bridgeResult struct {
 	OOMKilled       bool `json:"oom_killed"`
 	OutputTruncated bool `json:"output_truncated"`
 
+	// StartedAt and FinishedAt bracket exactly the interval DurationMS
+	// measures. RFC3339 with a literal Z; the worker copies all three into
+	// ScanResultV1.invocation, where a reader must be able to reconcile them.
+	StartedAt  string `json:"started_at,omitempty"`
+	FinishedAt string `json:"finished_at,omitempty"`
+
 	DurationMS        int64  `json:"duration_ms"`
 	DiskQuotaEnforced bool   `json:"disk_quota_enforced"`
 	ContainerID       string `json:"container_id,omitempty"`
@@ -205,6 +211,9 @@ func sandboxRun(ctx context.Context, args []string) error {
 		OOMKilled:       result.OOMKilled,
 		OutputTruncated: result.OutputTruncated,
 
+		StartedAt:  rfc3339Z(result.StartedAt),
+		FinishedAt: rfc3339Z(result.FinishedAt),
+
 		DurationMS:        result.Duration.Milliseconds(),
 		DiskQuotaEnforced: result.DiskQuotaEnforced,
 		ContainerID:       result.ContainerID,
@@ -214,6 +223,17 @@ func sandboxRun(ctx context.Context, args []string) error {
 	}
 
 	return json.NewEncoder(os.Stdout).Encode(out)
+}
+
+// rfc3339Z renders a timestamp the way every other timestamp in this system is
+// rendered: UTC, RFC3339, a literal Z. A zero time renders as "" and is omitted
+// rather than published as year 1 — a run that was never attempted has no
+// start, and inventing one would be worse than saying nothing.
+func rfc3339Z(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339Nano)
 }
 
 // sandboxCheck reports whether the sandbox is usable.

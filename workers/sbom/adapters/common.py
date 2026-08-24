@@ -597,6 +597,12 @@ class SandboxedAdapter(ToolAdapterBase):
         base = GenerateResult(
             status=ResultStatus.FAILED,
             engine_version=image.version,
+            # All three from the sandbox, which is the clock that actually
+            # bracketed the container. Taking the duration from here and the
+            # timestamps from the worker would put a wider interval next to a
+            # narrower number and make both unverifiable.
+            started_at=result.started_at,
+            finished_at=result.finished_at,
             duration_ms=result.duration_ms,
             exit_code=result.exit_code,
             argv_redacted=argv_redacted,

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
@@ -153,6 +154,14 @@ class GenerateResult:
     # and a report that cannot say "matched against vulnerability data as of X"
     # is not defensible.
     engine_db_version: str | None = None
+    #: ⚠ started_at, finished_at AND duration_ms DESCRIBE ONE INTERVAL.
+    #:
+    #: Set together or not at all. They come from the sandbox when the engine
+    #: actually ran, and from the worker's own clock when it did not — but
+    #: never one from each, because a reader who cannot reconcile
+    #: finished - started against duration cannot trust any of the three.
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
     duration_ms: int = 0
     exit_code: int | None = None
     argv_redacted: list[str] = field(default_factory=list)

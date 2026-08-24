@@ -156,6 +156,15 @@ type Result struct {
 	// downstream parser knows its input is incomplete rather than malformed.
 	OutputTruncated bool
 
+	// StartedAt and FinishedAt bracket exactly the interval Duration
+	// measures. They travel together deliberately: a reader who cannot
+	// reconcile finished - started against duration cannot trust any of the
+	// three, and provenance that cannot be checked is not provenance.
+	//
+	// UTC, RFC3339 with a literal Z when serialised. No local time anywhere.
+	StartedAt  time.Time
+	FinishedAt time.Time
+
 	Duration time.Duration
 
 	// DiskQuotaEnforced is false when the host's storage driver does not
@@ -223,7 +232,7 @@ func (r *DockerRunner) Close() error { return r.cli.Close() }
 var ErrSecretInEnvironment = errors.New("sandbox: credential in the engine environment")
 
 // Run executes one command under the full policy.
-func (r *DockerRunner) Run(ctx context.Context, spec Spec) (Result, error) {
+func (r *DockerRunner) Run(ctx context.Context, spec Spec) (res Result, err error) {
 	// ---- refuse before doing anything -------------------------------------
 	//
 	// Every check here is cheap and each one, skipped, is a hole. They run in
@@ -259,8 +268,21 @@ func (r *DockerRunner) Run(ctx context.Context, spec Spec) (Result, error) {
 	runCtx, cancel := context.WithTimeout(ctx, spec.Limits.WallClock)
 	defer cancel()
 
-	started := time.Now()
+	started := time.Now().UTC()
 	result := Result{DiskQuotaEnforced: spec.Limits.DiskMB > 0}
+
+	// ⚠ STAMPED IN A DEFER, so EVERY exit carries the timing — including the
+	// four error returns below.
+	//
+	// Duration was previously assigned only on the success path, so a run that
+	// failed to start, or whose copy-out failed, reported `duration_ms: 0`.
+	// That reads as "it finished instantly" rather than "it never got going",
+	// and the two are the opposite diagnosis.
+	defer func() {
+		res.StartedAt = started
+		res.FinishedAt = time.Now().UTC()
+		res.Duration = res.FinishedAt.Sub(started)
+	}()
 
 	hostCfg, containerCfg := r.buildConfig(spec)
 
@@ -348,7 +370,6 @@ func (r *DockerRunner) Run(ctx context.Context, spec Spec) (Result, error) {
 		}
 	}
 
-	result.Duration = time.Since(started)
 	return result, nil
 }
 
