@@ -98,6 +98,10 @@ type bridgeResult struct {
 	OOMKilled       bool `json:"oom_killed"`
 	OutputTruncated bool `json:"output_truncated"`
 
+	// ImageDigest is what the daemon resolved the reference to, not what we
+	// asked for. Empty when the image carries no registry digest.
+	ImageDigest string `json:"image_digest,omitempty"`
+
 	// StartedAt and FinishedAt bracket exactly the interval DurationMS
 	// measures. RFC3339 with a literal Z; the worker copies all three into
 	// ScanResultV1.invocation, where a reader must be able to reconcile them.
@@ -210,6 +214,8 @@ func sandboxRun(ctx context.Context, args []string) error {
 		TimedOut:        result.TimedOut,
 		OOMKilled:       result.OOMKilled,
 		OutputTruncated: result.OutputTruncated,
+
+		ImageDigest: result.ImageDigest,
 
 		StartedAt:  rfc3339Z(result.StartedAt),
 		FinishedAt: rfc3339Z(result.FinishedAt),

@@ -606,7 +606,51 @@ class SandboxedAdapter(ToolAdapterBase):
             duration_ms=result.duration_ms,
             exit_code=result.exit_code,
             argv_redacted=argv_redacted,
+            image_digest=result.image_digest,
         )
+
+        # ⚠ THE SCAN RAN A MUTABLE REFERENCE, AND THE REPORT HAS TO SAY SO.
+        #
+        # `toolctl pin` fills image_digest in the manifest; until it has, every
+        # engine is addressed by tag, and the same tag scanned twice can be two
+        # different binaries. The resolved digest above records what ran THIS
+        # time, which is what makes the run reproducible after the fact — but it
+        # does not make the reference reproducible in advance, and only the
+        # second of those is what "digest-pinned" means.
+        #
+        # `available()` already reports this in its detail. That reaches the
+        # engine list; it does not reach the result, and the result is what a
+        # report's provenance is built from.
+        if not image.digest_pinned:
+            base.diagnostics.append(
+                {
+                    "severity": "info",
+                    "code": "ENGINE_IMAGE_NOT_PINNED",
+                    "message": (
+                        f"{self.engine_id} was addressed by tag ({image.reference}), not by digest"
+                    ),
+                    "hint": (
+                        "the digest it resolved to is recorded on this result; run "
+                        "`encorebom toolctl pin` to make the reference itself "
+                        "reproducible"
+                    ),
+                }
+            )
+        if not result.image_digest and result.error == "":
+            # Distinct from the above: the reference may have been pinned and
+            # the daemon still reported no registry digest, which is what a
+            # locally built or tarball-loaded image looks like.
+            base.diagnostics.append(
+                {
+                    "severity": "warn",
+                    "code": "ENGINE_IMAGE_DIGEST_UNKNOWN",
+                    "message": f"the image for {self.engine_id} has no registry digest",
+                    "hint": (
+                        "this run cannot state which published image bytes produced "
+                        "its output; the image was probably built locally"
+                    ),
+                }
+            )
         # ⚠ THE VINTAGE COMES FROM OUR STAMP, NOT FROM THE ENGINE.
         #
         # An engine reporting its own database version is reporting a claim we

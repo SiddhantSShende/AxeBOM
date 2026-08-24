@@ -156,6 +156,23 @@ type Result struct {
 	// downstream parser knows its input is incomplete rather than malformed.
 	OutputTruncated bool
 
+	// ImageDigest is the REGISTRY MANIFEST DIGEST of the image that actually
+	// ran — read back from the daemon after the container was created, not
+	// copied from the reference we asked for.
+	//
+	// ⚠ THAT DISTINCTION IS THE ENTIRE VALUE OF THE FIELD. A tag is mutable:
+	// `anchore/syft:v1.51.0` today and tomorrow can be different binaries, and
+	// a compliance report naming a tag cannot say what it examined. Asking the
+	// daemon what it resolved records the bytes, even when the manifest gave us
+	// only a tag.
+	//
+	// Empty when the image has no registry digest at all — built locally, or
+	// loaded from a tarball. Empty is honest; the local image ID is a DIFFERENT
+	// hash (the config digest) and putting it here under the same name would be
+	// the same conflation this codebase refuses between `purl` and
+	// `certin_identifier`.
+	ImageDigest string
+
 	// StartedAt and FinishedAt bracket exactly the interval Duration
 	// measures. They travel together deliberately: a reader who cannot
 	// reconcile finished - started against duration cannot trust any of the
@@ -322,6 +339,10 @@ func (r *DockerRunner) Run(ctx context.Context, spec Spec) (res Result, err erro
 		}
 	}()
 
+	// After create, so the image is certainly present locally; before start, so
+	// a long-running scan cannot have the tag re-pointed underneath it.
+	result.ImageDigest = r.resolveImageDigest(runCtx, spec.Image)
+
 	if err := r.cli.ContainerStart(runCtx, created.ID, container.StartOptions{}); err != nil {
 		return result, fmt.Errorf("sandbox: start container: %w", err)
 	}
@@ -371,6 +392,68 @@ func (r *DockerRunner) Run(ctx context.Context, spec Spec) (res Result, err erro
 	}
 
 	return result, nil
+}
+
+// resolveImageDigest asks the daemon which image bytes a reference resolved to.
+//
+// Returns "" on any failure. A provenance field that cannot be read must not
+// fail a scan that otherwise succeeded — the gap is recorded by its absence,
+// which the worker turns into a stated diagnostic.
+func (r *DockerRunner) resolveImageDigest(ctx context.Context, ref string) string {
+	info, err := r.cli.ImageInspect(ctx, ref)
+	if err != nil {
+		r.log.Debug("could not resolve the image digest", "image", ref, "cause", err.Error())
+		return ""
+	}
+	return repoDigestFor(info.RepoDigests, ref)
+}
+
+// repoDigestFor picks the digest belonging to the repository we asked for.
+//
+// An image can carry digests for several repositories after a retag, and
+// returning another repository's digest would name a coordinate this scan never
+// used. Split out from the daemon call so the matching is testable without
+// Docker — which is how the normalisation below was found to be necessary.
+func repoDigestFor(repoDigests []string, ref string) string {
+	want := normalizeRepo(refWithoutTag(ref))
+	for _, rd := range repoDigests {
+		name, digest, ok := strings.Cut(rd, "@")
+		if ok && normalizeRepo(name) == want {
+			return digest
+		}
+	}
+	return ""
+}
+
+// refWithoutTag strips a `:tag` or `@digest` suffix, leaving the repository.
+//
+// The colon check is bounded by the last slash because a registry may carry a
+// port — `localhost:5000/engine` has a colon that is not a tag separator.
+func refWithoutTag(ref string) string {
+	if i := strings.LastIndex(ref, "@"); i >= 0 {
+		ref = ref[:i]
+	}
+	if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
+		ref = ref[:i]
+	}
+	return ref
+}
+
+// normalizeRepo puts a Docker Hub reference into the one form the daemon uses.
+//
+// ⚠ THE DAEMON DOES NOT ECHO BACK THE NAME YOU GAVE IT. Asking for
+// `docker.io/anchore/syft:v1.51.0` yields a RepoDigest of
+// `anchore/syft@sha256:…`, and `busybox:1.37` yields `busybox@sha256:…` even
+// though its canonical name is `docker.io/library/busybox`. Comparing the two
+// literally matches only when the caller happened to write the short form —
+// which is why every engine in the manifest, all of which use the `docker.io/`
+// prefix, resolved to an empty digest until this existed.
+func normalizeRepo(repo string) string {
+	for _, prefix := range []string{"index.docker.io/", "docker.io/"} {
+		repo = strings.TrimPrefix(repo, prefix)
+	}
+	// `library/` is Docker Hub's implicit namespace for official images.
+	return strings.TrimPrefix(repo, "library/")
 }
 
 // copyOut writes a container directory to a host tar file.

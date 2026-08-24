@@ -154,6 +154,10 @@ class GenerateResult:
     # and a report that cannot say "matched against vulnerability data as of X"
     # is not defensible.
     engine_db_version: str | None = None
+    #: Which image bytes actually ran. See sandbox.Result.ImageDigest for why
+    #: this is read back from the daemon rather than copied from the reference.
+    image_digest: str = ""
+
     #: ⚠ started_at, finished_at AND duration_ms DESCRIBE ONE INTERVAL.
     #:
     #: Set together or not at all. They come from the sandbox when the engine

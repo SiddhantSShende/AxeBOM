@@ -640,3 +640,26 @@ func TestATimedOutRunStillCarriesItsInterval(t *testing.T) {
 			res.Duration)
 	}
 }
+
+// ⚠ WHAT RAN, READ BACK FROM THE DAEMON RATHER THAN COPIED FROM THE REFERENCE.
+//
+// The manifest addresses every engine by tag today, and a tag is mutable: the
+// same reference scanned twice can be two different binaries. Asking the daemon
+// what it resolved is what lets a report state the bytes it examined even when
+// the reference itself was not reproducible in advance.
+func TestRunRecordsTheImageItActuallyResolved(t *testing.T) {
+	r := newRunner(t)
+	res := run(t, r, spec("sh", "-c", "true"))
+
+	if res.ImageDigest == "" {
+		// The test image is pulled from a registry in newRunner, so it has a
+		// repo digest. An empty value here means the resolution silently
+		// failed, which is the whole field being useless.
+		t.Fatalf("no image digest recorded for %s", testImage)
+	}
+	if !strings.HasPrefix(res.ImageDigest, "sha256:") {
+		t.Errorf("image digest = %q, want a sha256: manifest digest — the local "+
+			"image ID is a different hash and must not appear here", res.ImageDigest)
+	}
+	t.Logf("%s resolved to %s", testImage, res.ImageDigest)
+}

@@ -84,6 +84,10 @@ class SandboxResult:
     oom_killed: bool = False
     output_truncated: bool = False
 
+    #: The registry manifest digest the reference RESOLVED to, read back from
+    #: the daemon. Empty when the image has no registry digest at all.
+    image_digest: str = ""
+
     #: ⚠ THESE BRACKET EXACTLY THE INTERVAL ``duration_ms`` MEASURES.
     #:
     #: They travel together on purpose. A reader who cannot reconcile
@@ -121,6 +125,7 @@ class SandboxResult:
             timed_out=bool(payload.get("timed_out", False)),
             oom_killed=bool(payload.get("oom_killed", False)),
             output_truncated=bool(payload.get("output_truncated", False)),
+            image_digest=str(payload.get("image_digest", "")),
             started_at=_parse_ts(payload.get("started_at")),
             finished_at=_parse_ts(payload.get("finished_at")),
             duration_ms=int(payload.get("duration_ms", 0)),

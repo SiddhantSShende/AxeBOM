@@ -451,6 +451,10 @@ class SBOMWorker:
                 # time to the zero value and HandleResult already skips it, so
                 # an absent stamp stays absent instead of becoming year 1.
                 **_timestamps(generated),
+                # ⚠ WHAT RAN, resolved by the daemon rather than copied from the
+                # reference we asked for. Omitted when unknown: an empty string
+                # in a provenance field reads as a value.
+                **({"image_digest": generated.image_digest} if generated.image_digest else {}),
                 "exit_code": generated.exit_code if generated.exit_code is not None else 0,
                 "duration_ms": generated.duration_ms,
             },
