@@ -310,7 +310,20 @@ PATCH  /campaigns/:id                POST /campaigns/:id/run-now
 GET    /campaigns/:id/runs
 ```
 
-Every scan-creation request carries `bom_types[]`, `report_levels[]`, `standards[]`, `formats[]`, and optionally `engines[]`.
+Every scan-creation request (`POST /v1/scans`) carries `project_id`,
+`source_kind` and `families[]`, and optionally `engines[]` — `families` is
+which engine groups run (`sbom`, `cbom`, …), lowercase, matching
+`events.Family`.
+
+**`bom_types[]`, `report_levels[]`, `standards[]` and `formats[]` belong to
+report creation, not scan creation.** A report is one rendered document —
+`POST /v1/reports` takes one `scan_id` plus one `bom_type` / `level` /
+`format` (see §6 of `01-DATA-MODEL.md` for `report.reports`, one row per
+combination) — so a client requesting N report types × levels × formats
+sends N separate `POST /v1/reports` calls after the scan exists, not one
+call carrying all four dimensions. `standard` is optional and derived from
+`format` server-side (`spdx`→SPDX, `cyclonedx`→CycloneDX, everything
+else→`native`) — sending a mismatched one is refused, not corrected.
 
 ---
 
