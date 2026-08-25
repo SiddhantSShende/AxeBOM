@@ -35,7 +35,7 @@ ON CONFLICT (id) DO NOTHING;
 -- Users. GLOBAL — note carol belongs to BOTH tenants, which is the case that
 -- would break if users were tenant-scoped.
 --
--- ⚠ THE PASSWORD IS `encorebom-dev-only` AND IT IS THE SAME FOR EVERY USER.
+-- ⚠ THE PASSWORD IS `axebom-dev-only` AND IT IS THE SAME FOR EVERY USER.
 --
 -- Named so that it cannot be mistaken for a credential. This file is loaded
 -- only by `Migrator.Seed`, which refuses any host that is not localhost,
@@ -66,11 +66,11 @@ ON CONFLICT (id) DO NOTHING;
 -- ---------------------------------------------------------------------------
 INSERT INTO auth.users (id, email, name, auth_provider, status, password_hash) VALUES
     ('01900000-0000-7000-8000-0000000000a1', 'alice@acme.test',  'Alice Owner',   'local', 'active',
-     '$argon2id$v=19$m=19456,t=2,p=1$wtUzSH1FRdGYWPCRatJvUA$aocdY1t5nNscZeUX+4MO7LWRI+SuKgLzYii0yFPadSk'),
+     '$argon2id$v=19$m=19456,t=2,p=1$LoFY4Q5+7C0bAI0i3p59ZQ$frddvmV6u4oxvUkpDmnJjg+BSmnfG/ciVth69HWalxo'),
     ('01900000-0000-7000-8000-0000000000a2', 'aaron@acme.test',  'Aaron Analyst', 'local', 'active',
-     '$argon2id$v=19$m=19456,t=2,p=1$BrQEsX/pCy0WgdenyVMXJg$hl+ww8o2xK2gmn7s2EuUz2VovXMxdEHb2NPHr3XlOUM'),
+     '$argon2id$v=19$m=19456,t=2,p=1$VnLb+JaTQnB/uJZkSJBCgw$EA6Ju67Y4jCw5q7mmZsxFKTuxPWy1AT2ABj1FIJiTFc'),
     ('01900000-0000-7000-8000-0000000000b1', 'bob@beta.test',    'Bob Owner',     'local', 'active',
-     '$argon2id$v=19$m=19456,t=2,p=1$2GhfE24SgQOIuH7dNJt+7Q$/KEM+LsNtpPvdNqTnQMtAurZDaJZaXXvmHqRqiMP+Qs'),
+     '$argon2id$v=19$m=19456,t=2,p=1$qfkzFOAv80OjZIkY5ckZSA$werfey9WFRTnsdJDUFddTrEwIZZka+mM8pVKg8o+CH4'),
     ('01900000-0000-7000-8000-0000000000c1', 'carol@both.test',  'Carol Consultant', 'github', 'active',
      NULL)
 -- ⚠ DO UPDATE, not DO NOTHING, for password_hash ALONE.

@@ -18,9 +18,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
-	"github.com/encorebom/encorebom/services/campaign/internal/schedule"
-	"github.com/encorebom/encorebom/services/campaign/internal/scheduler"
+	"github.com/axebom/axebom/libs/go-shared/platform/db"
+	"github.com/axebom/axebom/services/campaign/internal/schedule"
+	"github.com/axebom/axebom/services/campaign/internal/scheduler"
 )
 
 // ErrNotFound is returned when a row does not exist FOR THIS TENANT.

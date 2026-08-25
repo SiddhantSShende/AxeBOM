@@ -28,6 +28,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/axebom/axebom/libs/go-shared/oidcauth"
 )
 
 // Source is where one scan's code comes from.
@@ -51,8 +53,19 @@ type Source struct {
 // into a stated reason on the scan rather than a retry.
 var ErrNoSource = errors.New("project has no repository connection")
 
-// TokenFunc mints a service token for one tenant.
-type TokenFunc func(ctx context.Context, tenantID string) (string, error)
+// TokenFunc mints this component's service credential.
+//
+// ⚠ IT TAKES NO TENANT, AND THAT IS THE CHANGE ZITADEL FORCED.
+//
+// The retired issuer minted a token that NAMED the tenant, so the credential
+// and the scope arrived together. A ZITADEL machine token is owned by the
+// AxeBOM organisation and says nothing about the customer being worked for,
+// so the tenant now travels as X-AxeBOM-Tenant on the request — honoured by
+// the middleware only for a verified service principal.
+//
+// The trust boundary is unchanged: our own components could always act for any
+// tenant. It is now explicit on the wire instead of buried in a claim.
+type TokenFunc func(ctx context.Context) (string, error)
 
 // Client reads the project service's service-only source endpoint.
 type Client struct {
@@ -97,7 +110,7 @@ func New(opts Options) (*Client, error) {
 
 // Resolve returns the source for one project.
 func (c *Client) Resolve(ctx context.Context, tenantID, projectID string) (Source, error) {
-	tok, err := c.token(ctx, tenantID)
+	tok, err := c.token(ctx)
 	if err != nil {
 		return Source{}, fmt.Errorf("source: mint service token: %w", err)
 	}
@@ -109,6 +122,8 @@ func (c *Client) Resolve(ctx context.Context, tenantID, projectID string) (Sourc
 	}
 	req.Header.Set("Authorization", "Bearer "+tok)
 	req.Header.Set("Accept", "application/json")
+	// Which tenant this clone is for. See TokenFunc.
+	req.Header.Set(oidcauth.HeaderServiceTenant, tenantID)
 
 	resp, err := c.http.Do(req)
 	if err != nil {

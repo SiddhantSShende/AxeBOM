@@ -9,15 +9,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/fetcher"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/blob"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/libs/go-shared/sandbox"
+	"github.com/axebom/axebom/libs/go-shared/fetcher"
+	"github.com/axebom/axebom/libs/go-shared/platform/blob"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/sandbox"
 )
 
 // Clone tests against a real container runtime.
 //
-// The network-dependent ones are gated on ENCOREBOM_NETWORK_TESTS, so a
+// The network-dependent ones are gated on AXEBOM_NETWORK_TESTS, so a
 // developer offline gets skips rather than confusing failures — but the fact
 // that they were skipped is visible in the output.
 
@@ -46,8 +46,8 @@ func newSandbox(t *testing.T) *sandbox.DockerRunner {
 
 func requireNetwork(t *testing.T) {
 	t.Helper()
-	if os.Getenv("ENCOREBOM_NETWORK_TESTS") == "" {
-		t.Skip("set ENCOREBOM_NETWORK_TESTS=1 to run tests that clone from the internet")
+	if os.Getenv("AXEBOM_NETWORK_TESTS") == "" {
+		t.Skip("set AXEBOM_NETWORK_TESTS=1 to run tests that clone from the internet")
 	}
 }
 
@@ -69,7 +69,7 @@ func TestTokenNeverAppearsInTheCommandLine(t *testing.T) {
 	// it succeeded.
 	_, err := fetcher.Clone(t.Context(), &recordingRunner{inner: r, t: t},
 		fetcher.CloneRequest{
-			RepoURL: "https://github.com/does-not-exist-encorebom/nothing.git",
+			RepoURL: "https://github.com/does-not-exist-axebom/nothing.git",
 			Token:   token,
 			Timeout: 20 * time.Second,
 		}, fetcher.FetcherPolicy(), fastCloneLimits())
@@ -442,7 +442,7 @@ func TestAllowlistWithoutAProxyIsRefused(t *testing.T) {
 			"it would have run with unrestricted egress under a name that says otherwise")
 	}
 
-	p.ProxyNetwork = "encorebom-egress"
+	p.ProxyNetwork = "axebom-egress"
 	if err := p.Validate(); err != nil {
 		t.Errorf("a properly configured allowlist policy was refused: %v", err)
 	}

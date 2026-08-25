@@ -10,33 +10,62 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
+import { AuthShell } from '../../components/AuthShell';
 import { initAuth } from '../../lib/auth';
+import { POST_SIGNOUT_KEY } from '../../lib/AuthContext';
 import { useAuth } from '../../lib/useAuth';
 
 /**
  * SignIn is what an unauthenticated visitor sees.
  *
- * Deliberately a button and not an automatic redirect. An app that bounces
- * straight to an identity provider cannot be looked at, cannot show why a
- * previous attempt failed, and turns a misconfigured client id into an endless
- * loop between two origins.
+ * ⚠ A BUTTON, NOT AN AUTOMATIC REDIRECT — WITH EXACTLY ONE EXCEPTION.
+ *
+ * An app that bounces straight to an identity provider cannot be looked at,
+ * cannot show why a previous attempt failed, and turns a misconfigured client
+ * id into an endless loop between two origins with nothing on screen to read.
+ * That risk is exactly what this screen exists to avoid, and it stays the
+ * DEFAULT for every ordinary way of landing here signed out: a session that
+ * simply expired, a bookmark opened cold, a client id that stopped matching
+ * what ZITADEL has registered.
+ *
+ * The one exception is immediately after this SAME browser explicitly clicked
+ * "Sign out" — POST_SIGNOUT_KEY is a one-shot marker `signOut` sets right
+ * before it redirects to ZITADEL's own logout. Finding it here means the
+ * ZITADEL round trip that just finished was already visible and already
+ * intentional, so there is nothing this screen would tell the visitor that
+ * clicking "Sign out" didn't already say. It is consumed — read once, then
+ * removed — specifically so it cannot mask a REAL failure on some later,
+ * unrelated visit.
  */
 export function SignIn() {
   const { signIn, error, loading } = useAuth();
 
+  useEffect(() => {
+    if (sessionStorage.getItem(POST_SIGNOUT_KEY) !== '1') return;
+    sessionStorage.removeItem(POST_SIGNOUT_KEY);
+    signIn();
+  }, [signIn]);
+
   return (
-    <div className="state state-empty">
-      <h3 className="state-title">Sign in to EncoreBOM</h3>
-      <p className="state-message">
-        {error ?? 'You are signed out. EncoreBOM uses your organisation identity provider.'}
-      </p>
-      <div className="state-actions">
-        <button className="btn btn-primary" onClick={signIn} disabled={loading}>
-          Sign in
-        </button>
+    <AuthShell>
+      <div className="auth-card-body">
+        <h3 className="state-title">Sign in to AxeBOM</h3>
+        <p className="state-message">
+          {error ?? 'You are signed out. AxeBOM uses your organisation identity provider.'}
+        </p>
+        <div className="state-actions">
+          {/* Not `onClick={signIn}` — the DOM click event would flow into
+              signIn's optional `returnTo` parameter as if it were a string. */}
+          <button className="btn btn-primary" onClick={() => signIn()} disabled={loading}>
+            Sign in
+          </button>
+        </div>
       </div>
-    </div>
+      <p className="auth-card-foot">
+        New here? <Link to="/signup">Create your organisation</Link>
+      </p>
+    </AuthShell>
   );
 }
 
@@ -52,18 +81,20 @@ export function SignIn() {
 export function NoAccess() {
   const { name, signOut } = useAuth();
   return (
-    <div className="state state-empty">
-      <h3 className="state-title">No access to EncoreBOM</h3>
-      <p className="state-message">
-        You are signed in as {name}, but your account has not been granted a role in any
-        organisation of this application. Ask an administrator to invite you.
-      </p>
-      <div className="state-actions">
-        <button className="btn" onClick={signOut}>
-          Sign out
-        </button>
+    <AuthShell>
+      <div className="auth-card-body">
+        <h3 className="state-title">No access to AxeBOM</h3>
+        <p className="state-message">
+          You are signed in as {name}, but your account has not been granted a role in any
+          organisation of this application. Ask an administrator to invite you.
+        </p>
+        <div className="state-actions">
+          <button className="btn" onClick={signOut}>
+            Sign out
+          </button>
+        </div>
       </div>
-    </div>
+    </AuthShell>
   );
 }
 
@@ -102,18 +133,24 @@ export function AuthCallback() {
 
   if (failure) {
     return (
-      <div className="state state-error">
-        <h3 className="state-title">Sign-in did not complete</h3>
-        <p className="state-message">{failure}</p>
-        <div className="state-actions">
-          <a className="btn" href="/">
-            Start again
-          </a>
+      <AuthShell className="auth-card-error">
+        <div className="auth-card-body">
+          <h3 className="state-title">Sign-in did not complete</h3>
+          <p className="state-message">{failure}</p>
+          <div className="state-actions">
+            <a className="btn" href="/">
+              Start again
+            </a>
+          </div>
         </div>
-      </div>
+      </AuthShell>
     );
   }
-  return <p className="state-message">Completing sign-in…</p>;
+  return (
+    <AuthShell>
+      <p className="auth-card-body state-message">Completing sign-in…</p>
+    </AuthShell>
+  );
 }
 
 /**

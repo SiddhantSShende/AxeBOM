@@ -10,7 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
 )
 
 // Tenancy tests. These are the acceptance criteria of Phase 1 and the reason

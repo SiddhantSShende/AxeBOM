@@ -20,8 +20,8 @@ reports every CBOM at roughly 30% coverage, falsely, in a compliance document.
 
 from __future__ import annotations
 
-from encorebom_shared.logging import get_logger
-from encorebom_shared.worker_runtime import run_worker
+from axebom_shared.logging import get_logger
+from axebom_shared.worker_runtime import run_worker
 
 from ..sbom.runner import SBOMWorker
 from .adapters import CBOMkitTheiaAdapter

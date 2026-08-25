@@ -1,9 +1,10 @@
 // Package store is the notification service's persistence layer.
 //
-// Every query goes through db.WithTenant. There is no exception here — unlike
-// the campaign scheduler, nothing in this service needs to read across tenants:
-// a delivery is always dispatched in the context of the tenant whose event
-// produced it.
+// Every query goes through db.WithTenant, with exactly ONE exception:
+// ClaimDueDeliveries (worker.go), which the retry poller calls with no tenant
+// to scope by — the same shape campaign's DueCampaigns already is, and the
+// same answer: a narrow SECURITY DEFINER function, never BYPASSRLS, never a
+// superuser connection.
 package store
 
 import (
@@ -15,9 +16,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
-	"github.com/encorebom/encorebom/services/notification/internal/subscription"
-	"github.com/encorebom/encorebom/services/notification/internal/webhook"
+	"github.com/axebom/axebom/libs/go-shared/platform/db"
+	"github.com/axebom/axebom/services/notification/internal/subscription"
+	"github.com/axebom/axebom/services/notification/internal/webhook"
 )
 
 // ErrNotFound is returned when a row does not exist FOR THIS TENANT.

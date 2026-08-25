@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/encorebom/encorebom/libs/go-shared/authz"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/services/report/internal/share"
-	"github.com/encorebom/encorebom/services/report/internal/store"
+	"github.com/axebom/axebom/libs/go-shared/authz"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/services/report/internal/share"
+	"github.com/axebom/axebom/services/report/internal/store"
 )
 
 // TestTheDownloadFilenameCannotBreakOutOfTheHeader.
@@ -80,7 +80,7 @@ func TestEveryDownloadResponseIsAnAttachmentAndUncacheable(t *testing.T) {
 	rec := httptest.NewRecorder()
 	writeDownloadHeaders(rec, store.Report{
 		ID: "0199-report", Format: "pdf", SizeBytes: 4096,
-		SHA256: "abc123", SigningKeyID: "encorebom-report-signing:v2",
+		SHA256: "abc123", SigningKeyID: "axebom-report-signing:v2",
 	})
 
 	h := rec.Header()
@@ -107,10 +107,10 @@ func TestEveryDownloadResponseIsAnAttachmentAndUncacheable(t *testing.T) {
 	}
 	// The digest is what the detached signature also covers, so a client can
 	// check integrity without fetching the signature.
-	if got := h.Get("X-EncoreBOM-SHA256"); got != "abc123" {
-		t.Errorf("X-EncoreBOM-SHA256 = %q", got)
+	if got := h.Get("X-AxeBOM-SHA256"); got != "abc123" {
+		t.Errorf("X-AxeBOM-SHA256 = %q", got)
 	}
-	if got := h.Get("X-EncoreBOM-Signing-Key"); got == "" {
+	if got := h.Get("X-AxeBOM-Signing-Key"); got == "" {
 		t.Error("the signing key id is not advertised, so a consumer cannot tell " +
 			"which published key to verify against")
 	}
@@ -122,10 +122,10 @@ func TestAnUnsignedReportAdvertisesNoKey(t *testing.T) {
 	rec := httptest.NewRecorder()
 	writeDownloadHeaders(rec, store.Report{ID: "r", Format: "json"})
 
-	if got := rec.Header().Get("X-EncoreBOM-Signing-Key"); got != "" {
+	if got := rec.Header().Get("X-AxeBOM-Signing-Key"); got != "" {
 		t.Errorf("an unsigned report advertised key %q", got)
 	}
-	if got := rec.Header().Get("X-EncoreBOM-Truncated"); got != "" {
+	if got := rec.Header().Get("X-AxeBOM-Truncated"); got != "" {
 		t.Errorf("an untruncated report advertised truncation %q", got)
 	}
 }
@@ -136,8 +136,8 @@ func TestATruncatedReportSaysSoInAHeader(t *testing.T) {
 	rec := httptest.NewRecorder()
 	writeDownloadHeaders(rec, store.Report{ID: "r", Format: "pdf", Truncated: true})
 
-	if got := rec.Header().Get("X-EncoreBOM-Truncated"); got != "true" {
-		t.Errorf("X-EncoreBOM-Truncated = %q, want true", got)
+	if got := rec.Header().Get("X-AxeBOM-Truncated"); got != "true" {
+		t.Errorf("X-AxeBOM-Truncated = %q, want true", got)
 	}
 }
 

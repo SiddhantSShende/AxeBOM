@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/ctxkey"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/ratelimit"
+	"github.com/axebom/axebom/libs/go-shared/platform/ctxkey"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/platform/ratelimit"
 )
 
 // RateLimitConfig configures the limiter.

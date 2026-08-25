@@ -32,7 +32,13 @@ import {
  * value grants nothing on its own — the server checks it against the roles the
  * token already carries.
  */
-const ORG_KEY = 'encorebom.org';
+const ORG_KEY = 'axebom.org';
+
+/**
+ * Consumed by SignIn (routes/auth/AuthRoutes.tsx) — see the comment on
+ * signOut below for why this exists and why it is read-once.
+ */
+export const POST_SIGNOUT_KEY = 'axebom.postSignOut';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -146,12 +152,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const wantOrg = activeOrg?.orgId ?? null;
   if (getOrgId() !== wantOrg) setApiOrg(wantOrg);
 
-  const signIn = useCallback(() => {
+  const signIn = useCallback((returnTo?: string) => {
     setError(null);
-    // Come back to where the user actually was, not to the root.
-    const returnTo = window.location.pathname + window.location.search;
+    // Come back to where the user actually was, not to the root — unless the
+    // caller named somewhere better. SignupPage does: the "somewhere" a
+    // brand-new visitor was is the signup form itself, and redirecting back
+    // to it after they just finished it would look like the account was
+    // never created.
+    const to = returnTo ?? window.location.pathname + window.location.search;
     void initAuth()
-      .then((mgr) => mgr.signinRedirect({ state: { returnTo } }))
+      .then((mgr) => mgr.signinRedirect({ state: { returnTo: to } }))
       .catch((e: Error) => setError(e.message));
   }, []);
 
@@ -159,6 +169,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(ORG_KEY);
     setAccessToken(null);
     setApiOrg(null);
+    // ⚠ A ONE-SHOT MARKER, NOT A STANDING PREFERENCE. SignIn reads this to
+    // skip straight back to the identity provider after a DELIBERATE sign-out
+    // — someone who just clicked "Sign out" does not need to see "you are
+    // signed out, click here" a second later. It is consumed (read once, then
+    // removed) by SignIn itself, so an unrelated later visit — a session that
+    // simply expired, a bookmark opened signed-out, a broken client id — still
+    // lands on the button screen. That screen exists specifically so a
+    // misconfigured client id fails visibly instead of bouncing forever
+    // between this app and ZITADEL with nothing on screen to read; skipping it
+    // unconditionally here would put that failure mode back.
+    sessionStorage.setItem(POST_SIGNOUT_KEY, '1');
     void initAuth()
       .then((mgr) => mgr.signoutRedirect())
       .catch((e: Error) => setError(e.message));

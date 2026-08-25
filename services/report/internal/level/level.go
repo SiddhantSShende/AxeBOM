@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/encorebom/encorebom/libs/go-shared/model"
+	"github.com/axebom/axebom/libs/go-shared/model"
 )
 
 // Level is a CERT-In BOM level.

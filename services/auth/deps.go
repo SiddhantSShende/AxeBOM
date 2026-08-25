@@ -6,13 +6,14 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/httpx"
-	"github.com/encorebom/encorebom/services/auth/internal/handler"
-	"github.com/encorebom/encorebom/services/auth/internal/service"
-	"github.com/encorebom/encorebom/services/auth/internal/store"
+	"github.com/axebom/axebom/libs/go-shared/auth"
+	"github.com/axebom/axebom/libs/go-shared/oidcauth"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/db"
+	"github.com/axebom/axebom/libs/go-shared/platform/httpx"
+	"github.com/axebom/axebom/services/auth/internal/handler"
+	"github.com/axebom/axebom/services/auth/internal/service"
+	"github.com/axebom/axebom/services/auth/internal/store"
 )
 
 // deps holds this service's constructed dependencies.
@@ -31,6 +32,11 @@ type deps struct {
 	pool    *db.Pool
 	issuer  *auth.Issuer
 	handler *handler.Handler
+	// identity guards the API-key management routes (routes.go), which are
+	// authenticated the ZITADEL way like every other service — unlike issuer
+	// above, which still backs this service's OWN pre-ZITADEL local-login
+	// surface (register/login/refresh/invitations).
+	identity *oidcauth.Guard
 }
 
 // buildDeps constructs everything this service needs.
@@ -85,7 +91,18 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 		RefreshTTL:           cfg.Auth.RefreshTTL,
 	})
 
-	return &deps{cfg: cfg, pool: pool, issuer: issuer, handler: h}, nil
+	// ⚠ A SIXTH SERVICE GAINS oidcauth. The other five replaced their own
+	// local-JWT middleware with it (docs/STATE.md); this one keeps both,
+	// side by side, because its existing routes still run on the local
+	// issuer above and nothing here migrates them. Only the new API-key
+	// routes (routes.go) use this guard.
+	identity, err := oidcauth.Open(cfg.OIDC, pool)
+	if err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("identity: %w", err)
+	}
+
+	return &deps{cfg: cfg, pool: pool, issuer: issuer, handler: h, identity: identity}, nil
 }
 
 // Close releases the dependencies, in reverse order of construction.

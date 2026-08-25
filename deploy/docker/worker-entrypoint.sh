@@ -1,7 +1,7 @@
 #!/bin/sh
-# EncoreBOM worker entrypoint.
+# AxeBOM worker entrypoint.
 #
-# With no arguments, start the family named by ENCOREBOM_WORKER_FAMILY.
+# With no arguments, start the family named by AXEBOM_WORKER_FAMILY.
 # With arguments, run those instead.
 #
 # The second half matters more than it looks. The previous form was
@@ -17,15 +17,15 @@ if [ "$#" -gt 0 ]; then
     exec "$@"
 fi
 
-: "${ENCOREBOM_WORKER_FAMILY:=sbom}"
+: "${AXEBOM_WORKER_FAMILY:=sbom}"
 
-case "$ENCOREBOM_WORKER_FAMILY" in
+case "$AXEBOM_WORKER_FAMILY" in
     sbom|cbom|aibom|qbom|hbom) ;;
     *)
-        echo "unknown ENCOREBOM_WORKER_FAMILY: '$ENCOREBOM_WORKER_FAMILY'" >&2
+        echo "unknown AXEBOM_WORKER_FAMILY: '$AXEBOM_WORKER_FAMILY'" >&2
         echo "expected one of: sbom cbom aibom qbom hbom" >&2
         exit 64
         ;;
 esac
 
-exec python -m "workers.${ENCOREBOM_WORKER_FAMILY}.runner"
+exec python -m "workers.${AXEBOM_WORKER_FAMILY}.runner"

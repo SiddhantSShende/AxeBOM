@@ -44,7 +44,7 @@ Fifteen fixtures. Each isolates a failure mode that has bitten real SBOM tooling
 | 9 | `log4shell-java` | **The alias closure.** Three engines emit `CVE-2021-44228`, `GHSA-jfh8-c2jp-5v3q`, and a distro id from three partial edge sets → **one** cluster. Also: naive dedup would report 3. |
 | 10 | `alias-overmerge` | A batched GHSA aliasing several distinct CVEs. Guards hold: no CVE↔CVE merge without an authoritative edge; a >12-member cluster is flagged, not merged. |
 | 11 | `cvss-conflict` | Grype says High, Trivy says Critical, NVD has v2 and v3.1. Precedence is applied, **nothing is averaged**, v2 is never max'd against v3.1, `severity_conflict = true`. |
-| 12 | `license-zoo` | `NONE` present, `NOASSERTION` absent, `GPL-2.0` flagged ambiguous (never auto-resolved), `Apache 2` → `Apache-2.0`, unrecognized text → `LicenseRef-EncoreBOM-*`, `MIT OR Apache-2.0` preserved unflattened. |
+| 12 | `license-zoo` | `NONE` present, `NOASSERTION` absent, `GPL-2.0` flagged ambiguous (never auto-resolved), `Apache 2` → `Apache-2.0`, unrecognized text → `LicenseRef-AxeBOM-*`, `MIT OR Apache-2.0` preserved unflattened. |
 | 13 | `hostile-names` | Component named `=cmd\|'/c calc'!A1`; filenames with newline, NUL, 4-byte emoji, RTL override, and an 8 KB path. Sanitized before insert; **escaped in XLSX**. |
 | 14 | `cpe-only` | Dependency-Check LOW-confidence CPE attaches as a **candidate identity**, does not merge into the PURL component, and its false positives do not appear as findings. |
 | 15 | `deb-epoch-arch` | rpm/deb EVR ordering; `epoch` and `arch` are identity-bearing; `1.10.0` sorts after `1.9.0` (naive string sort fails this). |
@@ -62,9 +62,9 @@ Every fixture additionally asserts:
 
 | Fixture | Phase | Proves |
 |---|---|---|
-| `crypto-mixed` | 11 | All four Table-9 asset types in one scan; **type-aware coverage** — a certificate is not scored against `key_size`. |
+| `crypto-mixed` | 11 | Real `cbomkit-theia` output (not hand-built) against an openssl-generated cert: type-aware coverage, AND a certificate correctly inherits its signer's quantum verdict via a resolved `bom-ref` rather than a raw UUID a hand-built fixture's readable fake refs had been hiding. `raw/`/`expected/` committed; no `TestGolden` Go harness wired to it yet — see the fixture's own README. |
 | `crypto-quantum` | 11 | RSA/ECC/DH/DSA flagged `quantum_vulnerable`; AES gets a Grover note, not a vulnerability flag. |
-| `ai-langchain` | 12 | Agent frameworks, LLM providers, MCP servers, HF model metadata; valid CycloneDX ML-BOM. |
+| `ai-langchain` | 12 | Agent frameworks, LLM providers, MCP servers, HF model metadata; valid CycloneDX ML-BOM. Not yet built as a pinned `raw/`/`expected/` fixture — the real `ai-bom` engine has been verified live against a LangChain+OpenAI test directory (real container, real detection) and `aibom-generator` against a real Hugging Face model (`workers/aibom/testdata/aibom-generator-distilbert-base-uncased.cdx.json`), but nobody has pinned that output into this corpus's shape yet. `workers/aibom/normalize/test_pipeline.py` covers the pipeline itself against synthetic fixtures in the meantime. |
 | `hbom-nested` | 15 | Recursive subcomponents to depth 4; both supplier relationships distinct; §10.4.1.4 fields present. |
 
 ---
@@ -94,6 +94,8 @@ go test ./... -run TestGolden -update   # regenerate — see §5 before using
 Failures print a structured diff of expected vs actual, keyed by `component_key` and cluster id — not a raw JSON dump, which is unreadable at 1400 components.
 
 `task test:golden` runs in CI on **both** windows-latest and ubuntu-latest. `.gitattributes` marks `*.golden` and `fixtures/**/expected/**` as `-text -diff` so Git never rewrites line endings — a CRLF-corrupted golden fails for a reason unrelated to the code, and that failure mode wastes whole sessions.
+
+`task test:conformance` is a related but separate check: it validates `services/report/testdata/golden/fixture.spdx.json`/`fixture.cdx.json` against the OFFICIAL SPDX and CycloneDX schemas (`pip install -e ".[conformance]"` first), not against our own normalizer's expectations. It answers "will a real SPDX/CycloneDX tool accept this file", which `task test:golden` does not — that task only proves our exporter is internally consistent with itself. See `tools/conformance/test_spdx_cyclonedx.py`.
 
 ---
 
@@ -141,7 +143,7 @@ Pinned `raw/` files drift from what current engines emit. Refresh when an engine
 
 ```
 task osint:sync
-go run ./cmd/encorebom fixtures refresh --fixture npm-simple
+go run ./cmd/axebom fixtures refresh --fixture npm-simple
 task test:golden
 ```
 

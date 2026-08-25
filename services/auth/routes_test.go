@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/httpx"
-	"github.com/encorebom/encorebom/libs/go-shared/routeguard"
+	"github.com/axebom/axebom/libs/go-shared/platform/httpx"
+	"github.com/axebom/axebom/libs/go-shared/routeguard"
 )
 
 // TestEveryRouteIsGuardedOrDeliberatelyPublic parses routes.go and fails on any
@@ -19,7 +19,13 @@ import (
 //
 // See that package's doc for why this reads source rather than the mux.
 func TestEveryRouteIsGuardedOrDeliberatelyPublic(t *testing.T) {
-	findings, err := routeguard.Check("routes.go", publicRoutes)
+	// ⚠ THIS SERVICE ALONE HAS TWO AUTHENTICATING WRAPPERS, NOT ONE.
+	// `authenticated` is the legacy local-JWT issuer this service's own
+	// register/login/refresh/invitations routes still run on; `zitadel` is
+	// oidcauth.Guard, used only by the newer API-key routes — see deps.go's
+	// `identity` field and routes.go's own comment on why both exist.
+	wrappers := append([]string{"zitadel"}, routeguard.DefaultAuthWrappers...)
+	findings, err := routeguard.CheckWith("routes.go", publicRoutes, wrappers)
 	if err != nil {
 		t.Fatalf("route guard: %v", err)
 	}

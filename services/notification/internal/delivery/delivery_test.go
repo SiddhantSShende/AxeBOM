@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/encorebom/encorebom/services/notification/internal/subscription"
-	"github.com/encorebom/encorebom/services/notification/internal/webhook"
+	"github.com/axebom/axebom/services/notification/internal/subscription"
+	"github.com/axebom/axebom/services/notification/internal/webhook"
 )
 
 var sentAt = time.Date(2026, 8, 17, 9, 14, 3, 0, time.UTC)
@@ -37,7 +37,7 @@ func payload() webhook.Payload {
 		TenantID:   "0199-tenant",
 		ScanID:     "0199-scan",
 		Status:     "completed",
-		URL:        "https://app.encorebom.example/scans/0199-scan",
+		URL:        "https://app.axebom.example/scans/0199-scan",
 	}
 }
 
@@ -116,10 +116,10 @@ func TestTheDeliveryCarriesIdentifyingHeaders(t *testing.T) {
 	}
 
 	// The delivery id lets a receiver deduplicate a retry without parsing.
-	if got.Get("X-EncoreBOM-Delivery") != "0199-delivery" {
+	if got.Get("X-AxeBOM-Delivery") != "0199-delivery" {
 		t.Errorf("no delivery id header: %v", got)
 	}
-	if got.Get("X-EncoreBOM-Event") != string(webhook.EventScanCompleted) {
+	if got.Get("X-AxeBOM-Event") != string(webhook.EventScanCompleted) {
 		t.Errorf("no event header: %v", got)
 	}
 	if got.Get(webhook.SignatureHeader) == "" {

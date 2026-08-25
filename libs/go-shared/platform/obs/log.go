@@ -23,7 +23,7 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/ctxkey"
+	"github.com/axebom/axebom/libs/go-shared/platform/ctxkey"
 )
 
 // contextType aliases context.Context so the handler signatures in redact.go

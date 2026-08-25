@@ -37,8 +37,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 // APIPrefix is the prefix the browser adds and the gateway removes.
@@ -82,12 +82,12 @@ func New(svc config.Services, log *slog.Logger) (*Router, error) {
 		raw     string
 		prefixe []string
 	}{
-		{"auth", svc.Auth, []string{"/v1/auth"}},
-		{"project", svc.Project, []string{"/v1/projects", "/v1/github", "/v1/hbom"}},
-		{"scan-orchestrator", svc.ScanOrchestrator, []string{"/v1/scans"}},
+		{"auth", svc.Auth, []string{"/v1/auth", "/v1/api-keys", "/v1/audit-log"}},
+		{"project", svc.Project, []string{"/v1/projects", "/v1/github", "/v1/hbom", "/v1/qbom", "/v1/aibom"}},
+		{"scan-orchestrator", svc.ScanOrchestrator, []string{"/v1/scans", "/v1/vex"}},
 		// "/shared/{token}" is deliberately unauthenticated — it is the public
 		// side of a share link — and it does NOT live under /v1.
-		{"report", svc.Report, []string{"/v1/reports", "/v1/shares", "/shared"}},
+		{"report", svc.Report, []string{"/v1/reports", "/v1/shares", "/shared", "/v1/csaf"}},
 		{"campaign", svc.Campaign, []string{"/v1/campaigns"}},
 		{"comment", svc.Comment, []string{"/v1/comments"}},
 		{"notification", svc.Notification, []string{"/v1/notifications"}},

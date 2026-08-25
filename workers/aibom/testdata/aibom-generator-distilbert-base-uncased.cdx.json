@@ -1,0 +1,153 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "authors": [
+        {
+          "name": "distilbert"
+        }
+      ],
+      "bom-ref": "pkg:huggingface/distilbert-base-uncased@12040acc",
+      "description": "AI model distilbert-base-uncased",
+      "externalReferences": [
+        {
+          "comment": "Model files",
+          "type": "distribution",
+          "url": "https://huggingface.co/distilbert-base-uncased/tree/main"
+        },
+        {
+          "comment": "Specific commit",
+          "type": "vcs",
+          "url": "https://huggingface.co/distilbert-base-uncased/commit/12040accade4e8a0f71eabdb258fecc2e7e948be"
+        },
+        {
+          "comment": "Model repository",
+          "type": "website",
+          "url": "https://huggingface.co/distilbert-base-uncased"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "apache-2.0 datasets"
+          }
+        }
+      ],
+      "modelCard": {
+        "modelParameters": {
+          "datasets": [
+            {
+              "contents": {
+                "url": "https://huggingface.co/datasets/consisting"
+              },
+              "name": "consisting",
+              "type": "dataset"
+            }
+          ],
+          "modelArchitecture": "transformer",
+          "task": "fill-mask"
+        },
+        "properties": [
+          {
+            "name": "genai:aibom:modelcard:vocabSize",
+            "value": "30522"
+          },
+          {
+            "name": "genai:aibom:trainingDataAvailable",
+            "value": "false"
+          },
+          {
+            "name": "genai:aibom:trainingDataWarning",
+            "value": "Training datasets were referenced but could not be verified on Hugging Face Hub. Dataset may not exist, be disabled, or be inaccessible."
+          },
+          {
+            "name": "downloads",
+            "value": "7038576"
+          },
+          {
+            "name": "language",
+            "value": "en"
+          },
+          {
+            "name": "metrics",
+            "value": "masks"
+          },
+          {
+            "name": "limitations",
+            "value": "You can use the raw model for either masked language modeling or next sentence prediction, but it's mostly intended to be fine-tuned on a downstream task"
+          },
+          {
+            "name": "safety",
+            "value": "Even if the training data used for this model could be characterized as fairly neutral, this model can have biased predictions"
+          }
+        ]
+      },
+      "name": "distilbert-base-uncased",
+      "properties": [
+        {
+          "name": "architectures",
+          "value": "DistilBertForMaskedLM"
+        },
+        {
+          "name": "model_type",
+          "value": "distilbert"
+        }
+      ],
+      "purl": "pkg:huggingface/distilbert-base-uncased@12040acc",
+      "supplier": {
+        "name": "distilbert"
+      },
+      "type": "machine-learning-model",
+      "version": "12040acc"
+    }
+  ],
+  "dependencies": [
+    {
+      "dependsOn": [
+        "pkg:huggingface/distilbert-base-uncased@12040acc"
+      ],
+      "ref": "pkg:generic/OWASP-AIBOM-Generator/job-2026-08-25-04:40:08@1787632808"
+    },
+    {
+      "ref": "pkg:huggingface/distilbert-base-uncased@12040acc"
+    }
+  ],
+  "metadata": {
+    "component": {
+      "authors": [
+        {
+          "name": "distilbert"
+        }
+      ],
+      "bom-ref": "pkg:generic/OWASP-AIBOM-Generator/job-2026-08-25-04:40:08@1787632808",
+      "description": "Generating SBOM for distilbert-base-uncased",
+      "manufacturer": {
+        "name": "OWASP AIBOM Generator"
+      },
+      "name": "job-2026-08-25-04:40:08",
+      "purl": "pkg:generic/OWASP-AIBOM-Generator/job-2026-08-25-04:40:08@1787632808",
+      "supplier": {
+        "name": "OWASP AIBOM Generator"
+      },
+      "type": "application",
+      "version": "1787632808"
+    },
+    "timestamp": "2026-08-25T04:40:08.772312+00:00",
+    "tools": {
+      "components": [
+        {
+          "manufacturer": {
+            "name": "OWASP GenAI Security Project"
+          },
+          "name": "owasp-aibom-generator",
+          "type": "application",
+          "version": "1.0.2"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:4db05da3-57d8-4f79-9e77-36de193a6e57",
+  "specVersion": "1.6",
+  "version": 1
+}

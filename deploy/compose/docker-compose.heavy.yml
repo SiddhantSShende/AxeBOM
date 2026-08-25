@@ -1,5 +1,5 @@
 # ============================================================================
-# EncoreBOM — heavy profile (OPT-IN)
+# AxeBOM — heavy profile (OPT-IN)
 # ============================================================================
 #   task dev:heavy    # = docker-compose.yml + this file
 #
@@ -10,7 +10,7 @@
 # the original plan:
 #
 #   Dependency-Track  — a full platform with its own DB, API and UI that
-#                       duplicates a large part of EncoreBOM. Integrated as an
+#                       duplicates a large part of AxeBOM. Integrated as an
 #                       EXPORT TARGET for portfolio monitoring, never a scanner.
 #                       4 GB heap minimum; upstream docs recommend 8-12 GB.
 #
@@ -21,7 +21,7 @@
 # See docs/04-OSINT-INTEGRATION.md §2 and OSINT/tools.manifest.yaml.
 # ============================================================================
 
-name: encorebom
+name: axebom
 
 services:
 

@@ -6,6 +6,7 @@ import {
   firstIncompleteStep,
   plannedReports,
   reachable,
+  scannableBomTypes,
   stepComplete,
   useWizard,
   validateDraft,
@@ -116,7 +117,30 @@ describe('the review count', () => {
   });
 });
 
+describe('scannableBomTypes', () => {
+  it('drops HBOM and QBOM, keeping the rest', () => {
+    expect(scannableBomTypes(complete({ bomTypes: ['SBOM', 'HBOM', 'CBOM', 'QBOM'] }))).toEqual([
+      'SBOM',
+      'CBOM',
+    ]);
+  });
+});
+
 describe('local validation', () => {
+  it('blocks a draft made entirely of HBOM and/or QBOM, against step 2', () => {
+    const errors = validateDraft(complete({ bomTypes: ['HBOM', 'QBOM'] }));
+    const hard = blocking(errors);
+
+    expect(hard).toHaveLength(1);
+    expect(hard[0]!.step).toBe(2);
+    expect(hard[0]!.message).toMatch(/not produced by a scan/);
+  });
+
+  it('does not block HBOM/QBOM alongside a scannable type', () => {
+    const errors = validateDraft(complete({ bomTypes: ['SBOM', 'HBOM'] }));
+    expect(blocking(errors)).toHaveLength(0);
+  });
+
   it('catches a format whose standard was not selected, against step 4', () => {
     const errors = validateDraft(complete({ standards: ['SPDX'], formats: ['cyclonedx'] }));
     const hard = blocking(errors);

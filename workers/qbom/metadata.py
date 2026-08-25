@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from encorebom_shared.model.generated_certin import QBOM_FIELDS
+from axebom_shared.model.generated_certin import QBOM_FIELDS
 
 NOT_PROVIDED = "not-provided"
 

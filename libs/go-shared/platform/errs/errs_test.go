@@ -68,7 +68,7 @@ func TestAllPrefixesRegistered(t *testing.T) {
 
 func TestFromHidesInternalCause(t *testing.T) {
 	// A plain error must never surface its text to a client.
-	raw := errors.New("pq: password authentication failed for user \"encorebom\"")
+	raw := errors.New("pq: password authentication failed for user \"axebom\"")
 	e := From(raw)
 
 	if e.Code != InternalUnexpected {
@@ -123,7 +123,7 @@ func TestWriteDoesNotLeakCause(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/x", nil)
 
-	secret := "postgres://user:hunter2@db:5432/encorebom"
+	secret := "postgres://user:hunter2@db:5432/axebom"
 	Write(rec, req, Wrap(errors.New(secret), InternalDependency, "database unavailable"))
 
 	if strings.Contains(rec.Body.String(), "hunter2") {

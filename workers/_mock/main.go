@@ -30,10 +30,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/bus"
-	"github.com/encorebom/encorebom/libs/go-shared/events"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/obs"
+	"github.com/axebom/axebom/libs/go-shared/bus"
+	"github.com/axebom/axebom/libs/go-shared/events"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/obs"
 
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -269,7 +269,7 @@ func (w *worker) writeManifest(job events.ScanJobV1, result events.ScanResultV1)
 func (w *worker) manifestPath(job events.ScanJobV1) string {
 	root := os.Getenv("MOCK_ARTIFACT_DIR")
 	if root == "" {
-		root = os.TempDir() + "/encorebom-mock"
+		root = os.TempDir() + "/axebom-mock"
 	}
 	return root + "/" + job.JobID + "/manifest.json"
 }

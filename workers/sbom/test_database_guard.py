@@ -22,9 +22,9 @@ from typing import Any
 
 import pytest
 
-from encorebom_shared.adapters.base import ResultStatus, ScanTarget
-from encorebom_shared.enginedb import resolve, write_stamp
-from encorebom_shared.sandbox import SandboxResult
+from axebom_shared.adapters.base import ResultStatus, ScanTarget
+from axebom_shared.enginedb import resolve, write_stamp
+from axebom_shared.sandbox import SandboxResult
 
 from .adapters.common import EngineImage
 from .adapters.grype import GrypeAdapter
@@ -221,7 +221,7 @@ def test_a_stamp_without_a_date_does_not_count(tmp_path: Path) -> None:
     """
     root = tmp_path / "enginedb"
     (root / "osv").mkdir(parents=True)
-    (root / "osv" / "encorebom-db.json").write_text(
+    (root / "osv" / "axebom-db.json").write_text(
         json.dumps({"database_id": "osv", "version": "2.5.0"}), encoding="utf-8"
     )
     assert resolve("osv", root) is None

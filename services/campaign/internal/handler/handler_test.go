@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/ctxkey"
-	"github.com/encorebom/encorebom/services/campaign/internal/store"
+	"github.com/axebom/axebom/libs/go-shared/platform/ctxkey"
+	"github.com/axebom/axebom/services/campaign/internal/store"
 )
 
 var clock = time.Date(2026, 8, 17, 9, 0, 0, 0, time.UTC)

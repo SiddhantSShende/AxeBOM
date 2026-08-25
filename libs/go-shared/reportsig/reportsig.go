@@ -7,13 +7,13 @@
 // envelope, the statement, the domain prefix and the check order are a public
 // contract, not a report-service implementation detail. It started inside
 // services/report/internal and Go's own internal rule rejected the CLI's
-// import — correctly: `encorebom verify` is a consumer-facing tool and has no
+// import — correctly: `axebom verify` is a consumer-facing tool and has no
 // business reaching into a service.
 //
 // ⚠ DETACHED, AND OVER A STATEMENT RATHER THAN OVER THE FILE.
 //
 // Detached because an embedded signature changes the document: an SPDX file
-// with an extra `encorebom_signature` key no longer validates against the
+// with an extra `axebom_signature` key no longer validates against the
 // official schema, and a compliance artifact a standard validator rejects is
 // worthless however correct its contents are.
 //
@@ -42,7 +42,7 @@ import (
 )
 
 // EnvelopeSchema versions the signature envelope.
-const EnvelopeSchema = "encorebom.signature/v1"
+const EnvelopeSchema = "axebom.signature/v1"
 
 // domainPrefix separates this signature's payloads from anything else the same
 // key might ever sign.
@@ -55,7 +55,7 @@ const EnvelopeSchema = "encorebom.signature/v1"
 // the key is used.
 //
 // It is part of the published verification procedure, not a secret.
-var domainPrefix = []byte("encorebom.signature/v1\x00")
+var domainPrefix = []byte("axebom.signature/v1\x00")
 
 // Algorithm is the only signature algorithm this package issues or accepts.
 //
@@ -111,12 +111,12 @@ type Envelope struct {
 	// A signature file is meant to be pretty-printed, copied, embedded and
 	// round-tripped through whatever JSON tooling a customer has. Base64 makes
 	// the signed bytes opaque to all of it. The cost is that the file is no
-	// longer human-readable; `encorebom verify` prints the statement after
+	// longer human-readable; `axebom verify` prints the statement after
 	// checking it, which is the only point at which reading it means anything.
 	Statement string `json:"statement"`
 
 	Algorithm string `json:"algorithm"`
-	// KeyID names the key and version, e.g. `encorebom-report-signing:v2`.
+	// KeyID names the key and version, e.g. `axebom-report-signing:v2`.
 	KeyID string `json:"key_id"`
 	// Signature is base64 of the raw Ed25519 signature.
 	Signature string `json:"signature"`

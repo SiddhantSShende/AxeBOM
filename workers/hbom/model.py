@@ -26,7 +26,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
-from encorebom_shared.model.generated_certin import HBOM_FIELDS
+from axebom_shared.model.generated_certin import HBOM_FIELDS
 
 NOT_PROVIDED = "not-provided"
 

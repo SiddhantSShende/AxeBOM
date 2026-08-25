@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/encorebom/encorebom/libs/go-shared/oidcauth"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/services/gateway/internal/authconfig"
+	"github.com/axebom/axebom/libs/go-shared/oidcauth"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/services/gateway/internal/authconfig"
 )
 
 const (
@@ -57,7 +57,7 @@ func TestTheClaimNamesMatchTheVerifier(t *testing.T) {
 func TestTheDocumentCarriesNoSecret(t *testing.T) {
 	cfg := configured()
 	cfg.InternalURL = "http://zitadel-api:8080"
-	cfg.ServiceKeyPath = "/var/run/encorebom/service-keys/svc-campaign.json"
+	cfg.ServiceKeyPath = "/var/run/axebom/service-keys/svc-campaign.json"
 
 	rec := serve(t, cfg)
 	body := rec.Body.String()

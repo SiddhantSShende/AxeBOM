@@ -12,7 +12,7 @@ state of AI supply-chain metadata. Papering over it with a plausible default
 would produce a higher number and a false one, and the guess would be read as a
 fact about their model.
 
-⚠ `risk_score` AND `owasp_llm_top10` ARE ENCOREBOM EXTENSIONS.
+⚠ `risk_score` AND `owasp_llm_top10` ARE AXEBOM EXTENSIONS.
 
 They carry `scored: false` in the profile and are excluded from both coverage
 numbers. They come from Trusera's heuristics; letting them count would move a
@@ -24,7 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from encorebom_shared.model.generated_certin import AIBOM_FIELDS
+from axebom_shared.model.generated_certin import AIBOM_FIELDS
 
 NOT_PROVIDED = "not-provided"
 

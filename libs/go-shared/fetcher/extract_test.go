@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/encorebom/encorebom/libs/go-shared/fetcher"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/fetcher"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 // The escape suite for archive extraction.

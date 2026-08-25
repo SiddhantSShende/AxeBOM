@@ -14,11 +14,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/authz"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/ctxkey"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/services/auth/internal/service"
+	"github.com/axebom/axebom/libs/go-shared/auth"
+	"github.com/axebom/axebom/libs/go-shared/authz"
+	"github.com/axebom/axebom/libs/go-shared/platform/ctxkey"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/services/auth/internal/service"
 )
 
 // Handler serves the auth endpoints.
@@ -64,8 +64,8 @@ func (h *Handler) secure() bool { return !h.cfg.AllowInsecureCookies }
 // therefore somewhere an XSS can steal it. The ACCESS token does go in the
 // body — it is short-lived and the SPA keeps it in memory only.
 const (
-	refreshCookie = "encorebom_refresh"
-	stateCookie   = "encorebom_oauth_state"
+	refreshCookie = "axebom_refresh"
+	stateCookie   = "axebom_oauth_state"
 
 	// refreshPath scopes the cookie so it is not attached to every API call.
 	// A credential should travel only to the endpoint that consumes it.

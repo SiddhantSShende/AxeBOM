@@ -111,7 +111,7 @@ type Counts struct {
 }
 
 // SignatureHeader is where the signature travels.
-const SignatureHeader = "X-EncoreBOM-Signature"
+const SignatureHeader = "X-AxeBOM-Signature"
 
 // TimestampHeader carries the same timestamp as the payload, for a receiver
 // that wants to check freshness before parsing the body.
@@ -119,7 +119,7 @@ const SignatureHeader = "X-EncoreBOM-Signature"
 // ⚠ IT IS A CONVENIENCE, NOT THE SOURCE OF TRUTH. Verify reads the timestamp
 // from the SIGNED payload; a receiver that trusted this header instead would be
 // trusting a value the signature does not cover.
-const TimestampHeader = "X-EncoreBOM-Timestamp"
+const TimestampHeader = "X-AxeBOM-Timestamp"
 
 // MaxAge is how old a delivery may be and still be accepted.
 //

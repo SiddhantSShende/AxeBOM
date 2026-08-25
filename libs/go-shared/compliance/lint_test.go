@@ -99,13 +99,13 @@ func TestCryptoAssetTypesAreDistinct(t *testing.T) {
 	}
 }
 
-// EncoreBOM extensions are our ANALYSIS, not the standard's requirements.
+// AxeBOM extensions are our ANALYSIS, not the standard's requirements.
 // Scoring them would let our own heuristics move a compliance percentage.
 func TestExtensionsAreNotScored(t *testing.T) {
 	p := loadProfile(t)
 	for _, f := range p.AllFields() {
-		if strings.HasPrefix(f.ID, "encorebom.") && f.IsScored() {
-			t.Errorf("%s is an EncoreBOM extension but is scored; it would "+
+		if strings.HasPrefix(f.ID, "axebom.") && f.IsScored() {
+			t.Errorf("%s is an AxeBOM extension but is scored; it would "+
 				"inflate or deflate a compliance percentage", f.ID)
 		}
 	}

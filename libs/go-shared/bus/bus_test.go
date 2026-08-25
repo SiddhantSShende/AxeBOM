@@ -11,8 +11,8 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/encorebom/encorebom/libs/go-shared/bus"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/bus"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
 )
 
 // Bus tests against a real NATS server.
@@ -281,10 +281,10 @@ func TestPermanentFailureGoesStraightToTheDLQ(t *testing.T) {
 		if got := attempts.Load(); got != 1 {
 			t.Errorf("a permanent failure was attempted %d times, want 1", got)
 		}
-		if reason := msg.Headers().Get("Encorebom-Dlq-Reason"); reason == "" {
+		if reason := msg.Headers().Get("Axebom-Dlq-Reason"); reason == "" {
 			t.Error("the DLQ message carries no reason; it is a bug report with the bug removed")
 		}
-		if orig := msg.Headers().Get("Encorebom-Original-Subject"); orig != "scan.job.testdlq" {
+		if orig := msg.Headers().Get("Axebom-Original-Subject"); orig != "scan.job.testdlq" {
 			t.Errorf("original subject = %q", orig)
 		}
 	case <-ctx.Done():

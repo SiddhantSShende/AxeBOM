@@ -18,32 +18,36 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/bus"
-	"github.com/encorebom/encorebom/libs/go-shared/events"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/ctxkey"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/services/scan-orchestrator/internal/orchestr"
-	"github.com/encorebom/encorebom/services/scan-orchestrator/internal/policy"
+	"github.com/axebom/axebom/libs/go-shared/auth"
+	"github.com/axebom/axebom/libs/go-shared/bus"
+	"github.com/axebom/axebom/libs/go-shared/events"
+	"github.com/axebom/axebom/libs/go-shared/oidcauth"
+	"github.com/axebom/axebom/libs/go-shared/platform/ctxkey"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/services/scan-orchestrator/internal/orchestr"
+	"github.com/axebom/axebom/services/scan-orchestrator/internal/policy"
 
 	"github.com/nats-io/nats.go/jetstream"
 )
 
 // Handler serves the scan endpoints.
 type Handler struct {
-	orch     *orchestr.Orchestrator
-	store    *orchestr.Store
-	bus      *bus.Bus
-	registry *policy.Registry
+	orch        *orchestr.Orchestrator
+	store       *orchestr.Store
+	bus         *bus.Bus
+	registry    *policy.Registry
+	policyStore *policy.Store
 }
 
-func New(orch *orchestr.Orchestrator, store *orchestr.Store, b *bus.Bus, reg *policy.Registry) *Handler {
-	return &Handler{orch: orch, store: store, bus: b, registry: reg}
+func New(orch *orchestr.Orchestrator, store *orchestr.Store, b *bus.Bus, reg *policy.Registry, policyStore *policy.Store) *Handler {
+	return &Handler{orch: orch, store: store, bus: b, registry: reg, policyStore: policyStore}
 }
 
 // ---------------------------------------------------------------------------
@@ -114,6 +118,78 @@ type scanDTO struct {
 	FinishedAt *time.Time `json:"finished_at,omitempty"`
 }
 
+// scanListItemDTO is scanDTO minus CoverageGaps.
+//
+// ⚠ THE FIELD IS ABSENT, NOT AN EMPTY ARRAY. CoverageGaps reads
+// scan.ecosystems_detected, and computing it for every row of a page would put
+// the N+1 straight back that loadRunsFor exists to remove. Sending
+// `"coverage_gaps": []` instead would silently claim "no gaps" for a value that
+// was never computed — exactly the false negative invariant 12 exists to
+// prevent. Leaving the key out is honest about what a list row does not know;
+// GET /v1/scans/{id}/engine-runs is where the real answer lives.
+type scanListItemDTO struct {
+	ID        string `json:"id"`
+	ProjectID string `json:"project_id"`
+	Status    string `json:"status"`
+
+	SourceKind string `json:"source_kind"`
+	CommitSHA  string `json:"commit_sha,omitempty"`
+
+	Families         []string `json:"families"`
+	EnginesRequested []string `json:"engines_requested"`
+
+	Progress   int            `json:"progress_pct"`
+	EngineRuns []engineRunDTO `json:"engine_runs"`
+
+	CreatedAt  time.Time  `json:"created_at"`
+	StartedAt  *time.Time `json:"started_at,omitempty"`
+	FinishedAt *time.Time `json:"finished_at,omitempty"`
+}
+
+// severityCountsDTO mirrors orchestr.SeverityCounts. See that type for why
+// None, Unknown and NotProvided are three separate fields rather than one
+// "unknown-ish" bucket.
+type severityCountsDTO struct {
+	Critical int `json:"critical"`
+	High     int `json:"high"`
+	Medium   int `json:"medium"`
+	Low      int `json:"low"`
+	None     int `json:"none"`
+	Unknown  int `json:"unknown"`
+	// json tag matches the vocabulary CLAUDE.md invariant 3 uses everywhere
+	// else in this product for "stored explicitly, asserts nothing" — this is
+	// that same state applied to a finding's severity.
+	NotProvided int `json:"not-provided"`
+}
+
+type findingsSummaryDTO struct {
+	ScanID string `json:"scan_id"`
+	// BOMDocumentID is omitted, not "", when nothing has been normalized yet
+	// — the same reasoning scanListItemDTO applies to CoverageGaps: a client
+	// must be able to tell "no document" from "a document with an empty id".
+	BOMDocumentID string            `json:"bom_document_id,omitempty"`
+	Severities    severityCountsDTO `json:"severities"`
+	// Always present, even when empty — see EngineRuns.
+	CoverageGaps []string `json:"coverage_gaps"`
+}
+
+func toFindingsSummaryDTO(s orchestr.FindingsSummary, gaps []string) findingsSummaryDTO {
+	return findingsSummaryDTO{
+		ScanID:        s.ScanID,
+		BOMDocumentID: s.BOMDocumentID,
+		Severities: severityCountsDTO{
+			Critical:    s.Severities.Critical,
+			High:        s.Severities.High,
+			Medium:      s.Severities.Medium,
+			Low:         s.Severities.Low,
+			None:        s.Severities.None,
+			Unknown:     s.Severities.Unknown,
+			NotProvided: s.Severities.NotProvided,
+		},
+		CoverageGaps: orEmpty(gaps),
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Scans
 // ---------------------------------------------------------------------------
@@ -137,10 +213,24 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		families = append(families, events.Family(f))
 	}
 
+	// ⚠ LOADED HERE, NOT INSIDE Orchestrator.CreateScan. The orchestrator's
+	// job is resolving families into engines; deciding what a tenant has
+	// customised is a persistence concern the handler owns, the same
+	// separation ListScans/GetScan already draw between this package and
+	// orchestr. An explicit per-request `req.Engines` still wins — it is
+	// validated in full against the source kind below, and a caller who named
+	// engines explicitly asked for exactly those, not this tenant's default.
+	overrides, err := h.policyStore.OverridesForTenant(r.Context(), tenantID)
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+
 	scan, err := h.orch.CreateScan(r.Context(), tenantID, orchestr.CreateScanInput{
 		ProjectID:        req.ProjectID,
 		SourceKind:       events.SourceKind(req.SourceKind),
 		Families:         families,
+		EngineOverrides:  overrides,
 		RequestedEngines: req.Engines,
 		RequestedBy:      ctxkey.UserID(r.Context()),
 		TriggeredBy:      "user",
@@ -154,6 +244,56 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	errs.WriteJSON(w, http.StatusAccepted, h.toDTO(r.Context(), tenantID, scan, nil))
+}
+
+// List handles GET /v1/scans.
+//
+// Keyset on id DESC, mirroring project.Handler.List exactly: the same cursor
+// idiom (last id seen, never an offset), the same effectiveLimit clamp, the
+// same {resource-plural, next_cursor} envelope. project_id and status are
+// optional filters — see orchestr.Store.ListScans for why an absent filter
+// matches everything rather than nothing.
+func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := auth.RequireTenant(r.Context())
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	scans, runsByScan, err := h.store.ListScans(r.Context(), tenantID, limit,
+		r.URL.Query().Get("cursor"),
+		r.URL.Query().Get("project_id"),
+		r.URL.Query().Get("status"))
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+
+	items := make([]scanListItemDTO, 0, len(scans))
+	for _, sc := range scans {
+		items = append(items, toListItemDTO(sc, runsByScan[sc.ID]))
+	}
+
+	// The cursor is the LAST id, because ids are UUIDv7 and therefore ordered.
+	// Offset pagination would skip or repeat rows whenever a scan finishes
+	// mid-listing — which, unlike a project list, happens constantly here.
+	var next string
+	if len(scans) > 0 && len(scans) == effectiveLimit(limit) {
+		next = scans[len(scans)-1].ID
+	}
+
+	errs.WriteJSON(w, http.StatusOK, map[string]any{
+		"scans":       items,
+		"next_cursor": next,
+	})
+}
+
+func effectiveLimit(requested int) int {
+	if requested <= 0 || requested > 200 {
+		return 50
+	}
+	return requested
 }
 
 // Get handles GET /v1/scans/{id}.
@@ -201,6 +341,45 @@ func (h *Handler) EngineRuns(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// FindingsSummary handles GET /v1/scans/{id}/findings-summary.
+//
+// ⚠ TWO SCHEMAS, STITCHED HERE, NOT ONE SQL JOIN — see orchestr/findings.go.
+//
+// GetScan runs FIRST and its result is otherwise discarded: it is the only
+// thing that can tell a cross-tenant scan id apart from one with nothing
+// normalized yet, both of which look like zero rows from inside normalize.*
+// alone. Skipping it would turn a cross-tenant id into 200 with an all-zero
+// summary — an oracle for probing which scans exist — instead of the 404
+// every other scan endpoint gives that id.
+func (h *Handler) FindingsSummary(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := auth.RequireTenant(r.Context())
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	scanID := r.PathValue("id")
+
+	if _, _, err := h.store.GetScan(r.Context(), tenantID, scanID); err != nil {
+		errs.Write(w, r, mapStoreError(err))
+		return
+	}
+
+	summary, err := h.store.FindingsSummary(r.Context(), tenantID, scanID)
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	// CoverageGaps does not depend on normalization having run — it reads
+	// scan.ecosystems_detected, populated as engines report — so it is
+	// available even for a scan whose SBOM is not normalized yet, and it
+	// answers a different question than the severity counts: zero findings
+	// and "no engine covered this ecosystem" are different facts, and a
+	// client rendering one number needs to be able to show the other.
+	gaps, _ := h.store.CoverageGaps(r.Context(), tenantID, scanID)
+
+	errs.WriteJSON(w, http.StatusOK, toFindingsSummaryDTO(summary, gaps))
+}
+
 // Cancel handles POST /v1/scans/{id}/cancel.
 func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := auth.RequireTenant(r.Context())
@@ -236,17 +415,35 @@ func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
 // Serves the registry so the UI can show what will run, including the honest
 // labels — HBOM is import-only, QBOM is derived — as data rather than as
 // frontend copy that can drift.
+//
+// ⚠ `?project_id=` IS OPTIONAL AND ADDITIVE. Without it, this is the same
+// static registry it always was. With it, each engine also carries
+// `last_run` — that project's most recent invocation of this engine, however
+// long ago — so the Engine Coverage panel can show "never run" as an honest,
+// distinct state from "ran and failed" rather than collapsing both into
+// silence (CLAUDE.md invariant #12).
 func (h *Handler) Engines(w http.ResponseWriter, r *http.Request) {
-	if _, err := auth.RequireTenant(r.Context()); err != nil {
+	tenantID, err := auth.RequireTenant(r.Context())
+	if err != nil {
 		errs.Write(w, r, err)
 		return
+	}
+
+	var latest map[string]orchestr.EngineRun
+	if projectID := r.URL.Query().Get("project_id"); projectID != "" {
+		latest, err = h.store.LatestEngineRunsForProject(r.Context(), tenantID, projectID)
+		if err != nil {
+			errs.Write(w, r, err)
+			return
+		}
 	}
 
 	out := make([]map[string]any, 0)
 	for _, id := range h.registry.IDs() {
 		e, _ := h.registry.Get(id)
-		out = append(out, map[string]any{
+		row := map[string]any{
 			"engine_id":       e.ID,
+			"mode":            e.Mode,
 			"families":        e.Families,
 			"source_kinds":    e.SourceKinds,
 			"ecosystems":      e.Ecosystems,
@@ -255,9 +452,161 @@ func (h *Handler) Engines(w http.ResponseWriter, r *http.Request) {
 			"default_weight":  e.DefaultWeight,
 			"requires_import": e.RequiresImport,
 			"is_derived":      e.Derived,
-		})
+		}
+		if run, ok := latest[e.ID]; ok {
+			row["last_run"] = map[string]any{
+				"scan_id":     run.ScanID,
+				"status":      run.Status,
+				"started_at":  run.StartedAt,
+				"finished_at": run.FinishedAt,
+				"error_code":  run.ErrorCode,
+			}
+		}
+		out = append(out, row)
 	}
 	errs.WriteJSON(w, http.StatusOK, map[string]any{"engines": out})
+}
+
+// ---------------------------------------------------------------------------
+// Engine policy — configurable tool management
+// ---------------------------------------------------------------------------
+
+// configurableFamilies are the families a tenant may customise. Deliberately
+// excludes "fetch" (not a BOM family a tenant reasons about) but INCLUDES
+// hbom and qbom — a row for either is harmless (rejectNonScannableFamilies
+// still refuses to ever schedule a job for them) and future-proofs the store
+// against a family that later grows a real engine.
+var configurableFamilies = map[string]bool{
+	"sbom": true, "cbom": true, "qbom": true, "aibom": true, "hbom": true,
+}
+
+type enginePolicyDTO struct {
+	Family    string         `json:"family"`
+	EngineIDs []string       `json:"engine_ids"`
+	Weights   map[string]int `json:"weights"`
+	Enabled   bool           `json:"enabled"`
+	Note      string         `json:"note,omitempty"`
+}
+
+func toEnginePolicyDTO(p policy.EnginePolicy) enginePolicyDTO {
+	return enginePolicyDTO{
+		Family: string(p.Family), EngineIDs: p.EngineIDs,
+		Weights: p.Weights, Enabled: p.Enabled, Note: p.Note,
+	}
+}
+
+// EnginePolicyList handles GET /v1/scans/engine-policy.
+//
+// Returns only the families this tenant has customised — an absent family
+// means "use the built-in default", the same convention the migration
+// documents. The UI renders all five BOM types regardless; this is the
+// overlay, not the whole picture (h.Engines is the whole picture).
+func (h *Handler) EnginePolicyList(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := auth.RequireTenant(r.Context())
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	rows, err := h.policyStore.ListForTenant(r.Context(), tenantID)
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	out := make([]enginePolicyDTO, 0, len(rows))
+	for _, p := range rows {
+		out = append(out, toEnginePolicyDTO(p))
+	}
+	errs.WriteJSON(w, http.StatusOK, map[string]any{"engine_policies": out})
+}
+
+type enginePolicyUpsertRequest struct {
+	EngineIDs []string       `json:"engine_ids"`
+	Weights   map[string]int `json:"weights"`
+	Enabled   *bool          `json:"enabled"`
+	Note      string         `json:"note"`
+}
+
+// EnginePolicyUpsert handles PUT /v1/scans/engine-policy/{family}.
+//
+// ⚠ EVERY engine_id IS VALIDATED AGAINST THE REGISTRY AND ITS FAMILY, HERE —
+// NOT LEFT FOR THE NEXT SCAN TO DISCOVER. Storing an unknown or wrong-family
+// engine id would silently drop it from every future scan's fan-out
+// (Registry.Resolve skips ids it cannot find), which is the same
+// discover-it-at-worker-time failure CreateScan's own validation exists to
+// avoid — just moved from scan time to configuration time.
+func (h *Handler) EnginePolicyUpsert(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := auth.RequireTenant(r.Context())
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+
+	family := r.PathValue("family")
+	if !configurableFamilies[family] {
+		errs.Write(w, r, errs.Newf(errs.ValidationFieldInvalid,
+			"family must be one of sbom, cbom, qbom, aibom, hbom (got %q)", family))
+		return
+	}
+
+	var req enginePolicyUpsertRequest
+	if err := decode(r, &req); err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+
+	var unknown []string
+	for _, id := range req.EngineIDs {
+		e, ok := h.registry.Get(id)
+		if !ok || !e.InFamily(events.Family(family)) {
+			unknown = append(unknown, id)
+		}
+	}
+	if len(unknown) > 0 {
+		engErr := errs.Newf(errs.ValidationFieldInvalid,
+			"%d engine id(s) are not valid for family %q: %s",
+			len(unknown), family, strings.Join(unknown, ", "))
+		for _, id := range unknown {
+			engErr = engErr.WithDetail(errs.Detail{"engine": id, "family": family})
+		}
+		errs.Write(w, r, engErr)
+		return
+	}
+
+	// Enabled defaults to true — an operator setting only engine_ids to pin a
+	// smaller set should not have to also remember to pass enabled:true.
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+
+	p, err := h.policyStore.Upsert(r.Context(), tenantID, events.Family(family),
+		req.EngineIDs, req.Weights, enabled, req.Note)
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	errs.WriteJSON(w, http.StatusOK, toEnginePolicyDTO(p))
+}
+
+// EnginePolicyDelete handles DELETE /v1/scans/engine-policy/{family}. Reverts
+// the family to the built-in default by removing the tenant's override row.
+func (h *Handler) EnginePolicyDelete(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := auth.RequireTenant(r.Context())
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	family := r.PathValue("family")
+	if !configurableFamilies[family] {
+		errs.Write(w, r, errs.Newf(errs.ValidationFieldInvalid,
+			"family must be one of sbom, cbom, qbom, aibom, hbom (got %q)", family))
+		return
+	}
+	if err := h.policyStore.Delete(r.Context(), tenantID, events.Family(family)); err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ---------------------------------------------------------------------------
@@ -305,6 +654,13 @@ func (h *Handler) Progress(w http.ResponseWriter, r *http.Request) {
 		// No cross-origin upgrades: the browser's same-origin policy is a real
 		// control here, and OriginPatterns would weaken it.
 		InsecureSkipVerify: false,
+		// ⚠ THIS IS NOT DECORATION. The browser cannot put an Authorization
+		// header on a handshake, so the SPA offers its access token as a second
+		// subprotocol (oidcauth.WSBearerPrefix) alongside this one. RFC 6455
+		// says a server that selects NONE of the offered protocols makes the
+		// client fail the connection — so omitting this list would reject every
+		// authenticated browser socket while leaving curl working perfectly.
+		Subprotocols: []string{oidcauth.WSSubprotocol},
 	})
 	if err != nil {
 		return // Accept already answered
@@ -407,6 +763,25 @@ func (h *Handler) toDTO(ctx context.Context, tenantID string, scan orchestr.Scan
 		CreatedAt:    scan.CreatedAt.UTC(),
 		StartedAt:    scan.StartedAt,
 		FinishedAt:   scan.FinishedAt,
+	}
+}
+
+// toListItemDTO is toDTO without the two per-row queries List cannot afford:
+// runs come from the page's single batched load, and CoverageGaps is not
+// computed at all — see scanListItemDTO.
+func toListItemDTO(scan orchestr.Scan, runs []orchestr.EngineRun) scanListItemDTO {
+	return scanListItemDTO{
+		ID: scan.ID, ProjectID: scan.ProjectID,
+		Status:           string(scan.Status),
+		SourceKind:       string(scan.SourceKind),
+		CommitSHA:        scan.CommitSHA,
+		Families:         orEmpty(scan.Families),
+		EnginesRequested: orEmpty(scan.EnginesRequested),
+		Progress:         orchestr.Progress(runs),
+		EngineRuns:       toRunDTOs(runs),
+		CreatedAt:        scan.CreatedAt.UTC(),
+		StartedAt:        scan.StartedAt,
+		FinishedAt:       scan.FinishedAt,
 	}
 }
 

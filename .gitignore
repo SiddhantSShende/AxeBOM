@@ -12,7 +12,7 @@ secrets/
 # Scanner binaries and vulnerability databases are FETCHED AND VERIFIED, never
 # committed. OSINT/tools.manifest.yaml is the only committed OSINT artifact —
 # it pins versions, digests and checksums. See docs/04-OSINT-INTEGRATION.md.
-.encorebom/
+.axebom/
 OSINT/bin/
 OSINT/src/
 OSINT/.venv/
@@ -63,15 +63,31 @@ desktop.ini
 deploy/compose/.data/
 *.local.yml
 
+# --- Third-party reference checkouts ---------------------------------------
+# `.reference/zitadel` is a pinned, READ-ONLY checkout of the ZITADEL server,
+# used to read its `cmd/defaults.yaml`, its compose reference stack and its
+# Apache-2.0 `proto/` while building our provisioner.
+#
+# ⚠ IT IS NEVER VENDORED, IMPORTED OR BUILT. The ZITADEL server is AGPL-3.0
+# (everything outside `proto/`, `apps/docs/`, `apps/login/` and `packages/`),
+# and CLAUDE.md invariant 9 puts copyleft in a separate service, never in our
+# binaries. We run the published container; we link only the Apache-2.0
+# `zitadel-go` / `zitadel/oidc` modules. `.golangci.yml` has a depguard rule
+# that fails the build on any `github.com/zitadel/zitadel/...` import, so this
+# cannot regress by accident.
+.reference/
+
 # --- Test / coverage output ------------------------------------------------
 coverage.out
 coverage.html
-/playwright-report/
-/test-results/
+# Unanchored: Playwright runs from frontend/, so these appear at
+# frontend/test-results/ and a leading slash would only ignore the root copy.
+playwright-report/
+test-results/
 
 # --- Generated code IS committed -------------------------------------------
 # The model files under libs/go-shared/model/ and
-# libs/py-shared/encorebom_shared/model/ are produced by `task profile:gen`
+# libs/py-shared/axebom_shared/model/ are produced by `task profile:gen`
 # but deliberately NOT ignored:
 #
 #   - a fresh clone must `go build` without first running a codegen step

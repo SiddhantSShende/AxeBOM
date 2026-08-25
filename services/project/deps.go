@@ -5,16 +5,16 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/blob"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/httpx"
-	"github.com/encorebom/encorebom/libs/go-shared/vault"
-	"github.com/encorebom/encorebom/services/project/internal/github"
-	"github.com/encorebom/encorebom/services/project/internal/handler"
-	"github.com/encorebom/encorebom/services/project/internal/service"
-	"github.com/encorebom/encorebom/services/project/internal/store"
+	"github.com/axebom/axebom/libs/go-shared/oidcauth"
+	"github.com/axebom/axebom/libs/go-shared/platform/blob"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/db"
+	"github.com/axebom/axebom/libs/go-shared/platform/httpx"
+	"github.com/axebom/axebom/libs/go-shared/vault"
+	"github.com/axebom/axebom/services/project/internal/github"
+	"github.com/axebom/axebom/services/project/internal/handler"
+	"github.com/axebom/axebom/services/project/internal/service"
+	"github.com/axebom/axebom/services/project/internal/store"
 )
 
 // deps holds this service's constructed dependencies.
@@ -29,12 +29,12 @@ import (
 // Return an error rather than exiting: a service that cannot reach its database
 // must fail to START, not start and serve 500s while passing liveness.
 type deps struct {
-	cfg     *config.Service
-	pool    *db.Pool
-	blob    *blob.Store
-	vault   *vault.Client
-	issuer  *auth.Issuer
-	handler *handler.Handler
+	cfg      *config.Service
+	pool     *db.Pool
+	blob     *blob.Store
+	vault    *vault.Client
+	identity *oidcauth.Guard
+	handler  *handler.Handler
 }
 
 // buildDeps constructs everything this service needs.
@@ -74,16 +74,12 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 			"cause", err.Error(), "address", cfg.Vault.Address)
 	}
 
-	// The project service VERIFIES access tokens; auth mints them.
-	issuer, err := auth.NewIssuer(auth.TokenConfig{
-		SigningKey: []byte(cfg.Auth.JWTSigningKey.Reveal()),
-		Issuer:     cfg.Auth.JWTIssuer,
-		AccessTTL:  cfg.Auth.AccessTTL,
-		RefreshTTL: cfg.Auth.RefreshTTL,
-	})
+	// Identity: ZITADEL access tokens are verified against the published
+	// key set and resolved to a local tenant UUID. See oidcauth.Guard.
+	identity, err := oidcauth.Open(cfg.OIDC, pool)
 	if err != nil {
 		pool.Close()
-		return nil, fmt.Errorf("token issuer: %w", err)
+		return nil, err
 	}
 
 	svc := service.New(service.Config{
@@ -93,7 +89,7 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 	})
 
 	return &deps{
-		cfg: cfg, pool: pool, blob: blobStore, vault: vaultClient, issuer: issuer,
+		cfg: cfg, pool: pool, blob: blobStore, vault: vaultClient, identity: identity,
 		handler: handler.New(svc, github.New(github.Config{})),
 	}, nil
 }

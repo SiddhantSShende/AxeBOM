@@ -19,8 +19,8 @@ from typing import Any
 
 import pytest
 
-from encorebom_shared.adapters.base import ResultStatus
-from encorebom_shared.errors import EngineUnavailableError
+from axebom_shared.adapters.base import ResultStatus
+from axebom_shared.errors import EngineUnavailableError
 
 from . import runner as runner_mod
 from .runner import SBOMWorker
@@ -139,7 +139,7 @@ def test_the_reference_is_read_from_the_job_envelope() -> None:
     worker then silently treats every job as having no source — which is exactly
     the failure this whole change exists to remove, reintroduced quietly.
     """
-    from encorebom_shared.source import workspace_ref
+    from axebom_shared.source import workspace_ref
 
     uri, sha = workspace_ref({"workspace": {"artifact_uri": "k/source.tar.zst", "sha256": "abc"}})
     assert uri == "k/source.tar.zst"

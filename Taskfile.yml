@@ -1,4 +1,4 @@
-# EncoreBOM — task runner
+# AxeBOM — task runner
 #
 # Why go-task and not make/bash: the primary dev machine has no `make`, no
 # preinstalled `task`, and PowerShell 5.1 (no `&&`, no ternary). go-task ships a
@@ -7,7 +7,7 @@
 #
 #   winget install Task.Task    |    go install github.com/go-task/task/v3/cmd/task@latest
 #
-# Anything more complex than a few lines belongs in the `encorebom` Go CLI, not
+# Anything more complex than a few lines belongs in the `axebom` Go CLI, not
 # here. See CLAUDE.md §Conventions — "No bash scripts".
 #
 # ---------------------------------------------------------------------------
@@ -22,9 +22,14 @@ vars:
   # The full system: infrastructure plus the application tier. The two files
   # are layered rather than merged so `dev:infra` can still bring up only the
   # backing stores — the shape you want when running services from an IDE.
-  COMPOSE: docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.app.yml
+  COMPOSE: docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.iam.yml -f deploy/compose/docker-compose.app.yml
   COMPOSE_INFRA: docker compose -f deploy/compose/docker-compose.yml
-  COMPOSE_HEAVY: docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.app.yml -f deploy/compose/docker-compose.heavy.yml
+  # Identity on its own. ZITADEL must be up and bootstrapped before any service
+  # can verify a token, so it is addressable without dragging the whole app tier
+  # along — and `iam:reset` must be able to destroy it without touching
+  # AxeBOM's own database.
+  COMPOSE_IAM: docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.iam.yml
+  COMPOSE_HEAVY: docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.iam.yml -f deploy/compose/docker-compose.app.yml -f deploy/compose/docker-compose.heavy.yml
   # Python lives in a venv on Windows (Scripts/) and Linux (bin/).
   PY: '{{if eq OS "windows"}}.venv/Scripts/python.exe{{else}}.venv/bin/python{{end}}'
 
@@ -39,7 +44,7 @@ tasks:
   preflight:
     desc: Report toolchain status and known environment gaps
     cmds:
-      - go run ./cmd/encorebom preflight
+      - go run ./cmd/axebom preflight
 
   # ================================================================== the gate
   verify:
@@ -154,6 +159,18 @@ tasks:
       # either way: same input in, byte-identical canonical model out.
       - '{{.PY}} -m pytest workers/sbom/test_golden.py workers/hbom/test_golden.py -v -m golden'
 
+  test:conformance:
+    desc: Validate exported SPDX/CycloneDX documents against the OFFICIAL schemas
+    # ⚠ NOT PART OF `task verify`. This validates the exporter's OUTPUT against
+    # real third-party tools (cyclonedx-python-lib, spdx-tools) rather than our
+    # own serializer's opinion of itself — install the extra first:
+    #   pip install -e ".[conformance]"
+    # The SPDX case is a KNOWN, currently-failing check (xfail, not skipped) —
+    # see tools/conformance/test_spdx_cyclonedx.py's own doc comment and
+    # docs/STATE.md for the root cause found and not yet fixed.
+    cmds:
+      - '{{.PY}} -m pytest tools/conformance -v'
+
   normalize:
     desc: Normalize one fixture's stored artifacts and print the summary
     cmds:
@@ -169,7 +186,7 @@ tasks:
   db:verify-rls:
     desc: Operator-facing RLS coverage report for a live database
     cmds:
-      - go run ./cmd/encorebom db verify-rls
+      - go run ./cmd/axebom db verify-rls
 
   # ==================================================================== build
   build:
@@ -193,26 +210,26 @@ tasks:
     # invisible in normal operation: nothing crashes, no test goes red, and the
     # wrong thing appears on a document somebody hands to a regulator.
     cmds:
-      - go run ./cmd/encorebom profile guardrails
+      - go run ./cmd/axebom profile guardrails
 
   profile:evidence:
     desc: Regenerate docs/COMPLIANCE-REPORT.md from the profile
     cmds:
-      - go run ./cmd/encorebom profile evidence
+      - go run ./cmd/axebom profile evidence
 
   profile:evidence:check:
     desc: "Fail if the committed evidence pack no longer describes the product"
     # A STALE PACK IS WORSE THAN AN ABSENT ONE: it is a document somebody hands
     # to an auditor in good faith, describing a product that has moved.
     cmds:
-      - go run ./cmd/encorebom profile evidence -check
+      - go run ./cmd/axebom profile evidence -check
 
   docs:lint:
     desc: Fail on broken cross-references between specification documents
     # Every phase file opens with a "Read first" list. A session that cannot
     # resolve one of those paths starts without a contract it was told to obey.
     cmds:
-      - go run ./cmd/encorebom docs lint docs/
+      - go run ./cmd/axebom docs lint docs/
 
   # ================================================================= local dev
   dev:
@@ -227,13 +244,21 @@ tasks:
         silent: true
       - cmd: echo "  api       http://localhost:8080"
         silent: true
+      - cmd: echo "  identity  http://localhost:5173/ui/console"
+        silent: true
       - cmd: echo "  minio     http://localhost:59001   (minioadmin/minioadmin)"
         silent: true
       - cmd: echo "  mailpit   http://localhost:58025"
         silent: true
       - cmd: echo ""
         silent: true
-      - cmd: echo "  task health   # per-service readiness"
+      # The inline '#' below is not a bug to remove and re-add: a literal '#'
+      # inside a double-quoted echo argument is mis-parsed by go-task's shell
+      # tokenizer as a comment start, truncating the string and failing with
+      # 'reached EOF without closing quote' — even though every container is
+      # already up by this point in the task. Keep the explanation on its own
+      # comment line instead of inside the quotes.
+      - cmd: echo "  task health   (per-service readiness)"
         silent: true
 
   dev:infra:
@@ -271,34 +296,94 @@ tasks:
     desc: "Tail logs. Usage: task logs -- gateway"
     cmds: ['{{.COMPOSE}} logs -f {{.CLI_ARGS}}']
 
+  # ================================================================ identity
+  # ZITADEL runs as a pinned, UNMODIFIED container and is reached over OIDC.
+  # No ZITADEL server code is linked into an AxeBOM binary — it is AGPL-3.0
+  # and CLAUDE.md invariant 9 keeps copyleft in a separate service.
+
+  iam:up:
+    desc: Start ZITADEL (init -> setup -> api -> login)
+    cmds:
+      - '{{.COMPOSE_IAM}} up -d zitadel-api zitadel-login'
+      - '{{.COMPOSE_IAM}} ps zitadel-api zitadel-login'
+      - cmd: echo ""
+        silent: true
+      - cmd: echo "  console   http://localhost:5173/ui/console"
+        silent: true
+      - cmd: echo "  issuer    http://localhost:5173"
+        silent: true
+      - cmd: echo "  direct    http://localhost:58080   (bypasses nginx)"
+        silent: true
+      - cmd: echo ""
+        silent: true
+      - cmd: 'echo "  next -> task iam:bootstrap"'
+        silent: true
+
+  iam:bootstrap:
+    desc: Create the ZITADEL project, roles, applications and development orgs
+    cmds:
+      - go run ./cmd/axebom iam bootstrap {{.CLI_ARGS}}
+
+  iam:verify:
+    desc: Print the issuer, project, roles and org-to-tenant mapping
+    cmds:
+      - go run ./cmd/axebom iam verify {{.CLI_ARGS}}
+
+  iam:logs:
+    desc: "Tail identity logs. Usage: task iam:logs -- zitadel-setup"
+    cmds: ['{{.COMPOSE_IAM}} logs -f {{.CLI_ARGS | default "zitadel-api zitadel-login"}}']
+
+  iam:reset:
+    desc: DESTROY the identity tier — ZITADEL's database and its bootstrap keys
+    prompt: >-
+      This drops ZITADEL's database and deletes the bootstrap volume holding
+      the machine key. Every user, org and application in ZITADEL is lost, and
+      `task iam:bootstrap` must be run again. AxeBOM's own database is not
+      touched. Continue?
+    cmds:
+      # The volume and the database go together. A surviving machine key against
+      # a fresh instance authenticates as a user that no longer exists, which
+      # reports as an opaque 401 rather than as the state mismatch it is.
+      - '{{.COMPOSE_IAM}} rm -sf zitadel-api zitadel-login zitadel-setup zitadel-init'
+      # Written by a container running as root, so removal needs the same.
+      - >-
+        docker run --rm -v {{.ROOT_DIR}}/deploy/compose/.data:/d alpine:3
+        sh -c "rm -rf /d/zitadel-bootstrap"
+
+      - >-
+        {{.COMPOSE_INFRA}} exec -T postgres
+        psql -U ${POSTGRES_USER:-axebom} -d ${POSTGRES_DB:-axebom}
+        -c "DROP DATABASE IF EXISTS ${ZITADEL_POSTGRES_DB:-zitadel} WITH (FORCE);"
+      - task: iam:up
+
   # ================================================================ database
   db:migrate:
     desc: Apply pending migrations across every schema
     cmds:
-      - go run ./cmd/encorebom db migrate
+      - go run ./cmd/axebom db migrate
 
   db:status:
     desc: Show applied and pending migrations per schema
     cmds:
-      - go run ./cmd/encorebom db status
+      - go run ./cmd/axebom db status
 
   db:seed:
     desc: Load development fixtures (TWO tenants — isolation bugs are invisible with one)
     cmds:
-      - go run ./cmd/encorebom db seed
+      - go run ./cmd/axebom db seed
 
   db:reset:
     desc: Drop every schema, migrate from scratch, seed
     prompt: This destroys the local database. Continue?
     cmds:
-      - go run ./cmd/encorebom db reset
-      - go run ./cmd/encorebom db seed
+      - go run ./cmd/axebom db reset
+      - go run ./cmd/axebom db seed
 
   db:down-all:
     desc: Roll every schema back to zero (development only)
     prompt: This drops every table. Continue?
     cmds:
-      - go run ./cmd/encorebom db down-all
+      - go run ./cmd/axebom db down-all
 
   profile:lint:
     desc: Validate the compliance profile — counts, ids, statuses, paths
@@ -306,27 +391,27 @@ tasks:
     # mismatch means the guideline was revised or the transcription is wrong;
     # both need a human. Never "fix" the expected value to match.
     cmds:
-      - go run ./cmd/encorebom profile lint
+      - go run ./cmd/axebom profile lint
 
   profile:gen:
     desc: Regenerate Go and Python models from the compliance profile
     # ruff format runs after generation so the committed Python is stable and
     # the drift check compares like with like.
     cmds:
-      - go run ./cmd/encorebom profile gen
-      - cmd: '{{.PY}} -m ruff format libs/py-shared/encorebom_shared/model'
+      - go run ./cmd/axebom profile gen
+      - cmd: '{{.PY}} -m ruff format libs/py-shared/axebom_shared/model'
         ignore_error: true
 
   profile:show:
     desc: "Show what the profile requires. Usage: task profile:show -- --bom-type AIBOM"
     cmds:
-      - go run ./cmd/encorebom profile show {{.CLI_ARGS}}
+      - go run ./cmd/axebom profile show {{.CLI_ARGS}}
 
   # ================================================================== OSINT
   osint:list:
     desc: List every pinned engine, its version and how it resolves
     cmds:
-      - go run ./cmd/encorebom toolctl list
+      - go run ./cmd/axebom toolctl list
 
   osint:dryrun:
     desc: Resolve every pinned URL without downloading — proves the manifest is real
@@ -334,26 +419,40 @@ tasks:
     # actually exercises the URL TEMPLATES. Both run: one checks what will be
     # used, the other checks what is declared.
     cmds:
-      - go run ./cmd/encorebom toolctl dryrun
-      - go run ./cmd/encorebom toolctl dryrun --force-mode binary
+      - go run ./cmd/axebom toolctl dryrun
+      - go run ./cmd/axebom toolctl dryrun --force-mode binary
+
+  osint:build-ai-bom:
+    desc: Build the local ai-bom engine image (upstream ships a pip package, not a container)
+    # ai-bom (Trusera) publishes no container image of its own — see
+    # OSINT/tools.manifest.yaml's `ai-bom` entry and
+    # deploy/docker/engines/Dockerfile.ai-bom for why one has to be built
+    # locally: AIBomAdapter runs it in the scan sandbox over untrusted
+    # customer code (CLAUDE.md invariant 7), and the sandbox only knows how to
+    # invoke a container. `toolctl pull` (below) cannot fetch this image from
+    # any registry — it does not exist on one — so this step has to run first,
+    # and `osint:pull` depends on it for exactly that reason.
+    cmds:
+      - docker build -f deploy/docker/engines/Dockerfile.ai-bom -t axebom/ai-bom-engine:dev .
 
   osint:pull:
     desc: Pre-pull every container-mode engine image (REQUIRED before scanning)
     # Engines run with --network=none, so a container cannot fetch its own
     # image. Without this every container engine reports "No such image" as an
     # honest but entirely avoidable gap.
+    deps: [osint:build-ai-bom]
     cmds:
-      - go run ./cmd/encorebom toolctl pull {{.CLI_ARGS}}
+      - go run ./cmd/axebom toolctl pull {{.CLI_ARGS}}
 
   osint:sync:
     desc: Download and verify pinned scanner binaries
     cmds:
-      - go run ./cmd/encorebom toolctl sync
+      - go run ./cmd/axebom toolctl sync
 
   osint:verify:
     desc: Probe every engine and report available/unavailable with reasons
     cmds:
-      - go run ./cmd/encorebom toolctl verify
+      - go run ./cmd/axebom toolctl verify
 
   osint:dbsync:
     desc: Provision the vulnerability databases (grype, trivy, osv) — REQUIRED before any vuln scan
@@ -373,11 +472,11 @@ tasks:
       - python -m workers.sbom.dbstatus
 
   osint:licenses:
-    desc: Fail if a copyleft dependency would be linked into an EncoreBOM binary
+    desc: Fail if a copyleft dependency would be linked into an AxeBOM binary
     # CLAUDE.md invariant 9. django-bom is GPL-3.0 and would have relicensed
     # hbom-worker; this is the mechanical guard against that class of mistake.
     cmds:
-      - go run ./cmd/encorebom toolctl licenses
+      - go run ./cmd/axebom toolctl licenses
 
   proto:gen:
     desc: "[phase 6] Generate Go and Python code from proto/"

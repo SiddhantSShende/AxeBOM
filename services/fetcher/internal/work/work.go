@@ -34,13 +34,13 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/encorebom/encorebom/libs/go-shared/bus"
-	"github.com/encorebom/encorebom/libs/go-shared/events"
-	"github.com/encorebom/encorebom/libs/go-shared/fetcher"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/blob"
-	"github.com/encorebom/encorebom/libs/go-shared/sandbox"
-	"github.com/encorebom/encorebom/libs/go-shared/vault"
-	"github.com/encorebom/encorebom/services/fetcher/internal/source"
+	"github.com/axebom/axebom/libs/go-shared/bus"
+	"github.com/axebom/axebom/libs/go-shared/events"
+	"github.com/axebom/axebom/libs/go-shared/fetcher"
+	"github.com/axebom/axebom/libs/go-shared/platform/blob"
+	"github.com/axebom/axebom/libs/go-shared/sandbox"
+	"github.com/axebom/axebom/libs/go-shared/vault"
+	"github.com/axebom/axebom/services/fetcher/internal/source"
 )
 
 // Resolver finds where a project's code lives.
@@ -98,7 +98,7 @@ func New(opts Options) (*Worker, error) {
 	}
 	root := opts.WorkspaceRoot
 	if root == "" {
-		root = filepath.Join(os.TempDir(), "encorebom-fetch")
+		root = filepath.Join(os.TempDir(), "axebom-fetch")
 	}
 	version := opts.Version
 	if version == "" {

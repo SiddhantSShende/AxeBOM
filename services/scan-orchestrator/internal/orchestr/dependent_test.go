@@ -3,10 +3,10 @@ package orchestr_test
 import (
 	"testing"
 
-	"github.com/encorebom/encorebom/libs/go-shared/bus"
+	"github.com/axebom/axebom/libs/go-shared/bus"
 
-	"github.com/encorebom/encorebom/libs/go-shared/events"
-	"github.com/encorebom/encorebom/services/scan-orchestrator/internal/orchestr"
+	"github.com/axebom/axebom/libs/go-shared/events"
+	"github.com/axebom/axebom/services/scan-orchestrator/internal/orchestr"
 )
 
 // grype reads syft's SBOM, so its job must not be published until syft reports.

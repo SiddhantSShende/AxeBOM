@@ -3,10 +3,10 @@ package service_test
 import (
 	"testing"
 
-	"github.com/encorebom/encorebom/libs/go-shared/model"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/services/project/internal/service"
-	"github.com/encorebom/encorebom/services/project/internal/store"
+	"github.com/axebom/axebom/libs/go-shared/model"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/services/project/internal/service"
+	"github.com/axebom/axebom/services/project/internal/store"
 )
 
 // CERT-In "Practices and Processes" — the commonly-missed minimum element.

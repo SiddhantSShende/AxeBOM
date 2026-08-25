@@ -12,16 +12,16 @@ The `buf.yaml` / `buf.gen.yaml` config exists from Phase 0 so the breaking-chang
 
 ```
 proto/
-  encorebom/scan/v1/       job.proto  event.proto  result.proto     ← Phase 6
-  encorebom/project/v1/    project.proto                            ← Phase 4
-  encorebom/auth/v1/       auth.proto                               ← Phase 3
+  axebom/scan/v1/       job.proto  event.proto  result.proto     ← Phase 6
+  axebom/project/v1/    project.proto                            ← Phase 4
+  axebom/auth/v1/       auth.proto                               ← Phase 3
   schemas/                 generated JSON Schemas for the envelopes ← Phase 6
   gen/{go,python}/         generated code — gitignored
 ```
 
 ## Rules
 
-- **Versioned packages**: `encorebom.scan.v1`. A breaking change means `v2`, with both consumed in parallel for at least one release.
+- **Versioned packages**: `axebom.scan.v1`. A breaking change means `v2`, with both consumed in parallel for at least one release.
 - **Additive changes never bump the version.** Consumers must ignore unknown fields — that is what makes additive evolution safe.
 - **Never reuse a field number or a field name with a different meaning.** Reserve them instead.
 - Generated code is **not committed**. `task proto:gen` regenerates it; `gen/` is gitignored.

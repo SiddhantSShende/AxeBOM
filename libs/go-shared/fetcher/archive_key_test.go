@@ -2,7 +2,7 @@ package fetcher
 
 import "testing"
 
-// The orchestrator's default ArtifactPrefix is a URI ("s3://encorebom"), and an
+// The orchestrator's default ArtifactPrefix is a URI ("s3://axebom"), and an
 // object key is bucket-relative. Passing one through as the other produced
 // "Object name contains unsupported characters" from MinIO — an error naming
 // neither the key nor the colon — on a RETRYABLE code path, so the fetch job
@@ -15,7 +15,7 @@ func TestObjectKeyPrefixStripsSchemeAndSlashes(t *testing.T) {
 	}{
 		{
 			name: "the real default, which is a URI",
-			in:   "s3://encorebom/scans/abc/raw/fetcher/job1/",
+			in:   "s3://axebom/scans/abc/raw/fetcher/job1/",
 			want: "scans/abc/raw/fetcher/job1",
 		},
 		{
@@ -25,7 +25,7 @@ func TestObjectKeyPrefixStripsSchemeAndSlashes(t *testing.T) {
 		},
 		{name: "already a key", in: "scans/abc/raw", want: "scans/abc/raw"},
 		{name: "other schemes too", in: "gs://bucket/a/b", want: "a/b"},
-		{name: "bucket with no key", in: "s3://encorebom", want: ""},
+		{name: "bucket with no key", in: "s3://axebom", want: ""},
 		{name: "empty", in: "", want: ""},
 	}
 

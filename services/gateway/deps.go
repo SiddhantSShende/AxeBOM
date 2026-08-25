@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/httpx"
-	"github.com/encorebom/encorebom/services/gateway/internal/middleware"
-	"github.com/encorebom/encorebom/services/gateway/internal/proxy"
+	"github.com/axebom/axebom/libs/go-shared/auth"
+	"github.com/axebom/axebom/libs/go-shared/iam"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/httpx"
+	"github.com/axebom/axebom/services/gateway/internal/middleware"
+	"github.com/axebom/axebom/services/gateway/internal/proxy"
 )
 
 // deps holds this service's constructed dependencies.
@@ -26,16 +28,23 @@ import (
 //
 // The gateway deliberately has NO database pool. It verifies tokens, limits
 // rates and proxies; giving it a pool would invite domain logic to accumulate
-// in the one component every request passes through.
+// in the one component every request passes through. iam is the one
+// deliberate exception, and it is a ZITADEL connection, not a database one —
+// see internal/signup and config.OIDC.ProvisioningKeyPath.
 type deps struct {
 	cfg     *config.Service
 	issuer  *auth.Issuer
 	limiter *middleware.Limiter
 	router  *proxy.Router
+	// iam is nil when self-service signup is not configured or could not
+	// connect at startup. internal/signup.Handler answers a structured
+	// INTERNAL_DEPENDENCY_UNAVAILABLE in that case rather than a nil
+	// dereference — every other gateway capability works with it absent.
+	iam *iam.Client
 }
 
 // buildDeps constructs everything this service needs.
-func buildDeps(_ context.Context, cfg *config.Service) (*deps, error) {
+func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 	// The gateway VERIFIES tokens; auth mints them. Both need the same key,
 	// which is why it is in the shared config section. NewIssuer enforces the
 	// minimum key length, so a too-short key stops the process here rather
@@ -64,13 +73,57 @@ func buildDeps(_ context.Context, cfg *config.Service) (*deps, error) {
 		return nil, fmt.Errorf("proxy router: %w", err)
 	}
 
-	return &deps{cfg: cfg, issuer: issuer, limiter: limiter, router: router}, nil
+	// Self-service signup is optional. A gateway that cannot reach the
+	// provisioning credential still verifies tokens and proxies every other
+	// route fine — logged loudly, not fatal, so a stack that never wires
+	// ZITADEL_BOOTSTRAP_KEY (most deployments) starts exactly as before.
+	iamClient, err := buildIAMClient(ctx, cfg.OIDC)
+	if err != nil {
+		slog.Error("self-service signup unavailable", "cause", err)
+	}
+
+	return &deps{cfg: cfg, issuer: issuer, limiter: limiter, router: router, iam: iamClient}, nil
+}
+
+// buildIAMClient connects the ZITADEL bootstrap credential used by
+// internal/signup, or returns (nil, nil) when the feature is not configured
+// at all — see config.OIDC.ProvisioningKeyPath.
+func buildIAMClient(ctx context.Context, cfg config.OIDC) (*iam.Client, error) {
+	if cfg.ProvisioningKeyPath == "" {
+		return nil, nil
+	}
+
+	internal, err := url.Parse(cfg.InternalURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse ZITADEL_INTERNAL_URL %q: %w", cfg.InternalURL, err)
+	}
+	// The public origin, e.g. "localhost:5173" — the same value oidcauth
+	// validates every token's `iss` against. ZITADEL selects its instance
+	// from the Host header, so a call dialed at cfg.InternalURL's address
+	// (zitadel-api:8080 in compose) must still present THIS Host or every
+	// call, starting with discovery, 404s as "Instance not found". See
+	// iam.Config.PublicHost.
+	public, err := url.Parse(cfg.Issuer)
+	if err != nil {
+		return nil, fmt.Errorf("parse ZITADEL_ISSUER %q: %w", cfg.Issuer, err)
+	}
+
+	return iam.Connect(ctx, iam.Config{
+		Domain:     internal.Hostname(),
+		Port:       internal.Port(),
+		Insecure:   internal.Scheme == "http",
+		KeyPath:    cfg.ProvisioningKeyPath,
+		PublicHost: public.Host,
+	})
 }
 
 // Close releases the dependencies, in reverse order of construction.
 func (d *deps) Close() {
 	if d == nil {
 		return
+	}
+	if d.iam != nil {
+		_ = d.iam.Close()
 	}
 }
 

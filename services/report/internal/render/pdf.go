@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-pdf/fpdf"
 
-	"github.com/encorebom/encorebom/libs/go-shared/model"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/model"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 // PDFMediaType is what the download response carries.
@@ -70,10 +70,20 @@ type PDFResult struct {
 }
 
 // WritePDF renders the report.
+//
+// ⚠ CBOM NEVER CALLS FieldsFor. FieldsFor has no flat field list to give a
+// CBOM — that is its whole point — so r.fields stays nil for one and every
+// CBOM-specific page below reads b.CryptoAssets directly instead. A caller
+// that is not CBOM-aware still cannot silently render an empty Components
+// table: there is no branch that reaches componentPages for a CBOM at all.
 func WritePDF(w io.Writer, b BOM, opts PDFOptions) (PDFResult, error) {
-	fields, err := FieldsFor(b.BOMType)
-	if err != nil {
-		return PDFResult{}, err
+	var fields []model.ProfileField
+	if b.BOMType != model.BOMTypeCBOM {
+		f, err := FieldsFor(b.BOMType)
+		if err != nil {
+			return PDFResult{}, err
+		}
+		fields = f
 	}
 
 	cap := opts.PageCap
@@ -100,10 +110,35 @@ func WritePDF(w io.Writer, b BOM, opts PDFOptions) (PDFResult, error) {
 	r := &pdfRender{doc: doc, bom: b, fields: fields, cap: cap}
 
 	r.coverPage()
-	r.coveragePage()
+
+	// ⚠ CBOM AND QBOM REPLACE, NOT ADD TO, THE GENERIC COVERAGE/COMPONENT
+	// PAGES — the same "instead of, not alongside" rule Sheets() applies to
+	// the spreadsheet. See cbom.go and qbom.go for why each substitute page
+	// exists and what it deliberately leaves out (full per-asset-type tables
+	// are in the XLSX and JSON exports, which are not page-capped).
+	switch b.BOMType {
+	case model.BOMTypeCBOM:
+		r.cryptoCoveragePage()
+	default:
+		r.coveragePage()
+	}
+
 	r.engineCoveragePage()
 	r.practicesPage()
-	r.componentPages()
+
+	switch b.BOMType {
+	case model.BOMTypeCBOM:
+		r.cryptoInventoryPage()
+	case model.BOMTypeAIBOM:
+		r.aibomInventoryPage()
+	default:
+		r.componentPages()
+	}
+
+	if b.BOMType == model.BOMTypeQBOM {
+		r.quantumPage()
+	}
+
 	r.findingPages()
 	r.licensePage()
 	r.vexPage()
@@ -130,10 +165,15 @@ func WritePDF(w io.Writer, b BOM, opts PDFOptions) (PDFResult, error) {
 const pageOverrunFactor = 4
 
 // estimatePages is a deliberately rough forecast, used only to refuse early.
+//
+// CryptoAssets counts toward the same estimate as Components: a CBOM's
+// cryptoInventoryPage is one row per asset, exactly like componentPages is
+// one row per component, so a huge CBOM must be refused for the same reason a
+// huge SBOM is.
 func estimatePages(b BOM) int {
 	const rowsPerPage = 40
 	const fixedPages = 8
-	rows := len(b.Components) + len(b.Findings) + len(b.Licenses)
+	rows := len(b.Components) + len(b.Findings) + len(b.Licenses) + len(b.CryptoAssets)
 	return fixedPages + rows/rowsPerPage
 }
 
@@ -405,21 +445,50 @@ func (r *pdfRender) licensePage() {
 	}
 }
 
-// vexPage is stubbed until Phase 13.
+// vexPage reports every finding's effective VEX status.
 //
-// ⚠ STUBBED, NOT OMITTED. A reader who does not see a VEX section cannot tell
-// whether there are no statements or whether this tool does not do VEX. The
-// empty state says which.
+// ⚠ NO STATEMENTS IS A STATED GAP, NOT AN OMITTED SECTION. A reader who does
+// not see this section cannot tell whether there are no statements or
+// whether this tool does not do VEX at all — CLAUDE.md invariant 3, applied
+// to a whole page rather than one field.
 func (r *pdfRender) vexPage() {
 	r.doc.AddPage()
 	r.heading("VEX statements")
-	r.body("No VEX statements have been recorded for this report.")
-	r.note("VEX lets a supplier assert that a vulnerability does not affect a " +
-		"product, with a justification. EncoreBOM stores such statements and " +
-		"joins them to findings; none exist for this report. A suppressed " +
-		"finding would still be listed above, carrying its status — \"we " +
-		"assessed this and it does not apply\" is a defensible position, and it " +
-		"must not look the same as a vulnerability that never appeared.")
+
+	counts := map[string]int{}
+	var untriaged int
+	for _, f := range r.bom.Findings {
+		if f.VEXStatus == "" {
+			untriaged++
+			continue
+		}
+		counts[f.VEXStatus]++
+	}
+
+	if len(r.bom.Findings) == 0 {
+		r.body("This report has no findings to triage.")
+	} else if len(counts) == 0 {
+		r.body("No VEX statements have been recorded for this report's findings.")
+	} else {
+		widths := []float64{60, 30}
+		r.tableHeader([]string{"Status", "Findings"}, widths)
+		for _, status := range []string{"affected", "under_investigation", "fixed", "not_affected"} {
+			if n := counts[status]; n > 0 {
+				r.tableRow([]string{status, strconv.Itoa(n)}, widths)
+			}
+		}
+		if untriaged > 0 {
+			r.tableRow([]string{"untriaged", strconv.Itoa(untriaged)}, widths)
+		}
+	}
+
+	r.note("A finding whose status is `not_affected` or `fixed` is de-emphasized " +
+		"in the findings table above, never deleted from it — \"we assessed this " +
+		"and it does not apply\" is a defensible position, and it must not look " +
+		"the same as a vulnerability that never appeared. VEX statements are " +
+		"append-only: every triage decision recorded here supersedes the last " +
+		"rather than overwriting it, and the full history is available from the " +
+		"live findings view.")
 
 	r.doc.Ln(4)
 	r.heading("CSAF")
@@ -455,7 +524,7 @@ func (r *pdfRender) methodologyPage() {
 	r.doc.Ln(4)
 	r.heading("Signature")
 	r.body("This document is signed with a detached Ed25519 signature published " +
-		"alongside it. Verify it with `encorebom verify <file>`, supplying the " +
+		"alongside it. Verify it with `axebom verify <file>`, supplying the " +
 		"published public key. The signature proves the file is byte-for-byte the " +
 		"one issued; it says nothing about whether the scan was complete — for " +
 		"that, read Engine Coverage.")

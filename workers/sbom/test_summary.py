@@ -28,8 +28,8 @@ import yaml
 from workers.aibom.adapters import AIBomAdapter
 from workers.cbom.adapters import CBOMkitTheiaAdapter
 
-from encorebom_shared.adapters.base import ResultStatus, ScanTarget
-from encorebom_shared.adapters.summary import (
+from axebom_shared.adapters.base import ResultStatus, ScanTarget
+from axebom_shared.adapters.summary import (
     EngineSummary,
     count_cyclonedx,
     count_distinct_vulnerabilities,
@@ -37,7 +37,7 @@ from encorebom_shared.adapters.summary import (
     dimensions_for,
     summarize,
 )
-from encorebom_shared.sandbox import SandboxResult
+from axebom_shared.sandbox import SandboxResult
 
 from .adapters import (
     DependencyCheckAdapter,
@@ -191,7 +191,7 @@ def test_every_produces_token_maps_to_a_summary_decision(name: str) -> None:
     dimension it named then reports null forever — indistinguishable from an
     engine that does not measure it.
     """
-    from encorebom_shared.adapters.summary import _DIMENSION_OF
+    from axebom_shared.adapters.summary import _DIMENSION_OF
 
     cls, _ = ADAPTERS[name]
     unmapped = [

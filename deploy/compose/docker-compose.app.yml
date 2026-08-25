@@ -1,5 +1,5 @@
 # ============================================================================
-# EncoreBOM — application tier
+# AxeBOM — application tier
 # ============================================================================
 #   task dev         -> docker-compose.yml + THIS FILE   (infra + the product)
 #   task dev:infra   -> docker-compose.yml only          (infra alone)
@@ -22,24 +22,24 @@
 # and that is the honest limit of what the container runtime can observe here.
 # ---------------------------------------------------------------------------
 
-name: encorebom
+name: axebom
 
 # --------------------------------------------------------------- shared env
 # Inside the compose network, services reach each other by SERVICE NAME on the
 # UPSTREAM port — not by localhost on the published 5xxxx port. The 5xxxx
 # mapping exists for the host only.
 x-service-env: &service-env
-  ENCOREBOM_ENV: ${ENCOREBOM_ENV:-development}
+  AXEBOM_ENV: ${AXEBOM_ENV:-development}
   LOG_LEVEL: ${LOG_LEVEL:-info}
   LOG_FORMAT: ${LOG_FORMAT:-json}
 
   POSTGRES_HOST: postgres
   POSTGRES_PORT: 5432
-  POSTGRES_DB: ${POSTGRES_DB:-encorebom}
-  POSTGRES_USER: ${POSTGRES_USER:-encorebom}
-  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-encorebom}
-  POSTGRES_APP_ROLE: ${POSTGRES_APP_ROLE:-encorebom_app}
-  POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-encorebom_app}
+  POSTGRES_DB: ${POSTGRES_DB:-axebom}
+  POSTGRES_USER: ${POSTGRES_USER:-axebom}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-axebom}
+  POSTGRES_APP_ROLE: ${POSTGRES_APP_ROLE:-axebom_app}
+  POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-axebom_app}
   POSTGRES_SSLMODE: disable
 
   NATS_URL: nats://nats:4222
@@ -47,7 +47,7 @@ x-service-env: &service-env
 
   S3_ENDPOINT: http://minio:9000
   S3_REGION: ${S3_REGION:-us-east-1}
-  S3_BUCKET: ${S3_BUCKET:-encorebom}
+  S3_BUCKET: ${S3_BUCKET:-axebom}
   S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
   S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
   S3_FORCE_PATH_STYLE: "true"
@@ -55,8 +55,17 @@ x-service-env: &service-env
   VAULT_ADDR: http://vault:8200
   VAULT_TOKEN: ${VAULT_TOKEN:-dev-root-token}
 
+  # Mailpit, the same one ZITADEL already sends real mail to — never a real
+  # relay in this compose file. 1025 is the INTERNAL port; 51025 (SMTP_PORT)
+  # is only for a caller on the host, same relationship as POSTGRES_HOST/PORT.
+  SMTP_HOST: mailpit
+  SMTP_PORT: 1025
+  SMTP_USERNAME: ${SMTP_USERNAME:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_FROM: ${SMTP_FROM:-noreply@axebom.test}
+
   JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-dev-only-insecure-signing-key-do-not-use-in-production}
-  JWT_ISSUER: ${JWT_ISSUER:-encorebom}
+  JWT_ISSUER: ${JWT_ISSUER:-axebom}
 
   # --- Identity ------------------------------------------------------------
   # ⚠ TWO ADDRESSES FOR ONE SERVER, AND THEY ARE NOT INTERCHANGEABLE.
@@ -74,7 +83,7 @@ x-service-env: &service-env
   # cannot be reached.
   ZITADEL_ISSUER: ${ZITADEL_ISSUER:-http://localhost:5173}
   ZITADEL_INTERNAL_URL: http://zitadel-api:8080
-  # Written by `encorebom iam bootstrap`, which prints it as a pasteable line.
+  # Written by `axebom iam bootstrap`, which prints it as a pasteable line.
   # Empty means every service refuses to start rather than answering 401 to
   # every request — see oidcauth.NewVerifier.
   ZITADEL_PROJECT_ID: ${ZITADEL_PROJECT_ID:-}
@@ -117,7 +126,7 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.cli
-    image: encorebom/cli:dev
+    image: axebom/cli:dev
     environment:
       <<: *service-env
     command: ["db", "migrate"]
@@ -135,17 +144,36 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.gateway
-    image: encorebom/gateway:dev
+    image: axebom/gateway:dev
     environment:
       <<: *service-env
+      # Self-service organisation signup (services/gateway/internal/signup).
+      # Empty in config.OIDC.ProvisioningKeyPath by default; setting it here
+      # is what turns the feature on for the `task dev` stack. Same key
+      # `axebom iam bootstrap` uses — see the package doc for why there is no
+      # narrower ZITADEL credential for "can create organisations".
+      ZITADEL_BOOTSTRAP_KEY: /zitadel/bootstrap/admin-sa.json
+    volumes:
+      # Read-only: this container creates organisations and users through
+      # ZITADEL's API, never touches ZITADEL's own database or filesystem.
+      - ./.data/zitadel-bootstrap:/zitadel/bootstrap:ro
     ports: ["${GATEWAY_PORT:-8080}:8080"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      # The admin key this container reads doesn't exist until the ZITADEL
+      # one-shot writes it. Without this, a gateway that starts first simply
+      # runs with signup permanently disabled for its lifetime — nothing
+      # retries the connection later.
+      zitadel-setup:
+        condition: service_completed_successfully
 
   auth:
     <<: *service-defaults
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.auth
-    image: encorebom/auth:dev
+    image: axebom/auth:dev
     environment:
       <<: *service-env
 
@@ -154,7 +182,7 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.project
-    image: encorebom/project:dev
+    image: axebom/project:dev
     environment:
       <<: *service-env
 
@@ -163,7 +191,7 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.scan-orchestrator
-    image: encorebom/scan-orchestrator:dev
+    image: axebom/scan-orchestrator:dev
     environment:
       <<: *service-env
 
@@ -172,7 +200,7 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.report
-    image: encorebom/report:dev
+    image: axebom/report:dev
     environment:
       <<: *service-env
 
@@ -181,31 +209,31 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.campaign
-    image: encorebom/campaign:dev
+    image: axebom/campaign:dev
     environment:
       <<: *service-env
       # campaign -> scan-orchestrator. One of only two services that PRESENT a
       # credential rather than merely verifying one.
-      ZITADEL_SERVICE_KEY_PATH: /var/run/encorebom/service-keys/svc-campaign.json
+      ZITADEL_SERVICE_KEY_PATH: /var/run/axebom/service-keys/svc-campaign.json
     # ⚠ NEEDED TO READ THE KEY ABOVE. It is written 0640 by
-    # `encorebom iam bootstrap` under the developer's own uid; this container
+    # `axebom iam bootstrap` under the developer's own uid; this container
     # runs as distroless nonroot. Joining the file's group is what lets it read
     # without the key being made world-readable — which on a shared machine is
     # the same as publishing it.
     group_add: ["${HOST_GID:-1000}"]
     volumes:
       # Read-only: this process must never rewrite its own key. Minted by
-      # `encorebom iam bootstrap`; the service refuses to start without it,
+      # `axebom iam bootstrap`; the service refuses to start without it,
       # because a campaign that cannot trigger a scan is a scheduler that
       # silently does nothing.
-      - ./.data/zitadel-bootstrap/service-keys:/var/run/encorebom/service-keys:ro
+      - ./.data/zitadel-bootstrap/service-keys:/var/run/axebom/service-keys:ro
 
   comment:
     <<: *service-defaults
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.comment
-    image: encorebom/comment:dev
+    image: axebom/comment:dev
     environment:
       <<: *service-env
 
@@ -214,7 +242,7 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.notification
-    image: encorebom/notification:dev
+    image: axebom/notification:dev
     environment:
       <<: *service-env
 
@@ -234,18 +262,18 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.fetcher
-    image: encorebom/fetcher:dev
+    image: axebom/fetcher:dev
     environment:
       <<: *service-env
       # fetcher -> project, to resolve where a scan's code lives.
-      ZITADEL_SERVICE_KEY_PATH: /var/run/encorebom/service-keys/svc-fetcher.json
+      ZITADEL_SERVICE_KEY_PATH: /var/run/axebom/service-keys/svc-fetcher.json
     # DOCKER_GID for the socket below; HOST_GID to read the service key above.
     # See the campaign service for why the key is group-readable.
     group_add: ["${DOCKER_GID:-986}", "${HOST_GID:-1000}"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       # Read-only. See the campaign service above.
-      - ./.data/zitadel-bootstrap/service-keys:/var/run/encorebom/service-keys:ro
+      - ./.data/zitadel-bootstrap/service-keys:/var/run/axebom/service-keys:ro
       # Clones land here before being archived. Identical host and container
       # paths, for the same sibling-container reason as the workers: the daemon
       # resolves mount paths host-side.
@@ -259,7 +287,7 @@ services:
       # so the job naks, redelivers, and naks forever while the queue stalls.
       # Sticky, like /tmp: each writer owns its own subtree and cannot remove
       # another's.
-      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/workspaces:/var/lib/encorebom/workspaces
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/workspaces:/var/lib/axebom/workspaces
 
   # ----------------------------------------------------------- scan workers
   # ⚠ THE WORKER MOUNTS THE DOCKER SOCKET. See deploy/docker/Dockerfile.worker
@@ -275,10 +303,10 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.worker
-    image: encorebom/worker:dev
+    image: axebom/worker:dev
     environment:
       <<: *service-env
-      ENCOREBOM_WORKER_FAMILY: sbom
+      AXEBOM_WORKER_FAMILY: sbom
     group_add: ["${DOCKER_GID:-986}"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -289,7 +317,7 @@ services:
       # The worker starts engines as SIBLING containers on the host daemon. Any
       # -v it passes is resolved by the DAEMON, against the HOST filesystem —
       # not inside this container. With a named volume mounted at
-      # /var/lib/encorebom/enginedb, the worker would ask the daemon to mount
+      # /var/lib/axebom/enginedb, the worker would ask the daemon to mount
       # that path from the host, where nothing exists, and the daemon would
       # silently create an empty directory. The engine then starts with no
       # database and osv-scanner reports {"results": []} and exits 0 — a clean
@@ -299,9 +327,9 @@ services:
       # view the same, so a path is meaningful wherever it is used.
       #
       # ~4.5 GB once provisioned (`task osint:dbsync`).
-      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/enginedb:/var/lib/encorebom/enginedb
-      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/workspaces:/var/lib/encorebom/workspaces
-      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/artifacts:/var/lib/encorebom/artifacts
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/enginedb:/var/lib/axebom/enginedb
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/workspaces:/var/lib/axebom/workspaces
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/artifacts:/var/lib/axebom/artifacts
 
   # One image, one process per family — NOT one process consuming five
   # subjects. A WorkQueue consumer is per filter subject, and mixing families in
@@ -309,29 +337,29 @@ services:
   # both shared one max_ack_pending budget.
   cbom-worker:
     <<: *service-defaults
-    image: encorebom/worker:dev
+    image: axebom/worker:dev
     environment:
       <<: *service-env
-      ENCOREBOM_WORKER_FAMILY: cbom
+      AXEBOM_WORKER_FAMILY: cbom
     group_add: ["${DOCKER_GID:-986}"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/enginedb:/var/lib/encorebom/enginedb
-      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/workspaces:/var/lib/encorebom/workspaces
-      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/artifacts:/var/lib/encorebom/artifacts
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/enginedb:/var/lib/axebom/enginedb
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/workspaces:/var/lib/axebom/workspaces
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/artifacts:/var/lib/axebom/artifacts
 
   aibom-worker:
     <<: *service-defaults
-    image: encorebom/worker:dev
+    image: axebom/worker:dev
     environment:
       <<: *service-env
-      ENCOREBOM_WORKER_FAMILY: aibom
+      AXEBOM_WORKER_FAMILY: aibom
     group_add: ["${DOCKER_GID:-986}"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/enginedb:/var/lib/encorebom/enginedb
-      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/workspaces:/var/lib/encorebom/workspaces
-      - ${ENGINE_STATE_ROOT:-/var/lib/encorebom}/artifacts:/var/lib/encorebom/artifacts
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/enginedb:/var/lib/axebom/enginedb
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/workspaces:/var/lib/axebom/workspaces
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/artifacts:/var/lib/axebom/artifacts
 
   # ⚠ NO qbom-worker OR hbom-worker, DELIBERATELY.
   #
@@ -364,11 +392,11 @@ services:
         VITE_OIDC_ISSUER: ${ZITADEL_ISSUER:-http://localhost:5173}
         VITE_OIDC_CLIENT_ID: ${ZITADEL_SPA_CLIENT_ID:-}
         VITE_OIDC_PROJECT_ID: ${ZITADEL_PROJECT_ID:-}
-    image: encorebom/frontend:dev
+    image: axebom/frontend:dev
     depends_on: [gateway]
     ports: ["${FRONTEND_PORT:-5173}:8085"]
     networks: [default]
 
 networks:
   default:
-    name: encorebom
+    name: axebom

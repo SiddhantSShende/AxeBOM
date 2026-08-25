@@ -36,7 +36,7 @@ services/report/
   share/      token issue + verify
   level/      top-level vs complete projection
 
-cmd/encorebom/verify.go     public signature verification
+cmd/axebom/verify.go     public signature verification
 testdata/golden/*.spdx.json *.cdx.json
 ```
 
@@ -44,7 +44,7 @@ testdata/golden/*.spdx.json *.cdx.json
 
 - **`protobom` is the serialization layer** — do not hand-roll SPDX or CycloneDX writers.
 - **Every report carries the Engine Coverage section.** Mandatory, not suppressible by a template. An SBOM that silently omits an ecosystem converts an unknown into a false negative.
-- **Both coverage numbers**, with the formula printed and a footer noting the weights are EncoreBOM's judgement, not CERT-In's.
+- **Both coverage numbers**, with the formula printed and a footer noting the weights are AxeBOM's judgement, not CERT-In's.
 - **Field tables render from the profile.** Never hardcode a count.
 - **`not-provided` renders explicitly** — never blank, never omitted.
 - **Escape every spreadsheet cell** beginning `= + - @` TAB CR, **in the writer**, unconditionally.
@@ -60,7 +60,7 @@ testdata/golden/*.spdx.json *.cdx.json
 5. **PDF** sections: executive summary · project, owner, validity · classifications and SDLC stage · **the six practices** · **coverage, both numbers, with formula and per-field breakdown** · **Engine Coverage incl. ecosystems with no engine** · component tables · license inventory · findings with CVSS and sources · VEX table (stubbed) · CSAF section (stubbed) · criticality breakdown · dependency graph summary · methodology footnotes (incl. the CERT-In `&subpath` vs `#subpath` discrepancy) · timestamp, author, signature.
 6. **Page cap.** 50k components is 3000+ pages. Cap, set `truncated = true`, and write an explicit truncation note pointing to XLSX/JSON. Product rule: Top-Level → PDF, Complete → XLSX/JSON. `REPORT_TOO_LARGE_FOR_PDF` rather than an OOM.
 7. PDF renderer runs with **remote resource loading disabled** — an `<img src="http://attacker/">` in a component description must not phone home.
-8. Ed25519 detached signature via Vault Transit; publish the public key; `encorebom verify` checks it.
+8. Ed25519 detached signature via Vault Transit; publish the public key; `axebom verify` checks it.
 9. Share links: 256-bit CSPRNG token, **hash stored**, optional expiry and download cap, every access audited, immediate revocation. `/shared/:token` is unauthenticated — rate-limit by IP, `Cache-Control: no-store`, `Content-Disposition: attachment`.
 10. Async render worker with progress. Update `docs/STATE.md`.
 
@@ -85,7 +85,7 @@ go test ./services/report/render/safe -run TestFormulaInjection -v
 task verify
 ```
 
-Manual: one scan → PDF + XLSX + CycloneDX + SPDX → `encorebom verify` passes → share link renders read-only in a clean browser profile.
+Manual: one scan → PDF + XLSX + CycloneDX + SPDX → `axebom verify` passes → share link renders read-only in a clean browser profile.
 
 ## Before you finish
 

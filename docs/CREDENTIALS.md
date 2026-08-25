@@ -1,9 +1,9 @@
-# Credentials — every key EncoreBOM can use, and how to get it free
+# Credentials — every key AxeBOM can use, and how to get it free
 
 Nothing here costs money. Every integration below either has a genuinely free
 tier or is free outright.
 
-**You do not need any of these to run EncoreBOM.** The stack comes up, scans
+**You do not need any of these to run AxeBOM.** The stack comes up, scans
 local source, and produces SBOM, CBOM, QBOM, AIBOM and HBOM output with no
 credentials at all. Each key unlocks one specific capability, and a key you do
 not supply produces a **stated gap** — the engine reports `unavailable` with a
@@ -97,7 +97,7 @@ escape suite asserts that no credential-shaped variable reaches one.
 
    | Field | Value for local development |
    |---|---|
-   | Application name | `EncoreBOM (local)` |
+   | Application name | `AxeBOM (local)` |
    | Homepage URL | `http://localhost:5173` |
    | Authorization callback URL | `http://localhost:5173/auth/github/callback` |
 
@@ -115,7 +115,7 @@ GITHUB_REDIRECT_URL=http://localhost:5173/auth/github/callback
 
 > The callback URL must match **exactly**, including scheme, port and path.
 > A mismatch produces GitHub's own `redirect_uri_mismatch` error page rather
-> than anything EncoreBOM logs.
+> than anything AxeBOM logs.
 >
 > Note the variable is `GITHUB_REDIRECT_URL`. Earlier templates called it
 > `GITHUB_CALLBACK_URL`, which no code ever read.

@@ -28,9 +28,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from encorebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
-from encorebom_shared.adapters.summary import count_distinct_vulnerabilities, summarize
-from encorebom_shared.sandbox import (
+from axebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
+from axebom_shared.adapters.summary import count_distinct_vulnerabilities, summarize
+from axebom_shared.sandbox import (
     SandboxLimits,
     SandboxResult,
     WorkspaceLayout,

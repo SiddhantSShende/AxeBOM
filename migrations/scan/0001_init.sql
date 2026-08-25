@@ -156,7 +156,7 @@ SELECT app.enable_tenant_rls('scan.raw_artifacts');
 
 -- IMMUTABLE BY GRANT, not by convention. Same reasoning as auth.audit_log:
 -- these artifacts are the evidence behind every report.
-REVOKE UPDATE, DELETE ON scan.raw_artifacts FROM encorebom_app;
+REVOKE UPDATE, DELETE ON scan.raw_artifacts FROM axebom_app;
 
 -- ---------------------------------------------------------------------------
 -- ecosystems_detected — feeds the mandatory Engine Coverage report section

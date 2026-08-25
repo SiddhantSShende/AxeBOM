@@ -29,7 +29,7 @@ deploy/k8s/                Helm charts, incl. an isolated engine node pool
 docs/RUNBOOKS.md           NEW — expanded from 08-OPERATIONS §6
 docs/COMPLIANCE-REPORT.md  the coverage evidence pack
 services/auth/oidc/        SAML/OIDC enterprise SSO
-cmd/encorebom/audit.go     audit-log export
+cmd/axebom/audit.go     audit-log export
 perf/                      k6 or vegeta scenarios
 ```
 
@@ -115,4 +115,4 @@ Plus: pen-test report with findings closed, load-test baselines recorded, restor
 
 Update `docs/STATE.md`: **mark GA.** Record load-test baselines, pen-test outcome, accepted risks with rationale, and what is deliberately deferred to post-launch.
 
-Then write the honest list — what EncoreBOM does not do, and what a customer should not expect it to do. That list is a feature. The alternative is discovering it together during an incident.
+Then write the honest list — what AxeBOM does not do, and what a customer should not expect it to do. That list is a feature. The alternative is discovering it together during an incident.

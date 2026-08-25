@@ -10,11 +10,12 @@ from __future__ import annotations
 import pytest
 from workers.cbom.adapters.cbomkit_theia import extract_crypto_assets, map_asset_type
 from workers.cbom.normalize.crypto import TYPE_COLUMNS, normalize_all
+from workers.cbom.normalize.pipeline import FIELD_SETS
 from workers.qbom.derive import crypto_asset_refs, derive_readiness
 from workers.qbom.metadata import DERIVED_FIELDS, form_fields, normalize_device
 
-from encorebom_shared.model.generated_certin import CRYPTO_FIELDS_BY_ASSET_TYPE
-from encorebom_shared.normalize.coverage import Field, score_crypto
+from axebom_shared.model.generated_certin import CRYPTO_FIELDS_BY_ASSET_TYPE
+from axebom_shared.normalize.coverage import score_crypto
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -90,20 +91,10 @@ CERTIFICATE = {
 }
 
 
-def profile_fields(asset_type: str) -> list[Field]:
-    return [
-        Field(
-            id=f.id,
-            name=f.name,
-            canonical_path=f.canonical_path,
-            weight=f.weight,
-        )
-        for f in CRYPTO_FIELDS_BY_ASSET_TYPE[asset_type]
-    ]
-
-
-FIELD_SETS = {t: profile_fields(t) for t in CRYPTO_FIELDS_BY_ASSET_TYPE}
-
+# `profile_fields`/`FIELD_SETS` used to be redefined here as a test-only
+# helper. They are real pipeline code now (workers/cbom/normalize/pipeline.py)
+# — `build_canonical_cbom` needs the exact same field sets to compute the
+# coverage numbers it writes, so this file imports rather than duplicates them.
 
 # ---------------------------------------------------------------------------
 # All four types from one scan
@@ -253,6 +244,46 @@ def test_every_flag_carries_a_rationale() -> None:
     assets, _ = normalize_all(raw)
     assert assets[0]["quantum_rationale"]
     assert assets[0]["deprecation_rationale"]
+
+
+def test_quantum_readiness_group_is_computed_once_and_stored() -> None:
+    """migrations/normalize/0005: the QBOM bucket is decided at CBOM-write
+
+    time, not re-derived by a report renderer. RSA lands in `vulnerable`
+    (Shor-broken); AES carries a Grover note and lands in `grover_note`, never
+    `vulnerable` — the two buckets this whole phase exists to keep separate.
+    """
+    ml_kem = {
+        "type": "cryptographic-asset",
+        "name": "ML-KEM-768",
+        "cryptoProperties": {
+            "assetType": "algorithm",
+            "algorithmProperties": {"primitive": "kem"},
+        },
+    }
+    raw, _ = extract_crypto_assets(cyclonedx([ALGORITHM, ml_kem]))
+    assets, _ = normalize_all(raw)
+    by_name = {a["name"]: a for a in assets}
+
+    assert by_name["RSA-2048"]["quantum_readiness_group"] == "vulnerable"
+    assert by_name["ML-KEM-768"]["quantum_readiness_group"] == "post_quantum"
+
+    aes_raw, _ = extract_crypto_assets(
+        cyclonedx(
+            [
+                {
+                    "type": "cryptographic-asset",
+                    "name": "AES-256-GCM",
+                    "cryptoProperties": {
+                        "assetType": "algorithm",
+                        "algorithmProperties": {"primitive": "ae", "mode": "gcm"},
+                    },
+                }
+            ]
+        )
+    )
+    aes_assets, _ = normalize_all(aes_raw)
+    assert aes_assets[0]["quantum_readiness_group"] == "grover_note"
 
 
 def test_a_certificate_is_assessed_on_the_algorithm_that_signed_it() -> None:
@@ -441,7 +472,7 @@ def test_the_form_is_generated_from_the_profile() -> None:
     """No count is written anywhere; a CERT-In revision adds a field without a
     code change."""
     fields = form_fields()
-    from encorebom_shared.model.generated_certin import QBOM_FIELDS
+    from axebom_shared.model.generated_certin import QBOM_FIELDS
 
     assert len(fields) == len(QBOM_FIELDS)
     assert {f["field_id"] for f in fields} == {f.id for f in QBOM_FIELDS}

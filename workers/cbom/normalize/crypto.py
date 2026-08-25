@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from encorebom_shared.crypto import assess_deprecation, assess_quantum, recommend_pqc
+from axebom_shared.crypto import assess_deprecation, assess_quantum, readiness_group, recommend_pqc
 
 #: Columns that belong to each asset type, mirroring CERT-In Table 9.
 #:
@@ -110,7 +110,7 @@ def normalize_crypto_asset(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def analyse(asset: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
-    """Run the three EncoreBOM analyses over a normalized asset.
+    """Run the three AxeBOM analyses over a normalized asset.
 
     ⚠ THE INPUTS COME FROM BOTH THE NORMALIZED ASSET AND THE RAW ONE, on
     purpose. `primitive` belongs to an algorithm and is dropped from a
@@ -174,6 +174,18 @@ def analyse(asset: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
         out["effective_quantum_bits"] = quantum.effective_quantum_bits
     if pqc is not None:
         out["pqc_recommendation"] = pqc.summary()
+
+    # ⚠ COMPUTED HERE, ONCE, AND STORED (migrations/normalize/0005) — never
+    # re-derived by a report renderer. See axebom_shared.crypto.readiness_group's
+    # own docstring for why a second implementation of this branch is the
+    # mistake that lets the CBOM and the QBOM disagree about the same asset.
+    group = readiness_group(
+        quantum_vulnerable=quantum.quantum_vulnerable,
+        grover_note=quantum.grover_note,
+        quantum_family=quantum.family,
+    )
+    if group is not None:
+        out["quantum_readiness_group"] = group
 
     diagnostics = list(quantum.diagnostics)
     if diagnostics:

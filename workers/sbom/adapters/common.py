@@ -5,7 +5,7 @@ what keeps the differences between engines visible:
 
     1. resolve the pinned image from OSINT/tools.manifest.yaml
     2. build an argv and REDACT it
-    3. run it in the sandbox (never directly — see encorebom_shared.sandbox)
+    3. run it in the sandbox (never directly — see axebom_shared.sandbox)
     4. classify the outcome, including the statuses that are not failures
     5. write the raw artifact, which is Phase 8's input and is never mutated
 
@@ -33,7 +33,7 @@ from typing import Any
 
 import yaml
 
-from encorebom_shared.adapters.base import (
+from axebom_shared.adapters.base import (
     Availability,
     Capabilities,
     EngineMode,
@@ -43,9 +43,9 @@ from encorebom_shared.adapters.base import (
     ScanTarget,
     ToolAdapterBase,
 )
-from encorebom_shared.enginedb import EngineDatabase, database_root
-from encorebom_shared.enginedb import resolve as enginedb_resolve
-from encorebom_shared.sandbox import Mount, Sandbox, SandboxLimits, SandboxResult, WorkspaceLayout
+from axebom_shared.enginedb import EngineDatabase, database_root
+from axebom_shared.enginedb import resolve as enginedb_resolve
+from axebom_shared.sandbox import Mount, Sandbox, SandboxLimits, SandboxResult, WorkspaceLayout
 
 
 #: Where the pinned engine versions and images live. ONE source of truth for
@@ -257,7 +257,7 @@ class SandboxedAdapter(ToolAdapterBase):
     #: Engines that match vulnerabilities MUST report a dated database.
     requires_db_version = False
     #: Which provisioned database this engine reads, if any. Set on every
-    #: engine with ``requires_db_version``; see :mod:`encorebom_shared.enginedb`
+    #: engine with ``requires_db_version``; see :mod:`axebom_shared.enginedb`
     #: for why the two travel together.
     database_id: str | None = None
     #: Where the provisioned database is mounted inside the container.
@@ -546,7 +546,7 @@ class SandboxedAdapter(ToolAdapterBase):
             env=env or None,
             mounts=mounts,
             limits=self.limits(),
-            labels={"encorebom.engine": self.engine_id, "encorebom.job": target.job_id},
+            labels={"axebom.engine": self.engine_id, "axebom.job": target.job_id},
         )
 
         generated = self.classify(target, result, redacted, image, database)
@@ -631,7 +631,7 @@ class SandboxedAdapter(ToolAdapterBase):
                     ),
                     "hint": (
                         "the digest it resolved to is recorded on this result; run "
-                        "`encorebom toolctl pin` to make the reference itself "
+                        "`axebom toolctl pin` to make the reference itself "
                         "reproducible"
                     ),
                 }

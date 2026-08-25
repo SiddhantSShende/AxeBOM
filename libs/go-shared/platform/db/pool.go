@@ -27,7 +27,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
 )
 
 // Pool wraps a pgxpool and refuses to hand out an unscoped connection.

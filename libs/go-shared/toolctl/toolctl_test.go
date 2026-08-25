@@ -27,7 +27,7 @@ func TestManifestIsResolvedAgainstNetwork(t *testing.T) {
 	m := realManifest(t)
 	if !m.Meta.ResolvedAgainstNetwork {
 		t.Error("manifest.resolved_against_network is false — versions are guesses. " +
-			"Run `encorebom toolctl dryrun` and pin real values.")
+			"Run `axebom toolctl dryrun` and pin real values.")
 	}
 	for _, tool := range m.Tools {
 		if strings.Contains(tool.Version, "TBD") {

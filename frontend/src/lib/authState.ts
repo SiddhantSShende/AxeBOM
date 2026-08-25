@@ -21,7 +21,13 @@ export interface AuthState {
   activeOrg: Membership | null;
   /** Set when a sign-in attempt failed, so the UI can say why. */
   error: string | null;
-  signIn: () => void;
+  /**
+   * returnTo overrides where the redirect comes back to. Omitted, it is the
+   * current path — see AuthContext. SignupPage passes '/projects' explicitly:
+   * called from /signup, the current-path default would send a freshly
+   * created visitor right back to the signup form after they log in.
+   */
+  signIn: (returnTo?: string) => void;
   signOut: () => void;
   selectOrg: (orgId: string) => void;
 }

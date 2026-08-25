@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/services/auth/internal/service"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/services/auth/internal/service"
 )
 
 // GitHub OAuth tests against a FAKE GitHub.
@@ -76,7 +76,7 @@ func (f *fakeGitHub) client(t *testing.T) *service.GitHubClient {
 	srv := f.start(t)
 	return service.NewGitHubClient(service.GitHubConfig{
 		ClientID: "test-client", ClientSecret: "test-secret",
-		RedirectURL: "https://encorebom.test/v1/auth/github/callback",
+		RedirectURL: "https://axebom.test/v1/auth/github/callback",
 		APIBase:     srv.URL, AuthBase: srv.URL,
 		HTTPClient: srv.Client(),
 	})

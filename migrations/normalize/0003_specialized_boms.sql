@@ -64,7 +64,7 @@ CREATE TABLE normalize.crypto_assets (
     cert_format               text,
     cert_extension            text,
 
-    -- ---- EncoreBOM analysis: NOT CERT-In fields, EXCLUDED from coverage ----
+    -- ---- AxeBOM analysis: NOT CERT-In fields, EXCLUDED from coverage ----
     -- True for Shor-vulnerable primitives: RSA, ECC/ECDSA/ECDH, DH, DSA.
     -- Symmetric primitives get a Grover note on effective key strength, not a
     -- vulnerability flag — halving effective strength is a sizing concern, and
@@ -149,7 +149,7 @@ CREATE TABLE normalize.ai_models (
     environmental_impact   text,
     attestation_signature  text,
 
-    -- EncoreBOM extensions from Trusera ai-bom. NOT CERT-In fields; excluded
+    -- AxeBOM extensions from Trusera ai-bom. NOT CERT-In fields; excluded
     -- from coverage scoring and labelled as extensions in reports.
     risk_score             numeric(5,2),
     owasp_llm_top10        text[],

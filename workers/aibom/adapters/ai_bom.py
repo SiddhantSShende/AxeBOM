@@ -25,9 +25,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from encorebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
-from encorebom_shared.adapters.summary import count_cyclonedx, summarize
-from encorebom_shared.sandbox import SandboxResult, WorkspaceLayout
+from axebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
+from axebom_shared.adapters.summary import count_cyclonedx, summarize
+from axebom_shared.sandbox import SandboxResult, WorkspaceLayout
 
 from ...sbom.adapters.common import SandboxedAdapter
 
@@ -58,13 +58,35 @@ class AIBomAdapter(SandboxedAdapter):
         super().__init__(CAPABILITIES, **kwargs)
 
     def build_argv(self, target: ScanTarget, layout: WorkspaceLayout) -> list[str]:
+        # ⚠ NO `--output` FLAG, AND THAT WAS THE BUG.
+        #
+        # This built `--output -`, following the common Unix "-" means stdout
+        # convention. ai-bom==3.1.0 does not honour it: `--output` is "a file
+        # path" full stop (ai_bom/reporters/base.py does
+        # `Path(path).write_text(...)` with no special case for "-"), so this
+        # silently wrote a file literally named `-` into the workspace and left
+        # stdout empty. The sandbox has no writable host mount (every mount is
+        # read-only, deliberately — see WorkspaceLayout), so that file was not
+        # even reachable, and `parse_stdout` failed the run with
+        # ENGINE_OUTPUT_UNPARSEABLE on every scan. It had never been run against
+        # the real package.
+        #
+        # Omitting `--output` entirely is the fix: for any non-`table` format
+        # ai-bom prints the rendered report straight to stdout
+        # (`ai_bom/cli.py::scan`, the final `else: print(output_str)` branch),
+        # which is exactly the one channel SandboxedAdapter reads.
+        #
+        # Verified against the pinned image, non-root, read-only, no network:
+        #   docker run --rm --user 65534:65534 --read-only --network none \
+        #     -v <fixture>:/src:ro axebom/ai-bom-engine:dev \
+        #     scan /src --format cyclonedx --quiet
+        # returns valid CycloneDX JSON on stdout and nothing on stderr.
         argv = [
             "scan",
             layout.container_source,
             "--format",
             "cyclonedx",
-            "--output",
-            "-",
+            "--quiet",
         ]
 
         if self.enable_llm_enrich:
@@ -220,7 +242,7 @@ def _model_usage(raw: dict[str, Any], properties: dict[str, str]) -> dict[str, A
         "locations": _locations(raw),
         "purl": _string(raw.get("purl")),
         "bom_ref": _string(raw.get("bom-ref")),
-        # ⚠ EncoreBOM EXTENSIONS, EXCLUDED FROM COVERAGE SCORING. Trusera's risk
+        # ⚠ AxeBOM EXTENSIONS, EXCLUDED FROM COVERAGE SCORING. Trusera's risk
         # score and OWASP LLM Top-10 mapping are analysis, not CERT-In Table 10
         # elements. Letting them count would move a compliance percentage
         # because a third party changed its heuristics.

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/ctxkey"
+	"github.com/axebom/axebom/libs/go-shared/platform/ctxkey"
 )
 
 func TestRequestIDGenerated(t *testing.T) {

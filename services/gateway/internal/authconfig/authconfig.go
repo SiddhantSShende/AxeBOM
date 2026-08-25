@@ -6,7 +6,7 @@
 //
 // The obvious alternative is a VITE_ variable compiled into the bundle. It is
 // wrong here for one practical reason: the client id and the project id are
-// produced by `encorebom iam bootstrap` and differ per ZITADEL instance, so
+// produced by `axebom iam bootstrap` and differ per ZITADEL instance, so
 // baking them in means the frontend image is no longer environment-neutral —
 // one image per deployment, rebuilt whenever identity is re-provisioned. The
 // failure mode when they drift is also unusually bad: the SPA redirects to a
@@ -29,9 +29,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/encorebom/encorebom/libs/go-shared/oidcauth"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/oidcauth"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 // Document is what GET /v1/auth/config answers.
@@ -110,7 +110,7 @@ func Handler(cfg config.OIDC) http.HandlerFunc {
 		if cfg.ProjectID == "" || cfg.SPAClientID == "" {
 			errs.Write(w, r, errs.New(errs.InternalDependency,
 				"identity is not provisioned: ZITADEL_PROJECT_ID and "+
-					"ZITADEL_SPA_CLIENT_ID are unset, which `encorebom iam bootstrap` writes"))
+					"ZITADEL_SPA_CLIENT_ID are unset, which `axebom iam bootstrap` writes"))
 			return
 		}
 

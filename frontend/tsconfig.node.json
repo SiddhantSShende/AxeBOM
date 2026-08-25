@@ -14,5 +14,9 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": ["vite.config.ts", "eslint.config.js"]
+  // ⚠ THE PLAYWRIGHT FILES BELONG TO A PROJECT ON PURPOSE. Type-checked lint
+  // rules require every linted file to be in one, and `npm run lint` is a CI
+  // gate — a spec outside both tsconfigs fails the whole lint run with a
+  // parser error that looks nothing like the missing include that caused it.
+  "include": ["vite.config.ts", "eslint.config.js", "playwright.config.ts", "e2e"]
 }

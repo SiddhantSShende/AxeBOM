@@ -16,7 +16,7 @@
  *
  * # Configuration is FETCHED, not compiled in
  *
- * The client id and project id are produced by `encorebom iam bootstrap` and
+ * The client id and project id are produced by `axebom iam bootstrap` and
  * differ per ZITADEL instance. Baking them into the bundle would mean one
  * frontend image per environment, rebuilt whenever identity is re-provisioned —
  * and the deployed image has no build args at all, so the compiled-in value was
@@ -80,7 +80,7 @@ function overrideFromEnv(): AuthConfig | null {
     scopes: defaultScopes(projectId),
     rolesClaim: `urn:zitadel:iam:org:project:${projectId}:roles`,
     orgClaim: 'urn:zitadel:iam:user:resourceowner:id',
-    orgHeader: 'X-EncoreBOM-Org',
+    orgHeader: 'X-AxeBOM-Org',
   };
 }
 
@@ -231,8 +231,25 @@ export interface Membership {
  * appear under several roles. Taking the first would make the result depend on
  * object key order — a user granted both `viewer` and `admin` in one tenant is
  * an admin. Mirrors oidcauth.Verifier, which does the same on the server.
+ *
+ * Exported (not just used internally) because `roleAtLeast` needs the same
+ * ordering, and a second, hand-typed list is how the two definitions drift.
  */
-const precedence: Role[] = ['viewer', 'analyst', 'admin', 'owner'];
+export const ROLE_PRECEDENCE: Role[] = ['viewer', 'analyst', 'admin', 'owner'];
+const precedence = ROLE_PRECEDENCE;
+
+/**
+ * roleAtLeast mirrors libs/go-shared/authz.RoleAtLeast.
+ *
+ * ⚠ THIS IS A UX CONVENIENCE, NOT ENFORCEMENT. Hiding a control a Viewer
+ * cannot use saves them a round trip to a 403; it does not replace the
+ * server's own check, which is what actually protects the resource. Never
+ * ship a control gated ONLY by this that has no matching matrix row.
+ */
+export function roleAtLeast(actual: Role | null | undefined, want: Role): boolean {
+  if (!actual) return false;
+  return precedence.indexOf(actual) >= precedence.indexOf(want);
+}
 
 export function membershipsFrom(
   profile: Record<string, unknown>,

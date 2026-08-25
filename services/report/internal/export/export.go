@@ -357,7 +357,7 @@ func toNode(c Component) (*sbom.Node, error) {
 		node.Identifiers[int32(sbom.SoftwareIdentifierType_CPE23)] = cpes[0]
 		for _, extra := range cpes[1:] {
 			node.Properties = append(node.Properties, &sbom.Property{
-				Name: "encorebom:cpe", Data: extra,
+				Name: "axebom:cpe", Data: extra,
 			})
 		}
 	}
@@ -394,7 +394,7 @@ func toNode(c Component) (*sbom.Node, error) {
 	sort.Strings(locations)
 	for _, loc := range locations {
 		node.Properties = append(node.Properties, &sbom.Property{
-			Name: "encorebom:location", Data: loc,
+			Name: "axebom:location", Data: loc,
 		})
 	}
 

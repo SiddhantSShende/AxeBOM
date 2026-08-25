@@ -26,8 +26,8 @@ from typing import Any
 
 import pytest
 
-from encorebom_shared.adapters.base import ResultStatus
-from encorebom_shared.sandbox import SandboxResult
+from axebom_shared.adapters.base import ResultStatus
+from axebom_shared.sandbox import SandboxResult
 
 from . import runner as runner_mod
 from .runner import SBOMWorker

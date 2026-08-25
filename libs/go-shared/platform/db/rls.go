@@ -13,7 +13,7 @@ import (
 // the migration looked right. A table added without a policy is not a style
 // problem: it is a table any tenant can read in full.
 //
-// The same code backs `encorebom db verify-rls` and TestRLSCoverage, so the
+// The same code backs `axebom db verify-rls` and TestRLSCoverage, so the
 // test that guards development and the command that guards production cannot
 // disagree.
 

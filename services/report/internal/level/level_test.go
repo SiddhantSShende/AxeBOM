@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/encorebom/encorebom/libs/go-shared/model"
+	"github.com/axebom/axebom/libs/go-shared/model"
 )
 
 func depth(n int) *int { return &n }

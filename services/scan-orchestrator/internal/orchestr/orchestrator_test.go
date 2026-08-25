@@ -7,13 +7,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/bus"
-	"github.com/encorebom/encorebom/libs/go-shared/events"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/services/scan-orchestrator/internal/orchestr"
-	"github.com/encorebom/encorebom/services/scan-orchestrator/internal/policy"
+	"github.com/google/uuid"
+
+	"github.com/axebom/axebom/libs/go-shared/bus"
+	"github.com/axebom/axebom/libs/go-shared/events"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/db"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/services/scan-orchestrator/internal/orchestr"
+	"github.com/axebom/axebom/services/scan-orchestrator/internal/policy"
 )
 
 // Phase 6 acceptance tests, against real Postgres and real NATS.
@@ -584,5 +586,148 @@ func TestProgressIsWeighted(t *testing.T) {
 	runs[1].Weight = 3
 	if got := orchestr.Progress(runs); got != 50 {
 		t.Errorf("progress = %d, want 50 with equal weights", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ListScans — GET /v1/scans
+// ---------------------------------------------------------------------------
+
+// A project id of its own, distinct from projectA, so a page assertion here
+// cannot be polluted by scans the rest of this file creates under projectA.
+const projectList = "01900000-0000-7000-8000-0000000000f2"
+
+// createListScan writes a scan directly through the STORE, not f.orch.CreateScan.
+//
+// ⚠ DELIBERATE: f.orch.CreateScan PUBLISHES a real job to NATS, and this test
+// binary runs against the same broker `task dev`'s live sbom-worker and
+// scan-orchestrator containers are also consuming — the exact hazard
+// requireExclusiveSbomSubject exists to route around (see pipeline_test.go). A
+// live worker picking up a job for a scan with no real archive fails fast and
+// reports a result, and that result's async status recompute can overwrite
+// this test's own UpdateScanStatus call mid-assertion. These tests only need
+// scan and engine_run ROWS to exist; the store's own CreateScan writes exactly
+// that, with no NATS publish for anything else to race.
+func createListScan(t *testing.T, f *fixture, tenantID, projectID string) orchestr.Scan {
+	t.Helper()
+	scan, err := f.store.CreateScan(t.Context(), orchestr.Scan{
+		TenantID: tenantID, ProjectID: projectID, SourceKind: events.SourceGit,
+		Families: []string{string(events.FamilySBOM)}, TriggeredBy: "user",
+		EnginesRequested: []string{"syft"},
+	}, []orchestr.EngineRun{
+		{JobID: uuid.NewString(), EngineID: "syft", Attempt: 1, Weight: 1},
+	})
+	if err != nil {
+		t.Fatalf("create scan: %v", err)
+	}
+	cleanupScan(t, f, tenantID, scan.ID)
+	return scan
+}
+
+// UUIDv7 ids are time-ordered, so `ORDER BY id DESC` is both chronological and
+// a stable keyset cursor — this is the same property GetScan's tenant isolation
+// test relies on, exercised here across a page boundary instead of one row.
+func TestListScansKeysetsNewestFirstAcrossAPageBoundary(t *testing.T) {
+	f := newFixture(t)
+
+	var ids []string
+	for i := 0; i < 3; i++ {
+		ids = append(ids, createListScan(t, f, tenantA, projectList).ID)
+	}
+	// ids[0] oldest, ids[2] newest.
+
+	page1, runs1, err := f.store.ListScans(t.Context(), tenantA, 2, "", projectList, "")
+	if err != nil {
+		t.Fatalf("list page 1: %v", err)
+	}
+	if len(page1) != 2 || page1[0].ID != ids[2] || page1[1].ID != ids[1] {
+		t.Fatalf("page 1 = %v, want [%s %s] newest first", scanIDs(page1), ids[2], ids[1])
+	}
+	// The engine run this scan fanned out to must have arrived through the ONE
+	// batched query, not a per-row fetch List cannot afford.
+	if len(runs1[page1[0].ID]) == 0 {
+		t.Error("engine runs were not batched onto the first page")
+	}
+
+	page2, _, err := f.store.ListScans(t.Context(), tenantA, 2, page1[1].ID, projectList, "")
+	if err != nil {
+		t.Fatalf("list page 2: %v", err)
+	}
+	if len(page2) != 1 || page2[0].ID != ids[0] {
+		t.Fatalf("page 2 = %v, want [%s]", scanIDs(page2), ids[0])
+	}
+}
+
+func scanIDs(scans []orchestr.Scan) []string {
+	out := make([]string, len(scans))
+	for i, s := range scans {
+		out[i] = s.ID
+	}
+	return out
+}
+
+// An absent filter matches everything; a filter that does not exist among this
+// tenant's scans matches nothing. Both halves of the `($1 = ” OR col = $1)`
+// idiom need a test, because a typo collapses one into the other silently.
+func TestListScansFiltersByProjectID(t *testing.T) {
+	f := newFixture(t)
+	const otherProject = "01900000-0000-7000-8000-0000000000f3"
+
+	mine := createListScan(t, f, tenantA, projectList)
+	_ = createListScan(t, f, tenantA, otherProject)
+
+	got, _, err := f.store.ListScans(t.Context(), tenantA, 50, "", projectList, "")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != mine.ID {
+		t.Fatalf("filtered list = %v, want exactly [%s]", scanIDs(got), mine.ID)
+	}
+}
+
+// A status filter naming a status none of the tenant's scans currently hold
+// must return zero rows, not every row — the failure mode of a filter clause
+// that silently degrades to "match anything" on a value it does not recognise.
+func TestListScansFiltersByStatus(t *testing.T) {
+	f := newFixture(t)
+
+	scan := createListScan(t, f, tenantA, projectList)
+	if err := f.store.UpdateScanStatus(t.Context(), tenantA, scan.ID, events.ScanCancelled); err != nil {
+		t.Fatalf("update status: %v", err)
+	}
+
+	cancelled, _, err := f.store.ListScans(t.Context(), tenantA, 50, "", projectList, "cancelled")
+	if err != nil {
+		t.Fatalf("list cancelled: %v", err)
+	}
+	if len(cancelled) != 1 || cancelled[0].ID != scan.ID {
+		t.Fatalf("cancelled list = %v, want exactly [%s]", scanIDs(cancelled), scan.ID)
+	}
+
+	queued, _, err := f.store.ListScans(t.Context(), tenantA, 50, "", projectList, "queued")
+	if err != nil {
+		t.Fatalf("list queued: %v", err)
+	}
+	for _, s := range queued {
+		if s.ID == scan.ID {
+			t.Error("a scan updated to cancelled still matched a filter for queued")
+		}
+	}
+}
+
+// The list is tenant-scoped the same way GetScan is: RLS, not a WHERE clause
+// this code could forget to write.
+func TestListScansIsTenantScoped(t *testing.T) {
+	f := newFixture(t)
+	scan := createListScan(t, f, tenantA, projectList)
+
+	got, _, err := f.store.ListScans(t.Context(), tenantB, 50, "", projectList, "")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	for _, s := range got {
+		if s.ID == scan.ID {
+			t.Fatal("tenant B's list included tenant A's scan")
+		}
 	}
 }

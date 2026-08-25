@@ -94,7 +94,7 @@ export function getOrgId(): string | null {
 }
 
 /** The header name, matching oidcauth.HeaderOrg. */
-export const ORG_HEADER = 'X-EncoreBOM-Org';
+export const ORG_HEADER = 'X-AxeBOM-Org';
 
 /**
  * How to obtain a fresh access token when one has expired.

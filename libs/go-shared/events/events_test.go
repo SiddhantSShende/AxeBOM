@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/events"
+	"github.com/axebom/axebom/libs/go-shared/events"
 )
 
 // ---------------------------------------------------------------------------

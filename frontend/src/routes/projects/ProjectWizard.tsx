@@ -19,7 +19,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ApiError } from '../../lib/api';
-import { BOM_TYPES } from '../../lib/bomTypes';
+import { BOM_TYPES } from '../../design/theme';
 import {
   humanizeEnum,
   useCreateProject,
@@ -133,7 +133,7 @@ export function ProjectWizard() {
       : true;
 
   return (
-    <div className="shell">
+    <div className="page">
       <header>
         <h1>Register a project</h1>
         <ol className="steps" aria-label="Progress">
@@ -331,7 +331,7 @@ function OwnerStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>) 
         </label>
       ))}
 
-      <div className="field-row">
+      <div className="field-pair">
         <label className="field">
           <span>Validity start</span>
           <input
@@ -384,9 +384,9 @@ function ClassificationStep({
   const bomTypes =
     options?.bom_types ??
     BOM_TYPES.map((b) => ({
-      id: b.id,
-      requires_import: b.id === 'HBOM',
-      is_derived: b.id === 'QBOM',
+      id: b.type,
+      requires_import: b.type === 'HBOM',
+      is_derived: b.type === 'QBOM',
     }));
   const stages = options?.sdlc_stages ?? [];
   const depths = options?.bom_depths ?? [];
@@ -540,7 +540,7 @@ function ClassificationStep({
           placeholder="How corrections are issued"
         />
         <small>
-          EncoreBOM implements corrections as re-normalization into a new BOM version; describe your
+          AxeBOM implements corrections as re-normalization into a new BOM version; describe your
           own process here.
         </small>
       </label>

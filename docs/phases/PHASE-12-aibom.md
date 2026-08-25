@@ -46,7 +46,7 @@ fixtures/ai-langchain/
 ## Contracts to honour
 
 - **All 19 Table-10 elements** populated or explicitly `not-provided`. Several — intended usage, out-of-scope usage, environmental impact, security requirements — are rarely in tool output and will mostly be `not-provided` or user-supplied. **That is the correct outcome**, visible in the coverage number, not something to paper over with a guess.
-- `risk_score` and `owasp_llm_top10` are **EncoreBOM extensions, excluded from coverage scoring**.
+- `risk_score` and `owasp_llm_top10` are **AxeBOM extensions, excluded from coverage scoring**.
 - **`--llm-enrich` stays off by default.** It needs an LLM key and **sends code context to a third party**; enabling it is a per-project decision surfaced in the UI, not a global flag.
 - Hugging Face lookups are network calls: they run in the **enrichment step outside the sandbox**, never inside a `--network=none` engine container.
 
@@ -59,7 +59,7 @@ fixtures/ai-langchain/
 5. Normalize to `normalize.ai_models` and `ai_datasets`; link software dependencies to existing SBOM components where the ecosystems overlap — an AI dependency is usually also a package.
 6. Fields with no tool source get a **user-supplied form**: intended usage, out-of-scope usage, security requirements, environmental impact. Same `not-provided` discipline.
 7. CycloneDX ML-BOM export via protobom; validate against the 1.6 ML-BOM schema.
-8. Report sections: model inventory, dataset table, AI dependencies, risk and OWASP LLM Top-10 (clearly marked as an EncoreBOM extension, not a CERT-In element).
+8. Report sections: model inventory, dataset table, AI dependencies, risk and OWASP LLM Top-10 (clearly marked as an AxeBOM extension, not a CERT-In element).
 9. Fixture `ai-langchain`: LangChain + an OpenAI client + a referenced HF model. Update `docs/STATE.md`.
 
 ## Test requirements

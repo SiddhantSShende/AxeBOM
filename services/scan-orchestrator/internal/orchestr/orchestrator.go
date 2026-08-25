@@ -5,15 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 
-	"github.com/encorebom/encorebom/libs/go-shared/bus"
-	"github.com/encorebom/encorebom/libs/go-shared/events"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/services/scan-orchestrator/internal/policy"
+	"github.com/axebom/axebom/libs/go-shared/bus"
+	"github.com/axebom/axebom/libs/go-shared/events"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/services/scan-orchestrator/internal/policy"
 )
 
 // Orchestrator creates scans, fans out jobs, and aggregates results.
@@ -24,7 +25,11 @@ type Orchestrator struct {
 	log      *slog.Logger
 
 	artifactPrefix string
-	now            func() time.Time
+	// frontendURL builds a notify event's URL. Empty means the scan.completed
+	// notification is skipped entirely rather than published with a broken
+	// link — see RecomputeScanStatus.
+	frontendURL string
+	now         func() time.Time
 
 	// seq numbers events PER PROCESS. Consumers reorder by (job_id, seq) and
 	// tolerate gaps, so a restart resetting this is survivable — which is the
@@ -38,9 +43,12 @@ type Config struct {
 	Bus      *bus.Bus
 	Registry *policy.Registry
 	Logger   *slog.Logger
-	// ArtifactPrefix is the object-storage root, e.g. s3://encorebom.
+	// ArtifactPrefix is the object-storage root, e.g. s3://axebom.
 	ArtifactPrefix string
-	Now            func() time.Time
+	// FrontendURL builds a notify event's URL. Empty disables that
+	// notification rather than publishing a broken link.
+	FrontendURL string
+	Now         func() time.Time
 }
 
 func New(cfg Config) *Orchestrator {
@@ -51,14 +59,15 @@ func New(cfg Config) *Orchestrator {
 		cfg.Logger = slog.Default()
 	}
 	if cfg.ArtifactPrefix == "" {
-		cfg.ArtifactPrefix = "s3://encorebom"
+		cfg.ArtifactPrefix = "s3://axebom"
 	}
 	if cfg.Registry == nil {
 		cfg.Registry = policy.DefaultRegistry()
 	}
 	return &Orchestrator{
 		store: cfg.Store, bus: cfg.Bus, registry: cfg.Registry,
-		log: cfg.Logger, artifactPrefix: cfg.ArtifactPrefix, now: cfg.Now,
+		log: cfg.Logger, artifactPrefix: cfg.ArtifactPrefix,
+		frontendURL: cfg.FrontendURL, now: cfg.Now,
 	}
 }
 
@@ -117,6 +126,17 @@ func (o *Orchestrator) CreateScan(ctx context.Context, tenantID string, in Creat
 		if err := o.registry.ValidateCombination(in.RequestedEngines, in.SourceKind, in.Families); err != nil {
 			return Scan{}, err
 		}
+	}
+
+	// HBOM and QBOM have no worker: workers/hbom and workers/qbom deliberately
+	// have no runner, because neither is a scan (CLAUDE.md honest labels — HBOM
+	// is a CSV/form import, QBOM is derived from CBOM discovery). Resolving
+	// either into `resolution.Engines` below would publish a scan.job.hbom /
+	// scan.job.qbom job that nothing ever consumes, and the scan would sit
+	// unconsumed until the reaper times it out. Reject before anything is
+	// persisted or published — never discover this at worker time.
+	if err := o.rejectNonScannableFamilies(in); err != nil {
+		return Scan{}, err
 	}
 
 	resolution := o.resolveEngines(in)
@@ -197,6 +217,115 @@ func (o *Orchestrator) CreateScan(ctx context.Context, tenantID string, in Creat
 // defaultJobDeadline matches the sandbox wall-clock ceiling plus scheduling
 // slack. The reaper marks anything past it as `timeout`.
 const defaultJobDeadline = 30 * time.Minute
+
+// familyRedirect names the concrete alternative for a family whose every
+// registered engine is metadata-only (policy.Engine.Derived or
+// .RequiresImport) — i.e. it exists in the registry for UI/tenant-override
+// purposes but has no engine that can be dispatched as a scan job.
+//
+// A family not listed here still gets rejected by rejectNonScannableFamilies
+// — the registry's flags are the source of truth, not this map — but with a
+// generic message instead of a specific redirect. Add an entry here whenever
+// a new metadata-only family is registered, so the 422 stays actionable.
+var familyRedirect = map[events.Family]string{
+	events.FamilyHBOM: "HBOM has no scanner; import hardware inventory via the " +
+		"/v1/hbom/* endpoints instead of requesting a scan.",
+	events.FamilyQBOM: "QBOM is derived from CBOM discovery, not scanned directly; " +
+		"it becomes available automatically once a CBOM report exists for this project.",
+}
+
+// rejectNonScannableFamilies refuses any requested family for which EVERY
+// registered engine is metadata-only, plus any RequestedEngines entry that
+// names such an engine directly.
+//
+// ⚠ GENERIC OFF THE REGISTRY FLAGS, NOT HARDCODED FAMILY NAMES.
+//
+// Today that is exactly HBOM (hbom-csv, RequiresImport) and QBOM
+// (qbom-derive, Derived) — see policy.DefaultRegistry — but this walks
+// Engine.Derived / Engine.RequiresImport rather than switching on family
+// name, so it stays correct if the registry changes without a second edit
+// here.
+//
+// Lists EVERY offending family and engine in one error, matching this
+// package's stated philosophy (see the doc comment on CreateScan): a user who
+// fixes the one thing they were shown and resubmits into the next has been
+// made to do the work twice.
+func (o *Orchestrator) rejectNonScannableFamilies(in CreateScanInput) error {
+	var offendingFamilies []events.Family
+	for _, f := range in.Families {
+		candidates := o.registry.ForFamily(f)
+		if len(candidates) == 0 {
+			// No registered engine at all for this family is a DIFFERENT
+			// problem (ScanNoEnginesAvailable, raised after resolution below) —
+			// not this check's concern.
+			continue
+		}
+		allMetadataOnly := true
+		for _, e := range candidates {
+			if !e.Derived && !e.RequiresImport {
+				allMetadataOnly = false
+				break
+			}
+		}
+		if allMetadataOnly {
+			offendingFamilies = append(offendingFamilies, f)
+		}
+	}
+
+	var offendingEngines []string
+	for _, id := range in.RequestedEngines {
+		if e, ok := o.registry.Get(id); ok && (e.Derived || e.RequiresImport) {
+			offendingEngines = append(offendingEngines, id)
+		}
+	}
+
+	if len(offendingFamilies) == 0 && len(offendingEngines) == 0 {
+		return nil
+	}
+
+	err := errs.New(errs.ScanFamilyNotDirectlyScannable,
+		buildNonScannableMessage(offendingFamilies, offendingEngines))
+
+	for _, f := range offendingFamilies {
+		reason, ok := familyRedirect[f]
+		if !ok {
+			reason = fmt.Sprintf(
+				"%s has no directly-invokable engine; every registered engine for "+
+					"it is derived from another BOM type's output or is an import, "+
+					"never a scan", f)
+		}
+		err = err.WithDetail(errs.Detail{"family": string(f), "reason": reason})
+	}
+	for _, id := range offendingEngines {
+		err = err.WithDetail(errs.Detail{
+			"engine": id,
+			"reason": fmt.Sprintf("%s is a metadata-only engine (derived or import-only) "+
+				"and cannot be requested directly as a scan engine", id),
+		})
+	}
+	return err
+}
+
+// buildNonScannableMessage mirrors policy.buildCombinationMessage's shape:
+// every offender named in the message AND in the details, so the error is
+// legible without a client that renders `details`.
+func buildNonScannableMessage(families []events.Family, engines []string) string {
+	var parts []string
+	if len(families) > 0 {
+		names := make([]string, len(families))
+		for i, f := range families {
+			names[i] = string(f)
+		}
+		parts = append(parts, fmt.Sprintf("%d BOM family(s) cannot be requested as a scan: %s",
+			len(families), strings.Join(names, ", ")))
+	}
+	if len(engines) > 0 {
+		parts = append(parts, fmt.Sprintf("%d engine(s) are metadata-only and cannot be requested directly: %s",
+			len(engines), strings.Join(engines, ", ")))
+	}
+	return strings.Join(parts, "; ") +
+		". Every offending family and engine is listed in the error details, so one correction fixes all of them."
+}
 
 // resolveEngines turns the request into an engine set.
 func (o *Orchestrator) resolveEngines(in CreateScanInput) policy.Resolution {
@@ -473,7 +602,60 @@ func (o *Orchestrator) RecomputeScanStatus(ctx context.Context, tenantID, scanID
 
 	o.log.Info("scan status derived",
 		"scan_id", scanID, "status", derived, "engine_runs", len(statuses))
+
+	// ⚠ AFTER THE STATUS WRITE, NEVER BEFORE — same rule report's render
+	// worker follows for report.ready. Best effort: a notification failing
+	// must not turn a correctly-derived scan status into a retried one
+	// (docs/02-CONTRACTS.md §2, "events are advisory").
+	o.publishScanCompleted(ctx, tenantID, scanID, derived)
 	return nil
+}
+
+// publishScanCompleted sends the notify.> event for a scan reaching a
+// terminal status, whatever that status is — webhook.EventScanCompleted's
+// own doc comment: "fires once per scan, whatever its terminal status."
+//
+// ⚠ NO COMPONENT/FINDING COUNTS. Those live in `normalize.*`, which this
+// service does not otherwise read (ADR-0001, CLAUDE.md invariant 11) — and
+// whether normalization has even finished by the moment every engine run
+// reaches terminal is a real, unanswered timing question, not something to
+// guess at here. A future session wiring real counts needs to answer that
+// first; until then this event carries ids, status and a URL only, which is
+// still the complete story a webhook receiver or an email needs to know
+// something happened and where to look for detail.
+func (o *Orchestrator) publishScanCompleted(ctx context.Context, tenantID, scanID string, status events.ScanStatus) {
+	if o.bus == nil || o.frontendURL == "" {
+		return
+	}
+
+	scan, _, err := o.store.GetScan(ctx, tenantID, scanID)
+	if err != nil {
+		o.log.Warn("could not load the scan for its completion notification",
+			"scan_id", scanID, "error", err)
+		return
+	}
+
+	evt := events.NotifyEventV1{
+		Schema:     events.NotifyEventSchema,
+		Event:      events.NotifyEventScanCompleted,
+		TenantID:   tenantID,
+		ProjectID:  scan.ProjectID,
+		ScanID:     scanID,
+		Status:     string(status),
+		URL:        o.frontendURL + "/scans/" + scanID,
+		OccurredAt: o.now().UTC().Format(time.RFC3339),
+	}
+	body, err := json.Marshal(evt)
+	if err != nil {
+		o.log.Warn("could not encode the scan.completed notification", "scan_id", scanID, "error", err)
+		return
+	}
+	// Dedup key: the scan id. RecomputeScanStatus only reaches here once a
+	// scan's status is genuinely terminal, and a crash-retry of the same
+	// terminal recomputation must not fan the same notification out twice.
+	if err := o.bus.Publish(ctx, evt.Subject(), scanID, body); err != nil {
+		o.log.Warn("could not publish the scan.completed notification", "scan_id", scanID, "error", err)
+	}
 }
 
 // ---------------------------------------------------------------------------

@@ -1,8 +1,8 @@
 # ============================================================================
-# EncoreBOM — OSINT tool manifest
+# AxeBOM — OSINT tool manifest
 # ============================================================================
-# The single machine-readable source of truth for every scanner EncoreBOM
-# invokes. Read by `encorebom toolctl sync|verify|list`.
+# The single machine-readable source of truth for every scanner AxeBOM
+# invokes. Read by `axebom toolctl sync|verify|list`.
 #
 # Rationale: docs/ADR/0002-pinned-artifacts-no-source-builds.md
 # Usage + failure modes: docs/04-OSINT-INTEGRATION.md
@@ -62,7 +62,7 @@ manifest:
   version: 2
   updated: "2026-08-16"
   resolved_against_network: true
-  tools_dir: .encorebom/tools
+  tools_dir: .axebom/tools
 
 defaults:
   mode_preference: [container, binary]
@@ -331,10 +331,26 @@ tools:
     upstream: https://github.com/Trusera/ai-bom
     license: Apache-2.0
     version: "3.1.0"
-    pip:
-      package: ai-bom          # pip-installable — no clone needed
-      version: "3.1.0"
-      require_hashes: true     # pip --require-hashes; populated by `toolctl pin`
+    # ⚠ CONTAINER, NOT PIP — EVEN THOUGH UPSTREAM ONLY PUBLISHES A PIP PACKAGE.
+    #
+    # AIBomAdapter (workers/aibom/adapters/ai_bom.py) subclasses
+    # SandboxedAdapter: it runs THIRD-PARTY CODE over untrusted customer source,
+    # which CLAUDE.md invariant 7 requires to happen in the sandbox
+    # (--network=none, read-only rootfs, cap-drop ALL, non-root, quotas) — a
+    # `pip:` entry gives ManifestResolver nothing to build a sandboxed
+    # container invocation from, so as a pip package this engine could never
+    # actually run.
+    #
+    # deploy/docker/engines/Dockerfile.ai-bom wraps the pip package in a
+    # container built locally with `task osint:build-ai-bom`. There is no
+    # upstream image, so there is no upstream digest to pin against — hence
+    # `image_tag: dev`, honestly tag-pinned rather than falsely digest-pinned.
+    # SandboxedAdapter.classify() already has a branch for exactly this case
+    # (no registry digest resolves; "the image was probably built locally").
+    container:
+      image: axebom/ai-bom-engine
+      image_tag: "dev"
+      image_digest: null
     source_kinds: [git, upload]
     produces: [ai_models, ai_dependencies]
     native_format: cyclonedx-json-1.6
@@ -344,6 +360,9 @@ tools:
       CrewAI, AutoGen, LlamaIndex, LangGraph), MCP servers, model references.
       `--llm-enrich` resolves concrete model names but needs an LLM key AND
       sends code context to a third party. OFF by default (AIBOM_LLM_ENRICH).
+      Package hashes for the full dependency closure (23 packages) are pinned
+      in deploy/docker/engines/ai-bom-requirements.lock.txt, verified with
+      `pip install --require-hashes` against python:3.12-slim.
 
   - id: aibom-generator
     role: generator
@@ -356,6 +375,12 @@ tools:
       is not reproducible and violates ADR-0002 in spirit. `toolctl pin` records
       the resolved COMMIT SHA into pip.ref so a build is at least repeatable;
       until then this engine is best-effort and marked as such in reports.
+      RESOLVED IN THIS SESSION (2026-08-25, real `pip install
+      git+https://github.com/GenAI-Security-Project/aibom-generator`, real
+      network): HEAD of `main` was commit
+      9b8056a66c03d4f6cf707059b83b21f97923c27b. Recorded here as evidence for
+      whoever runs `toolctl pin` next — NOT written to `pip.ref` below, since
+      that is `toolctl pin`'s job to do programmatically, not a value to hand-copy.
     pip:
       git: "https://github.com/GenAI-Security-Project/aibom-generator"
       ref: null                # commit sha, filled by `toolctl pin`
@@ -368,6 +393,17 @@ tools:
       Model-metadata AIBOM from Hugging Face. Complements ai-bom — that finds
       usage in code, this enriches the referenced models. Both emit
       CycloneDX 1.6, so the merge is clean.
+      Installs as `owasp-aibom-generator` (pyproject `[project] name`), NOT
+      `aibom-generator` — pip.git above is correct because it installs by URL,
+      but do not later add a `pip.package: aibom-generator` entry expecting it
+      to resolve on PyPI; this project is git-install-only. Its console script
+      is `aibom` (singular, no hyphen) — distinct from Trusera's `ai-bom`
+      console script above, so the two never collide on $PATH. Verified:
+      `AIBOMService.generate_aibom()` does not check that a model id resolves
+      on the Hub before fabricating a plausible-looking component from guessed
+      defaults, and no layer of its API accepts a revision/pin argument — see
+      `workers/aibom/adapters/aibom_generator_fetch.py`'s module docstring for
+      both, and how the Fetcher guards against them.
 
 # ============================================================================
 # HBOM — no scanner exists. Structured import only. Label honestly in the UI.
@@ -440,7 +476,7 @@ services:
     memory_recommended_gb: 12
     notes: >
       A full platform with its own database, API and UI that duplicates a large
-      part of EncoreBOM. Integrated as an OPTIONAL EXPORT TARGET for portfolio
+      part of AxeBOM. Integrated as an OPTIONAL EXPORT TARGET for portfolio
       monitoring — never as a scanner. Off by default; nothing in the core
       product depends on it.
 

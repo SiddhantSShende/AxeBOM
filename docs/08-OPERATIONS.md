@@ -26,7 +26,7 @@ databases (grype ≈ 2.0 GB, trivy ≈ 1.3 GB, OSV ≈ 0.3 GB, NVD if enabled).
 ### First run
 
 ```
-git clone … && cd EncoreBOM
+git clone … && cd AxeBOM
 cp .env.example .env          # runnable as-is; every credential is optional
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 
@@ -61,16 +61,16 @@ stated reason; nothing is silently omitted.
 
 #### Signing in to a seeded database
 
-Every seeded account uses the same password, **`encorebom-dev-only`**. It is
+Every seeded account uses the same password, **`axebom-dev-only`**. It is
 named so it cannot be mistaken for a credential, and the seed loader refuses any
 host that is not local, so these hashes cannot reach a remote database by
 accident (`libs/go-shared/platform/db/seed.go`).
 
 | Email | Password | Tenant | Role |
 |---|---|---|---|
-| `alice@acme.test` | `encorebom-dev-only` | Acme Industries | owner |
-| `aaron@acme.test` | `encorebom-dev-only` | Acme Industries | analyst |
-| `bob@beta.test` | `encorebom-dev-only` | Beta Corp | owner |
+| `alice@acme.test` | `axebom-dev-only` | Acme Industries | owner |
+| `aaron@acme.test` | `axebom-dev-only` | Acme Industries | analyst |
+| `bob@beta.test` | `axebom-dev-only` | Beta Corp | owner |
 | `carol@both.test` | — **SSO only** | Acme *and* Beta | analyst / viewer |
 
 ⚠ **carol has no password on purpose.** She is the only fixture that reaches

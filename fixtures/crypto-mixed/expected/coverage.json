@@ -1,0 +1,263 @@
+{
+  "completeness_numerator": 80,
+  "completeness_pct": 61.07,
+  "declaration_numerator": 80,
+  "declaration_pct": 61.07,
+  "denominator": 131,
+  "field_count": 25,
+  "fields": [
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 4,
+      "field_id": "certin.crypto.algo.asset_type",
+      "name": "Asset Type",
+      "present": 4,
+      "total": 4,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 0.0,
+      "declaration_pct": 0.0,
+      "declared": 0,
+      "field_id": "certin.crypto.algo.crypto_functions",
+      "name": "Crypto Functions",
+      "present": 0,
+      "total": 4,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 0.0,
+      "declaration_pct": 0.0,
+      "declared": 0,
+      "field_id": "certin.crypto.algo.list",
+      "name": "List",
+      "present": 0,
+      "total": 4,
+      "weight": 1
+    },
+    {
+      "completeness_pct": 0.0,
+      "declaration_pct": 0.0,
+      "declared": 0,
+      "field_id": "certin.crypto.algo.mode",
+      "name": "Mode",
+      "present": 0,
+      "total": 4,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 4,
+      "field_id": "certin.crypto.algo.name",
+      "name": "Name",
+      "present": 4,
+      "total": 4,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 75.0,
+      "declaration_pct": 75.0,
+      "declared": 3,
+      "field_id": "certin.crypto.algo.oid",
+      "name": "OID",
+      "present": 3,
+      "total": 4,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 4,
+      "field_id": "certin.crypto.algo.primitive",
+      "name": "Primitive",
+      "present": 4,
+      "total": 4,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 0.0,
+      "declaration_pct": 0.0,
+      "declared": 0,
+      "field_id": "certin.crypto.algo.security_level",
+      "name": "Classical security level",
+      "present": 0,
+      "total": 4,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 1,
+      "field_id": "certin.crypto.cert.asset_type",
+      "name": "Asset Type",
+      "present": 1,
+      "total": 1,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 1,
+      "field_id": "certin.crypto.cert.extension",
+      "name": "Certificate Extension",
+      "present": 1,
+      "total": 1,
+      "weight": 1
+    },
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 1,
+      "field_id": "certin.crypto.cert.format",
+      "name": "Certificate Format",
+      "present": 1,
+      "total": 1,
+      "weight": 1
+    },
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 1,
+      "field_id": "certin.crypto.cert.issuer_name",
+      "name": "Issuer Name",
+      "present": 1,
+      "total": 1,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 1,
+      "field_id": "certin.crypto.cert.name",
+      "name": "Name",
+      "present": 1,
+      "total": 1,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 1,
+      "field_id": "certin.crypto.cert.not_valid_after",
+      "name": "Not Valid After",
+      "present": 1,
+      "total": 1,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 1,
+      "field_id": "certin.crypto.cert.not_valid_before",
+      "name": "Not Valid Before",
+      "present": 1,
+      "total": 1,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 1,
+      "field_id": "certin.crypto.cert.sig_algo_ref",
+      "name": "Signature Algorithm Reference",
+      "present": 1,
+      "total": 1,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 1,
+      "field_id": "certin.crypto.cert.subject_name",
+      "name": "Subject Name",
+      "present": 1,
+      "total": 1,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 1,
+      "field_id": "certin.crypto.cert.subject_pk_ref",
+      "name": "Subject Public Key Reference",
+      "present": 1,
+      "total": 1,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 0.0,
+      "declaration_pct": 0.0,
+      "declared": 0,
+      "field_id": "certin.crypto.key.activation_date",
+      "name": "Activation Date",
+      "present": 0,
+      "total": 1,
+      "weight": 1
+    },
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 1,
+      "field_id": "certin.crypto.key.asset_type",
+      "name": "Asset Type",
+      "present": 1,
+      "total": 1,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 0.0,
+      "declaration_pct": 0.0,
+      "declared": 0,
+      "field_id": "certin.crypto.key.creation_date",
+      "name": "Creation Date",
+      "present": 0,
+      "total": 1,
+      "weight": 1
+    },
+    {
+      "completeness_pct": 0.0,
+      "declaration_pct": 0.0,
+      "declared": 0,
+      "field_id": "certin.crypto.key.id",
+      "name": "id",
+      "present": 0,
+      "total": 1,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 1,
+      "field_id": "certin.crypto.key.name",
+      "name": "Name",
+      "present": 1,
+      "total": 1,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 1,
+      "field_id": "certin.crypto.key.size",
+      "name": "size",
+      "present": 1,
+      "total": 1,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 0.0,
+      "declaration_pct": 0.0,
+      "declared": 0,
+      "field_id": "certin.crypto.key.state",
+      "name": "state",
+      "present": 0,
+      "total": 1,
+      "weight": 3
+    }
+  ],
+  "formula": "pct = 100 \u00d7 \u03a3_c \u03a3_f (w_f \u00d7 present(c,f)) / \u03a3_c \u03a3_f w_f",
+  "scored_entities": 6,
+  "unidentified_count": 0
+}

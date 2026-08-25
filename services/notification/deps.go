@@ -3,16 +3,20 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/httpx"
-	"github.com/encorebom/encorebom/libs/go-shared/vault"
-	"github.com/encorebom/encorebom/services/notification/internal/delivery"
-	"github.com/encorebom/encorebom/services/notification/internal/handler"
-	"github.com/encorebom/encorebom/services/notification/internal/store"
+	"github.com/axebom/axebom/libs/go-shared/bus"
+	"github.com/axebom/axebom/libs/go-shared/oidcauth"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/db"
+	"github.com/axebom/axebom/libs/go-shared/platform/httpx"
+	"github.com/axebom/axebom/libs/go-shared/vault"
+	"github.com/axebom/axebom/services/notification/internal/delivery"
+	"github.com/axebom/axebom/services/notification/internal/handler"
+	"github.com/axebom/axebom/services/notification/internal/mail"
+	"github.com/axebom/axebom/services/notification/internal/store"
+	"github.com/axebom/axebom/services/notification/internal/worker"
 )
 
 // deps holds this service's constructed dependencies.
@@ -20,16 +24,21 @@ import (
 // Return an error rather than exiting: a service that cannot reach its database
 // must fail to START, not start and serve 500s while passing liveness.
 type deps struct {
-	cfg     *config.Service
-	pool    *db.Pool
-	issuer  *auth.Issuer
-	vault   *vault.Client
-	store   *store.Store
-	handler *handler.Handler
+	cfg      *config.Service
+	pool     *db.Pool
+	bus      *bus.Bus
+	identity *oidcauth.Guard
+	vault    *vault.Client
+	store    *store.Store
+	handler  *handler.Handler
 
 	// delivery posts webhooks. It holds no secret: each delivery resolves one
 	// from Vault moments before use.
 	delivery *delivery.Client
+	mail     *mail.Sender
+
+	consumer *worker.Consumer
+	poller   *worker.Poller
 }
 
 // buildDeps constructs everything this service needs.
@@ -39,15 +48,24 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 		return nil, fmt.Errorf("open postgres: %w", err)
 	}
 
-	issuer, err := auth.NewIssuer(auth.TokenConfig{
-		SigningKey: []byte(cfg.Auth.JWTSigningKey.Reveal()),
-		Issuer:     cfg.Auth.JWTIssuer,
-		AccessTTL:  cfg.Auth.AccessTTL,
-		RefreshTTL: cfg.Auth.RefreshTTL,
+	// Identity: ZITADEL access tokens are verified against the published
+	// key set and resolved to a local tenant UUID. See oidcauth.Guard.
+	identity, err := oidcauth.Open(cfg.OIDC, pool)
+	if err != nil {
+		pool.Close()
+		return nil, err
+	}
+
+	// NATS is REQUIRED. Every notify.> event this service will ever act on
+	// arrives over it — a service that started without a broker would accept
+	// subscriptions and deliver nothing, silently, forever.
+	msgBus, err := bus.Connect(ctx, bus.Config{
+		URL:  cfg.NATS.URL,
+		Name: cfg.Name,
 	})
 	if err != nil {
 		pool.Close()
-		return nil, fmt.Errorf("build token issuer: %w", err)
+		return nil, fmt.Errorf("connect nats: %w", err)
 	}
 
 	// ⚠ VAULT IS REQUIRED, NOT OPTIONAL. Every webhook signing secret lives
@@ -60,6 +78,7 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 		Mount:   cfg.Vault.Mount,
 	})
 	if err != nil {
+		_ = msgBus.Close()
 		pool.Close()
 		return nil, fmt.Errorf("open vault: %w", err)
 	}
@@ -70,15 +89,30 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 		Secrets: vaultSecrets{vaultClient},
 	})
 	if err != nil {
+		_ = msgBus.Close()
 		pool.Close()
 		return nil, fmt.Errorf("build delivery client: %w", err)
 	}
 
+	mailSender := mail.New(mail.Config{
+		Host:     cfg.SMTP.Host,
+		Port:     cfg.SMTP.Port,
+		Username: cfg.SMTP.Username,
+		Password: cfg.SMTP.Password.Reveal(),
+		From:     cfg.SMTP.From,
+	}, nil)
+
+	attempter := worker.NewAttempter(notifyStore, deliveryClient, mailSender, nil, slog.Default())
+
 	return &deps{
 		cfg:      cfg,
 		pool:     pool,
-		issuer:   issuer,
+		bus:      msgBus,
+		identity: identity,
 		vault:    vaultClient,
+		mail:     mailSender,
+		consumer: worker.NewConsumer(msgBus, notifyStore, attempter, slog.Default()),
+		poller:   worker.NewPoller(notifyStore, attempter, nil, slog.Default()),
 		store:    notifyStore,
 		handler:  handler.New(notifyStore, vaultClient, time.Now),
 		delivery: deliveryClient,
@@ -114,6 +148,9 @@ func (d *deps) Close() {
 	if d == nil {
 		return
 	}
+	if d.bus != nil {
+		_ = d.bus.Close()
+	}
 	if d.pool != nil {
 		d.pool.Close()
 	}
@@ -136,5 +173,18 @@ func serviceMiddleware(d *deps) []httpx.Middleware {
 // A worker's failure belongs in a log, not in an exit: an instance that can
 // still serve HTTP is worth more than one that dies because NATS blinked.
 func startBackground(ctx context.Context, d *deps) {
-	_, _ = ctx, d
+	// ⚠ TWO WORKERS, ONE PROCESS. The consumer fans a notify.> event out to
+	// its first delivery attempts; the poller retries whatever that left
+	// pending, on its own clock — see internal/worker's package doc for why
+	// they are not one mechanism. Both are started BEFORE the server so a
+	// backlog begins draining at once, and both log rather than exit: an
+	// instance that can still serve subscription CRUD is worth more than one
+	// that dies because NATS or Postgres blinked.
+	go func() {
+		if err := d.consumer.Run(ctx); err != nil && ctx.Err() == nil {
+			slog.Error("the notification consumer stopped; events will not be delivered",
+				"error", err)
+		}
+	}()
+	go d.poller.Run(ctx)
 }

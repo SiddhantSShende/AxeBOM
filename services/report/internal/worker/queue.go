@@ -10,8 +10,8 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/encorebom/encorebom/libs/go-shared/bus"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/bus"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 // RenderJobV1 is the render-job envelope.
@@ -30,7 +30,7 @@ type RenderJobV1 struct {
 }
 
 // RenderJobSchema versions the envelope.
-const RenderJobSchema = "encorebom.report.render/v1"
+const RenderJobSchema = "axebom.report.render/v1"
 
 // Validate refuses a job that cannot identify a report.
 //

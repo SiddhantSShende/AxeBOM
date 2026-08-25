@@ -1,4 +1,4 @@
-# EncoreBOM — line-ending and diff policy
+# AxeBOM — line-ending and diff policy
 #
 # WHY THIS FILE MATTERS MORE THAN USUAL: development happens on Windows, and
 # the normalizer's correctness guarantee rests on golden-file diffs. If Git

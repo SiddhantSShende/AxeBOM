@@ -327,7 +327,7 @@ def test_renormalize_produces_version_2_without_touching_version_1() -> None:
     Version 1 must come back byte-identical afterwards, or a report issued
     against it no longer resolves to the data it was rendered from.
     """
-    from encorebom_shared.normalize.renormalize import renormalize
+    from axebom_shared.normalize.renormalize import renormalize
 
     from .normalize_runner import load_artifacts, sbom_fields
 
@@ -362,8 +362,8 @@ def test_vex_joins_to_findings_without_changing_them() -> None:
     """A suppressed finding is still a finding, with its justification beside
     it. Removing it would make "assessed and not applicable" indistinguishable
     from "never seen"."""
-    from encorebom_shared.normalize.pipeline import normalize
-    from encorebom_shared.normalize.vex import VexStatement, apply
+    from axebom_shared.normalize.pipeline import normalize
+    from axebom_shared.normalize.vex import VexStatement, apply
 
     from .normalize_runner import load_artifacts, sbom_fields
 

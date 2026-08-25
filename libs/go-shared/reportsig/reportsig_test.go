@@ -19,7 +19,7 @@ func statement() Statement {
 		GeneratedAt:     "2026-08-17T09:14:03Z",
 		ProfileID:       "certin-v2.0",
 		ProfileRevision: 1,
-		ToolName:        "EncoreBOM",
+		ToolName:        "AxeBOM",
 		ToolVersion:     "0.1.0",
 	}
 }
@@ -301,7 +301,7 @@ func TestAnUnknownSchemaIsRefused(t *testing.T) {
 		t.Fatalf("signing: %v", err)
 	}
 
-	env.Schema = "encorebom.signature/v2"
+	env.Schema = "axebom.signature/v2"
 	if _, err := Verify(env, artifact, s.PublicKey()); err == nil {
 		t.Fatal("an unknown envelope schema was accepted")
 	}

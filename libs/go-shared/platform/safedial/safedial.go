@@ -29,7 +29,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 // blockedNets are the ranges no customer-supplied host may resolve into.

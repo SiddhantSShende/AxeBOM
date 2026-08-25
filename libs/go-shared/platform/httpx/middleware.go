@@ -24,9 +24,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/ctxkey"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/obs"
+	"github.com/axebom/axebom/libs/go-shared/platform/ctxkey"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/platform/obs"
 )
 
 // Middleware is a standard HTTP decorator.

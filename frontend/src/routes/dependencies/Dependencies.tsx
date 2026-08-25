@@ -22,6 +22,7 @@ import { api } from '../../lib/api';
 import { ProvenanceChips, SeverityBadge, Value } from '../../components/Chips';
 import { EmptyState, ErrorState, SkeletonRows } from '../../components/States';
 import { compareSeverity } from '../../design/theme';
+import { AnimatePresence } from 'motion/react';
 import { ComponentDrawer, type ComponentDetail } from './ComponentDrawer';
 
 export interface DependencyRow {
@@ -227,15 +228,21 @@ export function Dependencies() {
         </div>
       )}
 
-      {selected !== null && (
-        <ComponentDrawer
-          componentKey={selected}
-          detail={detail.data ?? null}
-          loading={detail.isPending}
-          error={detail.error}
-          onClose={() => setSelected(null)}
-        />
-      )}
+      {/* AnimatePresence holds the drawer in the tree for its exit animation;
+          without it, setSelected(null) would unmount ComponentDrawer before
+          Overlay's exit transition ever plays. */}
+      <AnimatePresence>
+        {selected !== null && (
+          <ComponentDrawer
+            key={selected}
+            componentKey={selected}
+            detail={detail.data ?? null}
+            loading={detail.isPending}
+            error={detail.error}
+            onClose={() => setSelected(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

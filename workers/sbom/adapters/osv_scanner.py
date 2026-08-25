@@ -17,9 +17,9 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from encorebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
-from encorebom_shared.adapters.summary import count_distinct_vulnerabilities, summarize
-from encorebom_shared.sandbox import SandboxResult, WorkspaceLayout
+from axebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
+from axebom_shared.adapters.summary import count_distinct_vulnerabilities, summarize
+from axebom_shared.sandbox import SandboxResult, WorkspaceLayout
 
 from .common import SandboxedAdapter
 
@@ -364,7 +364,7 @@ def osv_db_version(payload: dict[str, Any]) -> str:
     difference, and the number ends up in a compliance document.
 
     The real vintage now comes from the provisioner's stamp (see
-    :mod:`encorebom_shared.enginedb`), which is a claim we can stand behind
+    :mod:`axebom_shared.enginedb`), which is a claim we can stand behind
     because we wrote it when we downloaded the data.
     """
     for key in ("db_version", "database_version", "osv_version"):

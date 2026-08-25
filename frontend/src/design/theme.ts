@@ -186,7 +186,7 @@ export const useTheme = create<ThemeState>()(
       },
     }),
     {
-      name: 'encorebom.theme',
+      name: 'axebom.theme',
       onRehydrateStorage: () => (state) => {
         if (state) applyTheme(state.choice);
       },

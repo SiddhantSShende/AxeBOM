@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"sort"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/migrations"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/migrations"
 )
 
 // Seed loads development fixtures.

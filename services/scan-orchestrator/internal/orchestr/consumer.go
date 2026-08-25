@@ -9,8 +9,8 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/encorebom/encorebom/libs/go-shared/bus"
-	"github.com/encorebom/encorebom/libs/go-shared/events"
+	"github.com/axebom/axebom/libs/go-shared/bus"
+	"github.com/axebom/axebom/libs/go-shared/events"
 )
 
 // The result consumer: the loop that turns worker output into scan state.

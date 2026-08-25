@@ -1,4 +1,4 @@
-# What EncoreBOM does not do
+# What AxeBOM does not do
 
 Phase 16 asks for this list, and calls it a feature. It is: the alternative is
 discovering these together during an incident, or — worse — an audit.
@@ -11,7 +11,7 @@ on.
 
 ## It never says you are compliant
 
-EncoreBOM reports **violations against a configured policy**. The word
+AxeBOM reports **violations against a configured policy**. The word
 "compliant" does not appear in generated output, and `task profile:guardrails`
 fails the build if it ever does.
 
@@ -57,7 +57,7 @@ precision the underlying data does not have.
 
 ## Scanners see what scanners see
 
-- **Lockfiles and manifests only.** EncoreBOM never runs `npm install`, `mvn`,
+- **Lockfiles and manifests only.** AxeBOM never runs `npm install`, `mvn`,
   `gradle`, `pip install` or `setup.py` — package-manager resolution executes
   code from the repository being scanned, and that is not a thing to do inside a
   compliance product. Consequence: a project without a lockfile yields a less

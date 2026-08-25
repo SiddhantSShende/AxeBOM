@@ -5,7 +5,7 @@
  *
  * ⚠ THE DEPLOYED APP FETCHES ITS CONFIGURATION FROM GET /api/v1/auth/config.
  *
- * The client id and project id are produced by `encorebom iam bootstrap` and
+ * The client id and project id are produced by `axebom iam bootstrap` and
  * differ per ZITADEL instance, so compiling them in would mean one frontend
  * image per environment — and the image is built without build args, so the
  * compiled-in value was the empty string and the container could not sign

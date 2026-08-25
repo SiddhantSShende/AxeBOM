@@ -1,5 +1,5 @@
 # ============================================================================
-# EncoreBOM — core stack
+# AxeBOM — core stack
 # ============================================================================
 #   task dev          -> this file        (~4 GB RAM, laptop-friendly)
 #   task dev:heavy    -> + docker-compose.heavy.yml  (~12-16 GB)
@@ -13,14 +13,14 @@
 # if `task dev` reports the daemon unreachable, start Docker Desktop or run
 # `wsl -d docker-desktop`.
 #
-# PORTS: EncoreBOM uses a dedicated 5xxxx range, not the service defaults.
+# PORTS: AxeBOM uses a dedicated 5xxxx range, not the service defaults.
 # This machine already runs other projects that occupy 5432, 4222, 6379, 9000,
 # 8200, 1025 and 8025 — every single default. Colliding would mean connecting
 # to somebody else's Postgres and getting a confusing auth failure rather than
 # an obvious "port in use". Every port is env-overridable.
 # ============================================================================
 
-name: encorebom
+name: axebom
 
 x-healthcheck-defaults: &hc
   interval: 10s
@@ -35,9 +35,9 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-encorebom}
-      POSTGRES_USER: ${POSTGRES_USER:-encorebom}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-encorebom}
+      POSTGRES_DB: ${POSTGRES_DB:-axebom}
+      POSTGRES_USER: ${POSTGRES_USER:-axebom}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-axebom}
       # Deterministic collation. Locale drift between machines changes index
       # ordering, which changes keyset pagination results.
       POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
@@ -56,7 +56,7 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-encorebom} -d ${POSTGRES_DB:-encorebom}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-axebom} -d ${POSTGRES_DB:-axebom}"]
       <<: *hc
 
   # ---------------------------------------------------------------------- nats
@@ -119,8 +119,8 @@ services:
     entrypoint: >
       /bin/sh -c "
       mc alias set local http://minio:9000 ${S3_ACCESS_KEY:-minioadmin} ${S3_SECRET_KEY:-minioadmin};
-      mc mb --ignore-existing local/${S3_BUCKET:-encorebom};
-      mc version enable local/${S3_BUCKET:-encorebom};
+      mc mb --ignore-existing local/${S3_BUCKET:-axebom};
+      mc version enable local/${S3_BUCKET:-axebom};
       echo 'bucket ready (versioned)';
       "
     restart: "no"
@@ -175,4 +175,4 @@ volumes:
 
 networks:
   default:
-    name: encorebom
+    name: axebom

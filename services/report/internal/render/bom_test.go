@@ -7,7 +7,7 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
-	"github.com/encorebom/encorebom/libs/go-shared/model"
+	"github.com/axebom/axebom/libs/go-shared/model"
 )
 
 func sampleBOM() BOM {
@@ -23,7 +23,7 @@ func sampleBOM() BOM {
 		ProfileRevision:    model.ProfileRevision,
 		ProfileAllVerified: model.ProfileAllVerified,
 		RulesetVersion:     "2026.08.1",
-		ToolName:           "EncoreBOM",
+		ToolName:           "AxeBOM",
 		ToolVersion:        "0.1.0",
 		Components: []Component{
 			{
@@ -260,7 +260,7 @@ func TestBothCoverageNumbersAppearWithTheirFormula(t *testing.T) {
 			t.Errorf("the summary does not carry %q", want)
 		}
 	}
-	if !strings.Contains(summary, "EncoreBOM's judgement, not CERT-In's") {
+	if !strings.Contains(summary, "AxeBOM's judgement, not CERT-In's") {
 		t.Error("the summary does not say whose the weights are — a reader would " +
 			"otherwise take our weighting for the regulator's")
 	}
@@ -268,7 +268,7 @@ func TestBothCoverageNumbersAppearWithTheirFormula(t *testing.T) {
 
 // TestTheWordCompliantDoesNotAppear.
 //
-// ⚠ A CONTRACT, NOT A STYLE RULE. EncoreBOM reports violations against a
+// ⚠ A CONTRACT, NOT A STYLE RULE. AxeBOM reports violations against a
 // configured policy; it never asserts that a project IS compliant. This walks
 // every rendered cell, so the check cannot be defeated by adding the word to a
 // sheet nobody thought to look at.

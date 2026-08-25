@@ -27,8 +27,8 @@ from typing import Any
 
 import pytest
 
-from encorebom_shared.adapters.base import ScanTarget
-from encorebom_shared.sandbox import SandboxResult
+from axebom_shared.adapters.base import ScanTarget
+from axebom_shared.sandbox import SandboxResult
 
 from . import runner as runner_mod
 from .adapters.common import EngineImage

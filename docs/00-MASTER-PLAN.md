@@ -8,7 +8,7 @@ For invariants read `CLAUDE.md`. For what is actually built read `STATE.md`. For
 
 ## 1. Product
 
-EncoreBOM generates five bill-of-materials types — **SBOM**, **CBOM** (cryptographic), **QBOM** (quantum), **AIBOM**, **HBOM** (hardware) — against the **CERT-In Technical Guidelines on SBOM, QBOM & CBOM, AIBOM and HBOM, Version 2.0 (09.07.2025)**.
+AxeBOM generates five bill-of-materials types — **SBOM**, **CBOM** (cryptographic), **QBOM** (quantum), **AIBOM**, **HBOM** (hardware) — against the **CERT-In Technical Guidelines on SBOM, QBOM & CBOM, AIBOM and HBOM, Version 2.0 (09.07.2025)**.
 
 **The flow.** Connect a project (GitHub SSO or manual registration/upload) → classify it into one or more BOM types → run scans backed by pinned open-source engines → generate reports in SPDX and/or CycloneDX, at Top-Level and/or Complete depth, as PDF, XLSX or JSON. Reports are signed, shareable and commentable. Campaigns schedule recurring scans. A dependencies module gives third-party visibility with per-engine provenance. VEX and CSAF carry vulnerability disclosure.
 
@@ -28,7 +28,7 @@ Stated here because it shapes the phase plan, and because overselling any of the
 
 - **There is no open-source HBOM scanner.** No tool discovers physical parts. HBOM is a structured CSV/form import plus a data model. The UI says so.
 - **QBOM is largely a derivation.** Crypto assets come from CBOM discovery with quantum-vulnerability rules applied; only Table 8's *device* metadata is separately captured. No tool discovers quantum hardware.
-- **EncoreBOM reports violations against a configured policy.** It never asserts "compliant." That word does not appear in generated output.
+- **AxeBOM reports violations against a configured policy.** It never asserts "compliant." That word does not appear in generated output.
 - **Every report states what it could not see.** A mandatory Engine Coverage section lists each engine's status and every ecosystem detected with no available engine. An SBOM that silently omits an ecosystem is worse than no SBOM.
 
 ---

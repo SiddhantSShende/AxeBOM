@@ -45,7 +45,7 @@ SELECT app.enable_tenant_rls('report.share_access_log');
 
 -- Append-only BY GRANT, not by convention. An audit trail an application can
 -- edit is not an audit trail.
-REVOKE UPDATE, DELETE ON report.share_access_log FROM encorebom_app;
+REVOKE UPDATE, DELETE ON report.share_access_log FROM axebom_app;
 
 -- ---------------------------------------------------------------------------
 -- claim_share_download
@@ -148,7 +148,7 @@ and the increment are one statement so a concurrent pair cannot both pass a
 download cap. Returns no row for an unknown token. Deliberately narrow: takes
 one hash, touches one link. Do not widen it.';
 
-GRANT EXECUTE ON FUNCTION report.claim_share_download(text) TO encorebom_app;
+GRANT EXECUTE ON FUNCTION report.claim_share_download(text) TO axebom_app;
 
 -- ---------------------------------------------------------------------------
 -- record_share_access
@@ -205,7 +205,7 @@ COMMENT ON FUNCTION report.record_share_access(uuid, text, inet, text) IS
 unauthenticated and has no tenant in scope. Derives the tenant from the link
 rather than accepting one, so it cannot write into another tenant''s log.';
 
-GRANT EXECUTE ON FUNCTION report.record_share_access(uuid, text, inet, text) TO encorebom_app;
+GRANT EXECUTE ON FUNCTION report.record_share_access(uuid, text, inet, text) TO axebom_app;
 
 -- +goose Down
 DROP FUNCTION IF EXISTS report.record_share_access(uuid, text, inet, text);

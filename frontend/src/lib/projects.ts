@@ -130,6 +130,33 @@ export function useCreateProject() {
   });
 }
 
+/**
+ * UpdateProjectInput is CreateProjectInput minus `source_type`.
+ *
+ * ⚠ THE SOURCE IS IMMUTABLE AFTER CREATION, AND THE SERVER IS THE REASON.
+ * `projectRequest` still parses `source_type` on a PUT, but
+ * `services/project/internal/handler/handler.go` never passes it to
+ * `svc.Update` — so sending it looks accepted and changes nothing. Offering
+ * the field in a settings form would be a control that silently does nothing,
+ * which is worse than not offering it.
+ */
+export type UpdateProjectInput = Omit<CreateProjectInput, 'source_type'>;
+
+export function useUpdateProject(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateProjectInput) =>
+      request<Project>(`/v1/projects/${projectId}`, { method: 'PUT', body: input }),
+    onSuccess: (data) => {
+      // Seed the detail cache from the response rather than refetching it: the
+      // server just told us the new state, and a refetch would show the old
+      // one for a frame.
+      qc.setQueryData(['project', projectId], data);
+      void qc.invalidateQueries({ queryKey: ['projects'] });
+    },
+  });
+}
+
 export interface PracticesInput {
   frequency?: string | undefined;
   depth?: string | undefined;

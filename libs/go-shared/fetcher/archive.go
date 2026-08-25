@@ -15,8 +15,8 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/blob"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/platform/blob"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 // Archiving materialized source into a content-addressed tar.zst.
@@ -88,7 +88,7 @@ func CreateArchive(ctx context.Context, store *blob.Store, srcDir, keyPrefix str
 	// depends on the digest of the whole archive, so it is not known until the
 	// last byte. Writing a temp file is the honest way to have both content
 	// addressing and a bounded memory footprint.
-	tmp, err := os.CreateTemp("", "encorebom-archive-*.tar.zst")
+	tmp, err := os.CreateTemp("", "axebom-archive-*.tar.zst")
 	if err != nil {
 		return Archive{}, fmt.Errorf("create temporary archive: %w", err)
 	}
@@ -303,8 +303,8 @@ var zeroTime = time.Unix(0, 0).UTC()
 //
 // The orchestrator builds Output.Prefix as
 // "<ArtifactPrefix>/scans/<id>/raw/<engine>/<job>/", and ArtifactPrefix
-// defaults to "s3://encorebom" — documented as "the object-storage root".
-// Passed through unchanged, the object name literally began "s3://encorebom/",
+// defaults to "s3://axebom" — documented as "the object-storage root".
+// Passed through unchanged, the object name literally began "s3://axebom/",
 // and MinIO rejected it:
 //
 //	Object name contains unsupported characters

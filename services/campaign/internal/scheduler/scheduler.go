@@ -42,7 +42,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/encorebom/encorebom/services/campaign/internal/schedule"
+	"github.com/axebom/axebom/libs/go-shared/events"
+	"github.com/axebom/axebom/services/campaign/internal/schedule"
 )
 
 // TickInterval is how often the leader looks for due campaigns.
@@ -158,12 +159,32 @@ type Lock interface {
 // Scheduler
 // ---------------------------------------------------------------------------
 
+// Notifier publishes a notify.> event.
+//
+// ⚠ THE DEDUP KEY IS EXPLICIT, NOT DERIVED FROM THE EVENT. Unlike a report id
+// or a scan id, `evt.CampaignID` repeats across every occurrence of the same
+// campaign — using it as JetStream's Nats-Msg-Id would let a SECOND failure
+// of an already-once-failed campaign be silently deduplicated within the
+// broker's window, which is exactly the case a broken hourly campaign hits.
+// The caller names the actual unique thing: the run id.
+type Notifier interface {
+	Publish(ctx context.Context, dedupKey string, evt events.NotifyEventV1) error
+}
+
 // Scheduler dispatches due campaigns.
 type Scheduler struct {
 	store   Store
 	trigger Trigger
 	lock    Lock
 	log     *slog.Logger
+
+	// notifier may be nil. A campaign.failed notification is advisory
+	// (docs/02-CONTRACTS.md §2) — its absence must never turn a correctly
+	// recorded failed run into something Tick treats differently.
+	notifier Notifier
+	// frontendURL builds the notification's URL. Empty skips it entirely
+	// rather than publishing one with a broken link.
+	frontendURL string
 
 	// batch bounds one tick. A tick that tries to dispatch ten thousand
 	// campaigns holds the leader lock for minutes and delays everything behind
@@ -174,11 +195,13 @@ type Scheduler struct {
 
 // Options configures a Scheduler.
 type Options struct {
-	Store   Store
-	Trigger Trigger
-	Lock    Lock
-	Logger  *slog.Logger
-	Batch   int
+	Store       Store
+	Trigger     Trigger
+	Lock        Lock
+	Logger      *slog.Logger
+	Batch       int
+	Notifier    Notifier
+	FrontendURL string
 }
 
 // New builds a Scheduler.
@@ -196,11 +219,13 @@ func New(opts Options) (*Scheduler, error) {
 		opts.Batch = 200
 	}
 	return &Scheduler{
-		store:   opts.Store,
-		trigger: opts.Trigger,
-		lock:    opts.Lock,
-		log:     opts.Logger,
-		batch:   opts.Batch,
+		store:       opts.Store,
+		trigger:     opts.Trigger,
+		lock:        opts.Lock,
+		log:         opts.Logger,
+		batch:       opts.Batch,
+		notifier:    opts.Notifier,
+		frontendURL: opts.FrontendURL,
 	}, nil
 }
 
@@ -327,6 +352,10 @@ func (s *Scheduler) dispatch(ctx context.Context, c Campaign, now time.Time) (Re
 				s.log.Error("could not record a failed run",
 					"campaign_id", c.ID, "run_id", runID, "cause", ferr.Error())
 			}
+			// ⚠ AFTER FailRun, NEVER BEFORE — same rule report's render worker
+			// and the scan orchestrator's completion notification both follow:
+			// the row being `failed` is the fact being announced.
+			s.publishCampaignFailed(ctx, c, runID, err.Error(), now)
 			return out, fmt.Errorf("trigger scans: %w", err)
 		}
 
@@ -353,6 +382,41 @@ func (s *Scheduler) dispatch(ctx context.Context, c Campaign, now time.Time) (Re
 	}
 
 	return out, nil
+}
+
+// publishCampaignFailed sends the notify.> event for a scheduled run that
+// could not complete — webhook.EventCampaignFailed's own doc comment: "fires
+// when a scheduled run could not complete."
+//
+// ⚠ NO ProjectID. A campaign targets `ProjectIDs []string` — several
+// projects, not one — so there is no single project id to name; CampaignID
+// and CampaignName are what a receiver has to look the run up by.
+func (s *Scheduler) publishCampaignFailed(ctx context.Context, c Campaign, runID, cause string, now time.Time) {
+	if s.notifier == nil || s.frontendURL == "" {
+		return
+	}
+
+	evt := events.NotifyEventV1{
+		Schema:       events.NotifyEventSchema,
+		Event:        events.NotifyEventCampaignFailed,
+		TenantID:     c.TenantID,
+		CampaignID:   c.ID,
+		CampaignName: c.Name,
+		Status:       "failed",
+		// ⚠ Cause IS AN OPERATOR-FACING STRING FROM trigger.Trigger's OWN
+		// ERROR TAXONOMY, NEVER A SCANNER'S RAW OUTPUT — safe for the EMAIL
+		// form to render (email.Data.Cause). It never reaches the webhook
+		// form at all: webhook.Payload has no field for it (toWebhookPayload
+		// only copies ids/counts/status/url), by the same confidentiality
+		// rule that keeps a project name out of a webhook body too.
+		Cause:      cause,
+		URL:        s.frontendURL + "/campaigns/" + c.ID,
+		OccurredAt: now.UTC().Format(time.RFC3339),
+	}
+	if err := s.notifier.Publish(ctx, runID, evt); err != nil {
+		s.log.Warn("could not publish the campaign.failed notification",
+			"campaign_id", c.ID, "run_id", runID, "error", err)
+	}
 }
 
 // Run ticks until the context is cancelled.

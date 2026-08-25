@@ -1,7 +1,7 @@
-# EncoreBOM frontend — built SPA served by nginx.
+# AxeBOM frontend — built SPA served by nginx.
 #
 # Build from the repository root:
-#   docker build -f deploy/docker/Dockerfile.frontend -t encorebom/frontend .
+#   docker build -f deploy/docker/Dockerfile.frontend -t axebom/frontend .
 #
 # Static build rather than a containerised `vite dev`. The dev server is for
 # hot reload on a developer's machine; running it as the deployed artefact
@@ -29,7 +29,7 @@ COPY frontend/ ./
 #
 # Vite substitutes `import.meta.env.VITE_*` during the build, so these must be
 # present HERE and not merely in the container's environment — a runtime env var
-# reaches nginx and never reaches the bundle. `encorebom iam bootstrap` prints
+# reaches nginx and never reaches the bundle. `axebom iam bootstrap` prints
 # both values and compose passes them from .env.
 #
 # Neither is a secret. The application is registered with AUTH_METHOD_NONE

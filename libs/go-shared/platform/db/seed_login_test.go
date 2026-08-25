@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
+	"github.com/axebom/axebom/libs/go-shared/auth"
 )
 
 // ⚠ A SEED WHOSE USERS CANNOT LOG IN IS NOT A SEED.
@@ -17,10 +17,23 @@ import (
 // path a developer actually takes was the one path nothing exercised.
 //
 // These tests are cheap and they close that hole permanently.
+//
+// ---------------------------------------------------------------------------
+// ⚠ THERE ARE NOW TWO WAYS IN, AND THE SEED PASSES THROUGH BOTH.
+//
+// Straight after `task db:reset` a seeded user is `local` with an argon2 hash.
+// After `axebom iam bootstrap` the same user is `oidc` with a
+// zitadel_user_id, because ZITADEL owns the credential from that point on and
+// the local row is only a projection.
+//
+// Both states are correct and the fixture moves between them, so asserting one
+// of them fails half the time for a reason that is not a defect. What must
+// never be true is NEITHER — a user with no password and no ZITADEL link
+// cannot sign in at all, which is the original hole in a new shape.
 
 // SeedPassword is what the dev seed hashes. Named so it cannot be mistaken for
 // a credential; see the seed file's header for why publishing it is safe.
-const SeedPassword = "encorebom-dev-only"
+const SeedPassword = "axebom-dev-only"
 
 // seedLogin is every seeded account and whether it can authenticate locally.
 var seedLogin = []struct {
@@ -45,21 +58,42 @@ func TestSeededUsersCanLogIn(t *testing.T) {
 	for _, want := range seedLogin {
 		t.Run(want.email, func(t *testing.T) {
 			var provider string
-			var hash *string
+			var hash, zitadelUserID *string
 
 			// auth.users is GLOBAL — no tenant_id, no RLS policy — so this
 			// reads through the plain pool rather than WithTenant. A user
 			// belongs to tenants through auth.memberships, which is what lets
 			// carol be in two of them.
 			err := pool.Raw().QueryRow(t.Context(),
-				`SELECT auth_provider, password_hash FROM auth.users WHERE email = $1`,
-				want.email).Scan(&provider, &hash)
+				`SELECT auth_provider, password_hash, zitadel_user_id
+				   FROM auth.users WHERE email = $1`,
+				want.email).Scan(&provider, &hash, &zitadelUserID)
 			if err != nil {
 				t.Fatalf("seeded user %s is missing: %v (did `task db:seed` run?)", want.email, err)
 			}
 
+			linked := zitadelUserID != nil && *zitadelUserID != ""
+
+			// The bootstrap has run and ZITADEL owns this account. There is no
+			// local credential left to check, and demanding one would be
+			// asserting the world before the identity provider existed.
+			if provider == "oidc" {
+				if !linked {
+					t.Fatalf("%s is marked oidc but has no zitadel_user_id, so no "+
+						"identity provider knows it and no password can be checked "+
+						"either — nobody can sign in as this user", want.email)
+				}
+				return
+			}
+
+			if linked {
+				t.Errorf("%s carries a zitadel_user_id but auth_provider is %q; "+
+					"oidcauth resolves on the link, so the two must agree",
+					want.email, provider)
+			}
 			if provider != want.provider {
-				t.Errorf("auth_provider = %q, want %q", provider, want.provider)
+				t.Errorf("auth_provider = %q, want %q (or %q once `axebom iam "+
+					"bootstrap` has linked the account)", provider, want.provider, "oidc")
 			}
 
 			if !want.local {
@@ -110,10 +144,20 @@ func TestSeededHashesUseDistinctSalts(t *testing.T) {
 			continue
 		}
 		var hash *string
+		var provider string
 		if err := pool.Raw().QueryRow(t.Context(),
-			`SELECT password_hash FROM auth.users WHERE email = $1`, want.email).
-			Scan(&hash); err != nil || hash == nil {
-			t.Fatalf("seeded user %s has no hash to compare: %v", want.email, err)
+			`SELECT password_hash, auth_provider FROM auth.users WHERE email = $1`,
+			want.email).Scan(&hash, &provider); err != nil {
+			t.Fatalf("seeded user %s could not be read: %v", want.email, err)
+		}
+		// Once the bootstrap has linked the account, ZITADEL holds the
+		// credential and there is no local hash to compare. Absent is correct
+		// here, not a finding.
+		if provider == "oidc" {
+			continue
+		}
+		if hash == nil {
+			t.Fatalf("seeded user %s has no hash to compare", want.email)
 		}
 		if prior, dup := seen[*hash]; dup {
 			t.Errorf("%s and %s share an identical hash, so they share a salt",

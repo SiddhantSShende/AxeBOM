@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/httpx"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/httpx"
 )
 
 // testServices points every upstream at one URL unless overridden.
@@ -105,6 +105,7 @@ func TestRoutesReachTheOwningService(t *testing.T) {
 		{"project by id", "/v1/projects/abc", "project", "/v1/projects/abc"},
 		{"github repos", "/v1/github/repos", "project", "/v1/github/repos"},
 		{"hbom", "/v1/hbom/preview", "project", "/v1/hbom/preview"},
+		{"qbom", "/v1/qbom/proj-1/form", "project", "/v1/qbom/proj-1/form"},
 		{"scans", "/v1/scans/abc/engine-runs", "scan", "/v1/scans/abc/engine-runs"},
 		{"reports", "/v1/reports", "report", "/v1/reports"},
 		{"shares", "/v1/shares/tok", "report", "/v1/shares/tok"},

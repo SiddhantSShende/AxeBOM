@@ -83,7 +83,7 @@ func TestAHardcodedFieldCountIsCaught(t *testing.T) {
 
 // TestAnAssertionOfComplianceIsCaught.
 //
-// ⚠ EncoreBOM REPORTS VIOLATIONS AGAINST A CONFIGURED POLICY. Compliance is a
+// ⚠ AxeBOM REPORTS VIOLATIONS AGAINST A CONFIGURED POLICY. Compliance is a
 // determination an auditor makes about an organisation, and a customer will
 // quote our word for it — in good faith — to somebody who holds them to it.
 func TestAnAssertionOfComplianceIsCaught(t *testing.T) {

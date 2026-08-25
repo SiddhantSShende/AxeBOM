@@ -61,7 +61,7 @@ takes one user id, returns only that user''s accepted memberships. Do not widen
 it — every added parameter is a new way to read across tenants.';
 
 -- The application role may call it, but the underlying tables stay protected.
-GRANT EXECUTE ON FUNCTION auth.memberships_for_user(uuid) TO encorebom_app;
+GRANT EXECUTE ON FUNCTION auth.memberships_for_user(uuid) TO axebom_app;
 
 -- ---------------------------------------------------------------------------
 -- Session lookup by refresh-token hash.
@@ -103,7 +103,7 @@ COMMENT ON FUNCTION auth.session_by_refresh_hash(text) IS
 returns one session. Returns revoked_at so the caller can detect reuse of an
 already-rotated token, which indicates theft.';
 
-GRANT EXECUTE ON FUNCTION auth.session_by_refresh_hash(text) TO encorebom_app;
+GRANT EXECUTE ON FUNCTION auth.session_by_refresh_hash(text) TO axebom_app;
 
 -- ---------------------------------------------------------------------------
 -- Family revocation.
@@ -132,7 +132,7 @@ END;
 $fn$;
 -- +goose StatementEnd
 
-GRANT EXECUTE ON FUNCTION auth.revoke_session_family(uuid) TO encorebom_app;
+GRANT EXECUTE ON FUNCTION auth.revoke_session_family(uuid) TO axebom_app;
 
 -- ---------------------------------------------------------------------------
 -- Pre-tenant audit write.
@@ -174,7 +174,7 @@ COMMENT ON FUNCTION auth.record_auth_event(uuid, uuid, text, jsonb, inet, text) 
 (a failed login for an unknown email) can be recorded without a tenant scope.
 INSERT only — the audit log has no UPDATE or DELETE grant.';
 
-GRANT EXECUTE ON FUNCTION auth.record_auth_event(uuid, uuid, text, jsonb, inet, text) TO encorebom_app;
+GRANT EXECUTE ON FUNCTION auth.record_auth_event(uuid, uuid, text, jsonb, inet, text) TO axebom_app;
 
 -- ---------------------------------------------------------------------------
 -- Invitations.
@@ -237,7 +237,7 @@ AS $fn$
 $fn$;
 -- +goose StatementEnd
 
-GRANT EXECUTE ON FUNCTION auth.invitation_by_token_hash(text) TO encorebom_app;
+GRANT EXECUTE ON FUNCTION auth.invitation_by_token_hash(text) TO axebom_app;
 
 -- ---------------------------------------------------------------------------
 -- Accept an invitation: create the membership and mark the invite used.
@@ -286,7 +286,7 @@ END;
 $fn$;
 -- +goose StatementEnd
 
-GRANT EXECUTE ON FUNCTION auth.accept_invitation(text, uuid) TO encorebom_app;
+GRANT EXECUTE ON FUNCTION auth.accept_invitation(text, uuid) TO axebom_app;
 
 -- +goose Down
 DROP FUNCTION IF EXISTS auth.accept_invitation(text, uuid);

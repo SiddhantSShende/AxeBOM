@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/sandbox"
+	"github.com/axebom/axebom/libs/go-shared/sandbox"
 )
 
 // ⚠ THE ESCAPE SUITE.

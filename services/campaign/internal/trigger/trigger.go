@@ -24,24 +24,28 @@ import (
 	"strings"
 	"time"
 
-	"github.com/encorebom/encorebom/services/campaign/internal/scheduler"
+	"github.com/axebom/axebom/libs/go-shared/oidcauth"
+	"github.com/axebom/axebom/services/campaign/internal/scheduler"
 )
 
 // Trigger calls the scan service.
 type Trigger struct {
 	client  *http.Client
 	baseURL string
-	// token mints the service-to-service credential per call rather than
-	// holding one: a long-lived token in a struct field is a long-lived token
-	// in a heap dump.
-	token func(ctx context.Context, tenantID string) (string, error)
+	// token mints the service-to-service credential.
+	//
+	// ⚠ IT TAKES NO TENANT. A ZITADEL machine token belongs to the AxeBOM
+	// organisation and carries no customer; the tenant this run acts for goes
+	// on the request as X-AxeBOM-Tenant, which the middleware honours only
+	// for a verified service principal.
+	token func(ctx context.Context) (string, error)
 }
 
 // Options configure a Trigger.
 type Options struct {
 	BaseURL string
 	Client  *http.Client
-	Token   func(ctx context.Context, tenantID string) (string, error)
+	Token   func(ctx context.Context) (string, error)
 }
 
 // New builds a Trigger.
@@ -78,7 +82,7 @@ func New(opts Options) (*Trigger, error) {
 func (t *Trigger) Trigger(
 	ctx context.Context, c scheduler.Campaign, runID string, _ time.Time,
 ) ([]string, error) {
-	token, err := t.token(ctx, c.TenantID)
+	token, err := t.token(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("mint service token: %w", err)
 	}
@@ -140,6 +144,8 @@ func (t *Trigger) startScan(
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
+	// Which tenant this run acts for. See Trigger.token.
+	req.Header.Set(oidcauth.HeaderServiceTenant, c.TenantID)
 
 	// ⚠ THE IDEMPOTENCY KEY IS DERIVED FROM THE RUN AND THE PROJECT, NOT
 	// GENERATED. A dispatch that starts three scans and then loses its

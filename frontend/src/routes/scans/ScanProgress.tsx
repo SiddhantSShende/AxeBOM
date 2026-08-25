@@ -12,13 +12,26 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router';
+import { useLocation, useParams } from 'react-router';
 import { StatusPill } from '../../components/Chips';
 import { SkeletonRows } from '../../components/States';
-import { connectProgress, type ConnectionState, type ScanProgress as Progress } from '../../lib/ws';
+import { getAccessToken } from '../../lib/api';
+import {
+  bearerProtocols,
+  connectProgress,
+  type ConnectionState,
+  type ScanProgress as Progress,
+} from '../../lib/ws';
 
 export function ScanProgressRoute() {
   const { id = '' } = useParams();
+  // ⚠ READ ONCE, ON THE ENTRY THAT SET IT. GenerateFlow passes this in
+  // navigate() state when some (not all) of the reports it queued for this
+  // scan were refused — CBOM today, a known, labelled gap
+  // (services/report/internal/service/service.go). A reload or a direct visit
+  // to this URL carries no state, which is correct: the warning describes one
+  // specific queueing attempt, not a property of the scan itself.
+  const reportWarning = (useLocation().state as { reportWarning?: string } | null)?.reportWarning;
   const [progress, setProgress] = useState<Progress | null>(null);
   const [connection, setConnection] = useState<ConnectionState>({ kind: 'connecting' });
 
@@ -28,14 +41,24 @@ export function ScanProgressRoute() {
     return connectProgress({
       url: `${proto}://${window.location.host}/api/v1/scans/${id}/progress`,
       handlers: { onProgress: setProgress, onConnection: setConnection },
+      // ⚠ READ LAZILY. The token is renewed roughly every quarter hour and a
+      // reconnect may happen long after this effect ran; capturing the value
+      // here would present an expired credential and close the socket the
+      // moment it recovered.
+      protocols: () => bearerProtocols(getAccessToken()),
     });
   }, [id]);
 
   return (
-    <div className="shell">
+    <div className="page">
       <header>
         <h1>Scan progress</h1>
         <ConnectionNotice state={connection} />
+        {reportWarning && (
+          <p className="conn conn-warn" role="status">
+            {reportWarning}
+          </p>
+        )}
       </header>
 
       {progress === null ? (

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/encorebom/encorebom/libs/go-shared/routeguard"
+	"github.com/axebom/axebom/libs/go-shared/routeguard"
 )
 
 // TestEveryRouteIsGuardedOrDeliberatelyPublic parses routes.go and fails on any

@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/encorebom/encorebom/services/campaign/internal/scheduler"
+	"github.com/axebom/axebom/services/campaign/internal/scheduler"
 )
 
-func token(context.Context, string) (string, error) { return "service-token", nil }
+func token(context.Context) (string, error) { return "service-token", nil }
 
 func campaign(projects ...string) scheduler.Campaign {
 	return scheduler.Campaign{

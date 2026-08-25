@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/bus"
-	"github.com/encorebom/encorebom/libs/go-shared/events"
+	"github.com/axebom/axebom/libs/go-shared/bus"
+	"github.com/axebom/axebom/libs/go-shared/events"
 )
 
 // releaseDependents publishes engine jobs that were waiting on this result.

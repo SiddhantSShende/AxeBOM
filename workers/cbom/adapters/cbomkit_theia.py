@@ -25,9 +25,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from encorebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
-from encorebom_shared.adapters.summary import count_cyclonedx, summarize
-from encorebom_shared.sandbox import SandboxResult, WorkspaceLayout
+from axebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
+from axebom_shared.adapters.summary import count_cyclonedx, summarize
+from axebom_shared.sandbox import SandboxResult, WorkspaceLayout
 
 from ...sbom.adapters.common import SandboxedAdapter
 

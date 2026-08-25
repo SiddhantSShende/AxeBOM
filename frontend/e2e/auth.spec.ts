@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { fillZitadelLogin } from './helpers';
 
 /**
  * The login round trip.
@@ -16,50 +17,13 @@ import { expect, test } from '@playwright/test';
  */
 
 const USER = process.env['E2E_USER'] ?? 'alice@acme.test';
-const PASSWORD = process.env['E2E_PASSWORD'] ?? 'EncoreBOM-dev-only1!';
+const PASSWORD = process.env['E2E_PASSWORD'] ?? 'AxeBOM-dev-only1!';
 
 async function signIn(page: import('@playwright/test').Page) {
   await page.goto('/projects');
   await page.getByRole('button', { name: 'Sign in' }).click();
-
-  // ZITADEL's login UI: login name, then password, each on its own step.
-  await step(page, /loginname|username|e-?mail/i, USER, /next|continue/i);
-  await step(page, /password/i, PASSWORD, /next|continue|sign in|log ?in/i);
-
+  await fillZitadelLogin(page, USER, PASSWORD);
   await page.waitForURL(/\/projects/, { timeout: 45_000 });
-}
-
-/**
- * step fills one field of the login UI and advances.
- *
- * ⚠ THE FILL IS RETRIED, AND THAT IS NOT FLAKE-PAPERING.
- *
- * ZITADEL's login is a server-rendered Next.js page whose submit button stays
- * disabled until React sees a value. `fill` sets the DOM value and dispatches an
- * input event, so a fill that lands BEFORE hydration is silently discarded: the
- * text is visibly in the box and the button never enables. Playwright's own
- * click retry cannot rescue that — it waited a full minute on a control that was
- * never going to change — because the missing event already happened.
- *
- * Retrying the fill itself is the fix: once hydration completes, one more fill
- * registers and the button enables immediately.
- */
-async function step(
-  page: import('@playwright/test').Page,
-  label: RegExp,
-  value: string,
-  advance: RegExp,
-) {
-  const field = page.getByLabel(label);
-  await field.waitFor({ state: 'visible' });
-  const next = page.getByRole('button', { name: advance });
-
-  await expect(async () => {
-    await field.fill(value);
-    await expect(next).toBeEnabled({ timeout: 1_000 });
-  }).toPass({ timeout: 20_000 });
-
-  await next.click();
 }
 
 test('an anonymous visitor is asked to sign in rather than shown an error', async ({ page }) => {

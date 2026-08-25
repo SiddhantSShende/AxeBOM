@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/authz"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/ctxkey"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/authz"
+	"github.com/axebom/axebom/libs/go-shared/platform/ctxkey"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 // HTTP middleware: authenticate, scope, authorize.
@@ -105,6 +105,18 @@ func Authorize(resource authz.Resource, action authz.Action) func(http.Handler) 
 				return
 			}
 
+			// ⚠ A KEY IS A NARROWING OF THE ROLE, NEVER A WIDENING. The role
+			// check above already passed (oidcauth.Authenticate sets an API-key
+			// request's role to the ceiling apikey.go's AuthorizeKey assumes);
+			// this only asks whether the SPECIFIC scope the caller presented
+			// covers this exact resource:action, so a scan:run key cannot also
+			// read reports just because the matrix would let an Analyst.
+			if scopes := ctxkey.APIKeyScopes(r.Context()); len(scopes) > 0 && !scopePermits(scopes, resource, action) {
+				errs.Write(w, r, errs.Newf(errs.PermRoleInsufficient,
+					"this API key does not carry the %s:%s scope", resource, action))
+				return
+			}
+
 			// The handler must still check the resource itself — currently only
 			// report download, against visibility. Marking it in the context is
 			// how a handler that forgets becomes findable rather than silent.
@@ -165,4 +177,20 @@ func RequireTenant(ctx context.Context) (string, error) {
 // a cross-tenant reference by other means must answer the same way.
 func NotFoundForCrossTenant(code errs.Code, resource string) *errs.Error {
 	return errs.Newf(code, "no such %s", resource)
+}
+
+// scopePermits reports whether any of the presented scopes names exactly this
+// (resource, action) pair.
+//
+// An unrecognized string (a scope this build never issued) matches nothing
+// rather than erroring — a key minted by an older or newer build must not
+// crash the request it is presented on; it simply carries no permission here.
+func scopePermits(raw []string, resource authz.Resource, action authz.Action) bool {
+	for _, s := range raw {
+		res, act, ok := Scope(s).Permission()
+		if ok && res == resource && act == action {
+			return true
+		}
+	}
+	return false
 }

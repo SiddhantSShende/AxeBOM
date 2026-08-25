@@ -2,19 +2,22 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/httpx"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/leader"
-	"github.com/encorebom/encorebom/services/campaign/internal/handler"
-	"github.com/encorebom/encorebom/services/campaign/internal/scheduler"
-	"github.com/encorebom/encorebom/services/campaign/internal/store"
-	"github.com/encorebom/encorebom/services/campaign/internal/trigger"
+	"github.com/axebom/axebom/libs/go-shared/bus"
+	"github.com/axebom/axebom/libs/go-shared/events"
+	"github.com/axebom/axebom/libs/go-shared/oidcauth"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/db"
+	"github.com/axebom/axebom/libs/go-shared/platform/httpx"
+	"github.com/axebom/axebom/libs/go-shared/platform/leader"
+	"github.com/axebom/axebom/services/campaign/internal/handler"
+	"github.com/axebom/axebom/services/campaign/internal/scheduler"
+	"github.com/axebom/axebom/services/campaign/internal/store"
+	"github.com/axebom/axebom/services/campaign/internal/trigger"
 )
 
 // deps holds this service's constructed dependencies.
@@ -27,11 +30,18 @@ import (
 // Return an error rather than exiting: a service that cannot reach its database
 // must fail to START, not start and serve 500s while passing liveness.
 type deps struct {
-	cfg     *config.Service
-	pool    *db.Pool
-	issuer  *auth.Issuer
-	store   *store.Store
-	handler *handler.Handler
+	cfg      *config.Service
+	pool     *db.Pool
+	bus      *bus.Bus
+	identity *oidcauth.Guard
+	store    *store.Store
+	handler  *handler.Handler
+
+	// tokens mints this service's own credential for calling the scan service.
+	// Separate from identity: verifying an inbound token and presenting an
+	// outbound one are different capabilities, and only two services in the
+	// fleet need the second.
+	tokens *oidcauth.ServiceTokenSource
 
 	// scheduler ticks alongside the HTTP server. Every instance runs it; only
 	// the advisory-lock holder polls. That is deliberate — there is no separate
@@ -48,43 +58,69 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 		return nil, fmt.Errorf("open postgres: %w", err)
 	}
 
-	issuer, err := auth.NewIssuer(auth.TokenConfig{
-		SigningKey: []byte(cfg.Auth.JWTSigningKey.Reveal()),
-		Issuer:     cfg.Auth.JWTIssuer,
-		AccessTTL:  cfg.Auth.AccessTTL,
-		RefreshTTL: cfg.Auth.RefreshTTL,
+	// Identity: ZITADEL access tokens are verified against the published key
+	// set and resolved to a local tenant UUID. See oidcauth.Guard.
+	identity, err := oidcauth.Open(cfg.OIDC, pool)
+	if err != nil {
+		pool.Close()
+		return nil, err
+	}
+
+	// NATS is REQUIRED. Without it a campaign.failed notification is simply
+	// never published — no different, correctness-wise, than the reaper's own
+	// event stream being advisory (docs/02-CONTRACTS.md §2), but a service
+	// that silently started without the broker it needs would fail every
+	// notification instead of failing loudly once at startup.
+	msgBus, err := bus.Connect(ctx, bus.Config{
+		URL:  cfg.NATS.URL,
+		Name: cfg.Name,
 	})
 	if err != nil {
 		pool.Close()
-		return nil, fmt.Errorf("build token issuer: %w", err)
+		return nil, fmt.Errorf("connect nats: %w", err)
+	}
+
+	tokens, err := oidcauth.NewServiceTokenSource(oidcauth.ServiceTokenConfig{
+		KeyPath:   cfg.OIDC.ServiceKeyPath,
+		BaseURL:   cfg.OIDC.InternalURL,
+		Issuer:    cfg.OIDC.Issuer,
+		ProjectID: cfg.OIDC.ProjectID,
+	})
+	if err != nil {
+		_ = msgBus.Close()
+		pool.Close()
+		return nil, fmt.Errorf("service credential: %w", err)
 	}
 
 	campaignStore := store.New(pool)
 
 	scanTrigger, err := trigger.New(trigger.Options{
 		BaseURL: cfg.Services.ScanOrchestrator,
-		Token: func(_ context.Context, tenantID string) (string, error) {
-			return issuer.MintService(serviceName, tenantID)
-		},
+		Token:   tokens.Token,
 	})
 	if err != nil {
+		_ = msgBus.Close()
 		pool.Close()
 		return nil, fmt.Errorf("build scan trigger: %w", err)
 	}
 
 	lock, err := leader.NewLock(pool, leader.CampaignScheduler)
 	if err != nil {
+		_ = msgBus.Close()
 		pool.Close()
 		return nil, fmt.Errorf("build leader lock: %w", err)
 	}
 
 	sched, err := scheduler.New(scheduler.Options{
-		Store:   campaignStore,
-		Trigger: scanTrigger,
-		Lock:    lock,
-		Logger:  slog.Default(),
+		Store:       campaignStore,
+		Trigger:     scanTrigger,
+		Lock:        lock,
+		Logger:      slog.Default(),
+		Notifier:    busNotifier{msgBus},
+		FrontendURL: cfg.Auth.FrontendURL,
 	})
 	if err != nil {
+		_ = msgBus.Close()
 		pool.Close()
 		return nil, fmt.Errorf("build scheduler: %w", err)
 	}
@@ -92,7 +128,9 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 	return &deps{
 		cfg:       cfg,
 		pool:      pool,
-		issuer:    issuer,
+		bus:       msgBus,
+		identity:  identity,
+		tokens:    tokens,
 		store:     campaignStore,
 		handler:   handler.New(campaignStore, runNowAdapter{campaignStore, scanTrigger}, time.Now),
 		scheduler: sched,
@@ -173,9 +211,23 @@ func (d *deps) Close() {
 			slog.Warn("could not release the scheduler lock", "cause", err.Error())
 		}
 	}
+	if d.bus != nil {
+		_ = d.bus.Close()
+	}
 	if d.pool != nil {
 		d.pool.Close()
 	}
+}
+
+// busNotifier adapts bus.Bus to scheduler.Notifier.
+type busNotifier struct{ bus *bus.Bus }
+
+func (n busNotifier) Publish(ctx context.Context, dedupKey string, evt events.NotifyEventV1) error {
+	body, err := json.Marshal(evt)
+	if err != nil {
+		return fmt.Errorf("encode notify event: %w", err)
+	}
+	return n.bus.Publish(ctx, evt.Subject(), dedupKey, body)
 }
 
 // serviceMiddleware returns middleware specific to this service, appended

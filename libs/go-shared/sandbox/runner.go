@@ -271,7 +271,7 @@ func (r *DockerRunner) Run(ctx context.Context, spec Spec) (res Result, err erro
 		// noisy discourages a second component from adopting the flag.
 		r.log.Warn("sandbox: running a container WITH a credential; "+
 			"this is permitted only for the fetcher (ADR-0008)",
-			"image", spec.Image, "role", spec.Labels["encorebom.role"])
+			"image", spec.Image, "role", spec.Labels["axebom.role"])
 	} else if err := assertNoSecrets(spec.Env); err != nil {
 		return Result{}, err
 	}
@@ -571,7 +571,7 @@ func (r *DockerRunner) buildConfig(spec Spec) (*container.HostConfig, *container
 		}
 	}
 
-	labels := map[string]string{"encorebom.sandbox": "true"}
+	labels := map[string]string{"axebom.sandbox": "true"}
 	for k, v := range spec.Labels {
 		labels[k] = v
 	}

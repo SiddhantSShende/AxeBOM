@@ -10,9 +10,9 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/encorebom/encorebom/libs/go-shared/bus"
-	"github.com/encorebom/encorebom/libs/go-shared/events"
-	"github.com/encorebom/encorebom/services/scan-orchestrator/internal/orchestr"
+	"github.com/axebom/axebom/libs/go-shared/bus"
+	"github.com/axebom/axebom/libs/go-shared/events"
+	"github.com/axebom/axebom/services/scan-orchestrator/internal/orchestr"
 )
 
 // The whole pipeline, end to end, against real Postgres and real NATS.
@@ -170,7 +170,7 @@ func TestFullPipelineCreateFetchFanOutResultStatus(t *testing.T) {
 	// The fetch completes: this is what pins the commit and triggers fan-out.
 	const commitSHA = "1234567890abcdef1234567890abcdef12345678"
 	if err := f.orch.PublishFetchResult(ctx, scan.ID, tenantA,
-		commitSHA, "s3://encorebom/workspaces/test/source.tar.zst", "sha-abc"); err != nil {
+		commitSHA, "s3://axebom/workspaces/test/source.tar.zst", "sha-abc"); err != nil {
 		t.Fatalf("publish fetch result: %v", err)
 	}
 
@@ -215,7 +215,7 @@ func TestFullPipelineWithAFailingEngine(t *testing.T) {
 
 	if err := f.orch.PublishFetchResult(ctx, scan.ID, tenantA,
 		"abcdef1234567890abcdef1234567890abcdef12",
-		"s3://encorebom/workspaces/test/source.tar.zst", "sha-abc"); err != nil {
+		"s3://axebom/workspaces/test/source.tar.zst", "sha-abc"); err != nil {
 		t.Fatalf("publish fetch result: %v", err)
 	}
 

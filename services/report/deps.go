@@ -3,25 +3,27 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/bus"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/blob"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/httpx"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/ratelimit"
-	"github.com/encorebom/encorebom/libs/go-shared/reportsig"
-	"github.com/encorebom/encorebom/libs/go-shared/vault"
-	"github.com/encorebom/encorebom/services/report/internal/handler"
-	"github.com/encorebom/encorebom/services/report/internal/service"
-	"github.com/encorebom/encorebom/services/report/internal/store"
-	"github.com/encorebom/encorebom/services/report/internal/worker"
+	"github.com/axebom/axebom/libs/go-shared/bus"
+	"github.com/axebom/axebom/libs/go-shared/events"
+	"github.com/axebom/axebom/libs/go-shared/oidcauth"
+	"github.com/axebom/axebom/libs/go-shared/platform/blob"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/db"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/platform/httpx"
+	"github.com/axebom/axebom/libs/go-shared/platform/ratelimit"
+	"github.com/axebom/axebom/libs/go-shared/reportsig"
+	"github.com/axebom/axebom/libs/go-shared/vault"
+	"github.com/axebom/axebom/services/report/internal/handler"
+	"github.com/axebom/axebom/services/report/internal/service"
+	"github.com/axebom/axebom/services/report/internal/store"
+	"github.com/axebom/axebom/services/report/internal/worker"
 )
 
 // deps holds this service's constructed dependencies.
@@ -36,12 +38,12 @@ import (
 // Return an error rather than exiting: a service that cannot reach its database
 // must fail to START, not start and serve 500s while passing liveness.
 type deps struct {
-	cfg     *config.Service
-	pool    *db.Pool
-	blob    *blob.Store
-	bus     *bus.Bus
-	issuer  *auth.Issuer
-	handler *handler.Handler
+	cfg      *config.Service
+	pool     *db.Pool
+	blob     *blob.Store
+	bus      *bus.Bus
+	identity *oidcauth.Guard
+	handler  *handler.Handler
 
 	// consumer drains render jobs. main.go runs it alongside the HTTP server:
 	// the same binary serves the API and renders, because a render is
@@ -72,16 +74,12 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 		return nil, fmt.Errorf("open object storage: %w", err)
 	}
 
-	// The report service VERIFIES access tokens; auth mints them.
-	issuer, err := auth.NewIssuer(auth.TokenConfig{
-		SigningKey: []byte(cfg.Auth.JWTSigningKey.Reveal()),
-		Issuer:     cfg.Auth.JWTIssuer,
-		AccessTTL:  cfg.Auth.AccessTTL,
-		RefreshTTL: cfg.Auth.RefreshTTL,
-	})
+	// Identity: ZITADEL access tokens are verified against the published
+	// key set and resolved to a local tenant UUID. See oidcauth.Guard.
+	identity, err := oidcauth.Open(cfg.OIDC, pool)
 	if err != nil {
 		pool.Close()
-		return nil, fmt.Errorf("token issuer: %w", err)
+		return nil, err
 	}
 
 	// NATS is REQUIRED. Rendering is async by contract, so a service that
@@ -107,16 +105,34 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 	}
 
 	return &deps{
-		cfg:           cfg,
-		pool:          pool,
-		blob:          blobStore,
-		bus:           msgBus,
-		issuer:        issuer,
-		handler:       handler.New(svc, nil),
-		signer:        signer,
-		consumer:      worker.NewConsumer(msgBus, worker.New(svc, st, blobStore, renderSigner, slog.Default()), slog.Default()),
+		cfg:      cfg,
+		pool:     pool,
+		blob:     blobStore,
+		bus:      msgBus,
+		identity: identity,
+		handler:  handler.New(svc, nil),
+		signer:   signer,
+		consumer: worker.NewConsumer(msgBus, worker.New(
+			svc, st, blobStore, renderSigner,
+			busNotifier{msgBus}, cfg.Auth.FrontendURL, slog.Default(),
+		), slog.Default()),
 		sharedBuckets: ratelimit.New(nil),
 	}, nil
+}
+
+// busNotifier adapts bus.Bus to worker.Notifier.
+type busNotifier struct{ bus *bus.Bus }
+
+// Publish sends a notify.> event with the report id as the dedup key — a
+// report row transitions to `ready` exactly once, so a crash-retry that
+// re-runs Worker.Render for an already-finished report must not fan the
+// same notification out twice.
+func (n busNotifier) Publish(ctx context.Context, evt events.NotifyEventV1) error {
+	body, err := json.Marshal(evt)
+	if err != nil {
+		return fmt.Errorf("encode notify event: %w", err)
+	}
+	return n.bus.Publish(ctx, evt.Subject(), evt.ReportID, body)
 }
 
 // buildSigner wires Vault Transit, or returns nil.
@@ -161,7 +177,7 @@ func buildSigner(ctx context.Context, cfg *config.Service) *reportsig.VaultSigne
 	// A transit mount can hold RSA and ECDSA keys. Pointing the report signer at
 	// one produces signatures nothing in the published verification procedure
 	// can check — and we would not find out until a customer ran
-	// `encorebom verify`. Better to know now and store unsigned.
+	// `axebom verify`. Better to know now and store unsigned.
 	if _, _, err := signer.PublicKey(); err != nil {
 		slog.Warn("the configured signing key is unusable; reports will be stored unsigned",
 			"key", keyName, "cause", err.Error())

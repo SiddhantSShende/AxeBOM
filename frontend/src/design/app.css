@@ -6,6 +6,59 @@
  * with one stubbornly white panel.
  */
 
+/* --- Typeface --------------------------------------------------------------
+ *
+ * Inter, self-hosted, variable, latin + latin-ext only.
+ *
+ * ⚠ NO EXTERNAL REQUEST, DELIBERATELY. A Google Fonts <link> would be blocked
+ * by a customer CSP, would fail entirely in an air-gapped deployment, and
+ * would leak every viewer's IP to a third party from inside a compliance tool.
+ * The package is a normal dependency (OFL-1.1) so the face we ship appears in
+ * our own SBOM — a BOM platform whose own bill of materials is incomplete is
+ * not credible.
+ *
+ * Only the two latin subsets are referenced. Fontsource ships seven; the other
+ * five would be bundled into the image and never fetched.
+ *
+ * `swap` and the metric-matched system fallback in --font mean a slow or
+ * missing font file costs a reflow, never a blank screen.
+ */
+@font-face {
+  font-family: 'InterVariable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'InterVariable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('../../node_modules/@fontsource-variable/inter/files/inter-latin-ext-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+/* --- The shell custom property ---------------------------------------------
+ * Registered so it can be TRANSITIONED. An unregistered custom property is an
+ * untyped token and animates as a discrete jump; registering it as a <length>
+ * is what makes the sidebar collapse ease instead of snap, with no JS and no
+ * layout projection.
+ */
+@property --sidebar-w {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 15rem;
+}
+
 /* --- Foundation ------------------------------------------------------------
  *
  * ⚠ `--font` WAS A TOKEN NOBODY APPLIED. Every screen rendered in the
@@ -101,6 +154,12 @@ code {
 :focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
+  /* ⚠ THE HALO BACKFILLS THE OFFSET GAP. `outline-offset` leaves 2px of
+   * whatever is behind the control showing through — on glass that can be a
+   * coloured ambient blob, and a focus ring whose contrast depends on where
+   * the page happens to have drifted is not a focus ring. This paints a known
+   * colour into the gap so the ring reads the same everywhere. */
+  box-shadow: 0 0 0 2px var(--bg);
   border-radius: var(--radius-sm);
 }
 
@@ -109,7 +168,15 @@ code {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    /* ⚠ WITHOUT THE ITERATION CAP THIS RULE MAKES THINGS WORSE, NOT BETTER.
+     *
+     * `animation-duration: 0.01ms` on an `infinite` animation does not stop it
+     * — it runs it as fast as the compositor will go. The skeleton shimmer is
+     * `infinite`, so a reader who asked for less motion got a strobe. That is
+     * the exact population the media query exists to protect. */
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -365,9 +432,10 @@ code {
 /* --- States -------------------------------------------------------------- */
 
 .state {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg-strong);
+  box-shadow: var(--glass-shadow);
   padding: var(--space-5);
   margin: var(--space-4) 0;
 }
@@ -441,10 +509,11 @@ code {
 }
 
 .callout {
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-border-strong);
   border-left: 3px solid var(--info);
   border-radius: var(--radius);
-  background: var(--surface);
+  background: var(--glass-bg-strong);
+  box-shadow: var(--glass-shadow);
   padding: var(--space-4);
   margin: var(--space-4) 0;
 }
@@ -502,7 +571,7 @@ code {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--surface-sunken);
+  background: var(--glass-head-bg);
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.07em;
@@ -536,11 +605,57 @@ code {
   background: var(--surface-sunken);
 }
 
+/* Wide content scrolls inside its OWN container.
+ *
+ * ⚠ THIS USED TO BE `.table { display: block; overflow-x: auto }`, which broke
+ * two things at once: it made thead/tbody anonymous blocks, so the sticky
+ * header stopped sticking, and it overrode `.table-virtual`'s flex layout on
+ * the 50k-row dependency table. The intent was always "the PAGE must never
+ * scroll sideways" — that is a property of the wrapper, not of the table.
+ */
+.table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+/*
+ * ⚠ ONE PANEL, ZERO BLURRED ROWS — AND NO `backdrop-filter` HERE EITHER.
+ *
+ * This container holds up to 50k absolutely-positioned rows. A filter per row
+ * would be 50k stacking contexts and one blur pass each per frame; a filter on
+ * the container would be cheaper but still buys nothing, because what is
+ * behind it is a smooth gradient and blurring a smooth gradient returns the
+ * same smooth gradient. Tier C is a high-alpha tint, which is what dense text
+ * needs anyway.
+ *
+ * `contain` makes the scroll container its own paint root so row recycling
+ * cannot invalidate the page around it.
+ */
 .table-scroll {
   height: 60vh;
   overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg-solid);
+  box-shadow: var(--glass-shadow);
+  contain: layout paint style;
+}
+.table-wrap {
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg-solid);
+  box-shadow: var(--glass-shadow);
+}
+.table-wrap > .table {
+  margin: 0;
+}
+/* Zebra + hover are TINTS, never filters — a paint of one small rect, which is
+ * affordable at 32px rows; a transform or shadow on hover would not be. */
+.table tbody tr:nth-child(even) {
+  background: var(--glass-row-alt);
+}
+.table tbody tr:hover {
+  background: var(--glass-row-hover);
 }
 .table-virtual tbody {
   display: block;
@@ -749,15 +864,30 @@ code {
 }
 
 .card {
-  border: 1px solid var(--border);
+  position: relative;
+  border: 1px solid var(--glass-border-strong);
   border-radius: var(--radius-lg);
-  background: var(--surface);
+  background: var(--glass-bg-strong);
   padding: var(--space-5);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--glass-shadow);
   transition:
-    box-shadow 0.15s ease,
-    transform 0.1s ease,
-    border-color 0.15s ease;
+    box-shadow var(--dur-base) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+/* The hairline that reads as "glass": a lit top edge, one pixel, inside the
+ * radius. A pseudo-element rather than a real node, deliberately — a decorative
+ * child inside a card would land in the accessibility tree and, in a chip,
+ * would break the `container.querySelector('[aria-hidden="true"]')` assertion
+ * in Chips.test.tsx. */
+:is(.card, .panel, .state, .tabs)::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  border-radius: inherit;
+  background: var(--glass-highlight);
+  pointer-events: none;
 }
 /* A card that links somewhere behaves like the button it stands in for — it
  * should feel liftable before the click, not just clickable after it. Cards
@@ -877,9 +1007,9 @@ code {
 }
 
 .empty {
-  border: 1px dashed var(--border-strong);
+  border: 1px dashed var(--glass-border-strong);
   border-radius: var(--radius-lg);
-  background: var(--surface-sunken);
+  background: var(--glass-bg);
   padding: var(--space-7) var(--space-5);
   text-align: center;
 }
@@ -929,7 +1059,11 @@ code {
 .steps li[data-done='true'] .step-n {
   background: var(--ok);
   border-color: var(--ok);
-  color: #fff;
+  /* ⚠ --text-inverse, NOT #fff. --ok is a DARK green in light mode and a LIGHT
+   * green in dark mode, so a fixed white numeral is legible in one theme and
+   * nearly invisible in the other. --text-inverse flips with the theme, which
+   * is the only value that is correct in both. */
+  color: var(--text-inverse);
 }
 .step-n {
   display: inline-grid;
@@ -990,6 +1124,26 @@ code {
 .field input[aria-invalid='true'] {
   border-color: var(--down);
 }
+/*
+ * ⚠ CHROME'S AUTOFILL IGNORES `background`/`color` HERE ENTIRELY.
+ *
+ * Autofilled fields get the browser's own low-contrast fill, not ours — on
+ * this glass-styled form it rendered as pale grey text nearly invisible
+ * against a pale grey field. `box-shadow: inset` is the one property Chrome
+ * does not override, so it stands in for the background; `-webkit-text-fill-
+ * color` does the same job `color` normally would. The absurd transition
+ * delay is the standard trick that stops Chrome re-asserting its own colour
+ * a moment after paint.
+ */
+.field input:-webkit-autofill,
+.field input:-webkit-autofill:hover,
+.field input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text);
+  -webkit-box-shadow: 0 0 0 1000px var(--surface) inset;
+  box-shadow: 0 0 0 1000px var(--surface) inset;
+  caret-color: var(--text);
+  transition: background-color 5000s ease-in-out 0s;
+}
 .field small {
   display: block;
   margin-top: var(--space-1);
@@ -997,10 +1151,13 @@ code {
   font-size: 0.82rem;
   max-width: 34rem;
 }
-.field-row {
+.field-pair {
   display: flex;
   gap: var(--space-4);
   flex-wrap: wrap;
+}
+.field-pair > .field {
+  flex: 1 1 12rem;
 }
 
 fieldset {
@@ -1051,12 +1208,6 @@ fieldset legend {
 }
 
 /* --- Dependencies -------------------------------------------------------- */
-
-.deps,
-.findings,
-.report {
-  padding: var(--space-5);
-}
 .filters {
   display: flex;
   gap: var(--space-3);
@@ -1099,19 +1250,28 @@ fieldset legend {
 
 /* --- Drawer and dialog --------------------------------------------------- */
 
+/* ⚠ --scrim, NOT rgba(0,0,0,.4). This was the one colour literal left in the
+ * file, and it was the wrong one to keep: a fixed black wash reads as heavy
+ * over a light theme and as invisible over a dark one. */
 .drawer-scrim {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--scrim);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
   display: flex;
   justify-content: flex-end;
   z-index: 50;
 }
+/* Tier A. These sit OVER the page, so the blur is doing visible work. */
 .drawer {
   width: min(46rem, 100%);
   height: 100%;
   overflow: auto;
-  background: var(--surface);
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-left: 1px solid var(--glass-border-strong);
   box-shadow: var(--shadow-drawer);
   padding: var(--space-5);
 }
@@ -1120,8 +1280,11 @@ fieldset legend {
   width: min(44rem, 100%);
   max-height: 90vh;
   overflow: auto;
-  background: var(--surface);
-  border-radius: var(--radius);
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-drawer);
   padding: var(--space-5);
 }
@@ -1181,18 +1344,18 @@ fieldset legend {
 .fields {
   margin: 0;
 }
-.field {
+.def-row {
   display: grid;
   grid-template-columns: 15rem 1fr;
   gap: var(--space-3);
   padding: var(--space-1) 0;
   border-bottom: 1px solid var(--border);
 }
-.field dt {
+.def-row dt {
   font-size: 0.82rem;
   color: var(--text-muted);
 }
-.field dd {
+.def-row dd {
   margin: 0;
   font-size: 0.85rem;
 }
@@ -1336,8 +1499,11 @@ fieldset legend {
   list-style: none;
   margin: var(--space-1) 0 0;
   padding: var(--space-1);
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-border-strong);
   border-radius: var(--radius);
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur-sm);
+  -webkit-backdrop-filter: var(--glass-blur-sm);
   background: var(--surface-raised);
   box-shadow: var(--shadow-menu);
 }
@@ -1373,118 +1539,512 @@ fieldset legend {
   color: var(--warn);
 }
 
-/* --- Shell --------------------------------------------------------------- */
+/* --- Ambient ---------------------------------------------------------------
+ *
+ * The wash everything else floats on. Fixed, inert, and OUTSIDE `.app` — a
+ * `z-index: -1` child would paint behind its own parent's background and
+ * vanish.
+ *
+ * `contain: strict` is the load-bearing declaration: it promises the browser
+ * that nothing in here can affect layout, size or paint outside its box, so a
+ * permanently-running animation can never invalidate the page it sits behind.
+ */
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+}
+.ambient-blob {
+  position: absolute;
+  width: 70vmax;
+  height: 70vmax;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--amb) 0%, transparent 100%);
+  opacity: 0.9;
+  /*
+   * ⚠ NO `filter: blur()`. A closest-side radial gradient is ALREADY soft, and
+   * blurring a 70vmax element costs GPU time proportional to its area on every
+   * frame, forever. Dropping the filter is the single decision that makes a
+   * background that never stops animating acceptable on an integrated GPU.
+   */
+  will-change: transform;
+  animation: drift 52s var(--ease-in-out) infinite alternate;
+}
+.ambient-blob[data-blob='1'] {
+  --amb: var(--amb-1);
+  top: -22vmax;
+  left: -14vmax;
+}
+.ambient-blob[data-blob='2'] {
+  --amb: var(--amb-2);
+  top: 34vmax;
+  left: 48vmax;
+  animation-delay: -17s;
+}
+.ambient-blob[data-blob='3'] {
+  --amb: var(--amb-3);
+  top: -8vmax;
+  left: 58vmax;
+  animation-delay: -34s;
+}
+/* transform only — a compositor-thread animation that never repaints. */
+@keyframes drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(6vmax, -4vmax, 0) scale(1.12);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* The wash STAYS — it is a static colour field, and removing it would be a
+   * different design, not a calmer one. Only the drifting stops. */
+  .ambient-blob {
+    animation: none !important;
+  }
+}
 
-/*
+/* --- Skip link -------------------------------------------------------------
+ * The first tab stop on every page. Off-screen until focused, then a real,
+ * visible control — a skip link that never becomes visible is decoration.
+ */
+.skip-link {
+  position: fixed;
+  top: var(--space-3);
+  left: var(--space-3);
+  z-index: 100;
+  transform: translateY(-200%);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  color: var(--primary-text);
+  font-weight: 650;
+  text-decoration: none;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+/* --- Shell -----------------------------------------------------------------
+ *
  * ⚠ THE OUTER <main> IS THE ONE PLACE PAGE PADDING AND MAX-WIDTH LIVE.
  *
- * Every route used to bring its own — some via `.shell` (which duplicated
- * this padding one level further in, on a SECOND nested <main>, an invalid
- * landmark a screen reader announces twice for one page), some with no
- * wrapper at all and no padding whatsoever. Defining it once here means every
- * route gets the same dashboard-consistent margins for free, and a new route
- * cannot forget to add them.
+ * Every route used to bring its own — some via `.shell` (which duplicated this
+ * padding one level further in, on a SECOND nested <main>, an invalid landmark
+ * a screen reader announces twice for one page), some with no wrapper at all
+ * and no padding whatsoever. Defining it once here means every route gets the
+ * same dashboard-consistent margins for free, and a new route cannot forget.
  */
 .app {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  background: var(--bg);
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    'side top'
+    'side main';
+  min-height: 100dvh;
+  /* --sidebar-w is registered with @property at the top of this file, which is
+   * what lets a custom property ease instead of jumping. */
+  transition: grid-template-columns var(--dur-base) var(--ease-out);
 }
+:root[data-sidebar='collapsed'] {
+  --sidebar-w: 4.25rem;
+}
+
 .app > main {
-  flex: 1;
+  grid-area: main;
+  /*
+   * ⚠ `min-width: 0` IS NOT OPTIONAL, AND ITS ABSENCE IS INVISIBLE UNTIL THE
+   * 50k-ROW TABLE LOADS. A grid item's default `min-width: auto` refuses to
+   * shrink below its content, so one wide table pushes the whole column — and
+   * the sidebar with it — off the screen. Paired with `minmax(0, 1fr)` on the
+   * column above; having one without the other does nothing.
+   */
+  min-width: 0;
   width: 100%;
   max-width: 78rem;
   margin: 0 auto;
   padding: var(--space-6) var(--space-5) var(--space-7);
 }
+.app > main:focus {
+  outline: none;
+}
 
-.app-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-5);
-  padding: var(--space-3) var(--space-5);
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-  box-shadow: var(--shadow-xs);
+/* Route wrapper. `motion` animates this on entry; keep it free of glass — an
+ * animating transform would become the backdrop root for anything inside it
+ * and flatten every blur on the page for the duration. */
+.route {
+  display: block;
+}
+
+/* --- Sidebar ---------------------------------------------------------------
+ * Tier A glass: it overlaps scrolling content, so the blur has real structure
+ * to work on and earns its cost.
+ */
+.sidebar {
+  grid-area: side;
   position: sticky;
   top: 0;
-  z-index: 40;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-3);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-right: 1px solid var(--glass-border-strong);
+  z-index: 30;
+}
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 2.25rem;
+  margin-bottom: var(--space-3);
 }
 .brand {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: 1.05rem;
+  font-size: 1.02rem;
   font-weight: 750;
   letter-spacing: -0.02em;
   color: var(--text);
   text-decoration: none;
+  overflow: hidden;
 }
-/* A small brand mark rather than an image asset: the product has no logo file
- * to ship, and a plain wordmark reads as unfinished next to five colour-coded
- * BOM chips a few pixels below it. */
-.brand::before {
-  content: '';
-  width: 0.6rem;
-  height: 0.6rem;
-  border-radius: 2px;
-  background: var(--primary);
+.brand-mark {
+  flex: none;
+  border-radius: 7px;
+  box-shadow: var(--shadow-xs);
 }
-.app-header nav {
-  display: flex;
-  gap: var(--space-5);
-  flex: 1;
-}
-.app-header nav a,
-.tabs a {
-  color: var(--text-muted);
-  text-decoration: none;
-  font-size: 0.88rem;
-  font-weight: 550;
-  padding: var(--space-1) 0;
-  border-bottom: 2px solid transparent;
-  transition: color 0.15s ease;
-}
-.app-header nav a:hover,
-.tabs a:hover {
-  color: var(--text);
-}
-.app-header nav a.active,
-.tabs a.active {
-  color: var(--text);
-  border-bottom-color: var(--primary);
-  font-weight: 650;
-}
-.tabs {
-  display: flex;
-  gap: var(--space-5);
-  margin: 0 0 var(--space-6);
-  padding-bottom: var(--space-2);
-  border-bottom: 1px solid var(--border);
+.brand-word {
+  white-space: nowrap;
 }
 
+.sidebar-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sidebar-nav a {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 0.885rem;
+  font-weight: 550;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.sidebar-nav a:hover {
+  background: var(--glass-row-hover);
+  color: var(--text);
+}
+/*
+ * react-router sets .active and aria-current on the matched NavLink.
+ *
+ * The generic rule covers Projects, Generate, Scheduled, Reports and
+ * Settings — cross-cutting destinations with no BOM-type identity of their
+ * own, so they get the neutral primary accent, not any one BOM type's
+ * colour. The five rules below it override this for the BOM-type group,
+ * keying off the same `data-bom` token BomTypeChip uses, so a CBOM link
+ * active in the sidebar and a CBOM chip in a table read as the same colour.
+ */
+.sidebar-nav a.active {
+  background: var(--glass-row-hover);
+  color: var(--primary);
+  font-weight: 650;
+}
+.sidebar-nav a[data-bom='sbom'].active {
+  background: var(--sbom-bg);
+  color: var(--sbom);
+}
+.sidebar-nav a[data-bom='cbom'].active {
+  background: var(--cbom-bg);
+  color: var(--cbom);
+}
+.sidebar-nav a[data-bom='qbom'].active {
+  background: var(--qbom-bg);
+  color: var(--qbom);
+}
+.sidebar-nav a[data-bom='aibom'].active {
+  background: var(--aibom-bg);
+  color: var(--aibom);
+}
+.sidebar-nav a[data-bom='hbom'].active {
+  background: var(--hbom-bg);
+  color: var(--hbom);
+}
+.nav-icon {
+  display: inline-flex;
+  flex: none;
+  width: 1.25rem;
+  justify-content: center;
+  /* Sized for the BOM-type glyphs (▣ ⚿ ◈ ◐ ▤), which are plain text here,
+     not an <svg> with its own explicit width/height like the other items. */
+  font-size: 1rem;
+  line-height: 1;
+}
+.icon {
+  display: block;
+}
+.nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-collapse {
+  margin-top: auto;
+  justify-content: flex-start;
+  gap: var(--space-3);
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text-faint);
+}
+.sidebar-collapse .icon {
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+/*
+ * ⚠ COLLAPSED HIDES THE LABEL FROM SIGHT, NEVER FROM THE ACCESSIBLE NAME.
+ *
+ * `width: 0; overflow: hidden` keeps the text in the accessibility tree, where
+ * `display: none` would remove it — and an icon-only nav whose destinations
+ * have no names anywhere is the same failure as an icon-only severity chip.
+ * The product refuses that in Chips.tsx; the rule does not stop at the content
+ * area.
+ */
+:root[data-sidebar='collapsed'] .nav-label,
+:root[data-sidebar='collapsed'] .brand-word {
+  width: 0;
+  opacity: 0;
+  transition:
+    width var(--dur-base) var(--ease-out),
+    opacity var(--dur-fast) linear;
+}
+:root[data-sidebar='collapsed'] .sidebar-nav a,
+:root[data-sidebar='collapsed'] .sidebar-collapse {
+  justify-content: center;
+  gap: 0;
+  padding-inline: var(--space-2);
+}
+:root[data-sidebar='collapsed'] .sidebar-collapse .icon {
+  transform: rotate(180deg);
+}
+:root[data-sidebar='collapsed'] .sidebar-brand {
+  justify-content: center;
+}
+
+/* --- Top bar ---------------------------------------------------------------
+ * Tier A glass, and sticky, so it also overlaps scrolling content.
+ */
+.topbar {
+  grid-area: top;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  min-height: var(--topbar-h);
+  padding: var(--space-2) var(--space-5);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--glass-border-strong);
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.session {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.session-name {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  /* A long email must not push Sign out off the bar on a narrow window. */
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.org-switcher select {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: var(--space-1) var(--space-2);
+  color: var(--text);
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.org-switcher select:hover {
+  border-color: var(--border-strong);
+}
+
+/* The mobile-only controls. Hidden by default; the media query below reveals
+ * them, which keeps the wide layout free of controls that do nothing. */
+.nav-toggle,
+.nav-close,
+.nav-scrim {
+  display: none;
+}
+
+/* --- Project tabs ----------------------------------------------------------
+ * A segmented control rather than an underline row: it reads as one object
+ * sitting on the glass instead of four unrelated links.
+ */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-6);
+  padding: var(--space-1);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg-strong);
+  box-shadow: var(--glass-shadow);
+}
+.tabs a {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  font-weight: 550;
+  text-decoration: none;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.tabs a:hover {
+  background: var(--glass-row-hover);
+  color: var(--text);
+}
+.tabs a.active {
+  background: var(--primary);
+  color: var(--primary-text);
+  font-weight: 650;
+}
+
+/* --- Theme toggle --------------------------------------------------------- */
 .theme-toggle {
   display: inline-flex;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--radius);
+  background: var(--glass-bg-strong);
 }
 .theme-option {
   padding: var(--space-1) var(--space-2);
   border: 0;
-  background: var(--surface);
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--text-muted);
   font: inherit;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 }
 .theme-option:hover {
-  background: var(--surface-sunken);
+  background: var(--glass-row-hover);
+  color: var(--text);
 }
 .theme-option[aria-pressed='true'] {
   background: var(--primary);
   color: var(--primary-text);
+}
+
+/* --- Narrow screens --------------------------------------------------------
+ * The sidebar stops being page furniture and becomes a modal panel. Same
+ * markup, different affordances — and the focus handling in Sidebar.tsx keys
+ * off the same `navOpen` state, so the two cannot disagree.
+ */
+@media (max-width: 60rem) {
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'top'
+      'main';
+  }
+  .sidebar {
+    position: fixed;
+    inset-block: 0;
+    inset-inline-start: 0;
+    width: 17rem;
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform var(--dur-base) var(--ease-out);
+    box-shadow: var(--glass-shadow-lg);
+  }
+  :root[data-nav-open] .sidebar {
+    transform: none;
+  }
+  /* Collapse is a wide-screen preference; a 4rem modal panel is nonsense. */
+  :root[data-sidebar='collapsed'] .nav-label,
+  :root[data-sidebar='collapsed'] .brand-word {
+    width: auto;
+    opacity: 1;
+  }
+  :root[data-sidebar='collapsed'] .sidebar-nav a {
+    justify-content: flex-start;
+    gap: var(--space-3);
+    padding-inline: var(--space-3);
+  }
+  .sidebar-collapse {
+    display: none;
+  }
+  .nav-toggle,
+  .nav-close {
+    display: inline-flex;
+  }
+  .nav-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: var(--scrim);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-base) var(--ease-out);
+  }
+  .nav-scrim[data-open='true'] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .topbar {
+    justify-content: space-between;
+  }
+  .app > main {
+    padding: var(--space-5) var(--space-4) var(--space-6);
+  }
+  .session-name {
+    display: none;
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -1505,21 +2065,12 @@ fieldset legend {
   font-size: 0.875rem;
 }
 
-.page-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-  margin-bottom: var(--space-5);
-}
-.page-header h1 {
-  margin: 0;
-}
-
 .panel {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+  position: relative;
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg-strong);
+  box-shadow: var(--glass-shadow);
   padding: var(--space-5);
   margin-bottom: var(--space-6);
 }
@@ -1647,12 +2198,6 @@ fieldset legend {
   flex-direction: column;
   gap: var(--space-3);
 }
-.card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  padding: var(--space-4);
-}
 .card-head {
   display: flex;
   align-items: flex-start;
@@ -1674,49 +2219,90 @@ fieldset legend {
  * never scroll horizontally, because on a phone that makes every other column
  * unreachable.
  */
-.table {
-  display: block;
-  overflow-x: auto;
-  max-width: 100%;
-}
 
-/* --- Identity in the header ---------------------------------------------- */
-/*
- * The nav uses `flex: 1` to push everything after it to the right, so these
- * controls group together at the end rather than each claiming their own gap.
+/* --- Auth shell -----------------------------------------------------------
+ *
+ * The pre-authentication moment — sign in, no access, create an organisation
+ * — has no sidebar and no top bar: one glass card, centered over the ambient
+ * wash, the way a hosted identity provider's own login reads. Used by
+ * SignIn/NoAccess (routes/auth/AuthRoutes.tsx) and SignupPage
+ * (routes/auth/SignupPage.tsx) through the shared <AuthShell>.
+ *
+ * ⚠ TIER A GLASS (--glass-bg + a real backdrop-filter blur), NOT TIER B LIKE
+ * `.card` / `.state`. tokens.css argues blur is wasted on a surface floating
+ * over a smooth, unblurred gradient — true for a card sitting in the app
+ * alongside scrolling content, where `.ambient`'s blobs are the only thing
+ * behind it. Here the card is the ENTIRE page and nothing else competes for
+ * attention, so the saturate() in --glass-blur visibly intensifies the
+ * ambient colour bleeding through — which is the whole point of a hero
+ * moment, not a cost worth skipping.
  */
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
+.auth-shell {
+  position: relative;
+  z-index: 1; /* above .ambient's z-index: 0 */
+  min-height: 100dvh;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-4);
 }
-
-.session {
+.auth-mark {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-}
-.session-name {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  /* A long email must not push Sign out off the header on a narrow window. */
-  max-width: 18ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.org-switcher select {
-  font: inherit;
-  font-size: 0.85rem;
-  padding: var(--space-1) var(--space-2);
+  font-weight: 750;
+  font-size: 1.05rem;
   color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: border-color 0.15s ease;
 }
-.org-switcher select:hover {
-  border-color: var(--border-strong);
+.auth-card {
+  position: relative;
+  width: 100%;
+  max-width: 28rem;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow-lg);
+  padding: var(--space-6);
+}
+/* The same lit top-edge every glass surface carries (see the .card comment
+ * above), one size up for a card this prominent. */
+.auth-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  border-radius: inherit;
+  background: var(--glass-highlight);
+  pointer-events: none;
+}
+/* SignIn/NoAccess still render `.state-title` / `.state-message` /
+ * `.state-actions` for their typography and layout — only the OUTER `.state
+ * state-empty` chrome is replaced by `.auth-card`, so the two must not stack
+ * two borders and two shadows. */
+.auth-card-body {
+  text-align: center;
+}
+.auth-card .field {
+  text-align: left;
+}
+/* .field-pair's usual 12rem basis (app.css "Form fields") is tuned for the
+ * wide main-content forms; inside the narrower auth card two full-width
+ * columns wrap onto separate rows instead of sitting side by side. */
+.auth-card .field-pair > .field {
+  flex-basis: 8rem;
+}
+.auth-card-error {
+  /* The same colour-plus-shape signal as .state-error — never colour alone. */
+  border-left: 3px solid var(--down);
+}
+.auth-card-foot {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--glass-border-strong);
+  text-align: center;
+  font-size: 0.88rem;
+  color: var(--text-muted);
 }

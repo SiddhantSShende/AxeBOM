@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/authz"
+	"github.com/axebom/axebom/libs/go-shared/auth"
+	"github.com/axebom/axebom/libs/go-shared/authz"
 )
 
 // registerRoutes mounts this service's HTTP surface.
@@ -37,7 +37,7 @@ func registerRoutes(mux *http.ServeMux, d *deps) {
 	d.StartBackground(context.Background())
 
 	h := d.handler
-	authenticated := auth.Authenticate(d.issuer, nil)
+	authenticated := d.identity.Authenticate()
 
 	guard := func(res authz.Resource, act authz.Action, fn http.HandlerFunc) http.Handler {
 		return authenticated(auth.Authorize(res, act)(fn))
@@ -52,6 +52,20 @@ func registerRoutes(mux *http.ServeMux, d *deps) {
 	mux.Handle("GET /v1/scans/engines",
 		guard(authz.ResourceScan, authz.ActionList, h.Engines))
 
+	// Configurable tool management (scan.engine_policy) — which engines run
+	// for a family, tenant-wide. Reading is the same visibility as the
+	// registry itself; writing changes what every future scan executes, so it
+	// is gated on ResourceEngine's own action, not ResourceScan's.
+	mux.Handle("GET /v1/scans/engine-policy",
+		guard(authz.ResourceEngine, authz.ActionList, h.EnginePolicyList))
+	mux.Handle("PUT /v1/scans/engine-policy/{family}",
+		guard(authz.ResourceEngine, authz.ActionConfigureEngines, h.EnginePolicyUpsert))
+	mux.Handle("DELETE /v1/scans/engine-policy/{family}",
+		guard(authz.ResourceEngine, authz.ActionConfigureEngines, h.EnginePolicyDelete))
+
+	mux.Handle("GET /v1/scans",
+		guard(authz.ResourceScan, authz.ActionList, h.List))
+
 	mux.Handle("GET /v1/scans/{id}",
 		guard(authz.ResourceScan, authz.ActionRead, h.Get))
 
@@ -59,6 +73,11 @@ func registerRoutes(mux *http.ServeMux, d *deps) {
 	// the scan, because it belongs in every report they can read.
 	mux.Handle("GET /v1/scans/{id}/engine-runs",
 		guard(authz.ResourceScan, authz.ActionRead, h.EngineRuns))
+
+	// Same visibility as the scan itself: whoever can read the scan can read
+	// what it found.
+	mux.Handle("GET /v1/scans/{id}/findings-summary",
+		guard(authz.ResourceScan, authz.ActionRead, h.FindingsSummary))
 
 	mux.Handle("POST /v1/scans/{id}/cancel",
 		guard(authz.ResourceScan, authz.ActionCancel, h.Cancel))
@@ -68,4 +87,14 @@ func registerRoutes(mux *http.ServeMux, d *deps) {
 	// HTTP response rather than an accepted socket that then closes.
 	mux.Handle("GET /v1/scans/{id}/progress",
 		guard(authz.ResourceScan, authz.ActionRead, h.Progress))
+
+	// --- VEX (CERT-In §6 vulnerability exploitability exchange) --------------
+	// Project-scoped, not scan-scoped: a triage decision is a fact about a
+	// project's vulnerability landscape that survives across re-scans, never
+	// tied to one run. ActionTriage (not ActionCreate) is the matrix cell the
+	// authz package already reserves for this resource.
+	mux.Handle("POST /v1/vex/{projectId}/statements",
+		guard(authz.ResourceVEX, authz.ActionTriage, h.CreateVEXStatement))
+	mux.Handle("GET /v1/vex/{projectId}/statements",
+		guard(authz.ResourceVEX, authz.ActionRead, h.ListVEXHistory))
 }

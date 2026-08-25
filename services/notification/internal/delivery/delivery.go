@@ -21,10 +21,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/safedial"
-	"github.com/encorebom/encorebom/services/notification/internal/subscription"
-	"github.com/encorebom/encorebom/services/notification/internal/webhook"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/platform/safedial"
+	"github.com/axebom/axebom/services/notification/internal/subscription"
+	"github.com/axebom/axebom/services/notification/internal/webhook"
 )
 
 // Timeout bounds one delivery attempt.
@@ -148,12 +148,12 @@ func (c *Client) Deliver(
 		return Result{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "EncoreBOM-Webhook/1")
+	req.Header.Set("User-Agent", "AxeBOM-Webhook/1")
 	req.Header.Set(webhook.SignatureHeader, webhook.Sign(body, sentAt, secret))
 	req.Header.Set(webhook.TimestampHeader, sentAt.Format(time.RFC3339))
 	// The delivery id lets a receiver deduplicate a retry without parsing.
-	req.Header.Set("X-EncoreBOM-Delivery", payload.DeliveryID)
-	req.Header.Set("X-EncoreBOM-Event", string(payload.Event))
+	req.Header.Set("X-AxeBOM-Delivery", payload.DeliveryID)
+	req.Header.Set("X-AxeBOM-Event", string(payload.Event))
 
 	resp, err := c.http.Do(req)
 	if err != nil {

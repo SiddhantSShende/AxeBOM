@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/encorebom/encorebom/libs/go-shared/platform/health"
+	"github.com/axebom/axebom/libs/go-shared/platform/health"
 )
 
 // registerHealthChecks wires this service's dependency probes.

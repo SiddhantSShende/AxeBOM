@@ -32,7 +32,7 @@ from typing import Any
 
 from workers.sbom.runner import ADAPTERS, DEPENDS_ON, SBOMWorker
 
-from encorebom_shared.enginedb import database_root
+from axebom_shared.enginedb import database_root
 
 #: Four ecosystems in one tree — maven, go, pypi and npm. Chosen because a
 #: single-ecosystem fixture cannot distinguish "the engine works" from "the

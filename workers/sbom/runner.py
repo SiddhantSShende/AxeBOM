@@ -27,13 +27,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from encorebom_shared import source
-from encorebom_shared.adapters.base import GenerateResult, RawArtifact, ResultStatus, ScanTarget
-from encorebom_shared.adapters.summary import EngineSummary
-from encorebom_shared.errors import EngineUnavailableError
-from encorebom_shared.logging import get_logger
-from encorebom_shared.sandbox import Sandbox
-from encorebom_shared.worker_runtime import run_worker
+from axebom_shared import source
+from axebom_shared.adapters.base import GenerateResult, RawArtifact, ResultStatus, ScanTarget
+from axebom_shared.adapters.summary import EngineSummary
+from axebom_shared.errors import EngineUnavailableError
+from axebom_shared.logging import get_logger
+from axebom_shared.sandbox import Sandbox
+from axebom_shared.worker_runtime import run_worker
 
 from .adapters import (
     DependencyCheckAdapter,
@@ -131,10 +131,10 @@ class SBOMWorker:
         tests. CBOM and AIBOM reuse this class with their own engine maps.
         """
         self._workspace_root = workspace_root or Path(
-            os.environ.get("ENCOREBOM_WORKSPACE_ROOT", "/var/lib/encorebom/workspaces")
+            os.environ.get("AXEBOM_WORKSPACE_ROOT", "/var/lib/axebom/workspaces")
         )
         self._output_root = output_root or Path(
-            os.environ.get("ENCOREBOM_OUTPUT_ROOT", "/var/lib/encorebom/artifacts")
+            os.environ.get("AXEBOM_OUTPUT_ROOT", "/var/lib/axebom/artifacts")
         )
         self._sandbox = sandbox or Sandbox()
         self._adapters = adapters if adapters is not None else ADAPTERS

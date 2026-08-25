@@ -1,4 +1,4 @@
-# EncoreBOM protobuf contracts.
+# AxeBOM protobuf contracts.
 #
 # proto/ is the single source of truth for anything crossing a process
 # boundary — gRPC service definitions and event envelopes alike
@@ -18,7 +18,7 @@ lint:
   use:
     - STANDARD
   except:
-    # Our package names are versioned (encorebom.scan.v1) but the directory
+    # Our package names are versioned (axebom.scan.v1) but the directory
     # layout is flat; revisit if the proto tree grows nested packages.
     - PACKAGE_DIRECTORY_MATCH
 

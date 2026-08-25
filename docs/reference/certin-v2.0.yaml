@@ -1,7 +1,7 @@
 # ============================================================================
-# EncoreBOM — CERT-In Compliance Profile
+# AxeBOM — CERT-In Compliance Profile
 # ============================================================================
-# Source of truth for EVERY field EncoreBOM must represent, score, and render.
+# Source of truth for EVERY field AxeBOM must represent, score, and render.
 #
 # Derived directly from:
 #   Indian Computer Emergency Response Team (CERT-In), Ministry of Electronics
@@ -46,7 +46,7 @@
 #   Both appear in every report. Always.
 #
 #   `weight` drives completeness_pct: 3 = minimum-element / identity-bearing,
-#   1 = enrichment. Weights are EncoreBOM's judgement, not CERT-In's — the
+#   1 = enrichment. Weights are AxeBOM's judgement, not CERT-In's — the
 #   guideline does not rank its fields. Flagged as such in the report footer.
 # ============================================================================
 
@@ -91,7 +91,7 @@ sbom:
       kind: enum_set
       # PDF p.28 §4.3 restates these as the two standard formats.
       required_values: [SPDX, CycloneDX]
-      encorebom_binding: scan.standards[]
+      axebom_binding: scan.standards[]
 
     # ------------------------------------------------------------------
     # THE COMMONLY-MISSED CATEGORY. These six are per-PROJECT settings that
@@ -105,49 +105,49 @@ sbom:
       sub_elements:
         - id: certin.sbom.pp.frequency
           name: Frequency
-          encorebom_binding: project.practices.frequency
+          axebom_binding: project.practices.frequency
           type: string          # cron expression or human cadence; links to Campaigns
           weight: 3
           status: verified
         - id: certin.sbom.pp.depth
           name: Depth
-          encorebom_binding: project.practices.depth
+          axebom_binding: project.practices.depth
           type: enum
           enum_ref: sbom.levels
           weight: 3
           status: verified
         - id: certin.sbom.pp.known_unknowns
           name: Known Unknowns
-          encorebom_binding: project.practices.known_unknowns
+          axebom_binding: project.practices.known_unknowns
           type: text
           description: >
             Declaration of what the organization knows it does NOT know about
-            its component inventory. Maps to EncoreBOM's engine-coverage gaps:
+            its component inventory. Maps to AxeBOM's engine-coverage gaps:
             ecosystems detected with no available engine are auto-populated
             here, and the user may add narrative.
           weight: 3
           status: verified
         - id: certin.sbom.pp.distribution_and_delivery
           name: Distribution and Delivery
-          encorebom_binding: project.practices.distribution
+          axebom_binding: project.practices.distribution
           type: text
           weight: 3
           status: verified
         - id: certin.sbom.pp.access_control
           name: Access Control
-          encorebom_binding: project.practices.access_control
+          axebom_binding: project.practices.access_control
           type: enum
           values: [public, private]     # PDF p.32 §5.3.2 — maintain BOTH versions
           weight: 3
           status: verified
         - id: certin.sbom.pp.accommodation_of_mistakes
           name: Accommodation of Mistakes
-          encorebom_binding: project.practices.errata_policy
+          axebom_binding: project.practices.errata_policy
           type: text
           description: >
             The errata/correction mechanism. PDF p.- §7.1.9: an SBOM is updated
             when new component information appears or errors are corrected.
-            EncoreBOM implements this as re-normalization versioning.
+            AxeBOM implements this as re-normalization versioning.
           weight: 3
           status: verified
 
@@ -240,7 +240,7 @@ sbom:
         The source or origin of the software component, such as whether it is
         proprietary, open-source, or obtained from a third-party vendor.
       canonical_path: component.origin
-      cyclonedx_path: components[].properties[encorebom:origin]
+      cyclonedx_path: components[].properties[axebom:origin]
       spdx_path: packages[].originator
       type: enum
       values: [proprietary, open-source, third-party-vendor, unknown]
@@ -291,7 +291,7 @@ sbom:
         The patch or update status of the software component, indicating whether
         any patches or updates are available to address known vulnerabilities.
       canonical_path: component.patch_status
-      cyclonedx_path: components[].properties[encorebom:patch_status]
+      cyclonedx_path: components[].properties[axebom:patch_status]
       spdx_path: annotations[]
       type: enum
       values: [up-to-date, patch-available, no-fix-available, unknown]
@@ -309,7 +309,7 @@ sbom:
       name: Release Date
       description: The date when the software component was released or made available for use.
       canonical_path: component.release_date
-      cyclonedx_path: components[].properties[encorebom:release_date]
+      cyclonedx_path: components[].properties[axebom:release_date]
       spdx_path: packages[].releaseDate
       type: date
       weight: 1
@@ -324,7 +324,7 @@ sbom:
         The date when support or maintenance for the software component is
         scheduled to end, indicating the end of its lifecycle.
       canonical_path: component.eol_date
-      cyclonedx_path: components[].properties[encorebom:eol_date]
+      cyclonedx_path: components[].properties[axebom:eol_date]
       spdx_path: packages[].validUntilDate
       type: date
       weight: 1
@@ -339,7 +339,7 @@ sbom:
         The criticality or importance of the software component to the overall
         functionality or security of the application.
       canonical_path: component.criticality
-      cyclonedx_path: components[].properties[encorebom:criticality]
+      cyclonedx_path: components[].properties[axebom:criticality]
       spdx_path: annotations[]
       type: enum
       values: [critical, high, medium, low]   # verbatim from p.23
@@ -355,7 +355,7 @@ sbom:
         Any usage restrictions or limitations associated with the software
         component, such as export control restrictions or intellectual property rights.
       canonical_path: component.usage_restrictions
-      cyclonedx_path: components[].properties[encorebom:usage_restrictions]
+      cyclonedx_path: components[].properties[axebom:usage_restrictions]
       spdx_path: packages[].comment
       type: text
       weight: 1
@@ -378,7 +378,7 @@ sbom:
       source_page: 23
       note: >
         Table 6 (p.25) renders "Checksums" and "Hashes" as two separate rows
-        with SHA-256 and MD5 respectively. EncoreBOM models one typed list
+        with SHA-256 and MD5 respectively. AxeBOM models one typed list
         covering both; the report renders them as the guideline presents them.
       status: verified
 
@@ -389,7 +389,7 @@ sbom:
         Additional comments, notes, or annotations relevant to the software
         component or its inclusion in the SBOM.
       canonical_path: component.comments
-      cyclonedx_path: components[].properties[encorebom:comments]
+      cyclonedx_path: components[].properties[axebom:comments]
       spdx_path: packages[].comment
       type: text
       weight: 1
@@ -410,7 +410,7 @@ sbom:
       source_page: 23
       note: >
         Populated from scan provenance: the engine id + version that observed
-        the component, plus the EncoreBOM tenant. Never left blank.
+        the component, plus the AxeBOM tenant. Never left blank.
       status: verified
 
     - id: certin.sbom.17.timestamp
@@ -432,7 +432,7 @@ sbom:
       name: Executable Property
       description: Attributes indicating whether a component within an SBOM can be executed.
       canonical_path: component.executable_property
-      cyclonedx_path: components[].properties[encorebom:executable]
+      cyclonedx_path: components[].properties[axebom:executable]
       spdx_path: packages[].primaryPackagePurpose
       type: tristate            # yes | no | not-provided
       weight: 1
@@ -447,7 +447,7 @@ sbom:
         Characteristics denoting if a component within an SBOM is stored as an
         archive or compressed file.
       canonical_path: component.archive_property
-      cyclonedx_path: components[].properties[encorebom:archive]
+      cyclonedx_path: components[].properties[axebom:archive]
       spdx_path: packages[].packageFileName
       type: tristate
       weight: 1
@@ -462,7 +462,7 @@ sbom:
         Descriptors defining the organized format of data within a component
         listed in an SBOM.
       canonical_path: component.structured_property
-      cyclonedx_path: components[].properties[encorebom:structured]
+      cyclonedx_path: components[].properties[axebom:structured]
       spdx_path: annotations[]
       type: tristate
       weight: 1
@@ -482,7 +482,7 @@ sbom:
         "pkg:supplier/OrganizationName/ComponentName@Version?qualifiers&subpath",
         aiding in tracking ownership changes and version updates.
       canonical_path: component.certin_identifier
-      cyclonedx_path: components[].properties[encorebom:certin_id]
+      cyclonedx_path: components[].properties[axebom:certin_id]
       spdx_path: packages[].externalRefs[PACKAGE-MANAGER/purl]
       type: string
       weight: 3
@@ -497,7 +497,7 @@ sbom:
         The guideline's own text says `&subpath` while its Table 6 example uses
         `#subpath` — treat `#` as canonical, per purl-spec.
 
-        EncoreBOM therefore stores TWO identifiers and never conflates them:
+        AxeBOM therefore stores TWO identifiers and never conflates them:
           component.purl              — canonical ecosystem PURL. THE MERGE KEY.
                                         Every scanner emits this; dedup uses it.
           component.certin_identifier — derived, render-only. NEVER a merge key.
@@ -519,7 +519,7 @@ sbom:
         A general summary of the software elements that are either integrated or
         directly used in a product. Component names, versions, and their
         interactions within the software.
-      encorebom_rule: depth <= 1 from the detected root set
+      axebom_rule: depth <= 1 from the detected root set
     - id: n_level
       name: n-Level SBOM
       source_page: 11
@@ -527,7 +527,7 @@ sbom:
       description: >
         Goes beyond top-level to include deeper details. "N" represents any
         arbitrary level of depth, at multiple tiers of granularity.
-      encorebom_rule: depth <= N, N user-supplied
+      axebom_rule: depth <= N, N user-supplied
     - id: delivery
       name: Delivery SBOM
       source_page: 11
@@ -549,7 +549,7 @@ sbom:
       description: >
         A complete and exhaustive list of all the parts, dependencies, and
         related metadata present in a software system.
-      encorebom_rule: all reachable components plus orphans, flagged
+      axebom_rule: all reachable components plus orphans, flagged
 
   # --------------------------------------------------------------------------
   # Classification — PDF p.12-13 §3.2, Figure 3. Aligned with SDLC stages.
@@ -566,7 +566,7 @@ sbom:
 # SECTION B — QBOM  (Table 8, PDF p.44-45)
 # ============================================================================
 # HONEST LABEL: no open-source tool discovers quantum hardware. QBOM in
-# EncoreBOM = (a) crypto assets derived from CBOM discovery with
+# AxeBOM = (a) crypto assets derived from CBOM discovery with
 # quantum-vulnerability rules applied, plus (b) device metadata captured by
 # form/import. Do not present this as a scanner in the UI.
 # ============================================================================
@@ -653,13 +653,13 @@ crypto_asset:
         - {id: certin.crypto.cert.format,           name: Certificate Format,            canonical_path: crypto_asset.cert_format,                 type: string, weight: 1, source_page: 47, status: verified, description: "Commonly X.509."}
         - {id: certin.crypto.cert.extension,        name: Certificate Extension,         canonical_path: crypto_asset.cert_extension,              type: string, weight: 1, source_page: 48, status: verified, description: "File extension, commonly .crt for X.509."}
 
-  # EncoreBOM extensions — NOT CERT-In fields. Excluded from coverage scoring;
+  # AxeBOM extensions — NOT CERT-In fields. Excluded from coverage scoring;
   # they are analysis output, not required elements. Driven by PDF p.43 §8.2.3
   # (PQC transition) and p.50 §8.4.2.2 (prohibit weak/deprecated algorithms).
-  encorebom_extensions:
-    - {id: encorebom.crypto.quantum_vulnerable,  canonical_path: crypto_asset.quantum_vulnerable,  type: boolean, scored: false, status: extension, description: "True for Shor-vulnerable primitives: RSA, ECC/ECDSA/ECDH, DH, DSA."}
-    - {id: encorebom.crypto.pqc_recommendation,  canonical_path: crypto_asset.pqc_recommendation,  type: text,    scored: false, status: extension, description: "NIST PQC migration guidance: lattice / code-based / hash-based / multivariate."}
-    - {id: encorebom.crypto.deprecation_status,  canonical_path: crypto_asset.deprecation_status,  type: enum,    scored: false, status: extension, values: [current, deprecated, weak, broken]}
+  axebom_extensions:
+    - {id: axebom.crypto.quantum_vulnerable,  canonical_path: crypto_asset.quantum_vulnerable,  type: boolean, scored: false, status: extension, description: "True for Shor-vulnerable primitives: RSA, ECC/ECDSA/ECDH, DH, DSA."}
+    - {id: axebom.crypto.pqc_recommendation,  canonical_path: crypto_asset.pqc_recommendation,  type: text,    scored: false, status: extension, description: "NIST PQC migration guidance: lattice / code-based / hash-based / multivariate."}
+    - {id: axebom.crypto.deprecation_status,  canonical_path: crypto_asset.deprecation_status,  type: enum,    scored: false, status: extension, values: [current, deprecated, weak, broken]}
 
 # ============================================================================
 # SECTION D — AIBOM  (Table 10, PDF p.54-55)
@@ -689,15 +689,15 @@ aibom:
     - {id: certin.aibom.18.vulnerabilities,       name: Vulnerabilities,            canonical_path: "ai_model.findings[]",             type: ref_list,    weight: 3, source_page: 55, status: verified}
     - {id: certin.aibom.19.attestations,          name: Attestations,               canonical_path: ai_model.attestation_signature,  type: signature,   weight: 3, source_page: 55, status: verified, description: "Digital signature for the model or AIBOM."}
 
-  encorebom_extensions:
-    - {id: encorebom.aibom.owasp_llm_top10, canonical_path: "ai_model.owasp_llm_top10[]", type: string_list, scored: false, status: extension, description: "OWASP LLM Top-10 mapping from Trusera ai-bom."}
-    - {id: encorebom.aibom.risk_score,      canonical_path: ai_model.risk_score,        type: number,      scored: false, status: extension}
+  axebom_extensions:
+    - {id: axebom.aibom.owasp_llm_top10, canonical_path: "ai_model.owasp_llm_top10[]", type: string_list, scored: false, status: extension, description: "OWASP LLM Top-10 mapping from Trusera ai-bom."}
+    - {id: axebom.aibom.risk_score,      canonical_path: ai_model.risk_score,        type: number,      scored: false, status: extension}
 
 # ============================================================================
 # SECTION E — HBOM  (Table 11, PDF p.60-61  +  §10.4.1.4, PDF p.62)
 # ============================================================================
 # HONEST LABEL: there is no credible open-source HBOM scanner. HBOM in
-# EncoreBOM is a structured CSV/form import plus a data model. Label it that
+# AxeBOM is a structured CSV/form import plus a data model. Label it that
 # way in the UI. Do not imply discovery.
 #
 # DEFECT D9 — two problems with Table 11 taken alone:
@@ -772,7 +772,7 @@ vex:
     PDF p.35: "It is an iterative process and the VEX document gets updated with
     each update in the vulnerability including the time taken by the supplier
     along with remediation, workarounds, restart/downtime required, scores, and
-    risks." EncoreBOM therefore versions VEX statements with full history and
+    risks." AxeBOM therefore versions VEX statements with full history and
     never mutates in place.
   statuses:
     - {id: not_affected,       name: Not affected,        csaf_value: not_affected,       source_page: 35, status: verified, description: "No remediation is required regarding this vulnerability."}
@@ -814,13 +814,13 @@ vulnerability_sources:
 secure_distribution:
   source_pages: [32, 33]
   controls:
-    - {id: certin.dist.5.3.1.rbac,           section: "5.3.1", name: Role-based access control, source_page: 32, status: verified, encorebom_binding: "docs/05-SECURITY-MODEL.md §RBAC matrix"}
-    - {id: certin.dist.5.3.2.public_private, section: "5.3.2", name: Public and Private BOM, source_page: 32, status: verified, encorebom_binding: "report.visibility", note: "Guideline requires maintaining BOTH versions: public (non-sensitive) and private (includes vulnerabilities)."}
-    - {id: certin.dist.5.3.3.transport,      section: "5.3.3", name: Secure distribution mechanisms, source_page: 32, status: verified, encorebom_binding: "HTTPS + detached signature on every report"}
-    - {id: certin.dist.5.3.4.automation,     section: "5.3.4", name: Automated generation and updates, source_page: 33, status: verified, encorebom_binding: "Campaigns module"}
-    - {id: certin.dist.5.3.5.verification,   section: "5.3.5", name: Consumption and verification, source_page: 33, status: verified, encorebom_binding: "encorebom verify <report> — signature check CLI"}
-    - {id: certin.dist.5.3.6.audit,          section: "5.3.6", name: Monitoring and auditing, source_page: 33, status: verified, encorebom_binding: "audit_log table + access-log review export"}
-    - {id: certin.dist.5.3.7.incident,       section: "5.3.7", name: Incident response and remediation, source_page: 33, status: verified, encorebom_binding: "VEX/CSAF workflow"}
+    - {id: certin.dist.5.3.1.rbac,           section: "5.3.1", name: Role-based access control, source_page: 32, status: verified, axebom_binding: "docs/05-SECURITY-MODEL.md §RBAC matrix"}
+    - {id: certin.dist.5.3.2.public_private, section: "5.3.2", name: Public and Private BOM, source_page: 32, status: verified, axebom_binding: "report.visibility", note: "Guideline requires maintaining BOTH versions: public (non-sensitive) and private (includes vulnerabilities)."}
+    - {id: certin.dist.5.3.3.transport,      section: "5.3.3", name: Secure distribution mechanisms, source_page: 32, status: verified, axebom_binding: "HTTPS + detached signature on every report"}
+    - {id: certin.dist.5.3.4.automation,     section: "5.3.4", name: Automated generation and updates, source_page: 33, status: verified, axebom_binding: "Campaigns module"}
+    - {id: certin.dist.5.3.5.verification,   section: "5.3.5", name: Consumption and verification, source_page: 33, status: verified, axebom_binding: "axebom verify <report> — signature check CLI"}
+    - {id: certin.dist.5.3.6.audit,          section: "5.3.6", name: Monitoring and auditing, source_page: 33, status: verified, axebom_binding: "audit_log table + access-log review export"}
+    - {id: certin.dist.5.3.7.incident,       section: "5.3.7", name: Incident response and remediation, source_page: 33, status: verified, axebom_binding: "VEX/CSAF workflow"}
 
 # ============================================================================
 # VALIDATION EXPECTATIONS

@@ -20,13 +20,13 @@ import (
 // between an evidence pack and a marketing table: an auditor can open page 27
 // and check.
 
-// Coverage classifies how EncoreBOM obtains an element.
+// Coverage classifies how AxeBOM obtains an element.
 type Coverage string
 
 const (
 	// CoverageAutomated means a scanner or derivation populates it.
 	CoverageAutomated Coverage = "automated"
-	// CoverageDerived means EncoreBOM computes it from other data.
+	// CoverageDerived means AxeBOM computes it from other data.
 	CoverageDerived Coverage = "derived"
 	// CoverageImported means it comes from a customer's structured import.
 	//
@@ -58,7 +58,7 @@ type EvidenceRow struct {
 	SourcePage int
 	// Status is `verified` or `assumed` — whether a human read that page.
 	Status string
-	// Weight is EncoreBOM's, NOT CERT-In's. The guideline assigns none.
+	// Weight is AxeBOM's, NOT CERT-In's. The guideline assigns none.
 	Weight        int
 	Scored        bool
 	Coverage      Coverage
@@ -237,7 +237,7 @@ const readingNote = `
 A value of ` + "`not-provided`" + ` is *reported* but scores zero for completeness,
 because omitting a field hides a gap while declaring it states one.
 
-**Weights are EncoreBOM's judgement, not CERT-In's.** The guideline assigns no
+**Weights are AxeBOM's judgement, not CERT-In's.** The guideline assigns no
 weights. They exist so a single percentage can be produced; the per-element
 table below is the unweighted evidence, and it is the part to check.
 
@@ -248,7 +248,7 @@ having guessed. ` + "`imported`" + ` means structured entry; for hardware it is 
 only form, because no tool discovers physical parts.
 
 **What this document does not say.** It does not assert that any project is
-compliant. EncoreBOM reports violations against a configured policy; compliance
+compliant. AxeBOM reports violations against a configured policy; compliance
 is a determination an auditor makes about an organisation.
 
 `

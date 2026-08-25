@@ -535,10 +535,10 @@ func (b *Bus) toDLQ(ctx context.Context, msg jetstream.Msg, subject string, caus
 
 	dlqMsg := nats.NewMsg(subject)
 	dlqMsg.Data = msg.Data()
-	dlqMsg.Header.Set("Encorebom-Dlq-Reason", truncateHeader(cause.Error()))
-	dlqMsg.Header.Set("Encorebom-Original-Subject", msg.Subject())
+	dlqMsg.Header.Set("Axebom-Dlq-Reason", truncateHeader(cause.Error()))
+	dlqMsg.Header.Set("Axebom-Original-Subject", msg.Subject())
 	if meta, err := msg.Metadata(); err == nil {
-		dlqMsg.Header.Set("Encorebom-Delivery-Count", fmt.Sprint(meta.NumDelivered))
+		dlqMsg.Header.Set("Axebom-Delivery-Count", fmt.Sprint(meta.NumDelivered))
 	}
 
 	// Best effort: if the DLQ publish fails there is nothing further to do, and

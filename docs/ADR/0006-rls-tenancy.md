@@ -4,7 +4,7 @@
 
 ## Context
 
-EncoreBOM is multi-tenant and the data is unusually sensitive: a tenant's BOM is a complete dependency inventory including unpatched vulnerabilities. A cross-tenant leak hands a competitor an attack plan.
+AxeBOM is multi-tenant and the data is unusually sensitive: a tenant's BOM is a complete dependency inventory including unpatched vulnerabilities. A cross-tenant leak hands a competitor an attack plan.
 
 The default approach is `WHERE tenant_id = ?` in every query, usually wrapped in a repository layer.
 

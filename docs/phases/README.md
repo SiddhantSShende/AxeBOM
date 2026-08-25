@@ -6,7 +6,7 @@ One file per phase. Each is a **standalone prompt** — hand it to a fresh sessi
 
 Open a new session and say:
 
-> Implement Phase 3 of EncoreBOM. Read `docs/phases/PHASE-03-auth-tenancy-rbac.md`.
+> Implement Phase 3 of AxeBOM. Read `docs/phases/PHASE-03-auth-tenancy-rbac.md`.
 
 Or `task phase -- 03` to print it.
 
@@ -63,6 +63,6 @@ Phase 16 depends on everything.
 
 ## Two phases worth extra care
 
-**Phase 5 (sandbox)** is where the project's largest risk lives. From that point on, EncoreBOM executes third-party binaries over untrusted user code. Do not compress it, and do not treat the escape suite as optional.
+**Phase 5 (sandbox)** is where the project's largest risk lives. From that point on, AxeBOM executes third-party binaries over untrusted user code. Do not compress it, and do not treat the escape suite as optional.
 
 **Phase 8 (normalizer)** produces every number a customer sees. A bug there does not crash anything — it quietly reports the wrong count. Four weeks is the honest estimate; the golden corpus is what makes it verifiable.

@@ -19,15 +19,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
+	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/model"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/blob"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/libs/go-shared/reportsig"
-	"github.com/encorebom/encorebom/services/report/internal/export"
-	"github.com/encorebom/encorebom/services/report/internal/render"
-	"github.com/encorebom/encorebom/services/report/internal/service"
-	"github.com/encorebom/encorebom/services/report/internal/store"
+	"github.com/axebom/axebom/libs/go-shared/events"
+	"github.com/axebom/axebom/libs/go-shared/model"
+	"github.com/axebom/axebom/libs/go-shared/platform/blob"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/reportsig"
+	"github.com/axebom/axebom/services/report/internal/export"
+	"github.com/axebom/axebom/services/report/internal/render"
+	"github.com/axebom/axebom/services/report/internal/service"
+	"github.com/axebom/axebom/services/report/internal/store"
 )
 
 // Source supplies the canonical BOM for a report.
@@ -45,6 +48,11 @@ type Signer interface {
 	SignPayload(payload []byte) (signature []byte, keyID string, err error)
 }
 
+// Notifier publishes a notify.> event. See libs/go-shared/events.NotifyEventV1.
+type Notifier interface {
+	Publish(ctx context.Context, evt events.NotifyEventV1) error
+}
+
 // Worker renders one report at a time.
 type Worker struct {
 	svc    *service.Service
@@ -55,15 +63,29 @@ type Worker struct {
 	// the row says so by carrying an empty signing_key_id.
 	signer Signer
 
+	// notifier may be nil. A report.ready notification is advisory
+	// (docs/02-CONTRACTS.md §2's own rule for every event in this product) —
+	// its absence must never turn a successful render into a failed one.
+	notifier Notifier
+	// frontendURL builds the notification's URL. Empty means notifications
+	// are skipped entirely rather than published with a broken link.
+	frontendURL string
+
 	log *slog.Logger
 }
 
 // New builds a worker.
-func New(svc *service.Service, src Source, bs *blob.Store, signer Signer, log *slog.Logger) *Worker {
+func New(
+	svc *service.Service, src Source, bs *blob.Store, signer Signer,
+	notifier Notifier, frontendURL string, log *slog.Logger,
+) *Worker {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Worker{svc: svc, source: src, blob: bs, signer: signer, log: log}
+	return &Worker{
+		svc: svc, source: src, blob: bs, signer: signer,
+		notifier: notifier, frontendURL: frontendURL, log: log,
+	}
 }
 
 // Render drives one report to a terminal state.
@@ -125,7 +147,7 @@ func (w *Worker) Render(ctx context.Context, tenantID, reportID string) (err err
 		signature, keyID = "", ""
 	}
 
-	return w.svc.Finish(ctx, tenantID, reportID, store.Completion{
+	if err := w.svc.Finish(ctx, tenantID, reportID, store.Completion{
 		StorageRef:     obj.Key,
 		SHA256:         obj.SHA256,
 		SizeBytes:      obj.Size,
@@ -133,7 +155,161 @@ func (w *Worker) Render(ctx context.Context, tenantID, reportID string) (err err
 		SigningKeyID:   keyID,
 		Truncated:      truncated,
 		TruncationNote: note,
-	})
+
+		// ⚠ CAPTURED FROM THE bom LOADED ABOVE, NOT RE-QUERIED. This is the
+		// exact data that produced the artifact just stored; see
+		// store.Completion's own doc comment for why that matters.
+		ProjectName:            bom.ProjectName,
+		BOMGeneratedAt:         bom.GeneratedAt,
+		LevelNote:              bom.LevelNote,
+		CompletenessPct:        coverageOrNil(bom.CoverageComputed, bom.Coverage.CompletenessPct),
+		DeclarationPct:         coverageOrNil(bom.CoverageComputed, bom.Coverage.DeclarationPct),
+		CoverageFormula:        bom.Coverage.Formula,
+		CoverageFields:         enrichCoverageFields(bom.BOMType, bom.Coverage.Fields),
+		Engines:                toStoreEngines(bom.Engines),
+		EcosystemsWithNoEngine: bom.EcosystemsWithNoEngine,
+	}); err != nil {
+		return err
+	}
+
+	// ⚠ AFTER Finish SUCCEEDS, NEVER BEFORE. The row being `ready` is the fact
+	// being announced; publishing first and having Finish then fail would
+	// notify a receiver about a report that, from the database's point of
+	// view, never finished.
+	w.publishReportReady(ctx, tenantID, report, bom)
+	return nil
+}
+
+// publishReportReady sends the one notify.> event this worker emits today.
+//
+// ⚠ BEST EFFORT, LIKE SIGNING ABOVE. A notification failing must not turn a
+// successful render into a failed one — docs/02-CONTRACTS.md §2's "events are
+// advisory" rule, applied here exactly as it already is to PublishAdvisory
+// elsewhere in this product.
+func (w *Worker) publishReportReady(ctx context.Context, tenantID string, report store.Report, bom render.BOM) {
+	if w.notifier == nil {
+		return
+	}
+	if w.frontendURL == "" {
+		w.log.Warn("no frontend URL configured; skipping the report.ready notification",
+			"report_id", report.ID)
+		return
+	}
+
+	critical, high := severityCounts(bom.Findings)
+	unavailable := unavailableEngineNames(bom.Engines)
+
+	evt := events.NotifyEventV1{
+		Schema:   events.NotifyEventSchema,
+		Event:    events.NotifyEventReportReady,
+		TenantID: tenantID,
+		// ⚠ NO ProjectID. render.BOM carries ProjectName, never a project id —
+		// resolving one would mean a query this worker does not otherwise need
+		// to make. A receiver has ReportID and ScanID to look up the rest.
+		ProjectName:        bom.ProjectName,
+		ScanID:             report.ScanID,
+		ReportID:           report.ID,
+		Status:             string(store.StatusReady),
+		Components:         len(bom.Components),
+		Findings:           len(bom.Findings),
+		Critical:           critical,
+		High:               high,
+		EnginesUnavailable: len(unavailable),
+		UnavailableEngines: unavailable,
+		URL:                w.frontendURL + "/reports/" + report.ID,
+		OccurredAt:         time.Now().UTC().Format(time.RFC3339),
+	}
+
+	if err := w.notifier.Publish(ctx, evt); err != nil {
+		w.log.Warn("could not publish the report.ready notification",
+			"report_id", report.ID, "error", err)
+	}
+}
+
+// severityCounts tallies the two severities the notify envelope reports.
+func severityCounts(findings []render.Finding) (critical, high int) {
+	for _, f := range findings {
+		switch strings.ToLower(f.Severity) {
+		case "critical":
+			critical++
+		case "high":
+			high++
+		}
+	}
+	return critical, high
+}
+
+// unavailableEngineNames names engines the Engine Coverage section already
+// marks `unavailable` — the same honesty rule extended to a notification.
+func unavailableEngineNames(engines []render.EngineCoverage) []string {
+	var out []string
+	for _, e := range engines {
+		if e.Status == "unavailable" {
+			out = append(out, e.EngineID)
+		}
+	}
+	return out
+}
+
+// coverageOrNil turns render.BOM's collapsed-to-zero coverage number back
+// into an absence when the document was never scored — see
+// render.BOM.CoverageComputed and store.Completion's own doc comments.
+func coverageOrNil(computed bool, pct float64) *float64 {
+	if !computed {
+		return nil
+	}
+	return &pct
+}
+
+// enrichCoverageFields adds the profile metadata (name, weight, source page)
+// that render.FieldCoverage itself does not carry, so a client reading the
+// stored summary never has to look the profile up separately to label a row.
+//
+// ⚠ A CBOM HAS NO SINGLE FIELD SET (render.FieldsFor's own reasoning, echoed
+// here). The per-field counts still come through from the normalizer's
+// breakdown when present; without profile metadata to enrich them with, they
+// are stored with just their id and counts rather than losing the row.
+func enrichCoverageFields(bomType model.BOMType, fields []render.FieldCoverage) []store.CoverageField {
+	byID := make(map[string]model.ProfileField)
+	if profileFields, err := render.FieldsFor(bomType); err == nil {
+		for _, f := range profileFields {
+			byID[f.ID] = f
+		}
+	}
+
+	out := make([]store.CoverageField, 0, len(fields))
+	for _, fc := range fields {
+		cf := store.CoverageField{
+			FieldID: fc.FieldID, Present: fc.Present, Declared: fc.Declared, Total: fc.Total,
+		}
+		if pf, ok := byID[fc.FieldID]; ok {
+			cf.Name = pf.Name
+			cf.Weight = pf.Weight
+			cf.SourcePage = pf.SourcePage
+		}
+		out = append(out, cf)
+	}
+	return out
+}
+
+// toStoreEngines converts the render model's engine coverage to the
+// persisted shape. Field-for-field identical, but kept as separate types:
+// render.EngineCoverage belongs to the renderer's in-memory model, and
+// store.EngineCoverage is the JSON shape a client reads back — the two are
+// free to diverge the day either one needs to.
+func toStoreEngines(engines []render.EngineCoverage) []store.EngineCoverage {
+	out := make([]store.EngineCoverage, 0, len(engines))
+	for _, e := range engines {
+		out = append(out, store.EngineCoverage{
+			EngineID:        e.EngineID,
+			Version:         e.Version,
+			Status:          e.Status,
+			DatabaseVersion: e.DatabaseVersion,
+			Ecosystems:      e.Ecosystems,
+			Diagnostic:      e.Diagnostic,
+		})
+	}
+	return out
 }
 
 // renderArtifact produces the bytes for one format.
@@ -262,7 +438,7 @@ func (w *Worker) sign(r store.Report, obj blob.Object, artifact []byte) (string,
 		GeneratedAt:     r.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 		ProfileID:       model.ProfileID,
 		ProfileRevision: model.ProfileRevision,
-		ToolName:        "EncoreBOM",
+		ToolName:        "AxeBOM",
 		ToolVersion:     version(),
 	}, artifact, w.signer)
 	if err != nil {

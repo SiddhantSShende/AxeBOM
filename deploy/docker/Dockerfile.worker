@@ -1,9 +1,9 @@
-# EncoreBOM Python scan worker — one image, five families.
+# AxeBOM Python scan worker — one image, five families.
 #
 # Build from the repository root:
-#   docker build -f deploy/docker/Dockerfile.worker -t encorebom/worker .
+#   docker build -f deploy/docker/Dockerfile.worker -t axebom/worker .
 #
-# The family is chosen at RUN time by ENCOREBOM_WORKER_FAMILY (sbom | cbom |
+# The family is chosen at RUN time by AXEBOM_WORKER_FAMILY (sbom | cbom |
 # aibom | qbom | hbom). One image rather than five because they share the
 # adapter base, the sandbox bridge, the manifest resolver and the normalizer —
 # five images would be five copies of the same layers differing by one module,
@@ -12,7 +12,7 @@
 # ---------------------------------------------------------------------------
 # THIS CONTAINER NEEDS THE DOCKER SOCKET, AND THAT IS A REAL PRIVILEGE
 #
-# Scanners run as sibling containers: the worker calls `encorebom sandbox run`,
+# Scanners run as sibling containers: the worker calls `axebom sandbox run`,
 # which uses the Docker API to start an engine with --network=none, a read-only
 # rootfs, all capabilities dropped, a non-root user and hard quotas. Handing a
 # container /var/run/docker.sock is equivalent to giving it root on the host.
@@ -35,7 +35,7 @@
 # ---------------------------------------------------------------------------
 
 # ---- build the sandbox bridge CLI -----------------------------------------
-# The worker shells out to `encorebom sandbox run`. Building it here rather
+# The worker shells out to `axebom sandbox run`. Building it here rather
 # than mounting a host binary keeps the image self-contained and means the
 # bridge protocol and the worker that speaks it are always the same commit.
 FROM golang:1.26-alpine AS gobuild
@@ -49,7 +49,7 @@ ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux go build \
       -trimpath \
       -ldflags="-s -w -X main.version=${VERSION}" \
-      -o /out/encorebom ./cmd/encorebom
+      -o /out/axebom ./cmd/axebom
 
 # ---- python runtime --------------------------------------------------------
 FROM python:3.13-slim AS runtime
@@ -75,11 +75,11 @@ COPY workers ./workers
 COPY OSINT ./OSINT
 COPY proto ./proto
 
-COPY --from=gobuild /out/encorebom /usr/local/bin/encorebom
+COPY --from=gobuild /out/axebom /usr/local/bin/axebom
 
 # The docker CLI, for database provisioning only.
 #
-# Normal scanning does NOT use it: the sandbox bridge is `encorebom sandbox
+# Normal scanning does NOT use it: the sandbox bridge is `axebom sandbox
 # run`, which speaks the Docker API directly through the Go SDK. But
 # `workers.sbom.dbsync` shells out to `docker run` to fetch the grype, trivy,
 # OSV and NVD databases, and provisioning has to happen in this container
@@ -106,11 +106,11 @@ COPY --from=docker:28-cli /usr/local/bin/docker /usr/local/bin/docker
 # OSINT/tools.manifest.yaml relative to the working directory, so /app must be
 # the CWD or every engine silently reports unavailable.
 ENV OSINT_MANIFEST=/app/OSINT/tools.manifest.yaml \
-    ENCOREBOM_BIN=/usr/local/bin/encorebom \
-    ENCOREBOM_WORKSPACE_ROOT=/var/lib/encorebom/workspaces \
-    ENCOREBOM_OUTPUT_ROOT=/var/lib/encorebom/artifacts \
-    ENCOREBOM_ENGINE_DB_ROOT=/var/lib/encorebom/enginedb \
-    ENCOREBOM_WORKER_FAMILY=sbom
+    AXEBOM_BIN=/usr/local/bin/axebom \
+    AXEBOM_WORKSPACE_ROOT=/var/lib/axebom/workspaces \
+    AXEBOM_OUTPUT_ROOT=/var/lib/axebom/artifacts \
+    AXEBOM_ENGINE_DB_ROOT=/var/lib/axebom/enginedb \
+    AXEBOM_WORKER_FAMILY=sbom
 
 # Family is read from the environment rather than baked in, so the same image
 # serves all five and a typo names an unknown family loudly instead of starting

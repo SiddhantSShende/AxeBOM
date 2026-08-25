@@ -6,14 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/encorebom/encorebom/libs/go-shared/model"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
-	"github.com/encorebom/encorebom/services/report/internal/level"
-	"github.com/encorebom/encorebom/services/report/internal/render"
+	"github.com/axebom/axebom/libs/go-shared/model"
+	"github.com/axebom/axebom/libs/go-shared/platform/db"
+	"github.com/axebom/axebom/libs/go-shared/vex"
+	"github.com/axebom/axebom/services/report/internal/level"
+	"github.com/axebom/axebom/services/report/internal/render"
 )
 
 // LoadBOM assembles the canonical BOM a renderer needs.
@@ -48,7 +50,7 @@ func (s *Store) LoadBOM(ctx context.Context, r Report) (render.BOM, error) {
 		ProfileID:          model.ProfileID,
 		ProfileRevision:    model.ProfileRevision,
 		ProfileAllVerified: model.ProfileAllVerified,
-		ToolName:           "EncoreBOM",
+		ToolName:           "AxeBOM",
 	}
 
 	err = s.pool.WithTenant(ctx, r.TenantID, func(ctx context.Context, tx db.Tx) error {
@@ -60,10 +62,27 @@ func (s *Store) LoadBOM(ctx context.Context, r Report) (render.BOM, error) {
 		if err := loadDocumentMeta(ctx, tx, docID, &out); err != nil {
 			return err
 		}
+		if err := loadProjectName(ctx, tx, r.ScanID, &out); err != nil {
+			return err
+		}
 		if err := loadComponents(ctx, tx, docID, &out); err != nil {
 			return err
 		}
-		if err := loadFindings(ctx, tx, docID, &out); err != nil {
+		// ⚠ RUN UNCONDITIONALLY, LIKE EVERY OTHER LOAD ABOVE. The crypto_assets
+		// and quantum_components tables hold nothing for a SBOM/AIBOM/HBOM
+		// document, so these are a no-op there — gating them on bomType would
+		// duplicate the type list Sheets() already branches on, and the two lists
+		// would drift the day a sixth BOM type is added.
+		if err := loadCryptoAssets(ctx, tx, docID, &out); err != nil {
+			return err
+		}
+		if err := loadQuantumDevice(ctx, tx, docID, &out); err != nil {
+			return err
+		}
+		if err := loadAIModels(ctx, tx, docID, &out); err != nil {
+			return err
+		}
+		if err := loadFindings(ctx, tx, docID, r.ScanID, &out); err != nil {
 			return err
 		}
 		if err := loadEngineCoverage(ctx, tx, r.ScanID, &out); err != nil {
@@ -143,7 +162,11 @@ func loadDocumentMeta(ctx context.Context, tx db.Tx, docID string, out *render.B
 
 	// ⚠ NIL IS NOT ZERO. A document whose coverage was never computed must not
 	// render as 0.00% — that reads as "we scored it and it failed" rather than
-	// "it has not been scored". Both stay at zero and the note says which.
+	// "it has not been scored". The sheets below still print a plain float and
+	// have no "unscored" state of their own, so CoverageComputed is what lets
+	// a caller further downstream (the worker, persisting to report.reports)
+	// tell the two apart rather than storing a lying zero.
+	out.CoverageComputed = completeness != nil || declaration != nil
 	if completeness != nil {
 		out.Coverage.CompletenessPct = *completeness
 	}
@@ -193,6 +216,34 @@ func applyCoverageBreakdown(raw []byte, out *render.BOM) error {
 	sort.Slice(out.Coverage.Fields, func(i, j int) bool {
 		return out.Coverage.Fields[i].FieldID < out.Coverage.Fields[j].FieldID
 	})
+	return nil
+}
+
+// loadProjectName reads the project this scan belongs to.
+//
+// ⚠ TWO QUERIES, NOT A JOIN ACROSS scan AND project. Reuses
+// resolveProjectIDForScan rather than writing `FROM project.projects p JOIN
+// scan.scans s ON s.project_id = p.id` — the exact cross-schema SQL join
+// loadPractices below is already flagged as a pre-existing violation of, not
+// a precedent to repeat (CLAUDE.md invariant 11).
+func loadProjectName(ctx context.Context, tx db.Tx, scanID string, out *render.BOM) error {
+	projectID, err := resolveProjectIDForScan(ctx, tx, scanID)
+	if err != nil {
+		return err
+	}
+
+	var name string
+	err = tx.QueryRow(ctx, `SELECT name FROM project.projects WHERE id = $1`, projectID).Scan(&name)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// The project was removed after the scan ran. The report still
+			// renders; the name renders `not-provided` rather than failing the
+			// whole BOM over a project that no longer exists.
+			return nil
+		}
+		return fmt.Errorf("load project name: %w", err)
+	}
+	out.ProjectName = name
 	return nil
 }
 
@@ -315,7 +366,338 @@ func loadComponentRelations(ctx context.Context, tx db.Tx, docID string, out *re
 	return nil
 }
 
-func loadFindings(ctx context.Context, tx db.Tx, docID string, out *render.BOM) error {
+// loadCryptoAssets reads a CBOM's crypto inventory, type-discrimination and
+// all.
+//
+// ⚠ EVERY COLUMN, REGARDLESS OF THIS ROW'S asset_type — SAME AS loadComponents
+// SELECTS EVERY COLUMN REGARDLESS OF ECOSYSTEM. render.CryptoAsset carries
+// every type's fields for the same reason normalize.crypto_assets is one wide
+// table (migrations/normalize/0003): this loader does not need to know which
+// asset types exist any more than loadComponents needs to know which
+// ecosystems do. CBOMSheets is what branches on AssetType and renders only
+// the applicable fields; duplicating that branch here would mean two places
+// agree on the same list, and the two would drift the day CERT-In Table 9
+// changes.
+func loadCryptoAssets(ctx context.Context, tx db.Tx, docID string, out *render.BOM) error {
+	rows, err := tx.Query(ctx, `
+		SELECT component_key, asset_type, name,
+		       primitive, mode, crypto_functions, classical_security_level, algorithm_list,
+		       key_id, key_state, key_size, creation_date, activation_date,
+		       protocol_version, cipher_suites, oid,
+		       cert_subject, cert_issuer, not_valid_before, not_valid_after,
+		       signature_algo_ref, subject_public_key_ref, cert_format, cert_extension,
+		       quantum_vulnerable, pqc_recommendation, deprecation_status,
+		       quantum_family, grover_note, quantum_rationale, deprecation_rationale,
+		       deprecation_reference, effective_quantum_bits, quantum_readiness_group
+		  FROM normalize.crypto_assets
+		 WHERE bom_document_id = $1
+		 ORDER BY asset_type, name`, docID)
+	if err != nil {
+		return fmt.Errorf("load crypto assets: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			a                                                 render.CryptoAsset
+			componentKey, primitive, mode                     *string
+			keyID, keyState, protocolVersion, oid             *string
+			certSubject, certIssuer, sigAlgoRef, subjectPKRef *string
+			certFormat, certExtension                         *string
+			pqcRecommendation, deprecationStatus              *string
+			quantumFamily, groverNote, quantumRationale       *string
+			deprecationRationale, deprecationReference        *string
+			readinessGroup                                    *string
+			classicalSecurityLevel, keySize, effectiveBits    *int
+			creationDate, activationDate                      *time.Time
+			notValidBefore, notValidAfter                     *time.Time
+		)
+
+		if err := rows.Scan(
+			&componentKey, &a.AssetType, &a.Name,
+			&primitive, &mode, &a.CryptoFunctions, &classicalSecurityLevel, &a.AlgorithmList,
+			&keyID, &keyState, &keySize, &creationDate, &activationDate,
+			&protocolVersion, &a.CipherSuites, &oid,
+			&certSubject, &certIssuer, &notValidBefore, &notValidAfter,
+			&sigAlgoRef, &subjectPKRef, &certFormat, &certExtension,
+			&a.QuantumVulnerable, &pqcRecommendation, &deprecationStatus,
+			&quantumFamily, &groverNote, &quantumRationale, &deprecationRationale,
+			&deprecationReference, &effectiveBits, &readinessGroup,
+		); err != nil {
+			return fmt.Errorf("scan crypto asset: %w", err)
+		}
+
+		a.ComponentKey = deref(componentKey)
+		a.Primitive = deref(primitive)
+		a.Mode = deref(mode)
+		a.ClassicalSecurityLevel = classicalSecurityLevel
+		a.KeyID = deref(keyID)
+		a.KeyState = deref(keyState)
+		a.KeySize = keySize
+		a.CreationDate = formatDate(creationDate)
+		a.ActivationDate = formatDate(activationDate)
+		a.ProtocolVersion = deref(protocolVersion)
+		a.OID = deref(oid)
+		a.CertSubject = deref(certSubject)
+		a.CertIssuer = deref(certIssuer)
+		// ⚠ FULL TIMESTAMPS, NOT JUST A DATE. Table 9's certificate validity
+		// window is `datetime`, not `date` (CanonicalPath type in the profile) —
+		// formatDate would silently drop the time of day from a value CERT-In
+		// asks for at full precision.
+		a.NotValidBefore = formatDateTime(notValidBefore)
+		a.NotValidAfter = formatDateTime(notValidAfter)
+		a.SignatureAlgoRef = deref(sigAlgoRef)
+		a.SubjectPublicKeyRef = deref(subjectPKRef)
+		a.CertFormat = deref(certFormat)
+		a.CertExtension = deref(certExtension)
+		a.PQCRecommendation = deref(pqcRecommendation)
+		a.DeprecationStatus = deref(deprecationStatus)
+		a.QuantumFamily = deref(quantumFamily)
+		a.GroverNote = deref(groverNote)
+		a.QuantumRationale = deref(quantumRationale)
+		a.DeprecationRationale = deref(deprecationRationale)
+		a.DeprecationReference = deref(deprecationReference)
+		a.EffectiveQuantumBits = effectiveBits
+		a.QuantumReadinessGroup = deref(readinessGroup)
+
+		out.CryptoAssets = append(out.CryptoAssets, a)
+	}
+	return rows.Err()
+}
+
+// loadAIModels reads the current AIBOM model inventory for this document,
+// including each model's datasets and SBOM dependency references.
+//
+// ⚠ THREE OF THE 19 TABLE 10 FIELDS HAVE NO normalize.ai_models COLUMN AT
+// ALL: `software_dependencies` and `vulnerabilities` (elements 6, 18) are
+// computed by workers/aibom/normalize/ai.py from the raw discovered model,
+// which is never persisted; `data_sets` (element 10) IS derivable, from
+// this same document's ai_datasets rows, and is filled in below. The first
+// two render `not-provided` here honestly — nothing in this schema has
+// anywhere to read them back from today, a real gap tracked in
+// docs/STATE.md, not a rendering shortcut.
+func loadAIModels(ctx context.Context, tx db.Tx, docID string, out *render.BOM) error {
+	rows, err := tx.Query(ctx, `
+		SELECT id, model_name, COALESCE(model_version,''), COALESCE(model_type,''),
+		       COALESCE(model_developer,''), COALESCE(licensing,''),
+		       ml_models_algorithms, performance_metrics, COALESCE(data_source,''),
+		       COALESCE(hardware,''), COALESCE(security_requirements,''),
+		       COALESCE(input,''), COALESCE(output,''), COALESCE(intended_usage,''),
+		       COALESCE(out_of_scope_usage,''), COALESCE(environmental_impact,''),
+		       COALESCE(attestation_signature,''), risk_score, owasp_llm_top10
+		  FROM normalize.ai_models
+		 WHERE bom_document_id = $1
+		 ORDER BY model_name`, docID)
+	if err != nil {
+		return fmt.Errorf("load ai models: %w", err)
+	}
+	defer rows.Close()
+
+	type modelRow struct {
+		id                                                  string
+		name, version, mtype, developer, licensing          string
+		algorithms                                          []string
+		metricsJSON                                         []byte
+		dataSource, hardware, securityReqs                  string
+		input, output, intendedUsage, outOfScope, envImpact string
+		attestation                                         string
+		riskScore                                           *float64
+		owaspTop10                                          []string
+	}
+	var loaded []modelRow
+	for rows.Next() {
+		var m modelRow
+		if err := rows.Scan(
+			&m.id, &m.name, &m.version, &m.mtype, &m.developer, &m.licensing,
+			&m.algorithms, &m.metricsJSON, &m.dataSource,
+			&m.hardware, &m.securityReqs,
+			&m.input, &m.output, &m.intendedUsage,
+			&m.outOfScope, &m.envImpact, &m.attestation, &m.riskScore, &m.owaspTop10,
+		); err != nil {
+			return fmt.Errorf("scan ai model: %w", err)
+		}
+		loaded = append(loaded, m)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, m := range loaded {
+		datasets, err := loadAIDatasets(ctx, tx, m.id)
+		if err != nil {
+			return err
+		}
+		deps, err := loadAIModelDependencies(ctx, tx, m.id)
+		if err != nil {
+			return err
+		}
+
+		datasetNames := make([]string, 0, len(datasets))
+		for _, d := range datasets {
+			datasetNames = append(datasetNames, d.Name)
+		}
+
+		out.AIModels = append(out.AIModels, render.AIModel{
+			Name:          m.name,
+			Datasets:      datasets,
+			Dependencies:  deps,
+			RiskScore:     m.riskScore,
+			OwaspLLMTop10: m.owaspTop10,
+			Fields: map[string]string{
+				model.FieldCertinAibom01ModelName:            m.name,
+				model.FieldCertinAibom02ModelVersion:         m.version,
+				model.FieldCertinAibom03ModelType:            m.mtype,
+				model.FieldCertinAibom04ModelDeveloper:       m.developer,
+				model.FieldCertinAibom05Licensing:            m.licensing,
+				model.FieldCertinAibom07MlModelsAlgorithms:   strings.Join(m.algorithms, ", "),
+				model.FieldCertinAibom08PerformanceMetrics:   metricsText(m.metricsJSON),
+				model.FieldCertinAibom09DataSource:           m.dataSource,
+				model.FieldCertinAibom10DataSets:             strings.Join(datasetNames, ", "),
+				model.FieldCertinAibom11Hardware:             m.hardware,
+				model.FieldCertinAibom12SecurityRequirements: m.securityReqs,
+				model.FieldCertinAibom13Input:                m.input,
+				model.FieldCertinAibom14Output:               m.output,
+				model.FieldCertinAibom15IntendedUsage:        m.intendedUsage,
+				model.FieldCertinAibom16OutOfScopeUsage:      m.outOfScope,
+				model.FieldCertinAibom17EnvironmentalImpact:  m.envImpact,
+				model.FieldCertinAibom19Attestations:         m.attestation,
+			},
+		})
+	}
+	return nil
+}
+
+func loadAIDatasets(ctx context.Context, tx db.Tx, aiModelID string) ([]render.AIDataset, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT name, COALESCE(version,''), COALESCE(format,''),
+		       COALESCE(limitations,''), COALESCE(license,''), COALESCE(source,'')
+		  FROM normalize.ai_datasets
+		 WHERE ai_model_id = $1
+		 ORDER BY name`, aiModelID)
+	if err != nil {
+		return nil, fmt.Errorf("load ai datasets: %w", err)
+	}
+	defer rows.Close()
+
+	var out []render.AIDataset
+	for rows.Next() {
+		var d render.AIDataset
+		if err := rows.Scan(&d.Name, &d.Version, &d.Format, &d.Limitations, &d.License, &d.Source); err != nil {
+			return nil, fmt.Errorf("scan ai dataset: %w", err)
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// loadAIModelDependencies returns the SBOM component keys this model
+// depends on — component_key is plain text, not a foreign key; see
+// docs/01-DATA-MODEL.md's ai_model_dependencies entry.
+func loadAIModelDependencies(ctx context.Context, tx db.Tx, aiModelID string) ([]string, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT component_key FROM normalize.ai_model_dependencies
+		 WHERE ai_model_id = $1
+		 ORDER BY component_key`, aiModelID)
+	if err != nil {
+		return nil, fmt.Errorf("load ai model dependencies: %w", err)
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			return nil, fmt.Errorf("scan ai model dependency: %w", err)
+		}
+		out = append(out, key)
+	}
+	return out, rows.Err()
+}
+
+// metricsText renders performance_metrics jsonb compactly for the flat field
+// table — the map-shaped value profile field 08 carries has no natural
+// single-string form, so this is a readable summary, not a lossless one; the
+// full JSON survives untouched in the JSON export's Canonical.AIModels.
+func metricsText(raw []byte) string {
+	if len(raw) == 0 || string(raw) == "{}" {
+		return ""
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil || len(m) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%v", k, m[k]))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// loadQuantumDevice reads the current device-metadata row for this document.
+//
+// ⚠ NIL IS A LEGITIMATE ANSWER, NOT AN ERROR. There is no quantum-hardware
+// scanner (CLAUDE.md); every value on normalize.quantum_components is
+// captured by form or import, and a project classified QBOM before anybody
+// filled the form in has genuinely recorded nothing yet. render.BOM.
+// QuantumDevice stays nil and the QBOM sheets render that as a stated gap —
+// see render.quantumDeviceSheet — rather than this function inventing a
+// zero-value device that would look like an empty form was submitted.
+func loadQuantumDevice(ctx context.Context, tx db.Tx, docID string, out *render.BOM) error {
+	var (
+		d                                              render.QuantumDevice
+		version, vendorOrigin, licenseInfo, commsProto *string
+		hardware, environmentalImpact, attestation     *string
+	)
+
+	err := tx.QueryRow(ctx, `
+		SELECT model_name, version, vendor_origin, license_info,
+		       communication_protocol, hardware, software_dependencies,
+		       environmental_impact, attestation_signature
+		  FROM normalize.quantum_components
+		 WHERE bom_document_id = $1
+		 ORDER BY created_at DESC
+		 LIMIT 1`, docID).
+		Scan(&d.ModelName, &version, &vendorOrigin, &licenseInfo,
+			&commsProto, &hardware, &d.SoftwareDependencies,
+			&environmentalImpact, &attestation)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("load quantum device: %w", err)
+	}
+
+	d.Version = deref(version)
+	d.VendorOrigin = deref(vendorOrigin)
+	d.LicenseInfo = deref(licenseInfo)
+	d.CommunicationProtocol = deref(commsProto)
+	d.Hardware = deref(hardware)
+	d.EnvironmentalImpact = deref(environmentalImpact)
+	d.AttestationSignature = deref(attestation)
+	out.QuantumDevice = &d
+	return nil
+}
+
+func loadFindings(ctx context.Context, tx db.Tx, docID, scanID string, out *render.BOM) error {
+	// ⚠ RESOLVED BEFORE THE FINDINGS QUERY OPENS, NOT AFTER — A SINGLE tx IS ONE
+	// CONNECTION. Issuing either of these two queries while the findings Query's
+	// Rows are still open (unclosed and undrained) fails every single call with
+	// pgx's "conn busy": one transaction cannot interleave two in-flight
+	// statements. This is not a JOIN across scan.scans either — the same
+	// "several single-schema queries, joined in Go" discipline LoadBOM's own doc
+	// comment states for this whole file (a discipline `loadPractices` above
+	// does not actually follow — pre-existing, not a precedent to repeat).
+	projectID, err := resolveProjectIDForScan(ctx, tx, scanID)
+	if err != nil {
+		return err
+	}
+	vexStatements := loadVEXStatementsForReport(ctx, tx, projectID)
+
 	rows, err := tx.Query(ctx, `
 		SELECT f.display_id_at_render, f.cluster_id, c.component_key,
 		       f.severity_effective, f.cvss_primary_score, f.severity_conflict,
@@ -364,6 +746,17 @@ func loadFindings(ctx context.Context, tx db.Tx, docID string, out *render.BOM) 
 			f.FixedInMin = *fixedIn
 		}
 
+		// ⚠ RESOLVED PER (cluster, component) — THE EXACT PAIR vex.Resolve
+		// TAKES. Unlike services/project's Finding (one row per CLUSTER,
+		// spanning every affected component, which forces picking a winner
+		// across several possible resolutions), this render.Finding is
+		// already one row per (cluster, component), so there is no
+		// aggregation ambiguity to resolve here at all.
+		if effective := vex.Resolve(vexStatements, f.ClusterID, f.ComponentKey); effective != nil {
+			f.VEXStatus = string(effective.Status)
+			f.VEXJustification = effective.Justification
+		}
+
 		byComponent[f.ComponentKey]++
 		out.Findings = append(out.Findings, f)
 	}
@@ -378,6 +771,63 @@ func loadFindings(ctx context.Context, tx db.Tx, docID string, out *render.BOM) 
 		}
 	}
 	return nil
+}
+
+// resolveProjectIDForScan looks up the project a scan belongs to.
+//
+// ⚠ normalize.vex_statements KEYS ON project_id, NOT scan_id — a triage
+// decision is a fact about a project's vulnerability landscape that survives
+// across re-scans (services/scan-orchestrator/internal/orchestr/vex_store.go's
+// own doc comment), so resolving it for a REPORT (which describes one scan)
+// means going through the scan it belongs to.
+func resolveProjectIDForScan(ctx context.Context, tx db.Tx, scanID string) (string, error) {
+	var projectID string
+	err := tx.QueryRow(ctx, `SELECT project_id FROM scan.scans WHERE id = $1`, scanID).Scan(&projectID)
+	if err != nil {
+		return "", fmt.Errorf("resolve project for scan: %w", err)
+	}
+	return projectID, nil
+}
+
+// loadVEXStatementsForReport reads every VEX statement for a project.
+//
+// ⚠ ERRORS ARE SWALLOWED, DELIBERATELY — mirrors services/project's own
+// loadClusterVEX precedent. VEX is optional; a project with none recorded is
+// the ordinary case, not a reason to fail an entire report render over a
+// section that would legitimately render empty anyway.
+func loadVEXStatementsForReport(ctx context.Context, tx db.Tx, projectID string) []vex.Statement {
+	rows, err := tx.Query(ctx, `
+		SELECT id, tenant_id, project_id, COALESCE(component_key,''), cluster_id,
+		       status, COALESCE(justification,''), COALESCE(remediation,''),
+		       COALESCE(workarounds,''), COALESCE(downtime,''), scope, version,
+		       COALESCE(superseded_by::text,''), COALESCE(author_user_id::text,''), created_at
+		  FROM normalize.vex_statements
+		 WHERE project_id = $1
+		 ORDER BY created_at`, projectID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var out []vex.Statement
+	for rows.Next() {
+		var st vex.Statement
+		var status, scope string
+		if err := rows.Scan(
+			&st.ID, &st.TenantID, &st.ProjectID, &st.ComponentKey, &st.ClusterID,
+			&status, &st.Justification, &st.Remediation, &st.Workarounds, &st.Downtime,
+			&scope, &st.Version, &st.SupersededBy, &st.AuthorUserID, &st.CreatedAt,
+		); err != nil {
+			return nil
+		}
+		st.Status = vex.Status(status)
+		st.Scope = vex.Scope(scope)
+		out = append(out, st)
+	}
+	if rows.Err() != nil {
+		return nil
+	}
+	return out
 }
 
 // loadEngineCoverage reads the mandatory Engine Coverage section.
@@ -608,6 +1058,17 @@ func formatDate(t *time.Time) string {
 		return ""
 	}
 	return t.UTC().Format("2006-01-02")
+}
+
+// formatDateTime renders a full timestamp, UTC with a literal Z (CLAUDE.md's
+// time convention) — for a `datetime`-typed profile field like a
+// certificate's validity window, where formatDate's date-only truncation
+// would silently drop the time of day CERT-In asks for.
+func formatDateTime(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.UTC().Format("2006-01-02T15:04:05Z")
 }
 
 // summariseHashes renders the checksum list for the field-14 column.

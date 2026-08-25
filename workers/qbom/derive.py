@@ -23,9 +23,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-#: Families that are already post-quantum. Kept here rather than imported from
-#: the rules module so the readiness view names exactly what it treats as done.
-PQC_FAMILIES = frozenset({"ml-kem", "ml-dsa", "slh-dsa", "falcon", "lms", "mceliece"})
+from axebom_shared.crypto.quantum_rules import PQC_FAMILIES, readiness_group
+
+__all__ = ["PQC_FAMILIES", "QuantumReadiness", "crypto_asset_refs", "derive_readiness"]
 
 
 @dataclass
@@ -95,16 +95,18 @@ def derive_readiness(crypto_assets: list[dict[str, Any]]) -> QuantumReadiness:
     out = QuantumReadiness()
 
     for asset in crypto_assets:
-        if asset.get("quantum_vulnerable"):
+        group = readiness_group(
+            quantum_vulnerable=bool(asset.get("quantum_vulnerable")),
+            grover_note=str(asset.get("grover_note") or ""),
+            quantum_family=str(asset.get("quantum_family") or ""),
+        )
+        if group == "vulnerable":
             out.vulnerable.append(asset)
-        elif asset.get("grover_note"):
+        elif group == "grover_note":
             out.grover_notes.append(asset)
-        elif asset.get("quantum_family") in PQC_FAMILIES:
-            # ⚠ MATCHED ON THE FAMILY, NEVER ON THE RATIONALE TEXT. This was a
-            # substring check against `quantum_rationale` first; a copy edit
-            # would have silently emptied this list with nothing failing.
+        elif group == "post_quantum":
             out.post_quantum.append(asset)
-        elif asset.get("quantum_family") == "unknown":
+        elif group == "unassessed":
             out.unassessed.append(asset)
 
     if out.unassessed:

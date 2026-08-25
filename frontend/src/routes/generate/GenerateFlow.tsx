@@ -22,6 +22,7 @@ import {
   effectiveFormats,
   plannedReports,
   reachable,
+  scannableBomTypes,
   stepComplete,
   useWizard,
   validateDraft,
@@ -136,8 +137,8 @@ export function GenerateFlow() {
         throw new Error(
           project
             ? `${project.name} has no scannable source (registered as ` +
-              `"${project.source_type}"). HBOM is imported, not scanned, so this ` +
-              'flow cannot produce a BOM for it.'
+                `"${project.source_type}"). HBOM is imported, not scanned, so this ` +
+                'flow cannot produce a BOM for it.'
             : 'No project selected.',
         );
       }
@@ -147,7 +148,14 @@ export function GenerateFlow() {
         source_kind: kind,
         // events.Family is lowercase ("sbom"); the wizard's BomType is
         // uppercase ("SBOM") because CERT-In and the UI present it that way.
-        families: draft.bomTypes.map((t) => t.toLowerCase()),
+        //
+        // ⚠ NOT draft.bomTypes. HBOM and QBOM are never scan families —
+        // `Orchestrator.CreateScan` refuses both outright — so only the
+        // scannable subset is sent here; validateDraft already blocks Run
+        // before this fires if that subset is empty. The report loop below
+        // still uses the full draft.bomTypes: a report can be requested for
+        // HBOM/QBOM without this run scanning for it.
+        families: scannableBomTypes(draft).map((t) => t.toLowerCase()),
       });
 
       // ⚠ FIRED WHILE THE SCAN IS STILL `queued`, AND THAT IS NOT A RACE.
@@ -210,7 +218,8 @@ export function GenerateFlow() {
       // the step that owns each one is the whole reason the wizard knows about
       // steps at all.
       if (err instanceof ApiError) setServerErrors(toCombinationErrors(err));
-      else setServerErrors([{ step: 1, message: err instanceof Error ? err.message : String(err) }]);
+      else
+        setServerErrors([{ step: 1, message: err instanceof Error ? err.message : String(err) }]);
     },
   });
 
@@ -515,7 +524,11 @@ function Review({
       {errors.length > 0 && (
         <div className="review-errors">
           {errors.map((e, i) => (
-            <div key={i} className="review-error" data-hard={e.step === 4 ? 'true' : undefined}>
+            <div
+              key={i}
+              className="review-error"
+              data-hard={blocking([e]).length > 0 ? 'true' : undefined}
+            >
               <p>{e.message}</p>
               {/*
                 ⚠ THE FIX BUTTON IS THE POINT. An error message that names a

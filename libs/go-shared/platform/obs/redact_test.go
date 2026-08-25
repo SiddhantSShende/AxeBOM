@@ -20,7 +20,7 @@ func TestRedactString(t *testing.T) {
 	}{
 		{
 			name:        "postgres dsn keeps host, drops password",
-			in:          "dial postgres://encorebom:hunter2@db.internal:5432/encorebom failed",
+			in:          "dial postgres://axebom:hunter2@db.internal:5432/axebom failed",
 			mustNotHave: "hunter2",
 			mustHave:    "db.internal:5432",
 		},
@@ -111,7 +111,7 @@ func TestRedactHandlerFiltersMessageAndAttrs(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(NewRedactHandler(slog.NewJSONHandler(&buf, nil)))
 
-	logger.Error("connection failed to postgres://app:hunter2@db:5432/encorebom",
+	logger.Error("connection failed to postgres://app:hunter2@db:5432/axebom",
 		"password", "hunter2",
 		"db_password", "another-secret",
 		"github_token", "ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789",

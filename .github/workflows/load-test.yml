@@ -1,0 +1,136 @@
+# AxeBOM — load test.
+#
+# ⚠ THESE SCENARIOS (perf/*.js) HAD NEVER RUN BEFORE THIS WORKFLOW EXISTED —
+# see perf/README.md's own opening line. This wires them up for real, against
+# a real stack this job brings up itself, using a real API key (perf/README's
+# own instruction: "a scoped API key rather than a session — the scenarios are
+# what a CI pipeline does").
+#
+# ⚠ NOT A PR GATE. A GitHub-hosted runner has ~2 CPUs and ~7GB RAM — nowhere
+# near the capacity numbers perf/README.md is actually measuring toward, and
+# 8 Go services plus Postgres, NATS, MinIO and ZITADEL sharing that box means
+# a run here tells you "did throughput regress by 10x", not "can this handle
+# production load." Manual dispatch plus a weekly schedule is the right
+# cadence for a REGRESSION check; a real capacity number needs a real
+# environment, which is what the `target_url` input is for.
+#
+# ⚠ UNVERIFIED. This workflow was written against Taskfile.yml's own `dev` /
+# `iam:bootstrap` / `db:migrate` / `db:seed` targets and the seeded fixture
+# identities in migrations/seed/0001_dev_tenants.sql, but it has not been run
+# by a GitHub Actions runner — the environment writing it has no way to
+# execute one. Treat the first real run as a dry run, not as a proven gate.
+
+name: load-test
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Base URL of an already-running stack (leave empty to bring one up here)'
+        required: false
+        default: ''
+      api_key:
+        description: 'Pre-minted API key for target_url (required if target_url is set)'
+        required: false
+        default: ''
+  schedule:
+    # Weekly, not daily: this is a regression check against last week's
+    # numbers, not a signal that changes hour to hour the way a security
+    # advisory does.
+    - cron: '0 7 * * 1'
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: '1.26'
+
+jobs:
+  load-test:
+    name: k6 scenarios
+    runs-on: ubuntu-latest
+    # A full stack plus three k6 scenarios genuinely takes a while; the
+    # default 6h is needlessly generous and would hide a hang.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use an existing target
+        if: inputs.target_url != ''
+        run: |
+          echo "BASE_URL=${{ inputs.target_url }}" >> "$GITHUB_ENV"
+          echo "API_KEY=${{ inputs.api_key }}" >> "$GITHUB_ENV"
+
+      # --------------------------------------------------------------------
+      # Bring up an ephemeral stack, ONLY when no target was given.
+      # --------------------------------------------------------------------
+      - uses: actions/setup-go@v5
+        if: inputs.target_url == ''
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - uses: arduino/setup-task@v2
+        if: inputs.target_url == ''
+
+      - name: Bring up the stack
+        if: inputs.target_url == ''
+        run: task dev
+
+      - name: Wait for the gateway
+        if: inputs.target_url == ''
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8080/healthz >/dev/null; then
+              echo "gateway is up"; exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::gateway never became healthy"
+          docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.iam.yml -f deploy/compose/docker-compose.app.yml logs --tail=200
+          exit 1
+
+      - name: Migrate and seed
+        if: inputs.target_url == ''
+        run: |
+          task db:migrate
+          task db:seed
+
+      - name: Bootstrap ZITADEL
+        if: inputs.target_url == ''
+        run: task iam:bootstrap
+
+      - name: Mint a scoped API key
+        if: inputs.target_url == ''
+        run: |
+          # alice@acme.test — the fixed, stable local seed user
+          # (migrations/seed/0001_dev_tenants.sql), never a ZITADEL-JIT id:
+          # a fresh CI database has never had an interactive ZITADEL login.
+          KEY=$(go run ./cmd/axebom apikey mint \
+            --tenant 01900000-0000-7000-8000-00000000000a \
+            --created-by 01900000-0000-7000-8000-0000000000a1 \
+            --name "load-test-ci-$(date -u +%Y%m%dT%H%M%SZ)" \
+            --scopes scan:run,report:read,finding:read \
+            --ttl-days 1)
+          echo "::add-mask::$KEY"
+          echo "API_KEY=$KEY" >> "$GITHUB_ENV"
+          echo "BASE_URL=http://localhost:8080" >> "$GITHUB_ENV"
+
+      # --------------------------------------------------------------------
+      # Run the scenarios against whichever BASE_URL/API_KEY were resolved
+      # above — an ephemeral stack, or a caller-supplied one.
+      # --------------------------------------------------------------------
+      - uses: grafana/setup-k6-action@v1
+
+      - name: scan-throughput
+        run: k6 run perf/scan-throughput.js -e BASE_URL="$BASE_URL" -e API_KEY="$API_KEY"
+
+      - name: dependencies-page
+        run: k6 run perf/dependencies-page.js -e BASE_URL="$BASE_URL" -e API_KEY="$API_KEY"
+
+      - name: report-render
+        run: k6 run perf/report-render.js -e BASE_URL="$BASE_URL" -e API_KEY="$API_KEY"
+
+      - name: Dump service logs on failure
+        if: failure() && inputs.target_url == ''
+        run: docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.iam.yml -f deploy/compose/docker-compose.app.yml logs --tail=500

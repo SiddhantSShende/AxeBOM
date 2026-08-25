@@ -10,8 +10,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/libs/go-shared/sandbox"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/sandbox"
 )
 
 // Cloning untrusted repositories.
@@ -233,13 +233,13 @@ func Clone(ctx context.Context, runner sandbox.Runner, req CloneRequest,
 	// asking "who may hold a token" greps CredentialsPermitted and finds
 	// exactly one call site.
 	spec.CredentialsPermitted = req.Token != ""
-	spec.Labels = map[string]string{"encorebom.role": "fetcher"}
+	spec.Labels = map[string]string{"axebom.role": "fetcher"}
 
 	// The tree comes back as a tar, copied from the finished container. There
 	// is no writable host mount at any point — see sandbox.CopyOut.
 	var tarPath string
 	if req.DestDir != "" {
-		f, err := os.CreateTemp("", "encorebom-clone-*.tar")
+		f, err := os.CreateTemp("", "axebom-clone-*.tar")
 		if err != nil {
 			return CloneResult{}, fmt.Errorf("clone: staging file: %w", err)
 		}

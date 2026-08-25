@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/encorebom/encorebom/libs/go-shared/schemacheck"
+	"github.com/axebom/axebom/libs/go-shared/schemacheck"
 )
 
 // TestEveryColumnThisPackageQueriesExists.

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import sys
 
-from encorebom_shared.enginedb import database_root, resolve
+from axebom_shared.enginedb import database_root, resolve
 
 from .dbsync import SPECS
 

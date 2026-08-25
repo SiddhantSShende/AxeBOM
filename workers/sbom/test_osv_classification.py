@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import pytest
 
-from encorebom_shared.adapters.base import ResultStatus
-from encorebom_shared.sandbox import SandboxResult
+from axebom_shared.adapters.base import ResultStatus
+from axebom_shared.sandbox import SandboxResult
 
 from .adapters.osv_scanner import OSVScannerAdapter
 

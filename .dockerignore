@@ -51,7 +51,7 @@ frontend/dist
 
 # Downloaded scanner binaries and provisioned engine databases (multi-GB).
 # These are mounted at runtime, never built in.
-.encorebom
+.axebom
 enginedb
 
 # Local state

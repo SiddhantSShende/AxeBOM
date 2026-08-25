@@ -1,7 +1,7 @@
-# EncoreBOM CLI — migrations, seeding, profile checks, the sandbox bridge.
+# AxeBOM CLI — migrations, seeding, profile checks, the sandbox bridge.
 #
 # Build from the repository root:
-#   docker build -f deploy/docker/Dockerfile.cli -t encorebom/cli .
+#   docker build -f deploy/docker/Dockerfile.cli -t axebom/cli .
 #
 # In the compose stack this runs as a one-shot `migrate` service that the
 # application services wait on. Running migrations from a dedicated container
@@ -23,11 +23,11 @@ ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux go build \
       -trimpath \
       -ldflags="-s -w -X main.version=${VERSION}" \
-      -o /out/encorebom ./cmd/encorebom
+      -o /out/axebom ./cmd/axebom
 
 FROM gcr.io/distroless/static-debian12:nonroot
 
-COPY --from=build /out/encorebom /encorebom
+COPY --from=build /out/axebom /axebom
 
 # The compliance profile and the OSINT manifest are read from disk at runtime
 # by `profile` and `toolctl`, so the CLI image carries them.
@@ -36,4 +36,4 @@ COPY --from=build /src/OSINT /OSINT
 
 USER nonroot:nonroot
 WORKDIR /
-ENTRYPOINT ["/encorebom"]
+ENTRYPOINT ["/axebom"]

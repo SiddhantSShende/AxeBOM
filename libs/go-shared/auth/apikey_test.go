@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/authz"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/authz"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 var keyNow = time.Date(2026, 8, 18, 9, 0, 0, 0, time.UTC)

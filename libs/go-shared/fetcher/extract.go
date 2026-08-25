@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"unicode/utf8"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 // Archive extraction over untrusted input.

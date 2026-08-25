@@ -22,8 +22,8 @@ from pathlib import Path
 
 import pytest
 
-from encorebom_shared.adapters.base import ResultStatus, ScanTarget
-from encorebom_shared.sandbox import SandboxResult
+from axebom_shared.adapters.base import ResultStatus, ScanTarget
+from axebom_shared.sandbox import SandboxResult
 
 from .adapters.common import (
     EngineImage,

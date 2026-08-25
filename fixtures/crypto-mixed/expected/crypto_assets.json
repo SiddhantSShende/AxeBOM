@@ -1,0 +1,116 @@
+[
+  {
+    "asset_type": "algorithm",
+    "component_key": "5b256ad4-22cd-4ddf-a978-88c694f478b7",
+    "crypto_functions": [
+      "sign"
+    ],
+    "deprecation_rationale": "RSA key size was not reported, so its strength could not be assessed. Anything below 2048 bits is disallowed.",
+    "deprecation_reference": "NIST SP 800-131A Rev. 2",
+    "deprecation_status": "current",
+    "effective_quantum_bits": 0,
+    "name": "RSA",
+    "oid": "1.2.840.113549.1.1.1",
+    "pqc_recommendation": "ML-DSA (FIPS 204, lattice): Replace signatures with ML-DSA. SLH-DSA (FIPS 205, hash-based) is the conservative alternative where a lattice assumption is unacceptable, at the cost of much larger signatures.",
+    "primitive": "signature",
+    "quantum_family": "rsa",
+    "quantum_rationale": "RSA rests on integer factorisation, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  },
+  {
+    "asset_type": "algorithm",
+    "component_key": "52d98851-258f-4552-99d0-8326ac840c14",
+    "crypto_functions": [
+      "digest"
+    ],
+    "deprecation_rationale": "No known weakness for its intended use.",
+    "deprecation_reference": "",
+    "deprecation_status": "current",
+    "effective_quantum_bits": 128,
+    "grover_note": "256-bit key gives roughly 128 bits of security against Grover's algorithm, which is comfortably beyond reach. No action.",
+    "name": "SHA256",
+    "primitive": "hash",
+    "quantum_family": "sha2",
+    "quantum_rationale": "A symmetric primitive. Grover's algorithm halves effective key strength \u2014 a sizing concern, not a break, so this is NOT reported as quantum-vulnerable.",
+    "quantum_readiness_group": "grover_note",
+    "quantum_vulnerable": false
+  },
+  {
+    "asset_type": "algorithm",
+    "component_key": "b21f7408-6344-4ea2-a317-541fa2579d3e",
+    "crypto_functions": [
+      "sign"
+    ],
+    "deprecation_rationale": "RSA key size was not reported, so its strength could not be assessed. Anything below 2048 bits is disallowed.",
+    "deprecation_reference": "NIST SP 800-131A Rev. 2",
+    "deprecation_status": "current",
+    "effective_quantum_bits": 0,
+    "name": "SHA256-RSA",
+    "oid": "1.2.840.113549.1.1.11",
+    "pqc_recommendation": "ML-DSA (FIPS 204, lattice): Replace signatures with ML-DSA. SLH-DSA (FIPS 205, hash-based) is the conservative alternative where a lattice assumption is unacceptable, at the cost of much larger signatures.",
+    "primitive": "signature",
+    "quantum_family": "rsa",
+    "quantum_rationale": "RSA rests on integer factorisation, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  },
+  {
+    "asset_type": "algorithm",
+    "component_key": "dfffe25d-9fee-442e-8d7d-f4fc7a1642a2",
+    "crypto_functions": [
+      "encapsulate",
+      "decapsulate",
+      "sign"
+    ],
+    "deprecation_rationale": "RSA key size was not reported, so its strength could not be assessed. Anything below 2048 bits is disallowed.",
+    "deprecation_reference": "NIST SP 800-131A Rev. 2",
+    "deprecation_status": "current",
+    "effective_quantum_bits": 0,
+    "name": "RSA",
+    "oid": "1.2.840.113549.1.1.1",
+    "pqc_recommendation": "ML-KEM or ML-DSA (FIPS 203 / FIPS 204, lattice): This asset reports no crypto functions, so its use could not be determined. Key establishment migrates to ML-KEM (FIPS 203); signatures migrate to ML-DSA (FIPS 204). Check which this is.",
+    "primitive": "pke",
+    "quantum_family": "rsa",
+    "quantum_rationale": "RSA rests on integer factorisation, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  },
+  {
+    "asset_type": "key",
+    "component_key": "03290ac5-2814-4337-9df6-f7303e57655e",
+    "deprecation_rationale": "No known weakness for its intended use.",
+    "deprecation_reference": "",
+    "deprecation_status": "current",
+    "effective_quantum_bits": 0,
+    "key_size": 2048,
+    "name": "RSA-2048",
+    "pqc_recommendation": "ML-KEM or ML-DSA (FIPS 203 / FIPS 204, lattice): This asset reports no crypto functions, so its use could not be determined. Key establishment migrates to ML-KEM (FIPS 203); signatures migrate to ML-DSA (FIPS 204). Check which this is.",
+    "quantum_family": "rsa",
+    "quantum_rationale": "RSA rests on integer factorisation, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  },
+  {
+    "asset_type": "certificate",
+    "cert_extension": "pem",
+    "cert_format": "X.509",
+    "cert_issuer": "example.com",
+    "cert_subject": "example.com",
+    "component_key": "f6197706-e284-4626-8708-f41670fed079",
+    "deprecation_rationale": "RSA key size was not reported, so its strength could not be assessed. Anything below 2048 bits is disallowed.",
+    "deprecation_reference": "NIST SP 800-131A Rev. 2",
+    "deprecation_status": "current",
+    "effective_quantum_bits": 0,
+    "name": "example.com",
+    "not_valid_after": "2027-08-24T20:02:22Z",
+    "not_valid_before": "2026-08-24T20:02:22Z",
+    "pqc_recommendation": "ML-DSA (FIPS 204, lattice): Replace signatures with ML-DSA. SLH-DSA (FIPS 205, hash-based) is the conservative alternative where a lattice assumption is unacceptable, at the cost of much larger signatures.",
+    "quantum_family": "rsa",
+    "quantum_rationale": "RSA rests on integer factorisation, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true,
+    "signature_algo_ref": "SHA256-RSA",
+    "subject_public_key_ref": "RSA-2048"
+  }
+]

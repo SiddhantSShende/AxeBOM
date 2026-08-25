@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/encorebom/encorebom/libs/go-shared/model"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/model"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 // TestThePDFRendererCannotReachTheNetwork.
@@ -273,7 +273,7 @@ func TestBothCoverageNumbersAppearInThePDF(t *testing.T) {
 	text := extractPDFText(t, buf.Bytes())
 	for _, want := range []string{
 		"Completeness", "12.40%", "Declaration", "100.00%",
-		"EncoreBOM's judgement",
+		"AxeBOM's judgement",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the PDF does not carry %q", want)
@@ -313,15 +313,63 @@ func TestAnEngineLessReportSaysSo(t *testing.T) {
 	}
 }
 
-// TestACBOMPDFIsRefused — the same type-discrimination refusal as every other
-// format, so they cannot disagree about what a CBOM is.
-func TestACBOMPDFIsRefused(t *testing.T) {
+// TestACBOMPDFRendersWithACryptoSummary.
+//
+// ⚠ THE PDF MUST NOT REFUSE A CBOM. It once did, for the same reason the JSON
+// bundle did — FieldsFor's "no flat field list" answer, correctly given, was
+// being read as "refuse the report". WritePDF now never calls FieldsFor for a
+// CBOM at all, and renders the crypto-specific pages instead.
+func TestACBOMPDFRendersWithACryptoSummary(t *testing.T) {
 	b := sampleBOM()
 	b.BOMType = model.BOMTypeCBOM
+	b.CryptoAssets = []CryptoAsset{
+		{AssetType: "certificate", Name: "leaf-cert", CertSubject: "CN=example"},
+		{AssetType: "algorithm", Name: "RSA-2048", QuantumVulnerable: true, QuantumReadinessGroup: "vulnerable"},
+	}
 
 	var buf bytes.Buffer
-	if _, err := WritePDF(&buf, b, PDFOptions{}); err == nil {
-		t.Fatal("a CBOM rendered against the flat SBOM field set")
+	if _, err := WritePDF(&buf, b, PDFOptions{}); err != nil {
+		t.Fatalf("a CBOM was refused: %v", err)
+	}
+
+	text := extractPDFText(t, buf.Bytes())
+	for _, want := range []string{"Cryptographic Assets", "leaf-cert", "RSA-2048", "Certificates", "Algorithms"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the CBOM PDF does not carry %q", want)
+		}
+	}
+}
+
+// TestAnAIBOMPDFRendersItsModelInventory — the same class of guarantee
+// TestACBOMPDFRendersWithACryptoSummary asserts: an AI model has no
+// PURL/depth/scope, so the generic componentPages() must not run for it,
+// and aibomInventoryPage() must actually appear instead.
+func TestAnAIBOMPDFRendersItsModelInventory(t *testing.T) {
+	risk := 7.5
+	b := sampleBOM()
+	b.BOMType = model.BOMTypeAIBOM
+	b.AIModels = []AIModel{
+		{
+			Name: "Llama-3-8B",
+			Fields: map[string]string{
+				model.FieldCertinAibom04ModelDeveloper: "Meta",
+				model.FieldCertinAibom05Licensing:      "llama3",
+			},
+			Datasets:  []AIDataset{{Name: "the-pile"}},
+			RiskScore: &risk,
+		},
+	}
+
+	var buf bytes.Buffer
+	if _, err := WritePDF(&buf, b, PDFOptions{}); err != nil {
+		t.Fatalf("an AIBOM was refused: %v", err)
+	}
+
+	text := extractPDFText(t, buf.Bytes())
+	for _, want := range []string{"AI Models", "Llama-3-8B", "Meta", "llama3"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the AIBOM PDF does not carry %q", want)
+		}
 	}
 }
 

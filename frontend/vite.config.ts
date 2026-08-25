@@ -20,6 +20,42 @@ export default defineConfig({
         changeOrigin: true,
         ws: true, // scan progress is a WebSocket (docs/02-CONTRACTS.md §10)
       },
+
+      // ZITADEL's canonical paths, mirroring deploy/docker/nginx.conf.
+      //
+      // ⚠ THE TWO MUST AGREE. nginx serves the container build and this serves
+      // `npm run dev`; a path present in one and missing in the other means
+      // login works in production and 404s locally, or the reverse — and the
+      // failure looks like a broken auth library rather than a missing proxy
+      // rule. When you add a path there, add it here.
+      //
+      // ⚠ changeOrigin IS FALSE, DELIBERATELY. ZITADEL selects its virtual
+      // instance from the Host header and bakes the issuer into every token.
+      // Rewriting the Host to zitadel's own address makes it publish an issuer
+      // of http://localhost:58080, which then mismatches the URL the browser
+      // called and every token is rejected.
+      ...Object.fromEntries(
+        [
+          '/.well-known',
+          '/oauth/v2',
+          '/oidc/v1',
+          '/saml/v2',
+          '/idps',
+          '/assets/v1',
+          '/admin/v1',
+          '/auth/v1', // NOT '/auth' — the SPA owns /auth/callback
+          '/management/v1',
+          '/system/v1',
+          '/v2',
+          '/ui/console',
+          '/ui/login',
+          '/ui/v2/login',
+          '/device',
+        ].map((path) => [
+          path,
+          { target: 'http://localhost:58080', changeOrigin: false },
+        ]),
+      ),
     },
   },
   build: {

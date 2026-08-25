@@ -1,4 +1,4 @@
-# EncoreBOM Helm values.
+# AxeBOM Helm values.
 #
 # ⚠ THE ENGINE NODE POOL IS THE MOST IMPORTANT BLOCK IN THIS FILE.
 #
@@ -10,7 +10,7 @@
 
 image:
   registry: ghcr.io
-  repository: encorebom
+  repository: axebom
   # Overridden at release time. `latest` is deliberately not the default: a tag
   # that moves makes a rollback impossible to describe.
   tag: ""
@@ -92,9 +92,9 @@ engines:
   # on a general pool, includes the services holding database credentials, the
   # JWT signing key and the Vault token. The pool is the blast-radius boundary.
   nodeSelector:
-    encorebom.io/workload: engine
+    axebom.io/workload: engine
   tolerations:
-    - key: encorebom.io/engine
+    - key: axebom.io/engine
       operator: Exists
       effect: NoSchedule
 
@@ -144,7 +144,7 @@ postgres:
   # An operator-managed instance is expected; the chart does not run a database.
   host: ""
   port: 5432
-  database: encorebom
+  database: axebom
   # ⚠ POINT-IN-TIME RECOVERY, 30-DAY WINDOW. A nightly dump loses a day; PITR
   # loses a transaction. For a product whose value is defensible records, the
   # difference is whether an incident costs a day of scans or nothing.
@@ -153,7 +153,7 @@ postgres:
     retentionDays: 30
 
 objectStorage:
-  bucket: encorebom
+  bucket: axebom
   # Versioning on, lifecycle rules on — with ONE exception, below.
   versioning: true
   lifecycle:

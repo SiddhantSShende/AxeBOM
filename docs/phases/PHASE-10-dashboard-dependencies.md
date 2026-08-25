@@ -14,7 +14,7 @@
 
 The product becomes usable by someone who has not read the specs. The five-step generate flow, live progress, the dependencies explorer, findings, and the report viewer.
 
-**Completing this phase means EncoreBOM is shippable as an SBOM platform.** Everything after adds BOM types and enterprise features.
+**Completing this phase means AxeBOM is shippable as an SBOM platform.** Everything after adds BOM types and enterprise features.
 
 ## Preconditions
 

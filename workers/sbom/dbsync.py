@@ -17,8 +17,8 @@ Those two together mean the attacker-controlled input is absent, so the reason
 the sandbox denies egress does not apply. Provisioning is NOT a weakened
 sandbox; it is a different operation on different data.
 
-Databases are written to ``$ENCOREBOM_ENGINE_DB_ROOT/<database_id>`` and stamped
-only on success — see :mod:`encorebom_shared.enginedb` for why the stamp is what
+Databases are written to ``$AXEBOM_ENGINE_DB_ROOT/<database_id>`` and stamped
+only on success — see :mod:`axebom_shared.enginedb` for why the stamp is what
 makes a database count as present.
 
 Usage::
@@ -38,8 +38,8 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from encorebom_shared.enginedb import database_root, write_stamp
-from encorebom_shared.logging import get_logger
+from axebom_shared.enginedb import database_root, write_stamp
+from axebom_shared.logging import get_logger
 
 from .adapters.common import ManifestResolver
 
@@ -228,7 +228,7 @@ def provision(database_id: str, *, root: Path | None = None, force: bool = False
         # ⚠ The stamp goes first. If the wipe or the download dies partway, the
         # directory must not still look provisioned — an unstamped directory is
         # treated as absent, which is the safe direction.
-        stamp = destination / "encorebom-db.json"
+        stamp = destination / "axebom-db.json"
         if stamp.exists():
             stamp.unlink()
         shutil.rmtree(destination, ignore_errors=True)
@@ -258,7 +258,7 @@ def provision(database_id: str, *, root: Path | None = None, force: bool = False
     warm_parent = database_root(root) / ".warm"
     warm_parent.mkdir(parents=True, exist_ok=True)
 
-    with tempfile.TemporaryDirectory(prefix="encorebom-warm-", dir=warm_parent) as tmp:
+    with tempfile.TemporaryDirectory(prefix="axebom-warm-", dir=warm_parent) as tmp:
         mounts: list[str] = []
         if not spec.stage_in_container:
             mounts += ["-v", f"{destination.resolve()}:{spec.target}"]
@@ -410,7 +410,7 @@ def _run_staged(
     and started rather than ``run --rm`` so its filesystem still exists to copy
     from after the process exits.
     """
-    name = f"encorebom-dbsync-{spec.database_id}"
+    name = f"axebom-dbsync-{spec.database_id}"
     # Clear a container left behind by an interrupted run. `docker` is resolved
     # from PATH deliberately: the runtime is whatever the operator installed,
     # and hardcoding a path would break every platform but the one it was
@@ -554,7 +554,7 @@ def _readable_as_scan_user(destination: Path, image: str) -> bool:
             _shell_image(image),
             "-c",
             # Find one regular file that is NOT the stamp and read a byte of it.
-            "f=$(find /db -type f ! -name encorebom-db.json | head -1); "
+            "f=$(find /db -type f ! -name axebom-db.json | head -1); "
             '[ -n "$f" ] && head -c 1 "$f" >/dev/null',
         ],
         5,
@@ -574,7 +574,7 @@ def _downloaded_bytes(path: Path) -> int:
     """Total size of everything except the stamp."""
     total = 0
     for item in path.rglob("*"):
-        if item.is_file() and item.name != "encorebom-db.json":
+        if item.is_file() and item.name != "axebom-db.json":
             total += item.stat().st_size
     return total
 

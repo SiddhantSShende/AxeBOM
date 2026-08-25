@@ -1,4 +1,4 @@
-// Package toolctl acquires and verifies the third-party scanners EncoreBOM
+// Package toolctl acquires and verifies the third-party scanners AxeBOM
 // invokes.
 //
 // ADR-0002: pinned release artifacts, never source builds. For a compliance
@@ -261,7 +261,7 @@ func (m *Manifest) ToolsForFamily(family string) []Tool {
 	return out
 }
 
-// CopyleftLicenses are licenses that must never be linked into an EncoreBOM
+// CopyleftLicenses are licenses that must never be linked into an AxeBOM
 // binary. CLAUDE.md invariant 9.
 var CopyleftLicenses = map[string]bool{
 	"GPL-2.0": true, "GPL-3.0": true, "GPL-2.0-only": true, "GPL-3.0-only": true,
@@ -270,7 +270,7 @@ var CopyleftLicenses = map[string]bool{
 }
 
 // LicenseProblems returns tools or libraries whose license would contaminate
-// an EncoreBOM binary.
+// an AxeBOM binary.
 //
 // Anything genuinely copyleft belongs in `rejected:` (invoked as a subprocess
 // or not at all). Finding one in `tools:` or `libraries:` means somebody added

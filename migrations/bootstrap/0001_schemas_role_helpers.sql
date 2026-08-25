@@ -3,7 +3,7 @@
 -- Bootstrap: schemas, the non-superuser application role, and the RLS helper.
 --
 -- Runs as the database OWNER. Everything after this runs as the owner too;
--- only the application connects as encorebom_app.
+-- only the application connects as axebom_app.
 --
 -- docs/ADR/0006-rls-tenancy.md
 -- ===========================================================================
@@ -42,17 +42,17 @@ CREATE SCHEMA IF NOT EXISTS app;
 -- +goose StatementBegin
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'encorebom_app') THEN
-    CREATE ROLE encorebom_app LOGIN PASSWORD 'encorebom_app';
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'axebom_app') THEN
+    CREATE ROLE axebom_app LOGIN PASSWORD 'axebom_app';
   END IF;
 END
 $$;
 -- +goose StatementEnd
 
-ALTER ROLE encorebom_app NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+ALTER ROLE axebom_app NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
 
 GRANT USAGE ON SCHEMA auth, project, scan, normalize, report, campaign, comment, notify, app
-  TO encorebom_app;
+  TO axebom_app;
 
 -- ---------------------------------------------------------------------------
 -- The RLS helper.
@@ -203,10 +203,10 @@ $fn$;
 -- convention — a convention is something an ORM will cheerfully ignore.
 -- ---------------------------------------------------------------------------
 ALTER DEFAULT PRIVILEGES IN SCHEMA auth, project, scan, normalize, report, campaign, comment, notify
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO encorebom_app;
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO axebom_app;
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA auth, project, scan, normalize, report, campaign, comment, notify
-  GRANT USAGE, SELECT ON SEQUENCES TO encorebom_app;
+  GRANT USAGE, SELECT ON SEQUENCES TO axebom_app;
 
 -- +goose Down
 DROP FUNCTION IF EXISTS app.touch_updated_at();

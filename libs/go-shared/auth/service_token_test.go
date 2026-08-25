@@ -5,14 +5,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/authz"
+	"github.com/axebom/axebom/libs/go-shared/authz"
 )
 
 func serviceIssuer(t *testing.T) *Issuer {
 	t.Helper()
 	i, err := NewIssuer(TokenConfig{
 		SigningKey: []byte("a-signing-key-of-sufficient-length-for-hs256"),
-		Issuer:     "encorebom",
+		Issuer:     "axebom",
 		AccessTTL:  15 * time.Minute,
 		RefreshTTL: 24 * time.Hour,
 	})
@@ -169,7 +169,7 @@ func TestAServiceTokenIsNotForgeableWithAnotherKey(t *testing.T) {
 
 	other, err := NewIssuer(TokenConfig{
 		SigningKey: []byte("a-different-signing-key-of-sufficient-length"),
-		Issuer:     "encorebom",
+		Issuer:     "axebom",
 		AccessTTL:  15 * time.Minute,
 		RefreshTTL: 24 * time.Hour,
 	})

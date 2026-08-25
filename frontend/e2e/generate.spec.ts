@@ -20,7 +20,7 @@ async function signIn(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: /next|continue/i }).click();
   const p = page.getByLabel(/password/i);
   await p.waitFor();
-  await p.fill('EncoreBOM-dev-only1!');
+  await p.fill('AxeBOM-dev-only1!');
   await page.waitForTimeout(400);
   await page.getByRole('button', { name: /next|continue|sign in|log ?in/i }).click();
   await page.waitForURL(/\/generate/, { timeout: 45000 });

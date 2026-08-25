@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/encorebom/encorebom/libs/go-shared/model"
+	"github.com/axebom/axebom/libs/go-shared/model"
 )
 
 // ─── HBOM ───────────────────────────────────────────────────────────────────
@@ -197,7 +197,7 @@ func enrichmentSummary(enriched map[string]string) string {
 // automated coverage the SBOM sections have. That assumption is discovered at
 // an audit, which is the worst possible moment.
 const HBOMProvenanceNote = "This hardware BOM was IMPORTED from structured entry — " +
-	"a parts list, a form, or both. EncoreBOM does not discover physical " +
+	"a parts list, a form, or both. AxeBOM does not discover physical " +
 	"components, and no open-source tool does; every value here was supplied by " +
 	"the customer or, where marked, by a parts-data provider. Coverage below " +
 	"reflects what was supplied, not what exists in the hardware."

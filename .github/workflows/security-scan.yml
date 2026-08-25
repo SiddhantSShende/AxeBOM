@@ -1,0 +1,121 @@
+# AxeBOM — security scanning.
+#
+# ⚠ SEPARATE FROM verify.yml, DELIBERATELY. `lint`'s golangci-lint run already
+# includes gosec (.golangci.yml) — that is STATIC analysis of our own code and
+# belongs in the fast gate. What this workflow adds is the thing gosec cannot
+# see: KNOWN vulnerabilities in the versions of our dependencies actually
+# reachable from our code (govulncheck), in Python packages (pip-audit), in
+# npm packages (npm audit), and in the filesystem as a whole, including
+# misconfigurations and embedded secrets (trivy fs). Running all of that on
+# every PR would slow the fast gate down for a class of finding that does not
+# change between commits an hour apart; a schedule plus manual dispatch is the
+# right cadence for "did a new CVE get published against something we ship."
+#
+# A BOM platform whose own supply chain is unscanned is not credible — this is
+# the same reasoning pyproject.toml's own "deliberately minimal dependencies"
+# comment states, applied to CI rather than to the dependency list itself.
+
+name: security-scan
+
+on:
+  schedule:
+    # 06:00 UTC daily. Vulnerability databases update continuously; a finding
+    # sitting undiscovered for a week is a week an exploitable dependency
+    # shipped in every build.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      # Only when a manifest actually changed — a new CVE against an existing
+      # pin is caught by the schedule above, not by every unrelated PR.
+      - 'go.mod'
+      - 'go.sum'
+      - 'pyproject.toml'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: '1.26'
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  govulncheck:
+    name: go vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      # ⚠ CALL-GRAPH AWARE, UNLIKE `go list -m all` PIPED TO A CVE DATABASE.
+      # govulncheck reports a vulnerability only when this codebase actually
+      # calls the affected function — a known-vulnerable dependency pulled in
+      # for one unused helper does not fail the build, which is what keeps
+      # this signal worth reading instead of a wall of noise nobody triages.
+      - run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - run: govulncheck ./...
+
+  pip-audit:
+    name: python dependency vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - run: pip install -e ".[dev]"
+      - run: pip install pip-audit
+      # `--strict` fails on ANY finding rather than only fixable ones; a
+      # dependency with no fix yet still needs a human decision (pin lower,
+      # accept the risk with a note, or drop it), not silence.
+      - run: pip-audit --strict
+
+  npm-audit:
+    name: frontend dependency vulnerabilities
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      # `high` rather than every advisory: low/moderate findings in
+      # dev-only tooling (a build plugin, a test runner) are frequent and
+      # rarely actionable same-day; this stays a signal worth acting on.
+      - run: npm audit --audit-level=high
+
+  trivy-fs:
+    name: filesystem scan (deps, secrets, misconfig)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ⚠ THE SAME trivy THE PRODUCT RUNS AGAINST CUSTOMER CODE
+      # (OSINT/tools.manifest.yaml), pointed at OUR OWN repository instead —
+      # not a different tool for a different purpose. `fs` mode needs no
+      # container image and no running stack, so it costs almost nothing to
+      # run on every schedule tick.
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          # Scanner test fixtures are DELIBERATELY vulnerable/malformed
+          # inputs (fixtures/*/raw/*.json feed the SBOM/CBOM workers) — a
+          # scanner flagging its own test data is noise, not a finding.
+          skip-dirs: fixtures

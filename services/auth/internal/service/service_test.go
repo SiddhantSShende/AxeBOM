@@ -12,13 +12,13 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/authz"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/services/auth/internal/service"
-	"github.com/encorebom/encorebom/services/auth/internal/store"
+	"github.com/axebom/axebom/libs/go-shared/auth"
+	"github.com/axebom/axebom/libs/go-shared/authz"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/db"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/services/auth/internal/service"
+	"github.com/axebom/axebom/services/auth/internal/store"
 )
 
 // Phase 3 acceptance tests.
@@ -76,7 +76,7 @@ func newFixture(t *testing.T) *fixture {
 
 	issuer, err := auth.NewIssuer(auth.TokenConfig{
 		SigningKey: []byte("test-signing-key-that-is-long-enough-to-pass-validation"),
-		Issuer:     "encorebom-test",
+		Issuer:     "axebom-test",
 		AccessTTL:  15 * time.Minute,
 		RefreshTTL: 24 * time.Hour,
 	})
@@ -346,7 +346,7 @@ func verifyClaims(t *testing.T, token string) (auth.Claims, error) {
 	t.Helper()
 	issuer, err := auth.NewIssuer(auth.TokenConfig{
 		SigningKey: []byte("test-signing-key-that-is-long-enough-to-pass-validation"),
-		Issuer:     "encorebom-test",
+		Issuer:     "axebom-test",
 		AccessTTL:  15 * time.Minute,
 		RefreshTTL: 24 * time.Hour,
 	})

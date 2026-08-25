@@ -21,12 +21,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/libs/go-shared/vault"
-	"github.com/encorebom/encorebom/services/notification/internal/store"
-	"github.com/encorebom/encorebom/services/notification/internal/subscription"
-	"github.com/encorebom/encorebom/services/notification/internal/webhook"
+	"github.com/axebom/axebom/libs/go-shared/auth"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/vault"
+	"github.com/axebom/axebom/services/notification/internal/store"
+	"github.com/axebom/axebom/services/notification/internal/subscription"
+	"github.com/axebom/axebom/services/notification/internal/webhook"
 )
 
 const maxRequestBody = 64 << 10

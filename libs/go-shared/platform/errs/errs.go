@@ -1,4 +1,4 @@
-// Package errs implements the EncoreBOM error taxonomy.
+// Package errs implements the AxeBOM error taxonomy.
 //
 // Contract: docs/02-CONTRACTS.md §9. That document is the SSOT; this package
 // implements it and must not diverge.
@@ -33,6 +33,30 @@ const (
 	AuthStateMismatch     Code = "AUTH_STATE_MISMATCH"
 	AuthProviderError     Code = "AUTH_PROVIDER_ERROR"
 	AuthTenantContextMiss Code = "AUTH_TENANT_CONTEXT_MISSING"
+
+	// AuthOrgAmbiguous means the caller holds a role in more than one
+	// organisation and named none of them.
+	//
+	// ⚠ IT IS AN ERROR RATHER THAN A DEFAULT ON PURPOSE. Picking one would
+	// make the answer depend on map iteration order, so a consultant working
+	// for two customers would see whichever tenant's data came up first — a
+	// cross-tenant read that looks like a normal response. The client selects,
+	// and this code is what tells it to.
+	//
+	// ⚠ IT ANSWERS 409, NOT 401 — see statusOverride. The token is valid and
+	// re-authenticating would produce an identical one.
+	AuthOrgAmbiguous Code = "AUTH_ORG_AMBIGUOUS"
+
+	// AuthOrgNameTaken means a self-service signup (services/gateway/internal/
+	// signup) asked for an organisation name that already exists.
+	//
+	// ⚠ 409, NOT 422 — see statusOverride. The request is well-formed; it
+	// conflicts with existing state, not with a validation rule.
+	AuthOrgNameTaken Code = "AUTH_ORG_NAME_TAKEN"
+
+	// AuthEmailTaken means a self-service signup asked for an email that
+	// already has an account, in this organisation or any other. Also 409.
+	AuthEmailTaken Code = "AUTH_EMAIL_TAKEN"
 )
 
 // Perm — 403. Note: never used for cross-tenant. See package doc.
@@ -40,6 +64,21 @@ const (
 	PermRoleInsufficient Code = "PERM_ROLE_INSUFFICIENT"
 	PermReportPrivate    Code = "PERM_REPORT_PRIVATE"
 	PermNoMatrixEntry    Code = "PERM_NO_MATRIX_ENTRY"
+
+	// PermNoRoleInOrg means the identity provider authenticated the caller but
+	// granted them nothing in the organisation they asked for.
+	PermNoRoleInOrg Code = "PERM_NO_ROLE_IN_ORG"
+
+	// PermCommentNotOwner means the caller holds a role sufficient to edit or
+	// delete SOME comment (the authz matrix grants comment:update/delete to
+	// every Viewer) but is not the author of THIS one.
+	//
+	// ⚠ THIS IS NOT THE CROSS-TENANT CASE. RLS already makes another tenant's
+	// comment invisible, which is a 404 (see NotFoundResource). This code fires
+	// only within the caller's own tenant, on a real row they can see but did
+	// not write — a genuine 403, checked by the handler because the authz
+	// matrix has no concept of row ownership (libs/go-shared/authz/matrix.go).
+	PermCommentNotOwner Code = "PERM_COMMENT_NOT_OWNER"
 )
 
 // NotFound — 404. Also the correct response for cross-tenant access.
@@ -67,6 +106,14 @@ const (
 	ScanSourceUnreachable        Code = "SCAN_SOURCE_UNREACHABLE"
 	ScanNoEnginesAvailable       Code = "SCAN_NO_ENGINES_AVAILABLE"
 	ScanCancelled                Code = "SCAN_CANCELLED"
+
+	// ScanFamilyNotDirectlyScannable means every registered engine for a
+	// requested family is metadata-only (policy.Engine.Derived or
+	// .RequiresImport) — HBOM (a CSV/form import) and QBOM (derived from CBOM
+	// discovery) today. Neither has a worker consuming its scan.job.* subject
+	// by design, so resolving one into a scan publishes a job nothing ever
+	// acks. Rejected at create time, never discovered at worker time.
+	ScanFamilyNotDirectlyScannable Code = "SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE"
 )
 
 // Fetch — 422. The untrusted-input boundary; see docs/05-SECURITY-MODEL.md §4.
@@ -124,6 +171,17 @@ const (
 
 // statusOverride holds codes whose HTTP status differs from their prefix default.
 var statusOverride = map[Code]int{
+	// ⚠ NOT 401, DESPITE THE AUTH_ PREFIX.
+	//
+	// The caller authenticated perfectly; they just hold roles in more than one
+	// organisation and named none. A 401 would tell every generic client — ours
+	// included — to discard the token and start a login, which returns an
+	// identical token and asks the identical question. 409 says "your request
+	// conflicts with the state of your account", which is exactly the case, and
+	// keeps the retry loop from existing at all.
+	AuthOrgAmbiguous:      http.StatusConflict,
+	AuthOrgNameTaken:      http.StatusConflict,
+	AuthEmailTaken:        http.StatusConflict,
 	ScanAlreadyRunning:    http.StatusConflict,
 	ReportRenderFailed:    http.StatusInternalServerError,
 	ReportSignatureFailed: http.StatusInternalServerError,
@@ -166,7 +224,7 @@ func (c Code) HTTPStatus() int {
 // secrets, credentials, or content read from a scanned repository.
 type Detail map[string]any
 
-// Error is the canonical EncoreBOM error.
+// Error is the canonical AxeBOM error.
 type Error struct {
 	Code    Code
 	Message string
@@ -210,7 +268,7 @@ func (e *Error) WithDetail(d Detail) *Error {
 	return e
 }
 
-// From extracts an *Error from any error. A non-EncoreBOM error becomes
+// From extracts an *Error from any error. A non-AxeBOM error becomes
 // INTERNAL_UNEXPECTED with a generic message, so an unhandled error can never
 // leak an internal string to a client.
 func From(err error) *Error {

@@ -17,8 +17,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/encorebom/encorebom/libs/go-shared/events"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
+	"github.com/axebom/axebom/libs/go-shared/events"
+	"github.com/axebom/axebom/libs/go-shared/platform/db"
 )
 
 // ErrNotFound is returned when a scan does not exist FOR THIS TENANT.
@@ -161,33 +161,47 @@ func (s *Store) CreateScan(ctx context.Context, sc Scan, runs []EngineRun) (Scan
 const statusQueued = "queued"
 
 // GetScan reads one scan with its engine runs.
+// scanColumns is shared by GetScan and ListScans so the two can never drift
+// out of column order with each other.
+const scanColumns = `
+	SELECT id, tenant_id, project_id, status, source_kind,
+	       COALESCE(source_commit_sha,''), COALESCE(source_archive_ref,''),
+	       COALESCE(source_archive_sha256,''),
+	       triggered_by, COALESCE(trigger_ref::text,''),
+	       bom_types, engines_requested,
+	       created_at, started_at, finished_at`
+
+// scanScanRow reads one scan.scans row. Named to avoid colliding with the Scan
+// type; "scan a Scan" reads worse than it already does.
+func scanScanRow(row pgx.Row) (Scan, error) {
+	var sc Scan
+	var status, kind string
+	err := row.Scan(&sc.ID, &sc.TenantID, &sc.ProjectID, &status, &kind,
+		&sc.CommitSHA, &sc.ArchiveRef, &sc.ArchiveSHA256,
+		&sc.TriggeredBy, &sc.TriggerRef,
+		&sc.Families, &sc.EnginesRequested,
+		&sc.CreatedAt, &sc.StartedAt, &sc.FinishedAt)
+	if err != nil {
+		return Scan{}, err
+	}
+	sc.Status = events.ScanStatus(status)
+	sc.SourceKind = events.SourceKind(kind)
+	return sc, nil
+}
+
 func (s *Store) GetScan(ctx context.Context, tenantID, scanID string) (Scan, []EngineRun, error) {
 	var sc Scan
 	var runs []EngineRun
 
 	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.Tx) error {
-		var status, kind string
-		err := tx.QueryRow(ctx, `
-			SELECT id, tenant_id, project_id, status, source_kind,
-			       COALESCE(source_commit_sha,''), COALESCE(source_archive_ref,''),
-			       COALESCE(source_archive_sha256,''),
-			       triggered_by, COALESCE(trigger_ref::text,''),
-			       bom_types, engines_requested,
-			       created_at, started_at, finished_at
-			  FROM scan.scans WHERE id = $1`, scanID).
-			Scan(&sc.ID, &sc.TenantID, &sc.ProjectID, &status, &kind,
-				&sc.CommitSHA, &sc.ArchiveRef, &sc.ArchiveSHA256,
-				&sc.TriggeredBy, &sc.TriggerRef,
-				&sc.Families, &sc.EnginesRequested,
-				&sc.CreatedAt, &sc.StartedAt, &sc.FinishedAt)
+		var err error
+		sc, err = scanScanRow(tx.QueryRow(ctx, scanColumns+` FROM scan.scans WHERE id = $1`, scanID))
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
 		}
 		if err != nil {
 			return fmt.Errorf("get scan: %w", err)
 		}
-		sc.Status = events.ScanStatus(status)
-		sc.SourceKind = events.SourceKind(kind)
 
 		runs, err = loadRuns(ctx, tx, scanID)
 		return err
@@ -198,16 +212,111 @@ func (s *Store) GetScan(ctx context.Context, tenantID, scanID string) (Scan, []E
 	return sc, runs, nil
 }
 
+// ListScans returns a tenant's scans, newest first.
+//
+// ⚠ ONE QUERY FOR EVERY PAGE'S ENGINE RUNS, NOT ONE PER SCAN.
+//
+// A page of 50 scans naively built by calling GetScan 50 times would be 50
+// round trips just for the runs, on top of the list query itself. loadRunsFor
+// takes every id from this page in one `WHERE scan_id = ANY($1)` query, the
+// same discipline project.loadClassificationsFor uses for a project list.
+//
+// project_id and status are optional filters, following the same
+// empty-argument-matches-everything idiom report.Store.List already uses for
+// scan_id — a caller who omits a filter gets the whole tenant page, not zero
+// rows.
+func (s *Store) ListScans(
+	ctx context.Context, tenantID string, limit int, cursor, projectID, status string,
+) ([]Scan, map[string][]EngineRun, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	var out []Scan
+	runsByScan := map[string][]EngineRun{}
+
+	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.Tx) error {
+		sql := scanColumns + `
+		  FROM scan.scans
+		 WHERE ($1 = '' OR project_id = $1::uuid)
+		   AND ($2 = '' OR status = $2)`
+		args := []any{projectID, status}
+		if cursor != "" {
+			sql += fmt.Sprintf(` AND id < $%d`, len(args)+1)
+			args = append(args, cursor)
+		}
+		sql += fmt.Sprintf(` ORDER BY id DESC LIMIT %d`, limit)
+
+		rows, err := tx.Query(ctx, sql, args...)
+		if err != nil {
+			return fmt.Errorf("list scans: %w", err)
+		}
+		defer rows.Close()
+
+		ids := make([]string, 0, limit)
+		for rows.Next() {
+			sc, err := scanScanRow(rows)
+			if err != nil {
+				return err
+			}
+			out = append(out, sc)
+			ids = append(ids, sc.ID)
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+
+		runsByScan, err = loadRunsFor(ctx, tx, ids)
+		return err
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return out, runsByScan, nil
+}
+
+// engineRunColumns is shared by loadRuns and loadRunsFor.
+const engineRunColumns = `
+	SELECT id, scan_id, tenant_id, job_id, engine_id, attempt, status,
+	       weight, ecosystems_covered,
+	       COALESCE(engine_version,''), COALESCE(engine_db_version,''),
+	       started_at, finished_at, deadline_at,
+	       COALESCE(error_code,''), COALESCE(error_message,''),
+	       COALESCE(diagnostics, '[]'::jsonb),
+	       COALESCE(summary, '{}'::jsonb)
+	  FROM scan.engine_runs`
+
+func scanEngineRunRow(row pgx.Row) (EngineRun, error) {
+	var r EngineRun
+	var status string
+	var diagnostics, summary []byte
+	err := row.Scan(&r.ID, &r.ScanID, &r.TenantID, &r.JobID, &r.EngineID,
+		&r.Attempt, &status, &r.Weight, &r.EcosystemsCovered,
+		&r.EngineVersion, &r.EngineDBVersion,
+		&r.StartedAt, &r.FinishedAt, &r.DeadlineAt,
+		&r.ErrorCode, &r.ErrorMessage, &diagnostics, &summary)
+	if err != nil {
+		return EngineRun{}, err
+	}
+	r.Status = events.EngineStatus(status)
+	if len(diagnostics) > 0 {
+		_ = json.Unmarshal(diagnostics, &r.Diagnostics)
+	}
+	// The column was written from the first engine result and read by
+	// nothing, so the counts existed only in the database. A null
+	// dimension unmarshals to a nil pointer, which is the point: it means
+	// the engine does not measure it, not that it measured zero.
+	if len(summary) > 0 {
+		_ = json.Unmarshal(summary, &r.Summary)
+	}
+	return r, nil
+}
+
 func loadRuns(ctx context.Context, tx db.Tx, scanID string) ([]EngineRun, error) {
-	rows, err := tx.Query(ctx, `
-		SELECT id, scan_id, tenant_id, job_id, engine_id, attempt, status,
-		       weight, ecosystems_covered,
-		       COALESCE(engine_version,''), COALESCE(engine_db_version,''),
-		       started_at, finished_at, deadline_at,
-		       COALESCE(error_code,''), COALESCE(error_message,''),
-		       COALESCE(diagnostics, '[]'::jsonb),
-		       COALESCE(summary, '{}'::jsonb)
-		  FROM scan.engine_runs
+	rows, err := tx.Query(ctx, engineRunColumns+`
 		 WHERE scan_id = $1
 		 ORDER BY engine_id, attempt`, scanID)
 	if err != nil {
@@ -217,30 +326,85 @@ func loadRuns(ctx context.Context, tx db.Tx, scanID string) ([]EngineRun, error)
 
 	var out []EngineRun
 	for rows.Next() {
-		var r EngineRun
-		var status string
-		var diagnostics, summary []byte
-		if err := rows.Scan(&r.ID, &r.ScanID, &r.TenantID, &r.JobID, &r.EngineID,
-			&r.Attempt, &status, &r.Weight, &r.EcosystemsCovered,
-			&r.EngineVersion, &r.EngineDBVersion,
-			&r.StartedAt, &r.FinishedAt, &r.DeadlineAt,
-			&r.ErrorCode, &r.ErrorMessage, &diagnostics, &summary); err != nil {
+		r, err := scanEngineRunRow(rows)
+		if err != nil {
 			return nil, err
-		}
-		r.Status = events.EngineStatus(status)
-		if len(diagnostics) > 0 {
-			_ = json.Unmarshal(diagnostics, &r.Diagnostics)
-		}
-		// The column was written from the first engine result and read by
-		// nothing, so the counts existed only in the database. A null
-		// dimension unmarshals to a nil pointer, which is the point: it means
-		// the engine does not measure it, not that it measured zero.
-		if len(summary) > 0 {
-			_ = json.Unmarshal(summary, &r.Summary)
 		}
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// loadRunsFor batches every id in one page into a single query, keyed by scan
+// id — the ANY($1) discipline project.loadClassificationsFor uses, so a page
+// of 50 scans costs one query here instead of 50.
+func loadRunsFor(ctx context.Context, tx db.Tx, scanIDs []string) (map[string][]EngineRun, error) {
+	rows, err := tx.Query(ctx, engineRunColumns+`
+		 WHERE scan_id = ANY($1)
+		 ORDER BY scan_id, engine_id, attempt`, scanIDs)
+	if err != nil {
+		return nil, fmt.Errorf("load engine runs: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[string][]EngineRun, len(scanIDs))
+	for rows.Next() {
+		r, err := scanEngineRunRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out[r.ScanID] = append(out[r.ScanID], r)
+	}
+	return out, rows.Err()
+}
+
+// LatestEngineRunsForProject returns this project's most recent run of each
+// engine it has ever invoked, keyed by engine id.
+//
+// ⚠ ACROSS EVERY SCAN, NOT THE LATEST SCAN. A project scanned for SBOM
+// yesterday and CBOM today has two current answers, one per engine — reading
+// only the latest scan's rows would make yesterday's SBOM engines vanish from
+// the Engine Coverage panel the moment an unrelated CBOM scan runs.
+// `scan.engine_runs` has no family column (see the comment in
+// orchestrator.go), so this is join-and-pick-one-per-engine, not
+// join-and-pick-one-per-family.
+//
+// `scan.engine_runs` and `scan.scans` are both in the `scan` schema — this is
+// not the cross-schema join CLAUDE.md invariant #11 forbids.
+func (s *Store) LatestEngineRunsForProject(ctx context.Context, tenantID, projectID string) (map[string]EngineRun, error) {
+	out := map[string]EngineRun{}
+	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.Tx) error {
+		rows, err := tx.Query(ctx, `
+			SELECT DISTINCT ON (er.engine_id)
+			       er.id, er.scan_id, er.tenant_id, er.job_id, er.engine_id, er.attempt, er.status,
+			       er.weight, er.ecosystems_covered,
+			       COALESCE(er.engine_version,''), COALESCE(er.engine_db_version,''),
+			       er.started_at, er.finished_at, er.deadline_at,
+			       COALESCE(er.error_code,''), COALESCE(er.error_message,''),
+			       COALESCE(er.diagnostics, '[]'::jsonb),
+			       COALESCE(er.summary, '{}'::jsonb)
+			  FROM scan.engine_runs er
+			  JOIN scan.scans sc ON sc.id = er.scan_id
+			 WHERE sc.project_id = $1
+			 ORDER BY er.engine_id, sc.created_at DESC, er.attempt DESC`, projectID)
+		if err != nil {
+			return fmt.Errorf("load latest engine runs: %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			r, err := scanEngineRunRow(rows)
+			if err != nil {
+				return err
+			}
+			out[r.EngineID] = r
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // SetSourceOnce records the fetch result.

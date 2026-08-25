@@ -2,7 +2,7 @@
 //
 // ⚠ THIS IS THE HIGHEST-RISK COMPONENT IN THE PRODUCT.
 //
-// EncoreBOM executes third-party scanner binaries over untrusted user code.
+// AxeBOM executes third-party scanner binaries over untrusted user code.
 // That is remote code execution by design; the only question is blast radius,
 // and everything in this package exists to bound it.
 //

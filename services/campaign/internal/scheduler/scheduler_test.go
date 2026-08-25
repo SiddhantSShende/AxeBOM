@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/axebom/axebom/libs/go-shared/events"
 )
 
 // ---------------------------------------------------------------------------
@@ -837,6 +839,95 @@ func TestAFailedTriggerLeavesTheRunVisibleAndDoesNotRetry(t *testing.T) {
 	}
 	if n := len(store.fired()); n != 1 {
 		t.Fatalf("a retry created %d run rows for one occurrence", n)
+	}
+}
+
+// fakeNotifier records what it was asked to publish.
+type fakeNotifier struct {
+	mu    sync.Mutex
+	sent  []events.NotifyEventV1
+	keys  []string
+	fails bool
+}
+
+func (n *fakeNotifier) Publish(_ context.Context, dedupKey string, evt events.NotifyEventV1) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.fails {
+		return errors.New("bus unreachable")
+	}
+	n.sent = append(n.sent, evt)
+	n.keys = append(n.keys, dedupKey)
+	return nil
+}
+
+func TestAFailedTriggerPublishesCampaignFailed(t *testing.T) {
+	cursor := time.Date(2026, 8, 17, 2, 30, 0, 0, time.UTC)
+	store := newStore(daily("c1", cursor))
+	trigger := &fakeTrigger{err: errors.New("scan orchestrator unreachable")}
+	notifier := &fakeNotifier{}
+	s, err := New(Options{
+		Store: store, Trigger: trigger, Logger: quietLogger(),
+		Notifier: notifier, FrontendURL: "https://app.axebom.test",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Date(2026, 8, 18, 2, 30, 5, 0, time.UTC)
+	if _, err := s.Tick(context.Background(), now); err != nil {
+		t.Fatalf("tick returned an error rather than isolating the campaign: %v", err)
+	}
+
+	if len(notifier.sent) != 1 {
+		t.Fatalf("%d notifications published, want 1", len(notifier.sent))
+	}
+	evt := notifier.sent[0]
+	if evt.Event != events.NotifyEventCampaignFailed {
+		t.Errorf("event = %q, want %q", evt.Event, events.NotifyEventCampaignFailed)
+	}
+	if evt.CampaignID != "c1" || evt.CampaignName != "c1" {
+		t.Errorf("campaign id/name = %q/%q, want c1/c1", evt.CampaignID, evt.CampaignName)
+	}
+	if !strings.Contains(evt.Cause, "unreachable") {
+		t.Errorf("cause = %q, does not say why", evt.Cause)
+	}
+	if evt.URL != "https://app.axebom.test/campaigns/c1" {
+		t.Errorf("url = %q", evt.URL)
+	}
+	// ⚠ THE DEDUP KEY IS THE RUN ID, NOT THE CAMPAIGN ID — see Notifier's own
+	// doc comment on why a repeating campaign id would let a second failure
+	// be silently swallowed by JetStream's dedup window.
+	fired := store.fired()
+	if len(fired) != 1 {
+		t.Fatalf("%d run rows, want 1", len(fired))
+	}
+	if notifier.keys[0] != fired[0].ID {
+		t.Errorf("dedup key = %q, want the run id %q", notifier.keys[0], fired[0].ID)
+	}
+}
+
+// A notifier failure must not turn a correctly recorded failed run into a
+// scheduler error — the same "events are advisory" rule PublishEvent already
+// follows elsewhere in this product.
+func TestANotifierFailureDoesNotFailTheTick(t *testing.T) {
+	store := newStore(daily("c1", time.Date(2026, 8, 17, 2, 30, 0, 0, time.UTC)))
+	trigger := &fakeTrigger{err: errors.New("scan orchestrator unreachable")}
+	notifier := &fakeNotifier{fails: true}
+	s, err := New(Options{
+		Store: store, Trigger: trigger, Logger: quietLogger(),
+		Notifier: notifier, FrontendURL: "https://app.axebom.test",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := s.Tick(context.Background(), time.Date(2026, 8, 18, 2, 30, 5, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("a notifier failure leaked into the tick's own error: %v", err)
+	}
+	if res.Failed != 1 {
+		t.Errorf("failed = %d, want 1 (the trigger failure, unrelated to the notifier)", res.Failed)
 	}
 }
 

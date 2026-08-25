@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from encorebom_shared.adapters.base import GenerateResult, RawArtifact, ResultStatus
+from axebom_shared.adapters.base import GenerateResult, RawArtifact, ResultStatus
 
 from .adapters.syft import SyftAdapter, SyftSPDXAdapter
 from .runner import SBOMWorker

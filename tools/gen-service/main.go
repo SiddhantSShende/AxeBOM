@@ -1,4 +1,4 @@
-// Command gen-service scaffolds an EncoreBOM Go service.
+// Command gen-service scaffolds an AxeBOM Go service.
 //
 // WHY THIS EXISTS (docs/ADR/0001, mitigation 1):
 //

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.encorebom.io/scan-result-v1.schema.json",
+  "$id": "https://schemas.axebom.io/scan-result-v1.schema.json",
   "title": "ScanResultV1",
   "description": "What one engine produced. `partial` is a FIRST-CLASS STATUS, not an error: 11 of 12 ecosystems covered is useful output plus a known gap, and both must survive into the report. `engine_db_version` is REQUIRED for vulnerability engines — a finding that cannot be dated is not defensible.",
   "type": "object",

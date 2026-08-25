@@ -6,15 +6,15 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/bus"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/blob"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/httpx"
-	"github.com/encorebom/encorebom/libs/go-shared/sandbox"
-	"github.com/encorebom/encorebom/libs/go-shared/vault"
-	"github.com/encorebom/encorebom/services/fetcher/internal/source"
-	"github.com/encorebom/encorebom/services/fetcher/internal/work"
+	"github.com/axebom/axebom/libs/go-shared/bus"
+	"github.com/axebom/axebom/libs/go-shared/oidcauth"
+	"github.com/axebom/axebom/libs/go-shared/platform/blob"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/httpx"
+	"github.com/axebom/axebom/libs/go-shared/sandbox"
+	"github.com/axebom/axebom/libs/go-shared/vault"
+	"github.com/axebom/axebom/services/fetcher/internal/source"
+	"github.com/axebom/axebom/services/fetcher/internal/work"
 )
 
 // deps holds this service's constructed dependencies.
@@ -81,26 +81,27 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 		return nil, fmt.Errorf("vault client: %w", err)
 	}
 
-	// Mints its own service token per request. Two minutes, per tenant: a
-	// long-lived shared token would be a standing credential in the one process
-	// that must not leak one.
-	issuer, err := auth.NewIssuer(auth.TokenConfig{
-		SigningKey: []byte(cfg.Auth.JWTSigningKey.Reveal()),
-		Issuer:     cfg.Auth.JWTIssuer,
-		AccessTTL:  cfg.Auth.AccessTTL,
-		RefreshTTL: cfg.Auth.RefreshTTL,
+	// The credential this service presents to the project service.
+	//
+	// ⚠ THIS IS THE ONE SECRET THIS PROCESS HOLDS BESIDES ITS VAULT TOKEN, and
+	// it is a private key rather than the HMAC secret every service used to
+	// share. A leak here now forges tokens for this machine user alone, not for
+	// every principal in the product.
+	tokens, err := oidcauth.NewServiceTokenSource(oidcauth.ServiceTokenConfig{
+		KeyPath:   cfg.OIDC.ServiceKeyPath,
+		BaseURL:   cfg.OIDC.InternalURL,
+		Issuer:    cfg.OIDC.Issuer,
+		ProjectID: cfg.OIDC.ProjectID,
 	})
 	if err != nil {
 		_ = runner.Close()
 		_ = b.Close()
-		return nil, fmt.Errorf("token issuer: %w", err)
+		return nil, fmt.Errorf("service credential: %w", err)
 	}
 
 	resolver, err := source.New(source.Options{
 		BaseURL: cfg.Services.Project,
-		Token: func(_ context.Context, tenantID string) (string, error) {
-			return issuer.MintService(cfg.Name, tenantID)
-		},
+		Token:   tokens.Token,
 	})
 	if err != nil {
 		_ = runner.Close()
@@ -139,10 +140,10 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 // engines and clones run as sibling containers, and the daemon resolves every
 // mount path against the host filesystem, not against this container.
 func workspaceRoot() string {
-	if v := os.Getenv("ENCOREBOM_WORKSPACE_ROOT"); v != "" {
+	if v := os.Getenv("AXEBOM_WORKSPACE_ROOT"); v != "" {
 		return v
 	}
-	return "/var/lib/encorebom/workspaces"
+	return "/var/lib/axebom/workspaces"
 }
 
 // Close releases the dependencies, in reverse order of construction.

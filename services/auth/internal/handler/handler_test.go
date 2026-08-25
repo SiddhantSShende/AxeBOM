@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
-	"github.com/encorebom/encorebom/services/auth/internal/handler"
-	"github.com/encorebom/encorebom/services/auth/internal/service"
-	"github.com/encorebom/encorebom/services/auth/internal/store"
+	"github.com/axebom/axebom/libs/go-shared/auth"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/db"
+	"github.com/axebom/axebom/services/auth/internal/handler"
+	"github.com/axebom/axebom/services/auth/internal/service"
+	"github.com/axebom/axebom/services/auth/internal/store"
 )
 
 // HTTP-surface tests: cookies, CSRF state, body limits — not identity.
@@ -51,7 +51,7 @@ func newLiveHandler(t *testing.T, gh *service.GitHubClient) *handler.Handler {
 
 	issuer, err := auth.NewIssuer(auth.TokenConfig{
 		SigningKey: []byte("test-signing-key-that-is-long-enough-to-pass-validation"),
-		Issuer:     "encorebom-test",
+		Issuer:     "axebom-test",
 		AccessTTL:  15 * time.Minute,
 		RefreshTTL: 24 * time.Hour,
 	})
@@ -85,7 +85,7 @@ func TestRefreshCookieIsSafeByDefault(t *testing.T) {
 
 	var found bool
 	for _, c := range rec.Result().Cookies() {
-		if c.Name != "encorebom_refresh" {
+		if c.Name != "axebom_refresh" {
 			continue
 		}
 		found = true
@@ -150,7 +150,7 @@ func TestGitHubCallbackRejectsAMismatchedState(t *testing.T) {
 	}))
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/auth/github/callback?code=abc&state=attacker-value", nil)
-	req.AddCookie(&http.Cookie{Name: "encorebom_oauth_state", Value: "the-real-value"})
+	req.AddCookie(&http.Cookie{Name: "axebom_oauth_state", Value: "the-real-value"})
 	rec := httptest.NewRecorder()
 	h.GitHubCallback(rec, req)
 
@@ -167,13 +167,13 @@ func TestGitHubCallbackClearsTheStateCookie(t *testing.T) {
 	}))
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/auth/github/callback?code=abc&state=x", nil)
-	req.AddCookie(&http.Cookie{Name: "encorebom_oauth_state", Value: "y"})
+	req.AddCookie(&http.Cookie{Name: "axebom_oauth_state", Value: "y"})
 	rec := httptest.NewRecorder()
 	h.GitHubCallback(rec, req)
 
 	var cleared bool
 	for _, c := range rec.Result().Cookies() {
-		if c.Name == "encorebom_oauth_state" && c.MaxAge < 0 {
+		if c.Name == "axebom_oauth_state" && c.MaxAge < 0 {
 			cleared = true
 		}
 	}
@@ -185,7 +185,7 @@ func TestGitHubCallbackClearsTheStateCookie(t *testing.T) {
 func TestGitHubAuthorizeSetsAStateCookieAndRedirects(t *testing.T) {
 	h := newHandler(service.NewGitHubClient(service.GitHubConfig{
 		ClientID: "client-id", ClientSecret: "secret",
-		RedirectURL: "https://encorebom.test/v1/auth/github/callback",
+		RedirectURL: "https://axebom.test/v1/auth/github/callback",
 	}))
 
 	rec := httptest.NewRecorder()
@@ -197,7 +197,7 @@ func TestGitHubAuthorizeSetsAStateCookieAndRedirects(t *testing.T) {
 
 	var state string
 	for _, c := range rec.Result().Cookies() {
-		if c.Name == "encorebom_oauth_state" {
+		if c.Name == "axebom_oauth_state" {
 			state = c.Value
 			if !c.HttpOnly {
 				t.Error("the state cookie is readable from JavaScript")

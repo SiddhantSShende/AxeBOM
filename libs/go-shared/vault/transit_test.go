@@ -120,7 +120,7 @@ func TestSignSendsTheMessageItself(t *testing.T) {
 	fake, srv := newFakeTransit(t)
 	defer srv.Close()
 
-	message := []byte("encorebom.signature/v1\x00{\"report_id\":\"x\"}")
+	message := []byte("axebom.signature/v1\x00{\"report_id\":\"x\"}")
 	sig, err := transitClient(t, srv.URL).Sign(context.Background(), "report-signing", message)
 	if err != nil {
 		t.Fatalf("signing: %v", err)
@@ -221,7 +221,7 @@ func TestTransitDefaultsToTheTransitMount(t *testing.T) {
 func TestVaultErrorsDoNotEchoThePath(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"errors":["1 error occurred: * encorebom/tenants/acme/repo-token/x"]}`))
+		_, _ = w.Write([]byte(`{"errors":["1 error occurred: * axebom/tenants/acme/repo-token/x"]}`))
 	}))
 	defer srv.Close()
 
@@ -229,7 +229,7 @@ func TestVaultErrorsDoNotEchoThePath(t *testing.T) {
 	if err == nil {
 		t.Fatal("a 400 was not reported as an error")
 	}
-	if strings.Contains(err.Error(), "encorebom/tenants") {
+	if strings.Contains(err.Error(), "axebom/tenants") {
 		t.Fatalf("the error echoes a secret path: %v", err)
 	}
 }

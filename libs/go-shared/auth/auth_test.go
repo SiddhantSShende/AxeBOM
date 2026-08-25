@@ -7,15 +7,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/authz"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/authz"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 func testIssuer(t *testing.T) *Issuer {
 	t.Helper()
 	i, err := NewIssuer(TokenConfig{
 		SigningKey: []byte("a-test-signing-key-of-at-least-32-bytes!"),
-		Issuer:     "encorebom-test",
+		Issuer:     "axebom-test",
 		AccessTTL:  15 * time.Minute,
 		RefreshTTL: 30 * 24 * time.Hour,
 	})
@@ -66,7 +66,7 @@ func TestAlgNoneIsRejected(t *testing.T) {
 	claims, _ := json.Marshal(Claims{
 		Subject: "attacker", TenantID: "victim-tenant", Role: authz.RoleOwner,
 		IssuedAt: time.Now().Unix(), Expires: time.Now().Add(time.Hour).Unix(),
-		Issuer: "encorebom-test",
+		Issuer: "axebom-test",
 	})
 	forged := hdr + "." + base64.RawURLEncoding.EncodeToString(claims) + "."
 
@@ -101,7 +101,7 @@ func TestSignatureFromAnotherKeyRejected(t *testing.T) {
 	a := testIssuer(t)
 	b, _ := NewIssuer(TokenConfig{
 		SigningKey: []byte("a-DIFFERENT-signing-key-32-bytes-long!!"),
-		Issuer:     "encorebom-test",
+		Issuer:     "axebom-test",
 	})
 	token, _, _ := b.IssueAccess(time.Now(), "u", "t", "s", authz.RoleOwner)
 

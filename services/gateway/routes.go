@@ -3,9 +3,10 @@ package main
 import (
 	"net/http"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/httpx"
-	"github.com/encorebom/encorebom/services/gateway/internal/authconfig"
-	"github.com/encorebom/encorebom/services/gateway/internal/proxy"
+	"github.com/axebom/axebom/libs/go-shared/platform/httpx"
+	"github.com/axebom/axebom/services/gateway/internal/authconfig"
+	"github.com/axebom/axebom/services/gateway/internal/proxy"
+	"github.com/axebom/axebom/services/gateway/internal/signup"
 )
 
 // registerRoutes mounts this service's HTTP surface.
@@ -61,4 +62,12 @@ func registerRoutes(mux *http.ServeMux, d *deps) {
 	identity := authconfig.Handler(d.cfg.OIDC)
 	mux.HandleFunc("GET /v1/auth/config", identity)
 	mux.HandleFunc("GET "+proxy.APIPrefix+"/v1/auth/config", identity)
+
+	// Self-service organisation signup — see internal/signup for why this
+	// lives here rather than behind ZITADEL's own (disabled) registration.
+	// Unauthenticated for the same reason /v1/auth/config is: it is how a
+	// visitor OBTAINS an account, so it cannot require one.
+	createOrg := signup.Handler(d.iam, d.cfg.OIDC.ProjectID)
+	mux.HandleFunc("POST /v1/auth/signup", createOrg)
+	mux.HandleFunc("POST "+proxy.APIPrefix+"/v1/auth/signup", createOrg)
 }

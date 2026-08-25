@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/encorebom/encorebom/libs/go-shared/platform/health"
+	"github.com/axebom/axebom/libs/go-shared/platform/health"
 )
 
 // registerHealthChecks wires this service's dependency probes.
@@ -17,8 +17,6 @@ import (
 // blip that fails liveness gets the entire fleet killed and turns a short
 // outage into a long one.
 func registerHealthChecks(c *health.Checker, d *deps) {
-	// Phase 1 adds: c.Register("postgres", db.Ping)
-	// Phase 6 adds: c.Register("nats", bus.Ping)
-	//               c.RegisterOptional("s3", blob.Ping)
-	_, _ = c, d
+	// Critical: every endpoint reads or writes a comment row.
+	c.Register("postgres", d.pool.Ping)
 }

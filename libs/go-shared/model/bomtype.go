@@ -2,7 +2,7 @@ package model
 
 import "fmt"
 
-// BOMType is one of the five bill-of-materials types EncoreBOM produces.
+// BOMType is one of the five bill-of-materials types AxeBOM produces.
 //
 // This lives in libs/go-shared because it crosses every boundary in the
 // system: project classifies into them, scan fans out by them, report renders
