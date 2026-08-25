@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/obs"
+	"github.com/axebom/axebom/libs/go-shared/platform/obs"
 )
 
 // ServerConfig configures Run.

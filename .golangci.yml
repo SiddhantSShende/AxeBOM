@@ -1,4 +1,4 @@
-# EncoreBOM — static analysis
+# AxeBOM — static analysis
 #
 # The most important thing in this file is the depguard `service-boundaries`
 # rules. See docs/ADR/0001, mitigation 3.
@@ -65,9 +65,9 @@ linters:
         service-boundaries-gateway:
           list-mode: lax
           files: ["**/services/gateway/**"]
-          allow: [github.com/encorebom/encorebom/services/gateway]
+          allow: [github.com/axebom/axebom/services/gateway]
           deny: &cross-service-deny
-            - pkg: github.com/encorebom/encorebom/services
+            - pkg: github.com/axebom/axebom/services
               desc: >-
                 Services must not import each other. Cross-service calls go
                 through generated clients (proto/) or the event bus
@@ -78,43 +78,49 @@ linters:
         service-boundaries-auth:
           list-mode: lax
           files: ["**/services/auth/**"]
-          allow: [github.com/encorebom/encorebom/services/auth]
+          allow: [github.com/axebom/axebom/services/auth]
           deny: *cross-service-deny
 
         service-boundaries-project:
           list-mode: lax
           files: ["**/services/project/**"]
-          allow: [github.com/encorebom/encorebom/services/project]
+          allow: [github.com/axebom/axebom/services/project]
           deny: *cross-service-deny
 
         service-boundaries-scan-orchestrator:
           list-mode: lax
           files: ["**/services/scan-orchestrator/**"]
-          allow: [github.com/encorebom/encorebom/services/scan-orchestrator]
+          allow: [github.com/axebom/axebom/services/scan-orchestrator]
           deny: *cross-service-deny
 
         service-boundaries-report:
           list-mode: lax
           files: ["**/services/report/**"]
-          allow: [github.com/encorebom/encorebom/services/report]
+          allow: [github.com/axebom/axebom/services/report]
           deny: *cross-service-deny
 
         service-boundaries-campaign:
           list-mode: lax
           files: ["**/services/campaign/**"]
-          allow: [github.com/encorebom/encorebom/services/campaign]
+          allow: [github.com/axebom/axebom/services/campaign]
           deny: *cross-service-deny
 
         service-boundaries-comment:
           list-mode: lax
           files: ["**/services/comment/**"]
-          allow: [github.com/encorebom/encorebom/services/comment]
+          allow: [github.com/axebom/axebom/services/comment]
           deny: *cross-service-deny
 
         service-boundaries-notification:
           list-mode: lax
           files: ["**/services/notification/**"]
-          allow: [github.com/encorebom/encorebom/services/notification]
+          allow: [github.com/axebom/axebom/services/notification]
+          deny: *cross-service-deny
+
+        service-boundaries-fetcher:
+          list-mode: lax
+          files: ["**/services/fetcher/**"]
+          allow: [github.com/axebom/axebom/services/fetcher]
           deny: *cross-service-deny
 
         # ------------------------------------------------------------------
@@ -127,7 +133,7 @@ linters:
           files:
             - "**/workers/**"
           deny:
-            - pkg: github.com/encorebom/encorebom/services
+            - pkg: github.com/axebom/axebom/services
               desc: >-
                 Workers must not import services. Workers communicate only via
                 the event bus and object storage. They deliberately hold no
@@ -142,9 +148,9 @@ linters:
           files:
             - "**/libs/go-shared/platform/**"
           deny:
-            - pkg: github.com/encorebom/encorebom/services
+            - pkg: github.com/axebom/axebom/services
               desc: platform must not depend on services — it is the base layer
-            - pkg: github.com/encorebom/encorebom/workers
+            - pkg: github.com/axebom/axebom/workers
               desc: platform must not depend on workers — it is the base layer
 
         # ------------------------------------------------------------------
@@ -165,6 +171,35 @@ linters:
               desc: deprecated; use io and os
             - pkg: github.com/pkg/errors
               desc: use the standard library errors package with %w
+
+            # ------------------------------------------------------------
+            # ⚠ THE ZITADEL SERVER IS AGPL-3.0-only.
+            #
+            # CLAUDE.md invariant 9: no GPL code in our binaries; copyleft
+            # goes in a subprocess or a separate service. ZITADEL runs as an
+            # unmodified published container and we speak OIDC and gRPC to it,
+            # which ships zero AGPL code inside anything we build.
+            #
+            # Importing one package from that module would link AGPL code into
+            # an AxeBOM binary and take the whole product with it. The
+            # temptation is real and specific: `zitadel/pkg/grpc/...` holds
+            # generated clients that look like exactly what a provisioner
+            # wants, and LICENSING.md carves out `proto/` but NOT `pkg/`.
+            #
+            # Use github.com/zitadel/zitadel-go/v3 instead — a separate
+            # repository, Apache-2.0, shipping its own generated clients.
+            #
+            # ⚠ THE TRAILING SLASH IS LOAD-BEARING. depguard matches by
+            # PREFIX, so a bare `github.com/zitadel/zitadel` would also match
+            # `github.com/zitadel/zitadel-go/v3` — the Apache-2.0 module we
+            # actually want — and ban the cure along with the disease.
+            - pkg: github.com/zitadel/zitadel/
+              desc: >-
+                The ZITADEL SERVER is AGPL-3.0-only and must never be linked
+                into an AxeBOM binary (CLAUDE.md invariant 9). It runs as a
+                separate container. Use github.com/zitadel/zitadel-go/v3
+                (Apache-2.0) for clients, and github.com/zitadel/oidc/v3
+                (Apache-2.0) for token verification.
 
     gosec:
       excludes:
@@ -210,7 +245,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/encorebom/encorebom
+        - github.com/axebom/axebom
 
 issues:
   max-issues-per-linter: 0

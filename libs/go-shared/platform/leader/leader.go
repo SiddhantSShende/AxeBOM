@@ -28,7 +28,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
+	"github.com/axebom/axebom/libs/go-shared/platform/db"
 )
 
 // ID is an advisory-lock key.

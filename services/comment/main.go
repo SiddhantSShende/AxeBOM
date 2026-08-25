@@ -1,4 +1,4 @@
-// Command comment is the EncoreBOM comment service.
+// Command comment is the AxeBOM comment service.
 //
 // Threaded comments on reports.
 //
@@ -14,15 +14,15 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/health"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/httpx"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/obs"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/health"
+	"github.com/axebom/axebom/libs/go-shared/platform/httpx"
+	"github.com/axebom/axebom/libs/go-shared/platform/obs"
 )
 
 const serviceName = "comment"
 
-// Injected at release time via -ldflags. See cmd/encorebom/version.go for why
+// Injected at release time via -ldflags. See cmd/axebom/version.go for why
 // build provenance is load-bearing rather than cosmetic.
 var version = "dev"
 

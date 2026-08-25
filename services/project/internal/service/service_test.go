@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/model"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/libs/go-shared/vault"
-	"github.com/encorebom/encorebom/services/project/internal/service"
-	"github.com/encorebom/encorebom/services/project/internal/store"
+	"github.com/axebom/axebom/libs/go-shared/model"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/db"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/vault"
+	"github.com/axebom/axebom/services/project/internal/service"
+	"github.com/axebom/axebom/services/project/internal/store"
 )
 
 // Phase 4 acceptance tests.

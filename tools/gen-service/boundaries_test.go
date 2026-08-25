@@ -33,7 +33,7 @@ func TestEveryServiceHasABoundaryRule(t *testing.T) {
 				"        %s\n"+
 				"          list-mode: lax\n"+
 				"          files: [\"**/services/%s/**\"]\n"+
-				"          allow: [github.com/encorebom/encorebom/services/%s]\n"+
+				"          allow: [github.com/axebom/axebom/services/%s]\n"+
 				"          deny: *cross-service-deny\n"+
 				"    Without it, %s can import any other service and nothing fails.",
 				s.Name, rule, s.Name, s.Name, s.Name)
@@ -48,7 +48,7 @@ func TestEveryServiceHasABoundaryRule(t *testing.T) {
 			t.Errorf("service %q's depguard rule is missing its file scope %s", s.Name, wantFiles)
 		}
 
-		wantAllow := "allow: [github.com/encorebom/encorebom/services/" + s.Name + "]"
+		wantAllow := "allow: [github.com/axebom/axebom/services/" + s.Name + "]"
 		if !strings.Contains(cfg, wantAllow) {
 			t.Errorf("service %q's depguard rule does not allow its own packages (%s), "+
 				"so the service cannot import its own internal/ tree", s.Name, wantAllow)

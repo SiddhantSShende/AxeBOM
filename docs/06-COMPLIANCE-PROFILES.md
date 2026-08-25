@@ -1,6 +1,6 @@
 # 06 — Compliance Profiles
 
-How EncoreBOM represents a compliance standard as **data** rather than code, and why that choice is load-bearing.
+How AxeBOM represents a compliance standard as **data** rather than code, and why that choice is load-bearing.
 
 The profile itself is `reference/certin-v2.0.yaml`. This document explains the mechanism, not the fields.
 
@@ -128,7 +128,7 @@ Two numbers, always both:
 - **`completeness_pct`** — substantive values only. `not-provided`, `NOASSERTION`, `unknown`, `""`, `[]` all score 0. **The honest compliance signal.**
 - **`declaration_pct`** — any value including explicit `not-provided`. A representation check, not compliance.
 
-The formula is printed in every report, so the number is auditable rather than magic. And the report footer states that **the weights are EncoreBOM's judgement, not CERT-In's** — the guideline does not rank its fields.
+The formula is printed in every report, so the number is auditable rather than magic. And the report footer states that **the weights are AxeBOM's judgement, not CERT-In's** — the guideline does not rank its fields.
 
 ---
 

@@ -3,7 +3,7 @@ package httpx
 import (
 	"net/http"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 // NotFound answers unmatched routes with the canonical error shape.

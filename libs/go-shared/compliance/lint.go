@@ -39,7 +39,7 @@ type LintResult struct {
 func (r LintResult) OK() bool { return len(r.Problems) == 0 }
 
 var (
-	fieldIDPattern = regexp.MustCompile(`^(certin|encorebom)\.[a-z0-9_.]+$`)
+	fieldIDPattern = regexp.MustCompile(`^(certin|axebom)\.[a-z0-9_.]+$`)
 	// Segments may nest and any segment may be a collection, e.g.
 	// component.provenance[].author — the author of a component's SBOM data
 	// lives on each provenance record, not on the component.
@@ -121,12 +121,12 @@ func Lint(p *Profile) LintResult {
 				add("status", "status is `assumed` but no note explains the inference", f.ID)
 			}
 		case "extension":
-			// An EncoreBOM analysis field, not a requirement of the standard.
+			// An AxeBOM analysis field, not a requirement of the standard.
 			// It has no source page to verify against, and it must not be
 			// scored — otherwise our own analysis would move a compliance
 			// percentage.
-			if !strings.HasPrefix(f.ID, "encorebom.") {
-				add("status", "status `extension` is only valid for encorebom.* ids", f.ID)
+			if !strings.HasPrefix(f.ID, "axebom.") {
+				add("status", "status `extension` is only valid for axebom.* ids", f.ID)
 			}
 			if f.IsScored() {
 				add("status", "an extension must set `scored: false`; scoring our own "+
@@ -147,7 +147,7 @@ func Lint(p *Profile) LintResult {
 
 		// --- id shape --------------------------------------------------------
 		if !fieldIDPattern.MatchString(f.ID) {
-			add("id-shape", "id must match (certin|encorebom).<dotted-lowercase>", f.ID)
+			add("id-shape", "id must match (certin|axebom).<dotted-lowercase>", f.ID)
 		}
 
 		// --- 5. canonical_path is well-formed and addresses a known entity ---

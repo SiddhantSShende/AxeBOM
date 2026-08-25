@@ -19,8 +19,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/encorebom/encorebom/libs/go-shared/model"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
+	"github.com/axebom/axebom/libs/go-shared/model"
+	"github.com/axebom/axebom/libs/go-shared/platform/db"
 )
 
 // ErrNotFound is returned when a row does not exist FOR THIS TENANT.

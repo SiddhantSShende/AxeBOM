@@ -22,20 +22,45 @@ from typing import Any
 
 import pytest
 
-from encorebom_shared.adapters.base import ResultStatus, ScanTarget
-from encorebom_shared.enginedb import resolve, write_stamp
-from encorebom_shared.sandbox import SandboxResult
+from axebom_shared.adapters.base import ResultStatus, ScanTarget
+from axebom_shared.enginedb import resolve, write_stamp
+from axebom_shared.sandbox import SandboxResult
 
 from .adapters.common import EngineImage
 from .adapters.grype import GrypeAdapter
 from .adapters.osv_scanner import OSVScannerAdapter
 from .adapters.syft import SyftAdapter
-from .adapters.trivy_fs import TrivyFSAdapter
+from .runner import ADAPTERS
 
-#: Every engine that matches vulnerabilities. Parameterising over the list
-#: rather than testing one engine is deliberate: the guard lives in the base
-#: class, and a future adapter that forgets `database_id` must fail here.
-VULN_ADAPTERS = [GrypeAdapter, TrivyFSAdapter, OSVScannerAdapter]
+#: Every engine that needs a provisioned database.
+#:
+#: DERIVED FROM THE RUNNER'S REGISTRY, not hand-listed. It used to be the
+#: literal [GrypeAdapter, TrivyFSAdapter, OSVScannerAdapter], and that omission
+#: is exactly how two adapters shipped broken: `trivy-image` and
+#: `dependency-check` both set requires_db_version without a database_id, so
+#: both resolved to None and were refused before their container ever started —
+#: permanently, and with a message reading "no provisioned None database was
+#: found". The test that existed to catch this never saw them.
+#:
+#: A hand-maintained list of things to check cannot catch the thing nobody
+#: remembered to add.
+VULN_ADAPTERS = sorted(
+    (cls for cls in set(ADAPTERS.values()) if getattr(cls, "requires_db_version", False)),
+    key=lambda c: c.__name__,
+)
+
+
+def test_the_registry_actually_yielded_database_backed_engines() -> None:
+    """Guard the guard.
+
+    If ADAPTERS were renamed or the attribute moved, VULN_ADAPTERS would quietly
+    become empty and every parameterised test below would vacuously pass —
+    reporting green while checking nothing.
+    """
+    assert len(VULN_ADAPTERS) >= 5, (
+        f"only {len(VULN_ADAPTERS)} database-backed adapters discovered "
+        f"({[c.__name__ for c in VULN_ADAPTERS]}); the registry lookup is probably broken"
+    )
 
 
 class RecordingSandbox:
@@ -75,19 +100,44 @@ def make(adapter_cls: type, *, db_root: Path, sandbox: Any = None) -> Any:
     )
 
 
-def target(tmp_path: Path) -> ScanTarget:
+def target(tmp_path: Path, adapter: Any = None) -> ScanTarget:
+    """A target every engine can accept.
+
+    Source kind is not uniform across engines, and the guard is parameterised
+    over all of them. trivy-image scans a digest-pinned image reference and
+    raises on a directory; the rest scan a tree. Handing every adapter the same
+    directory target made the image engine fail for a reason unrelated to the
+    database rule the test is actually about.
+    """
     workspace = tmp_path / "src"
     workspace.mkdir(exist_ok=True)
     (workspace / "package-lock.json").write_text("{}", encoding="utf-8")
     # grype refuses to scan a directory, so give it the SBOM it requires.
     sbom = workspace / "sbom.cdx.json"
     sbom.write_text("{}", encoding="utf-8")
+
+    kind = "git"
+    digest: str | None = None
+    if adapter is not None and "image" in adapter.capabilities.source_kinds:
+        kind = "image"
+        # Digest-pinned, because the adapter refuses a mutable tag — a report
+        # naming a tag cannot say what it examined.
+        digest = "docker.io/library/alpine@sha256:" + "0" * 64
+        # An exported image tarball, which trivy-image requires: the sandbox has
+        # no network and no daemon socket, so the engine cannot fetch an image
+        # itself and scans what the fetcher exported. The contents are
+        # irrelevant here — these tests never start a real container — but the
+        # FILE must exist, or the adapter reports ENGINE_INPUT_MISSING and never
+        # reaches the database rule under test.
+        (workspace / "image.tar").write_bytes(b"")
+
     return ScanTarget(
         scan_id="scan-1",
         job_id="job-1",
-        kind="git",
+        kind=kind,
         workspace=workspace,
         sbom_path=sbom,
+        image_digest=digest,
     )
 
 
@@ -105,7 +155,7 @@ def test_no_database_means_the_engine_never_runs(adapter_cls: type, tmp_path: Pa
     sandbox = RecordingSandbox()
     adapter = make(adapter_cls, db_root=tmp_path / "enginedb", sandbox=sandbox)
 
-    result = adapter.generate(target(tmp_path))
+    result = adapter.generate(target(tmp_path, adapter))
 
     assert result.status is ResultStatus.UNAVAILABLE
     assert sandbox.runs == [], "the engine was executed despite having no database"
@@ -122,7 +172,7 @@ def test_no_database_is_unavailable_not_succeeded_and_not_failed(
     retries produces a database, because the sandbox has no network.
     """
     adapter = make(adapter_cls, db_root=tmp_path / "enginedb")
-    result = adapter.generate(target(tmp_path))
+    result = adapter.generate(target(tmp_path, adapter))
 
     assert result.status is ResultStatus.UNAVAILABLE
     assert result.status is not ResultStatus.SUCCEEDED
@@ -141,7 +191,7 @@ def test_no_database_produces_no_artifact_to_normalize(adapter_cls: type, tmp_pa
     which is the same false negative one layer down.
     """
     adapter = make(adapter_cls, db_root=tmp_path / "enginedb")
-    result = adapter.generate(target(tmp_path))
+    result = adapter.generate(target(tmp_path, adapter))
     assert result.artifacts == []
 
 
@@ -160,7 +210,7 @@ def test_an_unstamped_directory_does_not_count_as_a_database(tmp_path: Path) -> 
 
     sandbox = RecordingSandbox()
     adapter = make(OSVScannerAdapter, db_root=root, sandbox=sandbox)
-    assert adapter.generate(target(tmp_path)).status is ResultStatus.UNAVAILABLE
+    assert adapter.generate(target(tmp_path, adapter)).status is ResultStatus.UNAVAILABLE
     assert sandbox.runs == []
 
 
@@ -171,7 +221,7 @@ def test_a_stamp_without_a_date_does_not_count(tmp_path: Path) -> None:
     """
     root = tmp_path / "enginedb"
     (root / "osv").mkdir(parents=True)
-    (root / "osv" / "encorebom-db.json").write_text(
+    (root / "osv" / "axebom-db.json").write_text(
         json.dumps({"database_id": "osv", "version": "2.5.0"}), encoding="utf-8"
     )
     assert resolve("osv", root) is None
@@ -194,7 +244,7 @@ def test_a_provisioned_database_is_mounted_read_only_and_lets_the_engine_run(
 
     sandbox = RecordingSandbox()
     adapter = make(adapter_cls, db_root=root, sandbox=sandbox)
-    adapter.generate(target(tmp_path))
+    adapter.generate(target(tmp_path, adapter))
 
     assert len(sandbox.runs) == 1, "a provisioned database should let the engine run"
     mounts = sandbox.runs[0]["mounts"]
@@ -223,7 +273,7 @@ def test_the_reported_vintage_comes_from_our_stamp(adapter_cls: type, tmp_path: 
 
     adapter = make(adapter_cls, db_root=root)
     generated = adapter.classify(
-        target(tmp_path),
+        target(tmp_path, adapter),
         SandboxResult(exit_code=0, stdout="{}"),
         [],
         StubResolver().image_for(adapter.engine_id),
@@ -286,7 +336,7 @@ def test_a_cataloguing_engine_needs_no_database(tmp_path: Path) -> None:
     sandbox = RecordingSandbox(SandboxResult(exit_code=0, stdout='{"artifacts": []}'))
     adapter = make(SyftAdapter, db_root=tmp_path / "enginedb", sandbox=sandbox)
 
-    adapter.generate(target(tmp_path))
+    adapter.generate(target(tmp_path, adapter))
     assert len(sandbox.runs) == 1, "syft was blocked by a database it does not use"
 
 

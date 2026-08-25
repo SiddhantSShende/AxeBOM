@@ -10,9 +10,9 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/encorebom/encorebom/libs/go-shared/bus"
-	"github.com/encorebom/encorebom/libs/go-shared/events"
-	"github.com/encorebom/encorebom/services/scan-orchestrator/internal/orchestr"
+	"github.com/axebom/axebom/libs/go-shared/bus"
+	"github.com/axebom/axebom/libs/go-shared/events"
+	"github.com/axebom/axebom/services/scan-orchestrator/internal/orchestr"
 )
 
 // The whole pipeline, end to end, against real Postgres and real NATS.
@@ -27,6 +27,62 @@ import (
 //
 // It implements the REAL worker contract, including the manifest idempotency
 // check, so the machinery is exercised the way a real engine will exercise it.
+// requireExclusiveSbomSubject skips unless this test can own scan.job.sbom.
+//
+// ⚠ CALLED FROM THE TEST BODY, NOT FROM THE WORKER GOROUTINE. t.Skipf outside
+// the test's own goroutine does not skip anything — the test carries on and
+// fails later for an unrelated-looking reason. That is exactly what happened:
+// the check lived inside fakeWorker.run and the test still reported
+// `scan status = "failed", want completed`.
+//
+// A WorkQueue stream allows ONE consumer per filter subject, so this test
+// stands in for the real SBOM worker and needs the subject to itself. It used
+// to take it with ReleaseFilterSubject, which claims a subject by DELETING
+// whatever consumer is already there — on a machine with the stack running,
+// that silently drops a live worker's in-flight deliveries, and the two then
+// compete anyway.
+//
+// The durable fix is an isolated broker per test run; recorded in docs/STATE.md.
+func requireExclusiveSbomSubject(ctx context.Context, t *testing.T, b *bus.Bus, durable string) {
+	t.Helper()
+	requireExclusive(ctx, t, b, bus.StreamJobs, "scan.job.sbom", durable,
+		"docker compose stop sbom-worker")
+}
+
+// requireExclusiveResults skips unless this test owns the fetch-result stream.
+//
+// The orchestrator's own durable is `orchestrator-fetch`, and a test that calls
+// ConsumeResults creates a consumer with THAT SAME NAME. On a WorkQueue stream
+// that is not a conflict — it is a consumer GROUP, so NATS load-balances
+// between the test and the running orchestrator, and roughly half the test's
+// messages are handled by a process the test cannot observe.
+//
+// The symptom is a 45-second timeout waiting for a status the other consumer
+// already applied, which reads as a product defect rather than a shared broker.
+func requireExclusiveResults(ctx context.Context, t *testing.T, b *bus.Bus, family string) {
+	t.Helper()
+	requireExclusive(ctx, t, b, bus.StreamResults, "scan.result."+family, "",
+		"docker compose stop scan-orchestrator")
+}
+
+func requireExclusive(ctx context.Context, t *testing.T, b *bus.Bus,
+	stream, subject, ownDurable, remedy string,
+) {
+	t.Helper()
+
+	existing, err := b.ConsumersOn(ctx, stream, subject)
+	if err != nil {
+		t.Fatalf("listing consumers on %s: %v", subject, err)
+	}
+	for _, name := range existing {
+		if name != ownDurable {
+			t.Skipf("a live consumer %q already holds %s; this test needs the subject "+
+				"to itself. Stop it (%s) or run against an isolated NATS.",
+				name, subject, remedy)
+		}
+	}
+}
+
 type fakeWorker struct {
 	bus      *bus.Bus
 	t        *testing.T
@@ -39,14 +95,6 @@ type fakeWorker struct {
 }
 
 func (w *fakeWorker) run(ctx context.Context, durable string) {
-	// Claim the filter subject. A WorkQueue stream allows ONE consumer per
-	// filter, so a durable left by a previous run — or by a mock-engine process
-	// somebody started by hand — blocks this one with an error that says
-	// nothing about what to do.
-	if err := w.bus.ReleaseFilterSubject(ctx, bus.StreamJobs, "scan.job.sbom"); err != nil {
-		w.t.Logf("releasing the filter subject: %v", err)
-	}
-
 	consumer, err := w.bus.EnsureConsumer(ctx, bus.ConsumerConfig{
 		Stream: bus.StreamJobs, Durable: durable, FilterSubject: "scan.job.sbom",
 	})
@@ -74,7 +122,7 @@ func (w *fakeWorker) run(ctx context.Context, durable string) {
 			Engine: job.Engine, EngineVersion: "0.0.1-test",
 			Status:            w.status,
 			EcosystemsCovered: []string{"npm"},
-			Summary:           events.Summary{Components: 7},
+			Summary:           events.Summary{Components: events.Count(7)},
 			Invocation: events.Invocation{
 				ArgvRedacted: []string{job.Engine},
 				StartedAt:    time.Now().UTC(), FinishedAt: time.Now().UTC(),
@@ -106,7 +154,10 @@ func TestFullPipelineCreateFetchFanOutResultStatus(t *testing.T) {
 	defer cancel()
 
 	// The orchestrator's own result loop — the thing under test.
+	requireExclusiveResults(ctx, t, f.bus, "fetch")
 	go func() { _ = f.orch.ConsumeResults(ctx) }()
+
+	requireExclusiveSbomSubject(ctx, t, f.bus, "pipeline-test-worker")
 
 	worker := &fakeWorker{bus: f.bus, t: t, status: events.StatusSucceeded}
 	go worker.run(ctx, "pipeline-test-worker")
@@ -119,7 +170,7 @@ func TestFullPipelineCreateFetchFanOutResultStatus(t *testing.T) {
 	// The fetch completes: this is what pins the commit and triggers fan-out.
 	const commitSHA = "1234567890abcdef1234567890abcdef12345678"
 	if err := f.orch.PublishFetchResult(ctx, scan.ID, tenantA,
-		commitSHA, "s3://encorebom/workspaces/test/source.tar.zst", "sha-abc"); err != nil {
+		commitSHA, "s3://axebom/workspaces/test/source.tar.zst", "sha-abc"); err != nil {
 		t.Fatalf("publish fetch result: %v", err)
 	}
 
@@ -149,7 +200,10 @@ func TestFullPipelineWithAFailingEngine(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
 	defer cancel()
 
+	requireExclusiveResults(ctx, t, f.bus, "fetch")
 	go func() { _ = f.orch.ConsumeResults(ctx) }()
+
+	requireExclusiveSbomSubject(ctx, t, f.bus, "pipeline-test-worker-fail")
 
 	worker := &fakeWorker{bus: f.bus, t: t, status: events.StatusFailed}
 	go worker.run(ctx, "pipeline-test-worker-fail")
@@ -161,7 +215,7 @@ func TestFullPipelineWithAFailingEngine(t *testing.T) {
 
 	if err := f.orch.PublishFetchResult(ctx, scan.ID, tenantA,
 		"abcdef1234567890abcdef1234567890abcdef12",
-		"s3://encorebom/workspaces/test/source.tar.zst", "sha-abc"); err != nil {
+		"s3://axebom/workspaces/test/source.tar.zst", "sha-abc"); err != nil {
 		t.Fatalf("publish fetch result: %v", err)
 	}
 
@@ -178,6 +232,7 @@ func TestFailedFetchFailsTheScanImmediately(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
+	requireExclusiveResults(ctx, t, f.bus, "fetch")
 	go func() { _ = f.orch.ConsumeResults(ctx) }()
 
 	scan := createScan(t, f, tenantA, "mock-engine")

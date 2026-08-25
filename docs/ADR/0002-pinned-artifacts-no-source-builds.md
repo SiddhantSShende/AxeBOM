@@ -10,7 +10,7 @@ The original plan cloned twelve scanner repositories into `OSINT/` and built the
 
 **Download pinned release binaries and container images, verified by SHA256 and cosign signature. Pin images by digest, never by tag.** Clone source only where no binary distribution exists, into gitignored `OSINT/src/`, for reference.
 
-`OSINT/tools.manifest.yaml` is the machine-readable pin. `encorebom toolctl sync` — a Go subcommand, cross-platform, no bash — fetches and verifies.
+`OSINT/tools.manifest.yaml` is the machine-readable pin. `axebom toolctl sync` — a Go subcommand, cross-platform, no bash — fetches and verifies.
 
 **Java-based tools run container-only, never installed locally.**
 

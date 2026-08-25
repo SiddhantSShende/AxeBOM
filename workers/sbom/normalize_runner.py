@@ -24,9 +24,9 @@ from typing import Any
 
 import yaml
 
-from encorebom_shared.logging import get_logger
-from encorebom_shared.normalize.coverage import Field, fields_from_profile
-from encorebom_shared.normalize.pipeline import Artifact, normalize
+from axebom_shared.logging import get_logger
+from axebom_shared.normalize.coverage import Field, fields_from_profile
+from axebom_shared.normalize.pipeline import Artifact, normalize
 
 log = get_logger("normalize")
 

@@ -65,10 +65,10 @@ type Field struct {
 	Scope         string   `yaml:"scope"`
 	Scored        *bool    `yaml:"scored"`
 	// Binding for per-project settings rather than per-component fields.
-	EncoreBOMBinding string `yaml:"encorebom_binding"`
+	AxeBOMBinding string `yaml:"axebom_binding"`
 }
 
-// IsScored reports whether the field counts toward coverage. EncoreBOM
+// IsScored reports whether the field counts toward coverage. AxeBOM
 // extensions (quantum_vulnerable, risk_score) are analysis, not CERT-In
 // elements, and must not inflate or deflate a compliance percentage.
 func (f Field) IsScored() bool { return f.Scored == nil || *f.Scored }
@@ -100,10 +100,10 @@ type Level struct {
 }
 
 type ElementSection struct {
-	SourceTable         string  `yaml:"source_table"`
-	SourcePages         []int   `yaml:"source_pages"`
-	Elements            []Field `yaml:"elements"`
-	EncoreBOMExtensions []Field `yaml:"encorebom_extensions"`
+	SourceTable      string  `yaml:"source_table"`
+	SourcePages      []int   `yaml:"source_pages"`
+	Elements         []Field `yaml:"elements"`
+	AxeBOMExtensions []Field `yaml:"axebom_extensions"`
 }
 
 // CryptoAssetSection is TYPE-DISCRIMINATED — CERT-In Table 9 defines four
@@ -113,11 +113,11 @@ type ElementSection struct {
 // Scoring a certificate against key_size would report every CBOM at roughly
 // 30% coverage, falsely, in a document shown to a regulator.
 type CryptoAssetSection struct {
-	SourceTable         string                `yaml:"source_table"`
-	SourcePages         []int                 `yaml:"source_pages"`
-	Discriminator       string                `yaml:"discriminator"`
-	Types               map[string]CryptoType `yaml:"types"`
-	EncoreBOMExtensions []Field               `yaml:"encorebom_extensions"`
+	SourceTable      string                `yaml:"source_table"`
+	SourcePages      []int                 `yaml:"source_pages"`
+	Discriminator    string                `yaml:"discriminator"`
+	Types            map[string]CryptoType `yaml:"types"`
+	AxeBOMExtensions []Field               `yaml:"axebom_extensions"`
 }
 
 type CryptoType struct {
@@ -190,7 +190,7 @@ func (p *Profile) AllFields() []Field {
 	}
 	out = append(out, p.SBOM.DataFields...)
 	out = append(out, p.QBOM.Elements...)
-	out = append(out, p.QBOM.EncoreBOMExtensions...)
+	out = append(out, p.QBOM.AxeBOMExtensions...)
 
 	// Map iteration is random; sort the crypto type names so generated output
 	// is byte-stable. Unstable codegen produces spurious diffs, and spurious
@@ -198,10 +198,10 @@ func (p *Profile) AllFields() []Field {
 	for _, name := range p.cryptoTypeNames() {
 		out = append(out, p.CryptoAsset.Types[name].Fields...)
 	}
-	out = append(out, p.CryptoAsset.EncoreBOMExtensions...)
+	out = append(out, p.CryptoAsset.AxeBOMExtensions...)
 
 	out = append(out, p.AIBOM.Elements...)
-	out = append(out, p.AIBOM.EncoreBOMExtensions...)
+	out = append(out, p.AIBOM.AxeBOMExtensions...)
 	out = append(out, p.HBOM.Elements...)
 	out = append(out, p.HBOM.AdditionalRequiredElements.Elements...)
 	out = append(out, p.VEX.AdditionalFields...)

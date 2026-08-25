@@ -18,8 +18,8 @@ metadata:
   name: {{ .Release.Name }}-engine-worker
   labels:
     app.kubernetes.io/name: engine-worker
-    app.kubernetes.io/part-of: encorebom
-    encorebom.io/trust: untrusted
+    app.kubernetes.io/part-of: axebom
+    axebom.io/trust: untrusted
 spec:
   replicas: {{ .Values.engines.replicas }}
   selector:
@@ -29,7 +29,7 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: engine-worker
-        encorebom.io/trust: untrusted
+        axebom.io/trust: untrusted
     spec:
       {{/*
         ⚠ NO SERVICE-ACCOUNT TOKEN.
@@ -104,7 +104,7 @@ spec:
               carrying one ever appears here, the security model is gone and the
               only evidence is this comment.
             */}}
-            - name: ENCOREBOM_ROLE
+            - name: AXEBOM_ROLE
               value: engine-worker
 
       volumes:

@@ -24,10 +24,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/ctxkey"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/services/campaign/internal/store"
+	"github.com/axebom/axebom/libs/go-shared/auth"
+	"github.com/axebom/axebom/libs/go-shared/platform/ctxkey"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/services/campaign/internal/store"
 )
 
 const maxRequestBody = 1 << 20

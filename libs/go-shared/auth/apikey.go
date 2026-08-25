@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/authz"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/authz"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 // ─── API keys ───────────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ import (
 //   - it EXPIRES by default, because a credential with no expiry is one nobody
 //     ever gets round to rotating.
 
-// KeyPrefix marks an EncoreBOM key in logs and in secret scanners.
+// KeyPrefix marks an AxeBOM key in logs and in secret scanners.
 //
 // ⚠ A RECOGNISABLE PREFIX IS A FEATURE, NOT A LEAK. GitHub, GitLab and every
 // commercial secret scanner match on known prefixes; a key that looks like
@@ -109,6 +109,34 @@ func (s Scope) Valid() bool {
 		}
 	}
 	return false
+}
+
+// ScopeStrings converts for storage and for the wire — the plain string form
+// scopes are persisted and transmitted as.
+func ScopeStrings(scopes []Scope) []string {
+	out := make([]string, len(scopes))
+	for i, s := range scopes {
+		out[i] = string(s)
+	}
+	return out
+}
+
+// ParseScopes converts and validates the wire/storage form.
+//
+// ⚠ REFUSES ANY UNKNOWN SCOPE RATHER THAN DROPPING IT. Silently ignoring
+// "vex:triage-typo" would mint a key the caller believes carries a permission
+// it does not.
+func ParseScopes(raw []string) ([]Scope, error) {
+	out := make([]Scope, len(raw))
+	for i, s := range raw {
+		scope := Scope(s)
+		if !scope.Valid() {
+			return nil, errs.Newf(errs.ValidationFieldInvalid,
+				"%q is not a scope this build issues", s)
+		}
+		out[i] = scope
+	}
+	return out, nil
 }
 
 // Permission maps a scope onto the authorization matrix.
@@ -251,7 +279,7 @@ func hashKey(plaintext string) string {
 // and a tenant with a thousand keys makes every request slow.
 func ParseKeyID(presented string) (string, error) {
 	if !strings.HasPrefix(presented, KeyPrefix) {
-		return "", errs.New(errs.AuthTokenInvalid, "not an EncoreBOM API key")
+		return "", errs.New(errs.AuthTokenInvalid, "not an AxeBOM API key")
 	}
 	rest := strings.TrimPrefix(presented, KeyPrefix)
 	keyID, _, ok := strings.Cut(rest, "_")

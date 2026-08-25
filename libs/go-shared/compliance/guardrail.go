@@ -56,7 +56,7 @@ func (r GuardrailReport) OK() bool { return len(r.Findings) == 0 }
 
 // ⚠ THE WORD "compliant" MUST NOT APPEAR IN GENERATED OUTPUT.
 //
-// EncoreBOM reports violations against a CONFIGURED POLICY. It cannot assert
+// AxeBOM reports violations against a CONFIGURED POLICY. It cannot assert
 // compliance: that is a determination an auditor makes about an organisation,
 // not one a tool makes about a repository. A report that says "compliant"
 // converts our coverage arithmetic into a legal claim we are not positioned to
@@ -201,7 +201,7 @@ func auditFile(path, body string, counts map[string]int) []GuardrailFinding {
 			findings = append(findings, GuardrailFinding{
 				Rule: "asserts-compliance", File: path, Line: number,
 				Text: truncate(trimmed),
-				Why: "EncoreBOM reports violations against a configured policy and never " +
+				Why: "AxeBOM reports violations against a configured policy and never " +
 					"asserts compliance — that is a determination an auditor makes about an " +
 					"organisation, not one a tool makes about a repository, and the customer " +
 					"will quote it in good faith to somebody who holds them to it.",

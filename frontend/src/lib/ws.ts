@@ -65,11 +65,55 @@ export function backoffMs(attempt: number, random: () => number = Math.random): 
   return Math.max(250, Math.round(base + jitter));
 }
 
+/**
+ * WS_SUBPROTOCOL and WS_BEARER_PREFIX carry authentication onto a handshake.
+ *
+ * ⚠ A BROWSER CANNOT PUT AN Authorization HEADER ON A WebSocket.
+ *
+ * `new WebSocket(url, protocols)` is the only place the platform lets a caller
+ * add anything of their own, and what it adds lands in the
+ * Sec-WebSocket-Protocol REQUEST HEADER — which is why this is not a way around
+ * the rule that a token must never travel in a URL. URLs are written to access
+ * logs, sent in Referer and kept in history; headers are not. The Kubernetes API
+ * server solves the same problem the same way.
+ *
+ * ⚠ THESE TWO STRINGS ARE A CONTRACT WITH THE SERVER. They must stay identical
+ * to oidcauth.WSSubprotocol and oidcauth.WSBearerPrefix in
+ * libs/go-shared/oidcauth/middleware.go. RFC 6455 says a server that selects
+ * none of the offered protocols makes a conforming browser FAIL the connection,
+ * so a mismatch here is not a 401 — it is a socket that closes with no
+ * explanation and a progress view that reconnects forever.
+ */
+export const WS_SUBPROTOCOL = 'axebom.v1';
+export const WS_BEARER_PREFIX = 'axebom.bearer.';
+
+/**
+ * bearerProtocols is what the client offers on the handshake.
+ *
+ * The plain subprotocol is always offered so the server has something to
+ * select; the credential is appended only when there is one, because an
+ * unauthenticated socket should be refused by the server rather than fail to
+ * negotiate.
+ */
+export function bearerProtocols(token: string | null | undefined): string[] {
+  return token ? [WS_SUBPROTOCOL, WS_BEARER_PREFIX + token] : [WS_SUBPROTOCOL];
+}
+
 interface ConnectOptions {
   url: string;
   handlers: ProgressHandlers;
+  /**
+   * The subprotocols to offer, evaluated ON EVERY ATTEMPT.
+   *
+   * ⚠ A FUNCTION, NOT AN ARRAY, BECAUSE OF RECONNECTS. Access tokens live
+   * fifteen minutes and the backoff runs up to thirty seconds between tries;
+   * a laptop lid closed over lunch reopens to a socket whose captured token
+   * expired long ago. Reading it at connect time means the reconnect presents
+   * whatever the session currently holds.
+   */
+  protocols?: () => string[];
   /** Injectable for tests; defaults to the platform WebSocket. */
-  factory?: (url: string) => WebSocketLike;
+  factory?: (url: string, protocols?: string[]) => WebSocketLike;
   random?: () => number;
   setTimeoutFn?: (fn: () => void, ms: number) => number;
   clearTimeoutFn?: (id: number) => void;
@@ -94,7 +138,8 @@ export function connectProgress(opts: ConnectOptions): () => void {
   const {
     url,
     handlers,
-    factory = (u) => new WebSocket(u) as unknown as WebSocketLike,
+    protocols,
+    factory = (u, p) => new WebSocket(u, p) as unknown as WebSocketLike,
     random = Math.random,
     setTimeoutFn = (fn, ms) => window.setTimeout(fn, ms),
     clearTimeoutFn = (id) => window.clearTimeout(id),
@@ -118,7 +163,7 @@ export function connectProgress(opts: ConnectOptions): () => void {
           },
     );
 
-    const ws = factory(url);
+    const ws = factory(url, protocols?.());
     socket = ws;
 
     ws.onopen = () => {

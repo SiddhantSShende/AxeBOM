@@ -2,7 +2,7 @@
 
 **Estimated: 2 weeks** · Depends on Phases 2, 4.
 
-> **This is the highest-risk phase in the project.** From here on, EncoreBOM executes third-party binaries over untrusted user code. Everything in this phase exists to bound the blast radius.
+> **This is the highest-risk phase in the project.** From here on, AxeBOM executes third-party binaries over untrusted user code. Everything in this phase exists to bound the blast radius.
 
 ## Read first
 

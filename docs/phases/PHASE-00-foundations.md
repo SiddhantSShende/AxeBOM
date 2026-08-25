@@ -19,7 +19,7 @@ The four ADR-0001 mitigations land here because each is worthless if added later
 ## Preconditions
 
 ```
-task preflight     # will fail: no cmd/encorebom yet. Expected.
+task preflight     # will fail: no cmd/axebom yet. Expected.
 go version         # 1.24+
 node --version     # 20+
 python --version   # 3.11+
@@ -36,10 +36,10 @@ Do not build: any domain logic, database schema (Phase 1), scanner integration (
 
 ```
 .git/                                   git init, initial commit
-go.mod                                  module github.com/<org>/encorebom
+go.mod                                  module github.com/<org>/axebom
 go.work                                 if using workspaces
 
-cmd/encorebom/
+cmd/axebom/
   main.go  preflight.go  version.go     # the CLI other tasks call
 
 libs/go-shared/platform/
@@ -52,7 +52,7 @@ libs/go-shared/platform/
 services/{gateway,auth,project,scan-orchestrator,report,campaign,comment,notification}/
   main.go  config.go  server.go         # health endpoints only
 
-libs/py-shared/encorebom_shared/
+libs/py-shared/axebom_shared/
   __init__.py  config.py  logging.py  errors.py
 pyproject.toml
 
@@ -69,13 +69,13 @@ tools/gen-service/main.go               the service generator
 
 - **Error taxonomy** — `02-CONTRACTS.md §9`. `errs` must produce that exact JSON shape with a stable `code`. Never a bare string, never `panic` in a request path.
 - **Schema-per-service** — no schema exists yet, but the config loader must give each service its own `search_path`. Establishing this now is what makes ADR-0001 mitigation 2 real.
-- **No bash.** Everything through `Taskfile.yml` and `cmd/encorebom`. `make`, `task` and `cosign` are absent from the primary dev machine and PowerShell 5.1 has no `&&`.
+- **No bash.** Everything through `Taskfile.yml` and `cmd/axebom`. `make`, `task` and `cosign` are absent from the primary dev machine and PowerShell 5.1 has no `&&`.
 
 ## Steps
 
 1. `git init`; commit `.gitattributes` **first** so line-ending normalization applies to everything after it.
 2. `go mod init`. Add `libs/go-shared/platform/*` — config, errs, obs, httpx, health.
-3. Write `cmd/encorebom` with `preflight` and `version`. `preflight` reports Go/Node/Python/Docker/WSL2/Java and **explicitly flags the two known gaps**: Java 1.8 (why Java tools are container-only) and a stopped Docker daemon. It reports; it does not fail on optional tooling.
+3. Write `cmd/axebom` with `preflight` and `version`. `preflight` reports Go/Node/Python/Docker/WSL2/Java and **explicitly flags the two known gaps**: Java 1.8 (why Java tools are container-only) and a stopped Docker daemon. It reports; it does not fail on optional tooling.
 4. Write `tools/gen-service` and **generate all eight services with it**. Do not hand-write the first one and generate the rest — if the generator cannot produce every service, it will not be used later, and hand-written service #9 is where drift starts.
 5. Configure `depguard` in `.golangci.yml`: `services/X` may import `libs/**` and `proto/**` but **never** `services/Y`.
 6. Python shared package + `pyproject.toml`; `ruff` and `pytest` configured.
@@ -97,7 +97,7 @@ tools/gen-service/main.go               the service generator
 task preflight            # runs, reports Java 1.8 + docker state
 task verify               # GREEN on Windows AND Ubuntu
 go build ./...            # all 8 services
-python -c "import encorebom_shared"
+python -c "import axebom_shared"
 npm --prefix frontend run build
 go run ./tools/gen-service --name example --dry-run    # generator works
 ```

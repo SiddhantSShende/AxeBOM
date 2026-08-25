@@ -6,7 +6,35 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/axebom/axebom/libs/go-shared/events"
 )
+
+// TestEventStringsMatchTheSharedEnvelope guards the one place these four
+// values are declared twice. libs/go-shared/events.NotifyEventV1 (published
+// by scan-orchestrator, campaign and report; consumed by this service) has
+// its own copy of these strings, because a shared library cannot import a
+// service's internal package. This is what catches the day the two drift.
+func TestEventStringsMatchTheSharedEnvelope(t *testing.T) {
+	pairs := []struct {
+		event Event
+		want  string
+	}{
+		{EventScanCompleted, events.NotifyEventScanCompleted},
+		{EventNewCriticalFindings, events.NotifyEventFindingsNewCritical},
+		{EventCampaignFailed, events.NotifyEventCampaignFailed},
+		{EventReportReady, events.NotifyEventReportReady},
+	}
+	for _, p := range pairs {
+		if string(p.event) != p.want {
+			t.Errorf("webhook.Event %q does not match events.NotifyEvent* %q", p.event, p.want)
+		}
+	}
+	if len(pairs) != len(Events()) {
+		t.Errorf("this test checks %d events but Events() returns %d; a new event "+
+			"was added to one side without the other", len(pairs), len(Events()))
+	}
+}
 
 var now = time.Date(2026, 8, 17, 9, 14, 3, 0, time.UTC)
 
@@ -22,7 +50,7 @@ func payload() Payload {
 		ScanID:     "0199-scan",
 		Status:     "completed_with_errors",
 		Counts:     Counts{Components: 412, Findings: 37, Critical: 3, High: 9, EnginesUnavailable: 1},
-		URL:        "https://app.encorebom.example/scans/0199-scan",
+		URL:        "https://app.axebom.example/scans/0199-scan",
 	}
 }
 

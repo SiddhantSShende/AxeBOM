@@ -12,7 +12,7 @@ package model
 // purl-spec uses an ecosystem type and namespace. Standard PURL for the same
 // component is pkg:maven/org.apache.tomcat/tomcat@9.0.71.
 //
-// These are two different identifiers and EncoreBOM stores both:
+// These are two different identifiers and AxeBOM stores both:
 //
 //	component.purl               canonical ecosystem PURL. THE MERGE KEY.
 //	                             Every scanner emits it; all dedup runs on it.

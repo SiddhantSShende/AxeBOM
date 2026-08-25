@@ -17,8 +17,9 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from encorebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
-from encorebom_shared.sandbox import SandboxResult, WorkspaceLayout
+from axebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
+from axebom_shared.adapters.summary import count_distinct_vulnerabilities, summarize
+from axebom_shared.sandbox import SandboxResult, WorkspaceLayout
 
 from .common import SandboxedAdapter
 
@@ -49,8 +50,66 @@ class OSVScannerAdapter(SandboxedAdapter):
 
         0 means "scanned, nothing found"; 1 means "scanned, found something".
         Both are successful scans. Its error codes are 127 and above.
+
+        ⚠ 128 IS NOT LISTED HERE, AND THAT IS DELIBERATE — see classify_nonzero.
+        It means "no package sources found", which is a legitimate outcome for a
+        repository with no lockfiles AND the symptom of a workspace the engine
+        could not read. Those two must not be given the same status, so the
+        decision needs the stderr, which acceptable_exit_codes cannot see.
         """
         return frozenset({0, 1})
+
+    #: osv-scanner's exit code for "nothing to scan".
+    NO_SOURCES_EXIT = 128
+
+    def classify_nonzero(self, result: SandboxResult) -> tuple[ResultStatus, str, str] | None:
+        """Separate "no lockfiles here" from "I could not see the tree".
+
+        ⚠ THE SAME EXIT CODE AND THE SAME MESSAGE COVER BOTH, and they deserve
+        opposite statuses. A repository that commits no lockfile — express, for
+        one — has genuinely nothing for osv-scanner to match against, and
+        reporting `failed` puts a false alarm in a compliance document. An empty
+        or unreadable workspace produces the identical message, and reporting
+        that as merely zero coverage would hide a real defect.
+
+        The distinguishing signal is in stderr, which osv-scanner prints before
+        giving up:
+
+            End status: 69 dirs visited, 283 inodes visited, 0 Extract calls
+
+        A walk that visited a real tree and found no manifests is a coverage
+        gap. A walk that visited almost nothing did not see the source. Both
+        cases were observed on this stack — the second while the archive was
+        being mounted from a tmpfs the daemon could not read.
+
+        Parsing stderr is fragile against upstream rewording, so the failure
+        direction is chosen deliberately: an unparsed count falls through to
+        `failed`, which overstates the problem visibly rather than
+        understating it.
+        """
+        if result.exit_code != self.NO_SOURCES_EXIT:
+            return None
+
+        stderr = (result.stderr or "") + (result.stdout or "")
+        if "no package sources found" not in stderr.lower():
+            return None
+
+        match = re.search(r"(\d+)\s+inodes visited", stderr)
+        if match is None or int(match.group(1)) <= 1:
+            return (
+                ResultStatus.FAILED,
+                "ENGINE_INPUT_UNREADABLE",
+                "osv-scanner walked an empty tree; the workspace was not "
+                "materialized or could not be read",
+            )
+
+        return (
+            ResultStatus.PARTIAL,
+            "ENGINE_ZERO_RESULTS",
+            f"osv-scanner found no lockfiles to match against "
+            f"({match.group(1)} inodes walked). It matches lockfiles only, so a "
+            f"project that commits none is outside its coverage",
+        )
 
     def database_env(self, database: Any) -> dict[str, str]:
         """Point osv-scanner at the provisioned database.
@@ -128,6 +187,7 @@ class OSVScannerAdapter(SandboxedAdapter):
             results = []
 
         ecosystems: set[str] = set()
+        vuln_ids: list[Any] = []
         vuln_count = 0
         alias_count = 0
         vulns_without_aliases = 0
@@ -149,6 +209,7 @@ class OSVScannerAdapter(SandboxedAdapter):
                     if not isinstance(vuln, dict):
                         continue
                     vuln_count += 1
+                    vuln_ids.append(vuln.get("id"))
 
                     # ⚠ THE ALIAS EDGES. Phase 8's union-find is built on these.
                     aliases = vuln.get("aliases")
@@ -158,6 +219,12 @@ class OSVScannerAdapter(SandboxedAdapter):
                         vulns_without_aliases += 1
 
         base.ecosystems_covered = sorted(ecosystems)
+        # osv-scanner nests findings per package, so the same advisory against
+        # two packages appears twice. Counted DISTINCT, as everywhere else.
+        base.summary = summarize(
+            self.capabilities,
+            {"vulnerabilities": count_distinct_vulnerabilities(vuln_ids)},
+        )
 
         # ⚠ THE ENGINE MUST PROVE IT LOADED A DATABASE, NOT MERELY THAT ONE
         # EXISTS ON DISK.
@@ -297,7 +364,7 @@ def osv_db_version(payload: dict[str, Any]) -> str:
     difference, and the number ends up in a compliance document.
 
     The real vintage now comes from the provisioner's stamp (see
-    :mod:`encorebom_shared.enginedb`), which is a claim we can stand behind
+    :mod:`axebom_shared.enginedb`), which is a claim we can stand behind
     because we wrote it when we downloaded the data.
     """
     for key in ("db_version", "database_version", "osv_version"):

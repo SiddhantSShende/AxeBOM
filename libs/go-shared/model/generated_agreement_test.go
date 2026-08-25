@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/encorebom/encorebom/libs/go-shared/model"
+	"github.com/axebom/axebom/libs/go-shared/model"
 )
 
 // The Go and Python models must agree.
@@ -23,7 +23,7 @@ var pyFieldID = regexp.MustCompile(`ProfileField\(\s*"([^"]+)"`)
 func pythonModelPath(t *testing.T) string {
 	t.Helper()
 	return filepath.Join("..", "..", "..",
-		"libs", "py-shared", "encorebom_shared", "model", "generated_certin.py")
+		"libs", "py-shared", "axebom_shared", "model", "generated_certin.py")
 }
 
 func pythonFieldIDs(t *testing.T, section *regexp.Regexp) []string {

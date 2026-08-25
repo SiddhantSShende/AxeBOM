@@ -264,7 +264,7 @@ CREATE INDEX licenses_deprecated_idx ON normalize.licenses (is_deprecated)
 
 -- ---------------------------------------------------------------------------
 -- license_refs — TENANT-SCOPED. Unrecognized license text found in a tenant's
--- own code becomes LicenseRef-EncoreBOM-<slug>, with the raw text preserved
+-- own code becomes LicenseRef-AxeBOM-<slug>, with the raw text preserved
 -- for later human mapping.
 -- ---------------------------------------------------------------------------
 CREATE TABLE normalize.license_refs (

@@ -17,8 +17,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/encorebom/encorebom/libs/go-shared/events"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/events"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 // Engine describes one scanner as a unit of work.
@@ -39,6 +39,17 @@ type Engine struct {
 
 	NativeFormat string   `json:"native_format"`
 	Requires     []string `json:"requires,omitempty"`
+
+	// Mode is how this engine actually runs: "container" (the sandbox, per
+	// CLAUDE.md invariant #7), "pip" (installed into the worker's own Python
+	// environment — unsandboxed, and only ever a discovery/enrichment step
+	// that never touches customer code with network access), or "internal"
+	// (no OSINT tool at all — hbom-csv and qbom-derive are AxeBOM's own
+	// import/derivation logic, not a third party engine). Mirrors
+	// OSINT/tools.manifest.yaml's per-tool `mode`, kept here as data (like
+	// RequiresImport/Derived below) so the UI's Engine Coverage panel never
+	// has to guess or hardcode it.
+	Mode string `json:"mode"`
 
 	// DBBacked engines need a vulnerability database, which means they need
 	// either a pre-warmed volume or egress. It is also why they must report
@@ -64,6 +75,22 @@ type Engine struct {
 	// quantum-vulnerability rules applied. There is no quantum-hardware
 	// scanner.
 	Derived bool `json:"derived,omitempty"`
+
+	// ConsumesOutputOf names an engine whose output this one reads.
+	//
+	// ⚠ DISTINCT FROM Requires, WHICH IS A CAPABILITY ("vuln_db"). This is an
+	// ORDERING constraint between two jobs in the same scan, and it changes
+	// when the job may be published rather than whether the engine can run.
+	//
+	// grype is the case: it matches against OUR syft SBOM rather than
+	// cataloguing the tree itself, because re-scanning would produce a second,
+	// subtly different component inventory to reconcile — exactly the work the
+	// normalizer exists to avoid.
+	//
+	// Without this the fan-out published all six jobs at once and grype
+	// routinely ran BEFORE syft, reporting `skipped` on every real scan for an
+	// input that was still being produced.
+	ConsumesOutputOf string `json:"consumes_output_of,omitempty"`
 }
 
 // Supports reports whether this engine can read a source kind.
@@ -101,6 +128,7 @@ func DefaultRegistry() *Registry {
 	list := []Engine{
 		{
 			ID:            "syft",
+			Mode:          "container",
 			Families:      []events.Family{events.FamilySBOM},
 			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload, events.SourceImage},
 			Ecosystems:    []string{"npm", "pypi", "maven", "golang", "gem", "cargo", "nuget", "deb", "rpm", "apk", "conan", "swift"},
@@ -110,20 +138,25 @@ func DefaultRegistry() *Registry {
 			GraphTrust:    map[string]int{"npm": 2, "pypi": 2, "golang": 3, "maven": 2},
 		},
 		{
-			ID:            "grype",
-			Families:      []events.Family{events.FamilySBOM},
-			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload, events.SourceImage},
-			Ecosystems:    []string{"npm", "pypi", "maven", "golang", "gem", "cargo", "nuget", "deb", "rpm", "apk"},
-			Produces:      []string{"vulnerabilities"},
-			NativeFormat:  "cyclonedx-json-1.6",
-			Requires:      []string{"vuln_db"},
-			DBBacked:      true,
-			DefaultWeight: 3,
+			ID:           "grype",
+			Mode:         "container",
+			Families:     []events.Family{events.FamilySBOM},
+			SourceKinds:  []events.SourceKind{events.SourceGit, events.SourceUpload, events.SourceImage},
+			Ecosystems:   []string{"npm", "pypi", "maven", "golang", "gem", "cargo", "nuget", "deb", "rpm", "apk"},
+			Produces:     []string{"vulnerabilities"},
+			NativeFormat: "cyclonedx-json-1.6",
+			Requires:     []string{"vuln_db"},
+			// grype matches against OUR SBOM, never a re-scan. Its job is held
+			// back until syft reports.
+			ConsumesOutputOf: "syft",
+			DBBacked:         true,
+			DefaultWeight:    3,
 		},
 		{
 			// trivy-fs and trivy-image are SEPARATE engines: different
 			// invocation, different parser, different source kinds.
 			ID:            "trivy-fs",
+			Mode:          "container",
 			Families:      []events.Family{events.FamilySBOM},
 			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload},
 			Ecosystems:    []string{"npm", "pypi", "maven", "golang", "gem", "cargo", "nuget", "deb", "rpm", "apk"},
@@ -136,6 +169,7 @@ func DefaultRegistry() *Registry {
 		},
 		{
 			ID:            "trivy-image",
+			Mode:          "container",
 			Families:      []events.Family{events.FamilySBOM},
 			SourceKinds:   []events.SourceKind{events.SourceImage},
 			Ecosystems:    []string{"deb", "rpm", "apk", "npm", "pypi", "golang"},
@@ -147,6 +181,7 @@ func DefaultRegistry() *Registry {
 		},
 		{
 			ID:            "osv-scanner",
+			Mode:          "container",
 			Families:      []events.Family{events.FamilySBOM},
 			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload},
 			Ecosystems:    []string{"npm", "pypi", "maven", "golang", "gem", "cargo", "nuget"},
@@ -158,6 +193,7 @@ func DefaultRegistry() *Registry {
 		},
 		{
 			ID:           "dependency-check",
+			Mode:         "container",
 			Families:     []events.Family{events.FamilySBOM},
 			SourceKinds:  []events.SourceKind{events.SourceGit, events.SourceUpload},
 			Ecosystems:   []string{"maven", "npm", "nuget", "pypi", "golang"},
@@ -171,6 +207,7 @@ func DefaultRegistry() *Registry {
 		},
 		{
 			ID:            "cbomkit-theia",
+			Mode:          "container",
 			Families:      []events.Family{events.FamilyCBOM},
 			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload, events.SourceImage},
 			Ecosystems:    []string{"generic"},
@@ -180,6 +217,7 @@ func DefaultRegistry() *Registry {
 		},
 		{
 			ID:            "cbomkit",
+			Mode:          "container",
 			Families:      []events.Family{events.FamilyCBOM},
 			SourceKinds:   []events.SourceKind{events.SourceGit},
 			Ecosystems:    []string{"java", "python"},
@@ -189,6 +227,7 @@ func DefaultRegistry() *Registry {
 		},
 		{
 			ID:            "aibom-generator",
+			Mode:          "pip",
 			Families:      []events.Family{events.FamilyAIBOM},
 			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload},
 			Ecosystems:    []string{"huggingface", "pypi"},
@@ -198,6 +237,7 @@ func DefaultRegistry() *Registry {
 		},
 		{
 			ID:            "ai-bom",
+			Mode:          "pip",
 			Families:      []events.Family{events.FamilyAIBOM},
 			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload},
 			Ecosystems:    []string{"pypi"},
@@ -209,6 +249,7 @@ func DefaultRegistry() *Registry {
 			// HONEST LABEL: not a scanner. A structured CSV/form import plus a
 			// data model. The UI must never imply discovery.
 			ID:             "hbom-csv",
+			Mode:           "internal",
 			Families:       []events.Family{events.FamilyHBOM},
 			SourceKinds:    []events.SourceKind{events.SourceUpload},
 			Ecosystems:     []string{"hardware"},
@@ -221,6 +262,7 @@ func DefaultRegistry() *Registry {
 			// HONEST LABEL: QBOM is largely a DERIVATION from CBOM crypto
 			// assets. Only Table 8 device metadata is separately captured.
 			ID:            "qbom-derive",
+			Mode:          "internal",
 			Families:      []events.Family{events.FamilyQBOM},
 			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload, events.SourceImage},
 			Ecosystems:    []string{"generic"},
@@ -235,6 +277,7 @@ func DefaultRegistry() *Registry {
 			// prove idempotency and status derivation run against the same code
 			// path a real engine will.
 			ID:            "mock-engine",
+			Mode:          "internal",
 			Families:      []events.Family{events.FamilySBOM},
 			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload, events.SourceImage},
 			Ecosystems:    []string{"npm", "pypi"},

@@ -16,8 +16,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from encorebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
-from encorebom_shared.sandbox import SandboxResult, WorkspaceLayout
+from axebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
+from axebom_shared.adapters.summary import count_distinct_vulnerabilities, summarize
+from axebom_shared.sandbox import SandboxResult, WorkspaceLayout
 
 from .common import SandboxedAdapter, ecosystems_from_purls
 
@@ -139,6 +140,22 @@ class GrypeAdapter(SandboxedAdapter):
             if isinstance(artifact, dict) and isinstance(artifact.get("purl"), str):
                 purls.append(artifact["purl"])
         base.ecosystems_covered = ecosystems_from_purls(purls)
+
+        # DISTINCT vulnerabilities, not matches. grype emits one match per
+        # (vulnerability, package) pair, so one CVE across three packages is
+        # three rows — and counting rows would make the same project look three
+        # times worse under grype than under trivy, in a field named
+        # `vulnerabilities`.
+        base.summary = summarize(
+            self.capabilities,
+            {
+                "vulnerabilities": count_distinct_vulnerabilities(
+                    (m.get("vulnerability") or {}).get("id")
+                    for m in matches
+                    if isinstance(m, dict) and isinstance(m.get("vulnerability"), dict)
+                )
+            },
+        )
 
         # ⚠ ZERO VULNERABILITIES IS LEGITIMATE HERE, unlike zero components from
         # a cataloguing engine. A patched project genuinely has none, and

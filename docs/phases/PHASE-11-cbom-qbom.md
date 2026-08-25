@@ -36,7 +36,7 @@ workers/cbom/normalize/crypto.py         cryptoProperties -> CryptoAsset
 workers/qbom/derive.py                   quantum-vulnerability rules
 workers/qbom/metadata.py                 Table 8 device capture
 
-libs/py-shared/encorebom_shared/crypto/
+libs/py-shared/axebom_shared/crypto/
   quantum_rules.py    Shor / Grover applicability
   pqc.py              NIST PQC recommendations
   deprecation.py      weak / deprecated / broken
@@ -49,7 +49,7 @@ fixtures/{crypto-mixed,crypto-quantum}/
 ## Contracts to honour
 
 - **Coverage is type-aware.** Score each asset only against the field set for its `asset_type` — 8 / 7 / 5 / 10 fields. Scoring a certificate against `key_size` reports every CBOM at roughly 30%, falsely, in a compliance document.
-- `quantum_vulnerable`, `pqc_recommendation` and `deprecation_status` are **EncoreBOM extensions, excluded from coverage scoring**. They are analysis, not CERT-In fields.
+- `quantum_vulnerable`, `pqc_recommendation` and `deprecation_status` are **AxeBOM extensions, excluded from coverage scoring**. They are analysis, not CERT-In fields.
 - QBOM `crypto_assets` reference the CBOM-derived assets — a QBOM does not re-discover them.
 - `cbomkit-theia`'s output schema is early and moving: **parse defensively**, ignore unknown fields, diagnose missing ones, never panic.
 

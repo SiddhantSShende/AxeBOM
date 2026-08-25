@@ -11,7 +11,7 @@ import pathlib
 
 import pytest
 
-from encorebom_shared.model.generated_certin import HBOM_FIELDS
+from axebom_shared.model.generated_certin import HBOM_FIELDS
 
 from .csv_import import ColumnMapping, HBOMImportError, parse
 from .form import FormError, blank_form, from_payload
@@ -139,7 +139,7 @@ def test_no_gpl_package_is_imported_anywhere_in_this_worker():
             stripped = line.strip()
             if stripped.startswith(("import ", "from ")):
                 assert "django" not in stripped.lower(), f"{path.name}: {stripped}"
-                assert "bom_" not in stripped.lower() or "encorebom" in stripped.lower()
+                assert "bom_" not in stripped.lower() or "axebom" in stripped.lower()
 
 
 # ---------------------------------------------------------------------------

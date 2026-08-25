@@ -18,7 +18,7 @@ import (
 //
 // Regenerate DELIBERATELY, with a justification in the commit message:
 //
-//	ENCOREBOM_WRITE_GOLDEN=1 go test ./services/report/internal/export/ -run TestGolden
+//	AXEBOM_WRITE_GOLDEN=1 go test ./services/report/internal/export/ -run TestGolden
 const goldenDir = "../../testdata/golden"
 
 var goldenFiles = map[string]Format{
@@ -27,7 +27,7 @@ var goldenFiles = map[string]Format{
 }
 
 func TestGolden(t *testing.T) {
-	writing := os.Getenv("ENCOREBOM_WRITE_GOLDEN") != ""
+	writing := os.Getenv("AXEBOM_WRITE_GOLDEN") != ""
 
 	for name, format := range goldenFiles {
 		t.Run(name, func(t *testing.T) {
@@ -69,7 +69,7 @@ func TestGolden(t *testing.T) {
 				}
 			}
 			t.Errorf("%s differs from its golden. If this is intended, "+
-				"regenerate with ENCOREBOM_WRITE_GOLDEN=1 and justify it in the "+
+				"regenerate with AXEBOM_WRITE_GOLDEN=1 and justify it in the "+
 				"commit message", name)
 		})
 	}

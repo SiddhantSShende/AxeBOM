@@ -156,6 +156,22 @@ export function effectiveFormats(draft: WizardDraft): Format[] {
 }
 
 /**
+ * scannableBomTypes drops the two types Generate cannot ask the scanner for.
+ *
+ * HBOM has no scanner — it is a CSV/form import — and QBOM is derived from
+ * CBOM discovery rather than scanned directly (CLAUDE.md honest labels).
+ * `Orchestrator.CreateScan` refuses either family outright
+ * (`SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE`); this is what the wizard sends to
+ * `POST /v1/scans`, kept separate from `draft.bomTypes` (which still drives
+ * `POST /v1/reports` — a report can honestly be requested for HBOM/QBOM
+ * without this run scanning for it, since the API resolves bom_document_id
+ * from whatever already exists at render time).
+ */
+export function scannableBomTypes(draft: WizardDraft): BomType[] {
+  return draft.bomTypes.filter((t) => t !== 'HBOM' && t !== 'QBOM');
+}
+
+/**
  * validateDraft finds the contradictions we can see WITHOUT calling the API.
  *
  * ⚠ IT DOES NOT REPLACE THE SERVER'S 422. The API owns which engine/source
@@ -169,6 +185,21 @@ export function effectiveFormats(draft: WizardDraft): Format[] {
  */
 export function validateDraft(draft: WizardDraft): CombinationError[] {
   const errors: CombinationError[] = [];
+
+  // ⚠ BLOCKING, NOT ADVISORY — same reasoning as the step-4 check below.
+  // `Orchestrator.CreateScan` refuses a scan with zero scannable families
+  // unconditionally; a Run built entirely from HBOM and/or QBOM would 422
+  // every time, and the draft alone is enough to know that in advance.
+  if (draft.bomTypes.length > 0 && scannableBomTypes(draft).length === 0) {
+    errors.push({
+      step: 2,
+      message:
+        'HBOM and QBOM are not produced by a scan — HBOM is imported from the ' +
+        "project's Hardware tab, and QBOM becomes available once a CBOM scan " +
+        'has run for this project. Select a scannable type as well (SBOM, ' +
+        'CBOM or AIBOM), or use those tools directly instead of Generate.',
+    });
+  }
 
   if (draft.formats.includes('spdx') && !draft.standards.includes('SPDX')) {
     errors.push({
@@ -216,7 +247,7 @@ export function validateDraft(draft: WizardDraft): CombinationError[] {
 
 /** blocking separates hard contradictions from advisory notes. */
 export function blocking(errors: CombinationError[]): CombinationError[] {
-  return errors.filter((e) => e.step === 4);
+  return errors.filter((e) => e.step === 4 || e.step === 2);
 }
 
 // ---------------------------------------------------------------------------
@@ -292,7 +323,7 @@ export const useWizard = create<WizardState>()(
       reset: () => set({ draft: { ...EMPTY_DRAFT }, current: 1, serverErrors: [] }),
     }),
     {
-      name: 'encorebom.wizard',
+      name: 'axebom.wizard',
       // ⚠ THE STEP IS PERSISTED WITH THE DRAFT. Restoring the values but not
       // the position drops the user back at step 1 in front of a form that is
       // already filled in, which reads as "it lost my work" even though it did

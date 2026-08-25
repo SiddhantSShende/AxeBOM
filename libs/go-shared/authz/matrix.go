@@ -93,12 +93,54 @@ const (
 	ResourceDependency Resource = "dependency"
 	ResourceFinding    Resource = "finding"
 	ResourceVEX        Resource = "vex"
-	ResourceReport     Resource = "report"
-	ResourceShareLink  Resource = "share_link"
-	ResourceComment    Resource = "comment"
-	ResourceCampaign   Resource = "campaign"
-	ResourceAuditLog   Resource = "audit_log"
-	ResourceEngine     Resource = "engine"
+	// ResourceCSAF is the CSAF 2.0 advisory a VEX statement is published as
+	// (normalize.csaf_advisories). Kept distinct from ResourceVEX: reading
+	// or publishing an advisory is a different action from triaging the
+	// finding behind it, even though today both happen at the same roles.
+	ResourceCSAF      Resource = "csaf"
+	ResourceReport    Resource = "report"
+	ResourceShareLink Resource = "share_link"
+	ResourceComment   Resource = "comment"
+	ResourceCampaign  Resource = "campaign"
+	ResourceAuditLog  Resource = "audit_log"
+	ResourceEngine    Resource = "engine"
+	// ResourceHardware is HBOM: import, structured entry and part lookup.
+	// Distinct from ResourceUpload — an HBOM import is stored as a component
+	// tree the moment it is confirmed, not a raw file, and part lookup calls
+	// a third-party commercial API on the tenant's behalf, which a plain
+	// upload never does.
+	ResourceHardware Resource = "hardware"
+	// ResourceQuantumDevice is QBOM Table 8 device metadata: captured by
+	// form, never scanned (there is no quantum-hardware scanner). Kept
+	// distinct from ResourceHardware rather than reused — the two BOM types
+	// happen to share a read/write sensitivity today (see the matrix cells
+	// below), but they are different CERT-In tables owned by different
+	// forms, and collapsing them would make a future divergence (e.g. a
+	// per-tenant policy that restricts quantum data specifically) require
+	// splitting the resource back out under load rather than by design.
+	ResourceQuantumDevice Resource = "quantum_device"
+	// ResourceCryptoAsset is CBOM's crypto-asset inventory
+	// (normalize.crypto_assets) — discovered by cbomkit-theia, read-only from
+	// this API today (no user-editable crypto asset exists, unlike HBOM/QBOM
+	// which are captured by form). Kept distinct from ResourceDependency:
+	// that resource is SBOM's software-component inventory specifically, and
+	// the two are different tables scored against different CERT-In tables
+	// (§4.2 vs Table 9) even though both are read-only discovery results.
+	ResourceCryptoAsset Resource = "crypto_asset"
+	// ResourceAIModel is AIBOM's model inventory (normalize.ai_models) —
+	// discovered by workers/aibom, mostly read-only from this API like
+	// ResourceCryptoAsset. Unlike crypto assets, four of its nineteen CERT-In
+	// elements (security requirements, intended usage, out-of-scope usage,
+	// attestation) ARE user-editable — no tool can ever report what a model
+	// is for or must not be used for — so this resource, alone among the
+	// read-only discovery resources, also grants ActionUpdate.
+	ResourceAIModel Resource = "ai_model"
+	// ResourceAPIKey is a long-lived bearer credential (libs/go-shared/auth's
+	// apikey.go). Deliberately Owner-only, not Admin like member management:
+	// a key's scopes can run scans, read reports and triage VEX across the
+	// whole tenant unattended, which is the tenant-deletion trust tier, not
+	// the ordinary-admin one.
+	ResourceAPIKey Resource = "api_key"
 )
 
 // Action is a verb applied to a Resource.
@@ -123,6 +165,12 @@ const (
 	// scripts, Gradle build files). Deliberately separate from `update`:
 	// accepting that risk is not an ordinary project edit.
 	ActionEnableRiskyResolution Action = "enable_risky_resolution"
+	// ActionConfigureEngines sets which engines run for a BOM family
+	// (scan.engine_policy), tenant-wide. Deliberately separate from `update`
+	// for the same reason as ActionEnableRiskyResolution: it changes what
+	// code executes on every future scan in that family, not one project's
+	// settings.
+	ActionConfigureEngines Action = "configure_engines"
 )
 
 // Permission identifies one cell of the matrix.
@@ -205,15 +253,50 @@ var matrix = map[Permission]rule{
 	},
 
 	{ResourceEngine, ActionList}: {minRole: RoleViewer},
+	{ResourceEngine, ActionConfigureEngines}: {
+		minRole: RoleAdmin,
+		why:     "changes which engines run for every scan in this family",
+	},
+
+	// --- hardware BOM (import + structured entry, never a scan) ---
+	// Read covers the tree itself and which part-lookup provider is
+	// configured — neither discloses anything beyond what a Viewer already
+	// sees on the project. Create covers every write: CSV preview and
+	// import, saving a component, and a part lookup — a preview touches no
+	// storage but still parses an uploaded file, which CLAUDE.md and the
+	// upload resource above both treat as an Analyst-level action, and a
+	// part lookup spends a commercial API quota on the tenant's behalf, the
+	// same reasoning ResourceRepoConn's ActionList uses to require Analyst
+	// over Viewer.
+	{ResourceHardware, ActionRead}:   {minRole: RoleViewer},
+	{ResourceHardware, ActionCreate}: {minRole: RoleAnalyst},
+
+	// --- quantum BOM (device metadata, captured by form, never a scan) ---
+	// Same read/write split as hardware BOM immediately above, and for the
+	// same reason: read discloses nothing a Viewer cannot already see on the
+	// project, and a save is a data-entry action gated at Analyst.
+	{ResourceQuantumDevice, ActionRead}:   {minRole: RoleViewer},
+	{ResourceQuantumDevice, ActionCreate}: {minRole: RoleAnalyst},
 
 	// --- results ---
-	{ResourceDependency, ActionRead}: {minRole: RoleViewer},
-	{ResourceDependency, ActionList}: {minRole: RoleViewer},
-	{ResourceFinding, ActionRead}:    {minRole: RoleViewer},
-	{ResourceFinding, ActionList}:    {minRole: RoleViewer},
+	{ResourceDependency, ActionRead}:  {minRole: RoleViewer},
+	{ResourceDependency, ActionList}:  {minRole: RoleViewer},
+	{ResourceCryptoAsset, ActionList}: {minRole: RoleViewer},
+	// --- AI models (discovered, same read sensitivity as crypto assets;
+	// the four user-supplied elements are a data-entry action, same Analyst
+	// gate as quantum device's form save above) ---
+	{ResourceAIModel, ActionList}:   {minRole: RoleViewer},
+	{ResourceAIModel, ActionRead}:   {minRole: RoleViewer},
+	{ResourceAIModel, ActionUpdate}: {minRole: RoleAnalyst},
+	{ResourceFinding, ActionRead}:   {minRole: RoleViewer},
+	{ResourceFinding, ActionList}:   {minRole: RoleViewer},
 
 	{ResourceVEX, ActionRead}:   {minRole: RoleViewer},
 	{ResourceVEX, ActionTriage}: {minRole: RoleAnalyst},
+	// Publishing an advisory is at least as consequential as the triage
+	// decision behind it — same RoleAnalyst floor as ResourceVEX's write.
+	{ResourceCSAF, ActionRead}:   {minRole: RoleViewer},
+	{ResourceCSAF, ActionCreate}: {minRole: RoleAnalyst},
 
 	// --- reports ---
 	{ResourceReport, ActionRead}: {minRole: RoleViewer},
@@ -246,6 +329,15 @@ var matrix = map[Permission]rule{
 	// --- audit ---
 	{ResourceAuditLog, ActionList}: {minRole: RoleAdmin, why: "access trails are sensitive"},
 	{ResourceAuditLog, ActionRead}: {minRole: RoleAdmin},
+
+	// --- API keys ---
+	// Owner only. A key is a durable, unattended bearer credential; minting
+	// one is closer to "grant standing access to this tenant" than to an
+	// ordinary member-management action, which is why this is stricter than
+	// ResourceMember's Admin floor above.
+	{ResourceAPIKey, ActionList}:   {minRole: RoleOwner},
+	{ResourceAPIKey, ActionCreate}: {minRole: RoleOwner},
+	{ResourceAPIKey, ActionDelete}: {minRole: RoleOwner},
 }
 
 // Decision is the outcome of an authorization check.

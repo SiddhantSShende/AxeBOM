@@ -151,7 +151,7 @@ SELECT app.enable_tenant_rls_nullable('auth.audit_log');
 -- The default privileges from the bootstrap migration granted UPDATE and
 -- DELETE; revoke them here. A convention is something an ORM will cheerfully
 -- ignore; a missing grant is not.
-REVOKE UPDATE, DELETE ON auth.audit_log FROM encorebom_app;
+REVOKE UPDATE, DELETE ON auth.audit_log FROM axebom_app;
 
 -- +goose Down
 DROP TABLE IF EXISTS auth.audit_log;

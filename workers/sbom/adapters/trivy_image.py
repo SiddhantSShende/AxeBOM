@@ -15,8 +15,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from encorebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
-from encorebom_shared.sandbox import SandboxResult, WorkspaceLayout
+from axebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
+from axebom_shared.adapters.summary import count_cyclonedx, summarize
+from axebom_shared.sandbox import SandboxResult, WorkspaceLayout
 
 from .common import SandboxedAdapter, ecosystems_from_purls
 from .trivy_fs import trivy_db_version
@@ -39,6 +40,18 @@ class TrivyImageAdapter(SandboxedAdapter):
     media_type = "application/vnd.cyclonedx+json; version=1.6"
     requires_db_version = True
 
+    # SHARES trivy-fs's database. `trivy image` and `trivy fs` read the same
+    # vulnerability DB; only the subcommand and the source kind differ.
+    #
+    # This was missing, and the omission made the adapter permanently dead in a
+    # way that read as deliberate. SandboxedAdapter.database() returns None when
+    # database_id is unset, and generate() short-circuits any adapter with
+    # requires_db_version to UNAVAILABLE before starting the container. The
+    # message it produced was "no provisioned None database was found" — the
+    # word None being the only evidence that this was a bug rather than an
+    # honest unprovisioned engine.
+    database_id = "trivy"
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(CAPABILITIES, **kwargs)
 
@@ -58,38 +71,97 @@ class TrivyImageAdapter(SandboxedAdapter):
         """
         return {"TMPDIR": layout.container_scratch}
 
-    def build_argv(self, target: ScanTarget, layout: WorkspaceLayout) -> list[str]:
-        """Scan a container image.
+    #: The fetcher writes the exported image here, inside the scan workspace.
+    #: Same shape as grype's dependency on sbom.cdx.json: an engine that needs
+    #: an artefact another step produces looks for it at a known name.
+    TARBALL_NAME = "image.tar"
 
-        ⚠ THIS ENGINE NEEDS THE IMAGE LOCALLY. The sandbox runs with
-        `--network=none`, so trivy cannot pull. The image must already be in the
-        daemon's store — pulled by the fetcher, which is the only component
-        permitted to reach a registry.
+    def input_gap(self, target: ScanTarget) -> str | None:
+        """trivy-image needs an EXPORTED TARBALL, not a reference.
 
-        Refusing a tag is not pedantry: an unpinned reference makes the report
-        unable to say what it scanned.
+        ⚠ THIS ADAPTER'S ORIGINAL PREMISE WAS WRONG.
+
+        It documented "the image must already be in the daemon's store — pulled
+        by the fetcher". Being in the daemon's store is of no use to the engine:
+        it runs with --network=none and, deliberately, with no Docker socket, so
+        it can reach none of trivy's four image sources. The real error is:
+
+            unable to find the specified image in
+            ["docker" "containerd" "podman" "remote"]
+              * docker error:     ... dial unix /var/run/docker.sock: no such file
+              * containerd error: ... socket not found
+              * podman error:     ... no podman socket found
+              * remote error:     ... network is unreachable
+
+        Mounting the socket to fix this would hand a container that runs
+        untrusted third-party binaries the equivalent of host root, which is the
+        one thing the sandbox exists to prevent.
+
+        So the image must be materialised OUTSIDE the sandbox — by the fetcher,
+        the only component permitted to reach a registry — and scanned as a
+        tarball. Until the fetcher does that, this is a stated gap rather than a
+        failing engine.
         """
-        digest = target.image_digest
-        if not digest:
-            raise ValueError("trivy-image requires an image digest; none was supplied")
-        if "@sha256:" not in digest:
-            raise ValueError(
-                f"trivy-image requires a DIGEST-pinned reference, got {digest!r}: "
-                "a tag is mutable, and a report naming a tag says nothing about "
-                "what was actually scanned"
+        if not target.image_digest:
+            return "trivy-image needs a digest-pinned image reference; none was supplied"
+
+        if "@sha256:" not in target.image_digest:
+            return (
+                f"trivy-image needs a DIGEST-pinned reference, got {target.image_digest!r}: "
+                "a tag is mutable, so a report naming one cannot say what was examined"
             )
 
+        tarball = target.workspace / self.TARBALL_NAME
+        if not tarball.is_file():
+            return (
+                f"trivy-image needs an exported image tarball at {self.TARBALL_NAME}, which the "
+                "fetcher has not produced. The engine cannot pull it itself: the sandbox has no "
+                "network and no daemon socket, by design"
+            )
+        return None
+
+    def build_argv(self, target: ScanTarget, layout: WorkspaceLayout) -> list[str]:
+        """Scan the exported tarball.
+
+        Two constraints shape this command, and both are load-bearing.
+
+        ⚠ --input, NOT a reference. See input_gap.
+
+        ⚠ THE DATABASE MOUNT IS READ-ONLY, AND trivy WRITES INTO ITS CACHE DIR.
+        Pointing --cache-dir straight at /enginedb fails with
+
+            unable to initialize fs cache: failed to create cache dir:
+            mkdir /enginedb/fanal: read-only file system
+
+        because `trivy image` maintains a layer cache alongside the database.
+        (`trivy fs` does not, which is why only image mode hits this.) Making
+        the mount writable is not an option — a writable host mount is how a
+        container escape becomes host compromise.
+
+        So the cache directory lives on the writable tmpfs and the database is
+        symlinked into it: trivy writes fanal to tmpfs and reads db from the
+        read-only mount.
+        """
+        cache = f"{layout.container_scratch}/trivy-cache"
+        tarball = f"{layout.container_source}/{self.TARBALL_NAME}"
+
         return [
-            "image",
-            "--format",
-            "cyclonedx",
-            "--skip-db-update",
-            "--skip-java-db-update",
-            "--cache-dir",
-            f"{layout.container_scratch}/trivy-cache",
-            "--quiet",
-            digest,
+            "-c",
+            (
+                f"set -e; mkdir -p {cache}; "
+                # -n so a retry inside the same workspace does not nest links.
+                f"ln -sfn /enginedb/db {cache}/db; "
+                f"exec trivy image --input {tarball} "
+                f"--format cyclonedx --scanners vuln "
+                f"--skip-db-update --skip-java-db-update "
+                f"--cache-dir {cache} --quiet"
+            ),
         ]
+
+    def entrypoint(self) -> list[str] | None:
+        # A shell, because the cache directory has to be prepared before trivy
+        # starts. The trivy image is Alpine-based and has /bin/sh.
+        return ["sh"]
 
     def interpret(
         self,
@@ -133,6 +205,7 @@ class TrivyImageAdapter(SandboxedAdapter):
             if isinstance(c, dict) and isinstance(c.get("purl"), str)
         ]
         base.ecosystems_covered = ecosystems_from_purls(purls)
+        base.summary = summarize(self.capabilities, count_cyclonedx(payload))
 
         if not components:
             base.status = ResultStatus.PARTIAL

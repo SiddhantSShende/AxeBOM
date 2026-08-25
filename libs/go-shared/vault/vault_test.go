@@ -275,7 +275,7 @@ func TestMemoryAndClientAgreeOnOwnership(t *testing.T) {
 	c, _ := New(Config{Address: srv.URL, Token: "t"})
 	m := NewMemory()
 
-	foreign := "encorebom/tenants/tenant-a/repo-token/conn-1"
+	foreign := "axebom/tenants/tenant-a/repo-token/conn-1"
 	ref := Ref{TenantID: "tenant-b", Kind: KindRepoToken, ID: "conn-1"}
 
 	_, clientErr := c.Get(t.Context(), ref, foreign)

@@ -26,8 +26,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/encorebom/encorebom/libs/go-shared/authz"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
+	"github.com/axebom/axebom/libs/go-shared/authz"
+	"github.com/axebom/axebom/libs/go-shared/platform/db"
 )
 
 // Store wraps the connection pool.
@@ -173,7 +173,7 @@ func (s *Store) UpdateGitHubLogin(ctx context.Context, userID, login string) err
 //
 // Callers must only reach here with an email GitHub reported as VERIFIED —
 // otherwise this is an account-takeover primitive: claim any address on GitHub,
-// sign in, inherit the matching EncoreBOM account.
+// sign in, inherit the matching AxeBOM account.
 //
 // The WHERE clause refuses to overwrite a DIFFERENT existing link, so a second
 // GitHub account cannot silently steal an already-linked user.

@@ -10,8 +10,9 @@
 
 import { useMemo, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { api, ApiError } from '../../lib/api';
+import { useProjects } from '../../lib/projects';
 import { BOM_TYPES } from '../../design/theme';
 import { BomTypeChip } from '../../components/Chips';
 import { EmptyState, ErrorState, SkeletonRows } from '../../components/States';
@@ -21,6 +22,7 @@ import {
   effectiveFormats,
   plannedReports,
   reachable,
+  scannableBomTypes,
   stepComplete,
   useWizard,
   validateDraft,
@@ -33,10 +35,29 @@ import {
   type WizardDraft,
 } from '../../lib/wizard';
 
-interface ProjectSummary {
-  id: string;
-  name: string;
-  classifications: string[];
+/**
+ * sourceKindFor maps a project's registered source onto what the scan API
+ * accepts (events.SourceKind: git | upload | image).
+ *
+ * ⚠ `manual` HAS NO ANSWER, ON PURPOSE. A manually-registered project has no
+ * engine that can reach it — HBOM is an import, not a scan (CLAUDE.md honest
+ * labels) — and `orch.CreateScan` already refuses an unrecognised source_kind
+ * with a clear message. Returning null here, rather than guessing, is what
+ * lets the Review step say so before Run rather than after a 422.
+ */
+function sourceKindFor(sourceType: string): 'git' | 'upload' | 'image' | null {
+  switch (sourceType) {
+    case 'github':
+    case 'gitlab':
+    case 'bitbucket':
+      return 'git';
+    case 'upload':
+      return 'upload';
+    case 'image':
+      return 'image';
+    default:
+      return null;
+  }
 }
 
 const LEVELS: { value: Level; label: string; hint: string }[] = [
@@ -92,11 +113,7 @@ export function GenerateFlow() {
     reset,
   } = useWizard();
 
-  const projects = useQuery({
-    queryKey: ['projects', 'options'],
-    queryFn: () => api.get<{ projects: ProjectSummary[] }>('/v1/projects?limit=200'),
-    staleTime: 30_000,
-  });
+  const projects = useProjects();
 
   const localErrors = useMemo(() => validateDraft(draft), [draft]);
   const allErrors = [...localErrors, ...serverErrors];
@@ -105,17 +122,95 @@ export function GenerateFlow() {
   const project = projects.data?.projects.find((p) => p.id === draft.projectId) ?? null;
 
   const run = useMutation({
-    mutationFn: () =>
-      api.post<{ id: string }>('/v1/scans', {
+    // ⚠ TWO CALLS, NOT ONE. `POST /v1/scans` and `POST /v1/reports` are
+    // different resources for a reason: a scan is ONE run of the engines; a
+    // report is ONE rendered document. "Reports: 8" on the Review step was
+    // always a cross product of bom_types × levels × formats — the SAME shape
+    // report.reports has had since migrations/report/0001 — and this wizard
+    // was posting all four dimensions to /v1/scans, which has never accepted
+    // them (createScanRequest is project_id/source_kind/families/engines).
+    // Every combination the review step promised 422'd as an unparseable
+    // body before a single report could exist.
+    mutationFn: async () => {
+      const kind = project ? sourceKindFor(project.source_type) : null;
+      if (!kind) {
+        throw new Error(
+          project
+            ? `${project.name} has no scannable source (registered as ` +
+                `"${project.source_type}"). HBOM is imported, not scanned, so this ` +
+                'flow cannot produce a BOM for it.'
+            : 'No project selected.',
+        );
+      }
+
+      const scan = await api.post<{ id: string }>('/v1/scans', {
         project_id: draft.projectId,
-        bom_types: draft.bomTypes,
-        levels: draft.levels,
-        standards: draft.standards,
-        formats: effectiveFormats(draft),
-      }),
-    onSuccess: (scan) => {
+        source_kind: kind,
+        // events.Family is lowercase ("sbom"); the wizard's BomType is
+        // uppercase ("SBOM") because CERT-In and the UI present it that way.
+        //
+        // ⚠ NOT draft.bomTypes. HBOM and QBOM are never scan families —
+        // `Orchestrator.CreateScan` refuses both outright — so only the
+        // scannable subset is sent here; validateDraft already blocks Run
+        // before this fires if that subset is empty. The report loop below
+        // still uses the full draft.bomTypes: a report can be requested for
+        // HBOM/QBOM without this run scanning for it.
+        families: scannableBomTypes(draft).map((t) => t.toLowerCase()),
+      });
+
+      // ⚠ FIRED WHILE THE SCAN IS STILL `queued`, AND THAT IS NOT A RACE.
+      // /v1/reports resolves its bom_document_id at RENDER time, inside the
+      // worker (services/report/internal/store/bomsource.go), not at create
+      // time — a report can be queued before the scan that will feed it has
+      // produced anything.
+      //
+      // `standard` is deliberately omitted: the API derives it from `format`
+      // (spdx->SPDX, cyclonedx->CycloneDX, everything else->native) and
+      // REFUSES a mismatch rather than silently correcting one
+      // (parseStandard in services/report/internal/service/service.go) — so
+      // sending our own guess here could only ever turn a valid request into
+      // a rejected one.
+      const combos: Array<{ bom_type: string; level: string; format: string }> = [];
+      for (const bomType of draft.bomTypes) {
+        for (const lvl of draft.levels) {
+          for (const format of effectiveFormats(draft)) {
+            combos.push({ bom_type: bomType, level: lvl, format });
+          }
+        }
+      }
+
+      // allSettled, not sequential awaits: these are independent resources,
+      // and one rejection must not stop the rest from being queued. CBOM is a
+      // real, LABELLED gap today ("CBOM reports are not yet renderable" —
+      // CERT-In Table 9 is type-discriminated) — every other combination
+      // still has to go through.
+      const settled = await Promise.allSettled(
+        combos.map((c) =>
+          api.post('/v1/reports', {
+            scan_id: scan.id,
+            bom_type: c.bom_type,
+            level: c.level,
+            format: c.format,
+          }),
+        ),
+      );
+      const failed = settled.filter((r) => r.status === 'rejected').length;
+
+      return { scan, planned: combos.length, failed };
+    },
+    onSuccess: ({ scan, planned, failed }) => {
       reset();
-      void navigate(`/scans/${scan.id}`);
+      void navigate(`/scans/${scan.id}`, {
+        state:
+          failed > 0
+            ? {
+                // Read by ScanProgress. A partial queue failure is not a
+                // reason to hide the scan that DID start — it is a reason to
+                // say plainly which of the promised reports did not queue.
+                reportWarning: `${planned - failed} of ${planned} reports were queued. ${failed} could not be — CBOM is a known gap; anything else, retry from the reports list once the scan finishes.`,
+              }
+            : undefined,
+      });
     },
     onError: (err) => {
       // ⚠ THE 422 IS MAPPED TO STEPS, NOT SHOWN AS A TOAST. The API enumerates
@@ -123,6 +218,8 @@ export function GenerateFlow() {
       // the step that owns each one is the whole reason the wizard knows about
       // steps at all.
       if (err instanceof ApiError) setServerErrors(toCombinationErrors(err));
+      else
+        setServerErrors([{ step: 1, message: err instanceof Error ? err.message : String(err) }]);
     },
   });
 
@@ -427,7 +524,11 @@ function Review({
       {errors.length > 0 && (
         <div className="review-errors">
           {errors.map((e, i) => (
-            <div key={i} className="review-error" data-hard={e.step === 4 ? 'true' : undefined}>
+            <div
+              key={i}
+              className="review-error"
+              data-hard={blocking([e]).length > 0 ? 'true' : undefined}
+            >
               <p>{e.message}</p>
               {/*
                 ⚠ THE FIX BUTTON IS THE POINT. An error message that names a

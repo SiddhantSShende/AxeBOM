@@ -4,7 +4,49 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
-    <title>EncoreBOM</title>
+    <title>AxeBOM</title>
+    <script>
+      // ⚠ BLOCKING, AND DELIBERATELY SO. Both attributes are written before the
+      // first paint, not after React hydrates.
+      //
+      // The theme store's default is 'light' (design/theme.ts), but a dark-OS
+      // visitor would otherwise see one dark frame from the prefers-color-scheme
+      // media query before the store applied — a real, visible flash. The
+      // sidebar has the same problem in a different currency: it rehydrates
+      // expanded and snaps to 4rem, so every cold load of a collapsed sidebar
+      // jumps.
+      //
+      // ⚠ THIS MIRRORS TWO ZUSTAND PERSIST KEYS AND MUST MOVE WITH THEM.
+      // 'axebom.theme' (design/theme.ts) and 'axebom.shell' (design/shell.ts).
+      // Rename one there without renaming it here and the flash this exists to
+      // prevent comes straight back — visible only on a cold load, which is
+      // exactly the case local development does not exercise.
+      //
+      // Fails silently to the defaults on any parse or storage exception rather
+      // than blocking the page.
+      (function () {
+        var read = function (key) {
+          try {
+            var raw = localStorage.getItem(key);
+            return raw ? JSON.parse(raw).state : null;
+          } catch (e) {
+            return null;
+          }
+        };
+
+        var theme = read('axebom.theme');
+        var choice = (theme && theme.choice) || 'light';
+        // 'system' removes the attribute so the media query keeps deciding.
+        if (choice && choice !== 'system') {
+          document.documentElement.setAttribute('data-theme', choice);
+        }
+
+        var shell = read('axebom.shell');
+        if (shell && shell.collapsed) {
+          document.documentElement.setAttribute('data-sidebar', 'collapsed');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

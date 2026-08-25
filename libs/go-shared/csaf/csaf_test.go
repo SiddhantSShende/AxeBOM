@@ -27,7 +27,7 @@ func input() VEXInput {
 
 func options() Options {
 	return Options{
-		TrackingID:    "ENCOREBOM-2026-0001",
+		TrackingID:    "AXEBOM-2026-0001",
 		Title:         "lodash prototype pollution assessment",
 		PublisherName: "Acme Ltd",
 		PublisherNS:   "https://acme.example",

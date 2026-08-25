@@ -122,7 +122,7 @@ function NewSubscription() {
           value={target}
           onChange={(e) => setTarget(e.target.value)}
           placeholder={
-            kind === 'email' ? 'security@example.com' : 'https://hooks.example.com/encorebom'
+            kind === 'email' ? 'security@example.com' : 'https://hooks.example.com/axebom'
           }
           type={kind === 'email' ? 'email' : 'url'}
           required

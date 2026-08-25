@@ -71,7 +71,7 @@ $$;
 -- The app role may CALL it. It may not become its owner, and the function body
 -- is fixed — which is what makes "narrow" mean something.
 REVOKE ALL ON FUNCTION campaign.due_campaigns(timestamptz, int) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION campaign.due_campaigns(timestamptz, int) TO encorebom_app;
+GRANT EXECUTE ON FUNCTION campaign.due_campaigns(timestamptz, int) TO axebom_app;
 
 -- ---------------------------------------------------------------------------
 -- next_run_at bootstrap

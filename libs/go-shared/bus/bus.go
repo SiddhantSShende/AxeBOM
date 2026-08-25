@@ -299,13 +299,37 @@ func (b *Bus) EnsureConsumer(ctx context.Context, cfg ConsumerConfig) (jetstream
 		ackWait = AckWait
 	}
 
+	// ⚠ BackOff IS DELIBERATELY NOT SET, AND THAT IS NOT AN OVERSIGHT.
+	//
+	// nats-server OVERRIDES AckWait with backoff[0] whenever a backoff list is
+	// present. Measured against a real server on this stack: a consumer
+	// configured AckWait=30m together with BackOff=[30s,2m,8m] reports
+	//
+	//	Ack Wait: 30.00s
+	//
+	// while the identical consumer without BackOff reports 30m0s. So setting
+	// both silently discarded the AckWait this function documents, and every
+	// consumer created here has really been running a 30-second ack window.
+	//
+	// For the RESULTS consumers that happens to be harmless — processing a
+	// result is milliseconds. For a SCAN JOB it is not: scans are minutes of
+	// container, so the message would be redelivered while the first worker was
+	// still running it, producing duplicate engine containers for one job and,
+	// after four deliveries, a DLQ entry for work that was succeeding.
+	// Idempotency does not rescue it, because the manifest is written LAST — by
+	// design, so a crash mid-run does not look complete — and a redelivery at
+	// 30 seconds therefore finds no manifest and starts the engine again.
+	//
+	// Nothing is lost. `backoff` is still the schedule; dispatch applies it
+	// explicitly via NakWithDelay, which is the path that actually matters. The
+	// consumer-level setting only governed ack-wait expiry, and buying that at
+	// the cost of the ack window is a bad trade.
 	c, err := b.js.CreateOrUpdateConsumer(ctx, cfg.Stream, jetstream.ConsumerConfig{
 		Durable:       cfg.Durable,
 		FilterSubject: cfg.FilterSubject,
 		AckPolicy:     jetstream.AckExplicitPolicy,
 		AckWait:       ackWait,
 		MaxDeliver:    MaxDeliver,
-		BackOff:       backoff,
 		MaxAckPending: cfg.MaxAckPending,
 		// DeliverAll: a consumer that starts fresh must pick up work already
 		// queued, not only what arrives after it connects.
@@ -511,10 +535,10 @@ func (b *Bus) toDLQ(ctx context.Context, msg jetstream.Msg, subject string, caus
 
 	dlqMsg := nats.NewMsg(subject)
 	dlqMsg.Data = msg.Data()
-	dlqMsg.Header.Set("Encorebom-Dlq-Reason", truncateHeader(cause.Error()))
-	dlqMsg.Header.Set("Encorebom-Original-Subject", msg.Subject())
+	dlqMsg.Header.Set("Axebom-Dlq-Reason", truncateHeader(cause.Error()))
+	dlqMsg.Header.Set("Axebom-Original-Subject", msg.Subject())
 	if meta, err := msg.Metadata(); err == nil {
-		dlqMsg.Header.Set("Encorebom-Delivery-Count", fmt.Sprint(meta.NumDelivered))
+		dlqMsg.Header.Set("Axebom-Delivery-Count", fmt.Sprint(meta.NumDelivered))
 	}
 
 	// Best effort: if the DLQ publish fails there is nothing further to do, and
@@ -544,4 +568,37 @@ func sanitizeHeader(s string) string {
 		out = append(out, r)
 	}
 	return string(out)
+}
+
+// ConsumersOn lists the durable names bound to a filter subject.
+//
+// Exists so a test can DETECT a live fleet instead of destroying it.
+// ReleaseFilterSubject is the only other way to claim a subject on a WorkQueue
+// stream, and it works by deleting whatever consumer is already there — which,
+// on a developer's machine with the stack running, means silently dropping a
+// real worker's in-flight deliveries and then producing a confusing test
+// failure when that worker competes for the same jobs.
+//
+// A test that cannot run should say so, not win a fight with the application.
+func (b *Bus) ConsumersOn(ctx context.Context, stream, subject string) ([]string, error) {
+	s, err := b.js.Stream(ctx, stream)
+	if err != nil {
+		return nil, fmt.Errorf("bus: stream %s: %w", stream, err)
+	}
+
+	var found []string
+	names := s.ConsumerNames(ctx)
+	for name := range names.Name() {
+		info, err := s.Consumer(ctx, name)
+		if err != nil {
+			continue
+		}
+		if info.CachedInfo().Config.FilterSubject == subject {
+			found = append(found, name)
+		}
+	}
+	if err := names.Err(); err != nil {
+		return nil, fmt.Errorf("bus: listing consumers on %s: %w", stream, err)
+	}
+	return found, nil
 }

@@ -6,13 +6,181 @@ A session that writes code but does not update this file has failed — the next
 
 ---
 
-**Last updated:** 2026-08-18
-**Current phase:** Phase 13 — 🟡 **in progress** (VEX resolution and CSAF generation done; storage, HTTP surface, comments and UI not built)
-**Next action:** `Bring Docker up and clear the unexercised backlog across Phases 9–12 before starting Phase 13.`
+**Last updated:** 2026-08-25
+**Current phase:** Phase 14 (campaigns & notifications) — 🟢 **All three of Phase 14's named events now publish for real: `report.ready` (report worker), `scan.completed` (scan-orchestrator), `campaign.failed` (campaign scheduler) — plus the delivery worker itself (Consumer + Poller, real webhook + real SMTP) that was the actual "zero mechanism" gap this session's own re-audit found. See the 2026-08-25 (p) and (q) session entries.**
+**Next action:** 🟡 **`findings.new_critical` is the one remaining notification event with no publisher AND no detection logic at all** — comparing a scan's findings against the prior scan of the same project is a real, unscoped design task (what counts as "new", compared against which prior scan, what if there is none), not wiring like the other three were, and was deliberately not improvised. A known, flagged, NOT-yet-fixed gap sits underneath all three campaign/scan-completed/findings email paths too: `EnqueueDelivery` stores the narrow `webhook.Payload`, not the richer `events.NotifyEventV1` a publisher sends, so `ProjectName`/`CampaignName`/`Cause` never reach an email template — it degrades honestly (raw id, missing Cause line) rather than crashing, but a real fix means widening what `notify.deliveries.payload` stores. Phase 15's CycloneDX HBOM export and vulnerability-matching element, and Phase 16's SSO/SCIM/pentest/Helm-dry-run/chaos/PITR, remain exactly as (o) found them — untouched.
 
-> ⚠ **Docker is still down**, so `migrations/report/0002` has never run and no
-> DB-backed or Playwright test has executed. That is the first thing to do when
-> it comes up — see "Not yet built" under Phases 9 and 10.
+> 🟢 **THE SIDEBAR REORGANISES AROUND THE FIVE BOM TYPES**, each a lens on
+> the same `project.project_classifications` data, not a separate product —
+> `/sbom`, `/cbom`, `/qbom`, `/aibom`, `/hbom` each show that type's projects,
+> an Engine Coverage panel (new: engine `mode` and per-project `last_run`,
+> `GET /v1/scans/engines?project_id=`), and a link into `/settings/engines`,
+> the first AxeBOM-native admin screen — `scan.engine_policy` (migrated in
+> Phase 6, never read since) is now wired end to end. Two dead routes
+> (`/v1/hbom/*`, `/v1/projects/{id}/dependencies` and `/findings`) and one
+> live bug (the orchestrator publishing `scan.job.hbom`/`scan.job.qbom` to
+> subjects with no worker) got fixed along the way. See the 2026-08-24 (i)
+> session entry.
+
+> 🟢 **CBOM AND QBOM WORK END TO END, LIVE — WRITE PATH, READS, REPORTS,
+> FRONTEND.** `render.Sheets`/`WriteJSON`/`WritePDF` no longer refuse CBOM
+> ((j)); `workers/cbom/normalize/pipeline.py` now actually writes
+> `normalize.crypto_assets` (proven against live Postgres, not yet live-
+> triggered — same deliberate boundary as SBOM, see (e)); a new
+> `GET /v1/projects/{id}/crypto-assets` and the ported
+> `GET/POST /v1/qbom/{id}` give the sidebar's Crypto and Quantum tabs real
+> data to render. A live run against real `cbomkit-theia` output (not a
+> hand-built fixture) found and fixed a genuine false negative: a
+> certificate's quantum-vulnerability verdict was silently wrong because it
+> pattern-matched an opaque engine `bom-ref` UUID instead of the algorithm
+> that actually signed it. Verified with screenshots against rebuilt
+> containers. See the 2026-08-24 (k) session entry.
+
+> 🟢 **THE REPORT VIEWER'S BACKEND GAP IS ACTUALLY CLOSED NOW, NOT JUST
+> PAPERED OVER.** (m) found the crash and stopped there; this session wired
+> real data all the way through: a new `migrations/report/0003` adds
+> `project_name`/`bom_generated_at`/`level_note`/`completeness_pct`/
+> `declaration_pct`/`coverage_fields`/`engine_coverage`/
+> `ecosystems_with_no_engine` to `report.reports`, captured once at
+> `MarkReady` from the exact `render.BOM` the worker already loaded — never
+> re-queried afterward. `GET /v1/reports/{id}` now also runs a live
+> same-schema `Siblings` query. Found three more real bugs closing this:
+> `render.BOM.ProjectName` had never been populated since Phase 9; a
+> genuinely-unscored document's coverage collapsed to a lying `0.00%`
+> instead of staying absent; and `bomsource.go`'s `loadFindings` (added in
+> (m)) queried on a busy pgx connection, meaning **no report of any format
+> could render at all** since (m) landed — not an edge case, every single
+> render. The frontend's own `Report` type turned out to be camel-cased
+> against a snake_case backend on top of everything else — fixed by
+> deleting the ad-hoc local type and using `lib/reports.ts`'s real one.
+> Verified against the live dev database with the actual production code
+> path, not mocks. See the 2026-08-25 (n) session entry.
+
+> 🟢 **VEX, CSAF AND COMMENTS WORK END TO END, LIVE — PHASE 13.** The pure
+> logic (`vex.go`'s resolver, `csaf.go`'s types) was already solid; this
+> session built the storage, HTTP, and UI on top of it, moving `vex` to
+> `libs/go-shared` so `report` can share the same resolver `scan-orchestrator`
+> writes against — the same reason `csaf` already lived there. Found and
+> fixed a real bug on the READ side: `services/project`'s existing VEX
+> resolution ignored scope specificity entirely, picking whichever statement
+> happened to have the highest id. `services/comment` is a real service now,
+> built by a dispatched agent that survived a mid-task interruption cleanly.
+> See the 2026-08-25 (m) session entry.
+
+> 🟢 **AIBOM WORKS END TO END, LIVE — INCLUDING A REAL CONTAINERIZED THIRD
+> ENGINE.** `ai-bom` (Trusera) was shipped as a `pip:` manifest entry whose
+> adapter, `AIBomAdapter`, requires a sandboxed container — it could never
+> actually run. Fixed by building `deploy/docker/engines/Dockerfile.ai-bom`
+> (a locally-built, hash-pinned wrapper image; no upstream image exists to
+> pull), the first engine of its kind in this repo. Running it for real
+> found a genuine bug nobody had ever exercised: `--output -` doesn't mean
+> stdout to `ai-bom==3.1.0`, so every run before this session would have
+> silently produced an unparseable result. `workers/aibom/normalize
+> /pipeline.py` now writes `normalize.ai_models`/`ai_datasets`
+> /`ai_model_dependencies` for real (same live-Postgres-proven,
+> not-yet-triggered boundary as CBOM/SBOM); a new
+> `GET /v1/projects/{id}/ai-models` and a small `services/project/internal
+> /aibom` package (the four Table 10 elements no tool can ever discover —
+> intended usage, out-of-scope usage, security requirements, attestation)
+> give the sidebar's new AI Models tab both a live read and an edit path.
+> Report rendering gets its own dedicated sheets/PDF page/JSON section,
+> same reasoning CBOM's crypto assets got theirs — an AI model has no PURL,
+> depth or scope for the generic component table to render. A concrete
+> `aibom-generator` enrichment Fetcher was also built and found two more
+> real upstream bugs (it fabricates a plausible component for a model that
+> does not exist; it has no revision-pinning parameter anywhere), both
+> guarded against rather than patched upstream — see the 2026-08-25 (l)
+> session entry for what's proven vs. still open (enrichment is not wired
+> into a live scan path yet, and a standards-conformant ML-BOM export does
+> not exist because the export library has no support for it at all).
+
+> 🟢 **THE SERVICES AUTHENTICATE AGAINST ZITADEL.** project,
+> scan-orchestrator, report, campaign and notification verify real ZITADEL
+> access tokens against the published key set and resolve them to a local
+> tenant UUID; campaign and fetcher present machine-user credentials of their
+> own. Proven live end to end: a real service token reaches
+> `GET /v1/projects/{id}/source` and gets **200** for its own tenant and
+> **404** for another — RLS holding, and 404 not 403.
+>
+> ⚠ **The hand-rolled HS256 auth is still present and still compiles.** It is
+> deleted in Phase H, after the frontend is on ZITADEL. Nothing is removed
+> before its replacement passes.
+
+> 🟢 **THE BROWSER SIGNS IN.** `setAccessToken` has call sites at last: the SPA
+> runs Authorization Code + PKCE against ZITADEL, sends a bearer token on every
+> request, renews before expiry, and retries a 401 once. Proven by four
+> Playwright tests against the running stack — `alice@acme.test` signs in and
+> **sees `payments-api`**, which only a token that was accepted, resolved to a
+> tenant and passed by RLS can produce.
+>
+> ⚠ **Configuration is FETCHED, not compiled in.** `GET /v1/auth/config` on the
+> gateway publishes issuer, client id, project id, scopes and the ZITADEL claim
+> names. The build-time alternative was already broken in the only place it
+> mattered: `Dockerfile.frontend` takes no build args, so the container image
+> had an empty client id and could not have signed anyone in.
+
+> ⚠ **Self-registration was open, and it silently created unusable accounts.**
+> ZITADEL's hosted login ships a "Register new user" link on by default. A
+> visitor who used it got a real ZITADEL account with a role in **no**
+> organisation — and because the project requires `AuthorizationRequired`, the
+> OIDC callback then refused with `Errors.User.GrantRequired`, which the login
+> UI renders as an unhelpful "Unknown error occurred." `iam bootstrap` now
+> disables `AllowRegister` on the instance login policy
+> (`iam.ensureLoginPolicy`), matching the invite-only tenancy model — a person
+> is meant to arrive already holding a role, not through self-service sign-up.
+> Verified live: the rendered login page no longer offers a register button.
+>
+> 🟢 **A real self-service path exists now, and it's ours, not ZITADEL's.**
+> `/signup` in the frontend + `POST /v1/auth/signup` on the gateway create the
+> organisation and its Owner correctly — grant included — before the visitor
+> ever reaches ZITADEL's password screen, closing the exact gap the paragraph
+> above describes. See the 2026-08-24 (h) session entry.
+
+> 🟢 **THE SEEDED USERS CAN LOG IN.** `alice@acme.test` / `aaron@acme.test` /
+> `bob@beta.test`, password `axebom-dev-only`. carol stays SSO-only on
+> purpose. See docs/08-OPERATIONS.md and the 2026-08-23 (g) session entry.
+
+> ✅ **DOCKER IS UP, AND THE WHOLE BACKLOG THAT DEPENDED ON IT HAS RUN.**
+> `migrations/report/0002` applied; the 12 DB-backed RLS tests executed for the
+> first time (all pass, no skips); the 12-case sandbox escape suite executed for
+> the first time against a real Linux daemon (all pass). 39 tenant-scoped tables
+> verified FORCE-RLS, 0 gaps.
+>
+> ⚠ **The dev machine changed.** This is now **Ubuntu 26.04 on KVM, 16 CPU /
+> 16 GB / 89 GB free**, not the Windows 11 box the rest of this document
+> describes. The Java 1.8 constraint, the C: disk pressure and the "Docker
+> Desktop daemon stops between sessions" note are all artefacts of that machine
+> and no longer apply. The container-only rule for Java scanners stands on its
+> own merits (ADR-0002) and has not changed.
+
+> 🟢 **THE APPLICATION RUNS.** `task dev` brings up infrastructure, all 8 Go
+> services, the SBOM worker and the frontend. `task health` reports 8/8 `up`.
+> Register → authenticate → read across upstreams works through the real browser
+> path (nginx → gateway → service). Before this session **nothing above the
+> infrastructure layer was wired to start at all.**
+
+> 🟢 **A SCAN NOW RUNS END TO END.** `POST /v1/scans` → `scan.job.fetch` →
+> the fetcher clones and archives → `scan.result.fetch` → the orchestrator pins
+> `source_commit_sha` and fans out 6 engine jobs → workers consume → results →
+> status derived. Observed: `completed_with_errors`, progress 100%. Engine
+> Engines now scan the real tree, and the engine graph works: against
+> expressjs/express **syft and grype both succeed**, with grype matching against
+> syft's SBOM rather than re-cataloguing. No engine reports `failed` — every
+> non-success carries a stated reason (dependency-check `unavailable` pending
+> the free NVD key; osv-scanner and trivy-fs `partial` because express commits
+> no lockfile).
+
+> 🟢 **DISPATCH WORKS.** A job published to `scan.job.sbom` is consumed by the
+> worker, runs syft in the sandbox, and its result lands on `scan.result.sbom`
+> where the orchestrator's consumer picks it up. Same proven for `scan.job.cbom`.
+> Before this, no Python worker consumed anything and there was no `nats`
+> dependency at all.
+
+> 🟢 **SIX OF SEVEN SBOM ENGINES VERIFIED LIVE** against
+> `fixtures/monorepo-multiroot` through the real sandbox: syft, syft-spdx,
+> trivy-fs, osv-scanner, grype (against our own syft SBOM) and trivy-image.
+> `dependency-check` is the one gap and reports itself honestly — it needs the
+> free NVD key. See "2026-08-23" in the session log.
 
 > ✅ **CI on `main` is green.** It had been red since 2026-08-17 — seven of
 > eight jobs failing from six independent causes, none of them a defect in
@@ -39,16 +207,16 @@ A session that writes code but does not update this file has failed — the next
 | CERT-In compliance profile | ✅ validated · lint + gen + 7 negative tests |
 | Repo skeleton, go.mod, git | ✅ 165 files, 5 commits |
 | Platform packages (Go) | ✅ errs, obs, httpx, health, config, ctxkey, **db** |
-| `encorebom` CLI | ✅ preflight, version, docs, **db**, **profile** |
+| `axebom` CLI | ✅ preflight, version, docs, **db**, **profile** |
 | Service generator | ✅ all 8 services generated by it |
-| Go services (8) | 🟡 **auth + project are real**; gateway has rate limiting; other 5 are scaffolds |
+| Go services (8) | 🟡 **auth + project are real**; **gateway now proxies to all 7 upstreams**; other 5 are scaffolds |
 | **Auth service** | ✅ **register, login, refresh+reuse detection, logout, me, GitHub OAuth, invitations** |
 | **Project service** | ✅ **CRUD, classifications, practices+gaps, connections, uploads, repo listing** |
 | **RBAC** | ✅ 49 permissions, fails closed; route-guard test parses `routes.go` |
 | **Rate limiting** | ✅ token bucket, separate tighter budget for credential endpoints |
 | **Credential storage** | ✅ Vault KV v2; Postgres holds a tenant-scoped path, never a token |
 | **Object storage** | ✅ MinIO; content-addressed, capped, **never extracted** |
-| **Sandbox** | ✅ **Docker; 12-case escape suite green against a real daemon** |
+| **Sandbox** | ✅ **Docker; 12-case escape suite RUN for the first time — green on real Linux** |
 | **Fetcher** | ✅ **connection-time SSRF defence, hardened clone, content-addressed tar.zst** |
 | **Orchestration** | ✅ **envelopes frozen, JetStream topology, fan-out, reaper, WS progress** |
 | **Envelope schemas** | ✅ `proto/schemas/*.json`, **generated from the Go types** |
@@ -63,18 +231,69 @@ A session that writes code but does not update this file has failed — the next
 | Python workers (other 3) | ⬜ directories only |
 | **HBOM worker** | ✅ **CSV import, recursive model, form, providers, coverage — import only, never discovery** |
 | **Campaign service** | ✅ **cron+DST, scheduler, leader lock, idempotent dispatch, CRUD, run history** |
-| **Notification service** | ✅ **signed webhooks, SSRF-safe delivery, retry+dead-letter, email templates, subscriptions** |
-| **Service tokens** | ✅ **per-tenant, 2-minute TTL, analyst role, `service:` subject prefix** |
+| **Notification service** | 🟢 **signed webhooks, SSRF-safe delivery, retry+dead-letter, SMTP email, subscriptions, AND a real running delivery worker (Consumer+Poller) — verified live 2026-08-25 (p), not just built** |
+| **Service tokens** | 🟢 **ZITADEL machine users, private-key-JWT; tenant named per request, honoured only for a verified service principal** |
+| **Identity provider** | 🟢 **ZITADEL v4.17.1, container-only (AGPL never linked); `axebom iam bootstrap` provisions project, roles, apps, orgs** |
+| **Token verification** | 🟢 **local JWKS, audience-checked; `oidcauth` replaces `auth.Authenticate` in 5 services** |
+| **Identity bridge** | 🟢 **`auth.identity_for` JIT-provisions the local projection; ZITADEL org → tenant UUID, so RLS is untouched** |
+| **Browser sign-in** | 🟢 **oidc-client-ts, Authorization Code + PKCE, silent renew, 401-retry-once; 4 Playwright tests green against the live stack** |
+| **SPA identity config** | 🟢 **`GET /v1/auth/config` — runtime, so one image serves every environment; VITE_OIDC_* remain a dev-only override** |
+| **Organisation switcher** | 🟢 **`X-AxeBOM-Org` sent on every request; a hint the server honours only against roles the token already carries** |
+| **Self-service signup** | 🟢 **`POST /v1/auth/signup` creates an org + Owner in ZITADEL before handoff to login; fails closed on a name/email collision — see the 2026-08-24 (h) session entry** |
+| **WebSocket auth** | 🟢 **token offered as a subprotocol (`axebom.bearer.`), never a query string; live handshake returns 101** |
+| **`GET /v1/scans`** | 🟢 **keyset on id DESC, `?limit=&cursor=&project_id=&status=`; engine runs for a whole page batched in one `ANY($1)` query** |
+| **`GET /v1/scans/{id}/findings-summary`** | 🟢 **grouped by `severity_effective`; none/unknown/not-provided kept as three separate buckets — correct, live, and honestly zero until normalization is triggered** |
+| **Normalizer write path** | 🟢 **`bulk.plan()` + `writer.py`, proven against the live RLS-protected schema; NOT wired into any live scan yet — see the 2026-08-24 (d) session entry** |
 | **Compliance guardrails** | ✅ **`profile guardrails` — no hardcoded count, no assertion of compliance; in `task verify`** |
 | **Evidence pack** | ✅ **`docs/COMPLIANCE-REPORT.md`, generated + staleness-checked** |
 | **API keys** | ✅ **scoped, hashed, prefixed, expiring — pure functions; no store, no routes** |
 | **Audit export** | ✅ **JSONL + CSV, escaped and deterministic — renderer only, nothing calls it** |
 | **Helm charts** | 🟡 **written; NEVER RENDERED — helm is not installed** |
-| **Load tests** | 🟡 **3 k6 scenarios parse; NEVER RUN — numbers are targets, not baselines** |
+| **Load tests** | 🟡 **3 k6 scenarios parse; CI wiring to run them now exists (`load-test.yml`, (o)) but has itself never executed — numbers are still targets, not baselines** |
+| **API keys** | 🟢 **`auth.api_keys` + `oidcauth`-wide request authentication + `POST/GET /v1/api-keys`, `DELETE /v1/api-keys/{id}` (RoleOwner) — verified live end to end, see (o)** |
+| **Audit-log export** | 🟢 **`GET /v1/audit-log/export` + `axebom audit export` — both formats, verified live against the real dev database, see (o)** |
+| **SPDX/CycloneDX conformance** | 🟡 **`task test:conformance` runs the golden fixtures through the official validators — CycloneDX passes; SPDX has a real, found, `xfail`'d bug (colon-bearing SPDXIDs) — see (o)** |
+| **Dependency/vuln scanning CI** | 🟡 **`security-scan.yml` written (govulncheck, pip-audit, npm audit, trivy fs) — `actionlint`-clean, never executed by a real runner, see (o)** |
 | Frontend | ✅ scaffold builds; **Phase 10 replaces it** |
 | Boundary lint | ✅ configured and demonstrated failing |
-| CI (dual-OS) | ✅ written, **never run** — no remote |
-| OSINT manifest | ✅ resolved against upstream; every URL probes 200 |
+| CI (dual-OS) | ✅ written; **no Docker job**, so DB-backed and sandbox tests never run there |
+| OSINT manifest | ✅ resolved against upstream; **`cbomkit-theia` tag corrected (`v1.1.2` → `1.1.2`)** |
+| **Deployment** | ✅ **`task dev` runs the whole system: infra + 8 services + worker + frontend** |
+| **Gateway proxy** | ✅ **`/api` strip, 7 upstreams, WebSocket upgrade, taxonomy errors; 9 tests** |
+| **Container images** | ✅ **8 services + worker + frontend + CLI; Go base read from `go.mod`** |
+| **Engine images** | ✅ **`task osint:pull` — the sandbox cannot pull, `--network=none`** |
+| **Engine databases** | ✅ **grype 2.0 GB · trivy 1.3 GB · osv 263 MB, stamped. `nvd` needs the free key** |
+| **Engines verified LIVE** | 🟢 **6/7 — syft, syft-spdx, trivy-fs, osv-scanner, grype, trivy-image** |
+| **Raw artifact evidence** | ✅ **now actually written; the worker was discarding it (ADR-0003)** |
+| **Credentials guide** | ✅ **`docs/CREDENTIALS.md` — NVD, GitHub, Mouser, Nexar, HF; all free** |
+| **Worker → NATS** | 🟢 **WIRED — sbom, cbom, aibom consume `scan.job.*` and publish results, proven live** |
+| **Fetcher → NATS** | 🟢 **WIRED — a 9th service; clone → archive → fan-out proven end to end** |
+| **Archive → worker** | 🟢 **WIRED — `axebom source materialize`; syft inventories 21 components live** |
+| **syft → grype handoff** | 🟢 **WIRED — fan-out holds grype; syft publishes to the workspace; grype succeeds** |
+| **Engine `summary` counts** | ⬜ **always 0 — syft reports 21 components and the envelope says 0** |
+| **Sidebar IA** | 🟢 **five BOM-type sections (`/sbom` `/cbom` `/qbom` `/aibom` `/hbom`), each a lens on the same projects — see 2026-08-24 (i)** |
+| **`scan.engine_policy`** | 🟢 **WIRED — migrated Phase 6, never read since; `policy.Store` + `GET/PUT/DELETE /v1/scans/engine-policy` + `/settings/engines` admin UI** |
+| **`GET /v1/scans/engines`** | 🟢 **now also returns `mode` (container/pip/internal) and, with `?project_id=`, each engine's `last_run`** |
+| **`/v1/hbom/*`** | 🟢 **WIRED — Go-native port of `workers/hbom/{model,csv_import,providers}.py`, no Go→Python bridge exists so none was built** |
+| **`/v1/projects/{id}/dependencies`, `/findings`** | 🟢 **WIRED — were dead routes the frontend already called** |
+| **Orchestrator dead-job bug** | ✅ **FIXED — `families:["hbom"\|"qbom"]` now rejected at scan-create time (`SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE`), not published to a subject nothing consumes** |
+| **CBOM normalizer write path** | 🟢 **`workers/cbom/normalize/pipeline.py` writes `normalize.crypto_assets` for real, proven against live Postgres; not live-triggered (same boundary as SBOM, see (e))** |
+| **`GET /v1/projects/{id}/crypto-assets`** | 🟢 **WIRED — the interactive read the sidebar's Crypto tab needed; neither parallel Milestone 4 workstream built it, so it was added directly** |
+| **`/v1/qbom/{id}[/form,/device]`** | 🟢 **WIRED — Go-native port of `workers/qbom/metadata.py`, same no-bridge precedent as HBOM** |
+| **Certificate quantum-verdict bug** | ✅ **FIXED — found only by running real `cbomkit-theia` output: a certificate inherited nothing from its signer because the code matched the signer's raw engine `bom-ref` UUID as if it were a name** |
+| **`ai-bom` engine containerization** | 🟢 **`deploy/docker/engines/Dockerfile.ai-bom` — this repo's first locally-built (not pulled) sandboxed engine image; the manifest `pip:`→`container:` contradiction (i) flagged is resolved** |
+| **`ai-bom` `--output -` bug** | ✅ **FIXED — every run before this session would have written an unreachable file and failed every scan; found only by actually running the real container** |
+| **`aibom-generator` Fetcher** | 🟢 **BUILT — `workers/aibom/adapters/aibom_generator_fetch.py`; guards two real upstream bugs (model fabrication, no revision pinning) found by running the real package; not yet wired into a live scan trigger** |
+| **AIBOM normalizer write path** | 🟢 **`workers/aibom/normalize/pipeline.py` writes `normalize.ai_models`/`ai_datasets`/`ai_model_dependencies` for real, proven against live Postgres; not live-triggered (same boundary as SBOM/CBOM, see (e))** |
+| **`GET /v1/projects/{id}/ai-models`** | 🟢 **WIRED, plus `POST .../ai-models/{modelId}/fields` for the four user-supplied Table 10 elements** |
+| **AIBOM NULL-vs-not-provided bug** | ✅ **FIXED — an empty user-field edit was writing NULL instead of the explicit sentinel Python's normalizer always writes; caught by a test asserting the raw column, not just field_status** |
+| **Gateway `/v1/aibom` proxy prefix** | ✅ **FIXED — same class of gap (i) hit for `/v1/qbom`: a route that works against the service directly but 404s through real ingress until the prefix is added** |
+| **CycloneDX ML-BOM export** | 🔴 **NOT BUILT — `protobom`, this codebase's chosen format library, has no ML-BOM/model-card support at all; a real one means hand-rolling CycloneDX or extending protobom upstream, flagged rather than attempted** |
+| **VEX triage (write + read)** | 🟢 **`libs/go-shared/vex` (moved from scan-orchestrator's internal package so report can share it), a new store/HTTP layer, project-scoped, automatic supersession — verified live** |
+| **VEX effective-status specificity bug** | ✅ **FIXED — `services/project`'s `loadClusterVEX` picked the highest-id statement regardless of scope; a broader, slightly-newer statement could outrank a narrower, more specific, older one. Found on the READ side, same class as CBOM's certificate bug on the write side** |
+| **CSAF 2.0 generation** | 🟢 **`services/report/internal/csafgen` + storage; always produces a `csaf.Document.Validate()`-clean document; idempotent per VEX statement; verified live with a real generated document (real tenant as publisher, real CVE/GHSA, real impact statement)** |
+| **Threaded comments (`services/comment`)** | 🟢 **Real service — depth-5 enforced, ownership checked, soft-delete-with-live-children — built by a dispatched agent, survived a session interruption with zero rework needed; frontend comment rail built and verified live** |
+| **Report viewer crash + data gap** | 🟢 **FULLY FIXED — `GET /v1/reports/{id}` sends real project name, coverage numbers (nullable, honestly "not yet computed"), coverage-field breakdown, engine coverage, ecosystems-with-no-engine and a live siblings list, captured at render completion (`migrations/report/0003`); also fixed a bug that made every render of every format fail (`loadFindings` on a busy pgx connection) and a bug that left `render.BOM.ProjectName` always empty since Phase 9** |
 
 ---
 
@@ -94,7 +313,7 @@ A session that writes code but does not update this file has failed — the next
 - **A query outside `WithTenant` fails closed** — `current_setting` raises when unset.
 - `auth.audit_log` (no UPDATE/DELETE) and `scan.raw_artifacts` (no UPDATE/DELETE) are append-only/immutable **by grant, not by convention**.
 
-### Compliance profile — `encorebom profile lint | gen | show`
+### Compliance profile — `axebom profile lint | gen | show`
 
 `profile lint` runs the 7 checks from `06-COMPLIANCE-PROFILES.md §8`: **131 fields, all 17 count assertions match the source PDF, 0 assumed entries.**
 
@@ -106,7 +325,7 @@ A session that writes code but does not update this file has failed — the next
 
 > **131 fields vs the "134 ids" recorded in the Phase 0 log** — both are right. 131 are *fields*; the other 3 ids belong to the minimum-element *categories*, which are not fields.
 
-Generated code is **committed** (a fresh clone must `go build`) with a drift check. EncoreBOM extensions carry `status: extension` and `scored: false`, so our own analysis cannot move a compliance percentage.
+Generated code is **committed** (a fresh clone must `go build`) with a drift check. AxeBOM extensions carry `status: extension` and `scored: false`, so our own analysis cannot move a compliance percentage.
 
 ### CERT-In identifier
 
@@ -169,7 +388,7 @@ The `ENABLE`-without-`FORCE` case is the one worth remembering: the table owner 
 
 ### The manifest now describes reality
 
-`encorebom toolctl dryrun` resolved every pin against upstream. **Every Phase 0
+`axebom toolctl dryrun` resolved every pin against upstream. **Every Phase 0
 placeholder was significantly stale** — syft 1.19→1.51, grype 0.87→0.117,
 trivy 0.58→0.74, osv-scanner 2.0→2.5, dependency-check 11.1→13.0,
 ai-bom 0.9→3.1. Nothing but a network probe would have revealed that.
@@ -206,12 +425,12 @@ failed download on disk means the next run may treat it as cached and good.
 
 ```
 libs/go-shared/toolctl/    manifest.go resolve.go fetch.go  (+17 tests)
-cmd/encorebom/toolctl.go   list | dryrun | sync | verify | licenses
+cmd/axebom/toolctl.go   list | dryrun | sync | verify | licenses
 libs/py-shared/.../adapters/  base.py registry.py           (+13 tests)
 ```
 
 `toolctl licenses` is the mechanical guard for CLAUDE.md invariant 9 — it fails
-if a copyleft dependency would be linked into an EncoreBOM binary.
+if a copyleft dependency would be linked into an AxeBOM binary.
 
 ### A gap in my own tool, found and fixed
 
@@ -246,7 +465,7 @@ At the time: 192 images / 47 GB, 541 build-cache entries / 25.6 GB, 153 running
 containers — **most from other projects, which is why none of it was cleaned up
 unilaterally.**
 
-`D:\encorebom-tmp` was created during diagnosis and is safe to delete.
+`D:\axebom-tmp` was created during diagnosis and is safe to delete.
 
 ---
 
@@ -265,7 +484,7 @@ unilaterally.**
 
 Do not relitigate without an ADR (`docs/ADR/`): 0001 microservices · 0002 pinned artifacts · 0003 replayable normalization · 0004 one engine per job · 0005 durable cluster ids · 0006 RLS tenancy · 0007 profile-driven compliance · 0008 fetcher holds the only credentials.
 
-Settled in implementation: module path `github.com/encorebom/encorebom`; infra ports in the 5xxxx range; two Postgres identities (owner for migrations, `encorebom_app` for runtime); no external config/CLI library.
+Settled in implementation: module path `github.com/axebom/axebom`; infra ports in the 5xxxx range; two Postgres identities (owner for migrations, `axebom_app` for runtime); no external config/CLI library.
 
 ---
 
@@ -400,7 +619,7 @@ before Vault is contacted. The memory fake enforces the same rule, because a
 fake that skipped it would let a cross-tenant test pass while the product leaks.
 
 Proven end to end against the running stack: Postgres holds
-`encorebom/tenants/<tenant>/repo-token/<conn>`, Vault holds the token, and a
+`axebom/tenants/<tenant>/repo-token/<conn>`, Vault holds the token, and a
 scan of every column for the token string returns zero.
 
 ### Uploads are stored and never opened
@@ -538,7 +757,7 @@ Stated plainly, because a known gap is manageable and an undocumented one is not
 ### The envelopes are frozen, and their schemas are generated
 
 `ScanJobV1`, `ScanEventV1`, `ScanResultV1` in `libs/go-shared/events`, with
-JSON Schemas written to `proto/schemas/` by `encorebom schema gen`.
+JSON Schemas written to `proto/schemas/` by `axebom schema gen`.
 
 **Generated from the Go types, not hand-written.** A hand-written schema is a
 second definition that drifts the moment somebody adds a field. The Python
@@ -720,7 +939,7 @@ now succeed on all five fixtures.
 - **`dependency-check` and `trivy-image` are unexercised.** Both are implemented
   and both report `unavailable` today for stated reasons, which is the honest
   status rather than a hidden gap. dependency-check needs an NVD API key.
-- **Engine databases live outside the repo** (`ENCOREBOM_ENGINE_DB_ROOT`,
+- **Engine databases live outside the repo** (`AXEBOM_ENGINE_DB_ROOT`,
   ~4.5 GB). CI has none, so DB-backed engines are `unavailable` there — correct
   behaviour, but it means CI does not exercise the matching path.
 - **The NATS subscription loop is not wired.** `SBOMWorker.handle` is complete
@@ -861,7 +1080,7 @@ reads the digest from the LOCATION.
   driver-level write and the transaction around it are not wired, so no
   canonical row reaches Postgres yet.
 - **`renormalize` has no CLI entry point.** The function and its diff are tested;
-  `encorebom renormalize <scan>` is not built.
+  `axebom renormalize <scan>` is not built.
 - **VEX statements have no ingestion path.** The join and its precedence rules
   are implemented and tested; nothing creates a statement yet (Phase 13).
 
@@ -1010,7 +1229,7 @@ Three refusals, each with a test:
 
 - **The envelope does not carry the public key.** An attacker who can replace a
   signature can replace an embedded key. The key comes from published material
-  or `encorebom verify` refuses to run.
+  or `axebom verify` refuses to run.
 - **The algorithm is compared to a constant**, never used to select an
   implementation. `alg: none` has shipped in real products more than once.
 - **Development signatures are marked** (`insecure-local:`) and report
@@ -1304,10 +1523,16 @@ scanner — at the point of entry rather than as a coverage surprise weeks later
 
 ### Not yet built in Phase 11
 
-- **`cbomkit-theia` has never run.** The adapter is written and its parsing is
-  tested against hand-built CycloneDX, but no container has executed. Its real
-  output may differ from the fixture in ways only a run reveals — which is
-  exactly what Phase 7 learned about every SBOM engine.
+- **`cbomkit-theia` has run once, end to end, but never against real crypto
+  material.** This contradicted an earlier draft of this section, which said
+  the container had never executed — corrected here. Session `2026-08-23 (b)`
+  proved `scan.job.cbom` → sandbox → `scan.result.cbom` after fixing the
+  engine's argv (`dir get <path> --quiet` was never a real invocation; the
+  pinned image's own `--help` gives `dir <path>`). The one run so far used
+  `fixtures/monorepo-multiroot`, which contains no certs, TLS config or
+  `java.security` — so it returned `partial` with `ENGINE_ZERO_RESULTS`
+  honestly, but the parser's handling of a document that actually contains
+  `cryptoProperties` is still unvalidated against a live run.
 - **No `crypto-mixed` / `crypto-quantum` golden fixtures.** The unit tests build
   their documents inline; there are no committed raw artifacts to replay.
 - **No report sections and no UI.** The crypto inventory, quantum-readiness view
@@ -1465,6 +1690,15 @@ consumer's validator rejects, and a test asserts it never leaks.
 
 Scheduled scans that run unattended, and the notifications that report them.
 
+⚠ **UPDATE, 2026-08-25 (p): the delivery worker below did not exist when this
+section was written — everything under "Webhooks"/"Secrets" was correct
+about the SIGNING and CLASSIFICATION logic, but nothing drained
+`notify.deliveries` or called any of it.** That worker (Consumer + Poller),
+real SMTP email, and one real publisher (`report.ready`) are now built and
+verified live — see (p)'s session entry and the corrected "does NOT have"
+list below. Treat this section as accurate for the pure logic it describes
+and superseded on "is anything actually running".
+
 ### The claim this phase is really about
 
 **The advisory lock is not what prevents a double fire.** It is a polling
@@ -1594,13 +1828,26 @@ query cache. Resolved per delivery, never cached in a struct.
 - **`leader` has never held a real advisory lock.** Its semantics are modelled
   by a fake in the scheduler tests; the reentrancy and dead-session behaviour it
   documents are argued, not demonstrated.
-- **No webhook has been delivered to a real endpoint**, and no email has been
-  sent — there is no SMTP client wired, only templates. Mailpit is untouched.
-- **No delivery worker.** `delivery.Client` posts and classifies; nothing drains
-  `notify.deliveries` or acts on `next_retry_at`. Retries are a data model and a
-  policy, not a running loop.
-- **Nothing publishes notification events.** No scan completion or new-critical
-  detection calls `MatchingSubscriptions`.
+- ~~No webhook has been delivered to a real endpoint, and no email has been
+  sent.~~ **Built 2026-08-25 (p): both now work, verified live** — a real
+  signed webhook POST reached a real HTTPS endpoint and was correctly
+  classified/recorded, and a real SMTP send arrived in Mailpit. See (p).
+- ~~No delivery worker. Retries are a data model and a policy, not a running
+  loop.~~ **Built 2026-08-25 (p)**: `services/notification/internal/worker`'s
+  Consumer (first attempts, event-driven) and Poller (retries,
+  `notify.claim_due_deliveries`, migration 0002) — verified live, including a
+  manually-seeded pending row actually being reclaimed and re-attempted at
+  attempt 2.
+- ~~Nothing publishes notification events.~~ **Three of four now do, built
+  2026-08-25 (p)/(q)**: `report.ready` (report's render worker),
+  `scan.completed` (`orchestr.RecomputeScanStatus`, verified live — a real
+  scan reaching terminal status produced a real dead-lettered delivery row),
+  `campaign.failed` (the scheduler's `FailRun` path, dedup keyed on the RUN
+  id — not the campaign id, which repeats across occurrences — unit-verified
+  with a fake notifier, not yet reproduced against the live container).
+  `findings.new_critical` has no detection logic at all (not even a
+  publisher gap — nothing computes "new" vs. the prior scan), a real design
+  task, not wiring — see "Next action" at the top of this file.
 - **`RunNow` is wired but never executed** — it needs the scan service up.
 - **No campaign frontend tests beyond `campaigns.test.ts`** (presets, cron shape,
   timezone). No Playwright, no axe pass on the new screens.
@@ -1775,7 +2022,7 @@ against a live system.
 
 The phase file asks for two checks by hand. A hand-grep happens once, performed
 by the person who already knows the rule — who is the person least likely to
-have broken it. `encorebom profile guardrails` runs in CI instead:
+have broken it. `axebom profile guardrails` runs in CI instead:
 
 - **no hardcoded field count** — a literal stops matching the profile when
   CERT-In revises the guideline, and nothing fails when it does
@@ -1905,36 +2152,2682 @@ mind**, because a claim about limits should be falsifiable.
 | `profile guardrails` | ✅ 194 files, no violations |
 | `profile evidence -check` | ✅ pack current, 8 sections |
 | Mutation: 10 guarantees | ✅ all caught |
-| k6 scenarios | ✅ parse (esbuild); **never executed** |
+| k6 scenarios | ✅ parse (esbuild); **never executed** — `.github/workflows/load-test.yml` (o) wires real execution, itself unrun |
 | Helm chart | 🟡 `Chart.yaml`/`values.yaml` parse; **templates never rendered — helm is not installed** |
+| `task test:conformance` (SPDX/CycloneDX) | 🟡 CycloneDX ✅ valid against official schema; SPDX ❌ real bug found, `xfail`'d — see (o) |
+| API-key mint→authenticate→revoke, live | ✅ (o): real key minted, real request authenticated with correct tenant/role/scopes, revoked key correctly refused |
+| Audit-log export, live | ✅ (o): both formats, against the real dev database, export-of-export correctly recorded first |
 
 ### What Phase 16 does NOT have
 
 - **No penetration test.** The phase's central deliverable. It needs an external
   party and a running system.
-- **No load-test baselines.** The k6 scenarios exist and parse; the numbers in
-  them are TARGETS, not measurements. Recording a target as a baseline would
-  make a regression invisible — there would be nothing to regress from.
+- **No load-test BASELINES, still — but the mechanism to produce them now
+  exists and has not been run.** `.github/workflows/load-test.yml` (2026-08-25
+  (o)) brings up a real stack, mints a real API key, and runs all three
+  `perf/*.js` scenarios — written against `Taskfile.yml`'s own `dev`/
+  `iam:bootstrap`/`db:migrate`/`db:seed` targets, `actionlint`-clean, but
+  **never executed by an actual GitHub Actions runner** (this session had no
+  way to run one). Treat the first real trigger as a dry run. The numbers in
+  the scenarios remain TARGETS until one actually completes.
 - **The Helm templates have never been rendered.** `helm` is not installed on
   this machine, so `helm template | kubectl apply --dry-run=server` — the
   phase's exit criterion — has not run. The templates are unverified YAML with
-  Go template syntax.
+  Go template syntax. Untouched this session.
 - **No restore drill, no chaos testing, no PITR configured.** All need
-  infrastructure.
-- **No SAML/OIDC SSO and no SCIM.** API keys are built; enterprise identity is
-  not.
-- **The API-key store, HTTP surface and middleware do not exist.** `Mint`,
-  `Verify` and `AuthorizeKey` are pure functions with no table behind them and
-  no route using them.
-- **The audit-export CLI command and HTTP endpoint do not exist.** The renderer
-  is written and tested; nothing calls it.
+  infrastructure. Untouched this session.
+- **No SAML/OIDC SSO and no SCIM.** API keys are built AND now have a real
+  HTTP surface (see 2026-08-25 (o) below); enterprise identity federation is
+  still not started at all — a materially larger feature, deliberately not
+  attempted opportunistically alongside the bounded items above.
+- ~~The API-key store, HTTP surface and middleware do not exist.~~ **Built
+  2026-08-25 (o)**: `auth.api_keys` (migration 0004), a pre-tenant
+  `oidcauth.Authenticate` branch usable by EVERY service (not just the one
+  that mints them), scope-narrowing in `auth.Authorize`, and
+  `POST/GET /v1/api-keys` + `DELETE /v1/api-keys/{id}` (RoleOwner). Verified
+  live: minted a real key, authenticated a real request with it, confirmed
+  revocation blocks it.
+- ~~The audit-export CLI command and HTTP endpoint do not exist.~~ **Built
+  2026-08-25 (o)**: `GET /v1/audit-log/export` (tenant-scoped, streaming) and
+  `axebom audit export --tenant --actor` (operator, owner-connection,
+  explicit-tenant-filtered — the one place in this codebase a hand-written
+  `WHERE tenant_id = ?` is correct, because there is no RLS to lean on
+  outside the application path). Both record the export as its own audit
+  event, before streaming, per `auditexport.ExportRecord`'s own design.
+  Verified live against the dev database in both formats.
 - **`docs/RUNBOOKS.md` is still a forward reference**, because a runbook whose
-  procedures have never been executed is fiction.
-- **No SPDX/CycloneDX conformance run** against the official validators.
+  procedures have never been executed is fiction. Untouched this session.
+- ~~No SPDX/CycloneDX conformance run against the official validators.~~
+  **Built 2026-08-25 (o)**: `task test:conformance`
+  (`tools/conformance/test_spdx_cyclonedx.py`, `pip install -e ".[conformance]"`)
+  runs the golden fixtures through `cyclonedx-python-lib` and `spdx-tools` —
+  the real thing, not a hand-rolled schema check. **Found a real bug, left
+  unfixed and `xfail`'d rather than papered over**: `services/report/internal
+  /export`'s `toNode()` feeds the raw `component_key` (e.g.
+  `purl:pkg:maven/...`) straight into every SPDX `PackageSPDXIdentifier` and
+  relationship reference. SPDX 2.3 permits at most one colon in an SPDXID
+  (reserved for `DocumentRef-X:SPDXRef-Y`); ours carries several, because a
+  PURL itself has colons. CycloneDX's `bom-ref` has no such restriction,
+  which is why the CDX fixture validates clean on the exact same underlying
+  key and the SPDX one does not — confirmed the bug is SPDX-specific, not a
+  general identity problem. Not fixed: the correct fix touches
+  `export.go`'s shared node/root/edge ID generation for BOTH formats and
+  would change the golden fixtures, which is a deliberately separate,
+  reviewed decision (CLAUDE.md: "a golden updated without justification is a
+  guard removed"), not a side effect of adding a conformance check.
+- **No CI wiring for dependency/vulnerability scanning existed before this
+  session — not even a stub job**, worse than the phase's own prose implied.
+  **Built 2026-08-25 (o)**: `.github/workflows/security-scan.yml` —
+  `govulncheck` (Go, call-graph aware), `pip-audit` (Python deps),
+  `npm audit` (frontend deps), `trivy fs` (the same trivy the product runs
+  against customer code, pointed at this repository instead). Deliberately
+  separate from `verify.yml`'s existing `gosec` (static analysis of OUR code,
+  belongs in the fast gate) — this is KNOWN-CVE scanning of dependencies,
+  on a schedule plus manifest-change triggers, not every PR.
+  `actionlint`-clean; **never executed by an actual GitHub Actions runner**,
+  same caveat as the load-test workflow above.
 
 ---
 
 ## Session log
+
+### 2026-08-25 (q) — The other two named publishers: scan.completed and campaign.failed
+
+**Goal:** (p)'s own "what's left" flagged `scan.completed` and `campaign.failed` as "bounded work, not a redesign" — two identified call sites with a fully-built, tested delivery mechanism waiting behind them. User confirmed: wire the two bounded ones, leave `findings.new_critical` (a real design task) and the SPDX bug (needs its own reviewed golden-fixture change) alone.
+
+#### scan.completed — `orchestr.RecomputeScanStatus`, after the status write
+
+`Orchestrator` already held a `*bus.Bus` and already imported `libs/go-shared/events` (for the advisory `SCAN_EVENTS` stream), so this was genuinely just wiring: a new `publishScanCompleted` call right after `o.log.Info("scan status derived", ...)`, using the scan's own `ProjectID` (one query, `o.store.GetScan`, already existed) and the scan id as the JetStream dedup key — a scan reaches this exact point at most meaningfully once, so a crash-retry re-deriving the same terminal status must not fan a second notification out. **Deliberately no component/finding counts**: those live in `normalize.*`, which scan-orchestrator does not otherwise read (CLAUDE.md invariant 11), and whether normalization has even finished by the moment every engine run reports terminal is a real, unanswered timing question — not something to guess at while wiring a notification. `FrontendURL` threaded through `Config` the same way `report`'s worker already has it.
+
+Verified live end to end, the same way (p) verified `report.ready`: created a real webhook subscription, drove a real scan (via the existing live-DB test fixture, `orchestr.New` with `FrontendURL` set) to a real terminal status by submitting a real engine result, and confirmed a real `notify.deliveries` row appeared — `event_type=scan.completed`, correctly dead-lettered on the same `https://example.com/` 405 `report.ready` also hit. (The scan's OWN status flipped to `failed` moments later in the same shared dev database — real background activity from the live fetcher/reaper this test happened to race against, not a defect in the new code; the delivery row is the evidence that matters and it was written the instant the scan first went terminal.)
+
+#### campaign.failed — the scheduler's FailRun path, and the one real design wrinkle
+
+`services/campaign` had never connected to NATS at all — a new `bus.Connect` in `deps.go`, alongside the existing Postgres/Vault-shaped dependency wiring. The publish call sits right after `s.store.FailRun(...)` in `dispatch()`, the exact point `webhook.EventCampaignFailed`'s own doc comment describes ("fires when a scheduled run could not complete").
+
+**The one thing that could not just copy `report.ready`/`scan.completed`'s pattern**: both of those use their own event's natural id (`ReportID`, `ScanID`) as the JetStream dedup key, because each fires at most once for that id. A campaign's id is NOT like that — the SAME campaign can fail repeatedly across many scheduled occurrences, and deduping on `CampaignID` would let JetStream's window silently swallow the SECOND failure notification of a campaign that fails every run, which is exactly the case where the notification matters most. Fixed by widening `scheduler.Notifier`'s interface to take an explicit dedup key (`Publish(ctx, dedupKey, evt)`) rather than deriving one from the event — the caller names the RUN id, which genuinely is unique per occurrence. `report`'s and scan-orchestrator's own Notifier shapes were left alone; their natural per-event id was already correct and changing them would have been risk for no benefit.
+
+No single project id: a campaign targets `ProjectIDs []string` (plural), so the event carries `CampaignID`/`CampaignName` only, matching what a receiver would actually look the run up by.
+
+**Verified with two new unit tests** (`fakeNotifier`, mirroring the existing fake-store/fake-trigger style already in `scheduler_test.go`): one confirms a failed trigger publishes exactly one `campaign.failed` event with the right ids, the right Cause, and — the specific regression this session's own design decision exists to prevent — a dedup key equal to the run id, not the campaign id; the other confirms a notifier failure never leaks into `Tick`'s own error (events are advisory, same rule everywhere else in this product). **Not reproduced against the live container** — unlike the other two, triggering a real scheduled-campaign failure needs a real cron-claimed occurrence, which is more setup than the marginal verification value justified given the wiring is mechanically identical to two already-proven cases and the container was confirmed to start and connect to NATS cleanly.
+
+#### A gap made more precise, not created, while wiring the second and third publisher
+
+`toEmailData`'s existing comment (written in (p), before either of these publishers existed) predicted this exactly: `EnqueueDelivery` stores the narrow `webhook.Payload`, so `ProjectName`/`CampaignName`/`Cause` — all populated on the envelopes `scan.completed` and `campaign.failed` now actually publish — never survive to an email render. Updated the comment now that the prediction is a live fact rather than a hypothetical: an email for either event today shows a raw id where a name belongs and silently omits the Cause line (the template's own `{{if .Data.Cause}}` guard), which is honest degradation, not a crash — but the real fix (storing the richer envelope, not the narrowed payload) is still a deliberately separate, unattempted change.
+
+#### Verified live, once more
+
+Rebuilt and redeployed `scan-orchestrator` and `campaign`; both started cleanly, connected to Postgres and NATS, no crash loops. `go build ./...`, `golangci-lint run ./...`, `go test ./... -count=1`, `docs lint`, `profile guardrails` all pass repo-wide. All throwaway verification code and test data deleted/cleaned up afterward.
+
+#### What's left, honestly
+
+`findings.new_critical` remains exactly as (p) left it — no detection logic, a real design task for its own session. The email-richness gap above is now concretely demonstrated rather than merely predicted, and still not fixed. `campaign.failed` is unit-verified but not live-verified against the running container, unlike its two siblings.
+
+### 2026-08-25 (p) — The notification delivery worker: zero mechanism to real, verified, live delivery
+
+**Goal:** (o)'s own re-audit named this the single largest concrete gap across Phases 14–16 — "not merely unverified... genuinely nonexistent." User confirmed it as the next target after (o)'s four Phase 16 items landed.
+
+#### What was actually missing, corrected from (o)'s first-pass read
+
+A deeper research pass (before writing any code) found `services/notification` far more built than (o)'s audit had time to credit: webhook HMAC signing, backoff/classification/dead-lettering, subscription matching, and email template rendering were ALL complete and tested — `libs/go-shared/platform/safedial`-backed, `TestPayloadCarriesNoComponentOrFindingDetail`-guarded, the works. What was missing was narrower and more mechanical than "build notifications from scratch": nothing ever CALLED any of it. `deps.go`'s `startBackground` was a literal no-op; no NATS consumer existed; no SMTP sender existed despite the templates; and no publisher anywhere called `MatchingSubscriptions`.
+
+#### The envelope: one more shared type, and why webhook.Payload could not be reused
+
+`libs/go-shared/events`'s new `NotifyEventV1` is the internal message a publisher (report, eventually scan-orchestrator and campaign) sends to `notify.<event>`, consumed only by `services/notification`. It is deliberately RICHER than the existing, tested `webhook.Payload` (ids/counts/status/url only, by CLAUDE.md's confidentiality rule): the internal envelope may carry a project name, a campaign name, a failure cause — things the EMAIL channel needs to render a human sentence and a WEBHOOK body must never carry, because a webhook lands in a third party's log aggregator and an email lands in an inbox we control. `services/notification`'s consumer derives the narrower `webhook.Payload` from the richer envelope at fan-out time. The four event-type strings are declared twice (once here, once in `webhook.Event` — a shared library cannot import a service's internal package) and a new test, `TestEventStringsMatchTheSharedEnvelope`, is what catches the day they drift.
+
+Found and fixed a real spec-drift while writing this: `docs/02-CONTRACTS.md` §11 named six webhook events under different spellings than the four the actual, tested `webhook.Event` enum has. The code is the mature, tested artifact; the doc was an early draft nobody updated. Corrected to match reality, with a note rather than a silent rewrite.
+
+#### The delivery worker: two drivers, one shared Attempter, and why they cannot be one mechanism
+
+`services/notification/internal/worker`: **Consumer** (event-driven, `notify.>`, `EnsureConsumer`/`Consume` — the exact pattern `report`'s render consumer already established) fans one event out to every matching subscription and fires the FIRST delivery attempt for each. **Poller** (time-driven, 15s tick) retries whatever that left `pending` past its `next_retry_at`. They cannot share NATS redelivery for retries: a single event fans out to N subscriptions, and tying one subscription's retry schedule to the event MESSAGE would redeliver — and re-enqueue, duplicating — every other subscription's already-succeeded delivery just because one webhook target is down. The Consumer acks the message unconditionally once fan-out itself succeeds, even when every individual delivery fails; only a failure BEFORE any row was written (the initial `MatchingSubscriptions` lookup) is safe to retry at the message level.
+
+**The poller's cross-tenant claim** (`migrations/notify/0002_delivery_worker.sql`) is the same shape `campaign.due_campaigns` already is: a background tick has no tenant to scope by, so one narrow SECURITY DEFINER function (`notify.claim_due_deliveries`) does the read — returning only what `webhook.Payload` already permits on the wire, so it cannot leak anything the wire format itself refuses to carry. The status transition (`pending` → `processing`) IS the lock, same idiom as `report.ClaimForRender`, with `FOR UPDATE SKIP LOCKED` as a second, cheap layer. This required widening the `status` CHECK constraint (`deliveries_status_check`) — the one schema change this work needed.
+
+**Email** got its first real sender: `services/notification/internal/mail`, stdlib `net/smtp` only (no new dependency — PLAIN auth is skipped entirely when no username is configured, which is what makes Mailpit work unauthenticated), building a real multipart/alternative MIME message so a client with HTML disabled still sees the text part. New `config.SMTP` (`Host`/`Port`/`Username`/`Password`/`From`), wired into `docker-compose.app.yml` pointed at the Mailpit container already running (`mailpit:1025` internal, `SMTP_PORT` published for host-side use) — ZITADEL has sent it real mail for a while; this is the first time this codebase's own services have.
+
+#### The one real publisher: report.ready, and why it was the right first choice over scan.completed
+
+`services/report/internal/worker`'s `Render()` now publishes `report.ready` once, after `Finish` succeeds — never before, so a notification is never sent about a row that, from the database's point of view, did not finish. Chose this over `scan.completed` deliberately: at the exact point a report finishes rendering, the ALREADY-LOADED `render.BOM` (project name, findings, coverage, engine status) has every number the notification needs, in-process, with zero additional queries — the same `bom` this session's earlier (n) entry wired into the report-viewer coverage fix. `scan.completed` would need scan-orchestrator to read `normalize.*` tables it does not otherwise touch, with a real open question about whether normalization has even finished by the time all engine runs report terminal — a genuine timing question, not answered today, and not answered by guessing. `report.ready` has no email form at all (`email.Kinds()`'s own, pre-existing shape) — a rendered artifact finishing is a webhook-only integration event — so the consumer's fan-out skips an email subscription that matched it rather than enqueueing a delivery that would always fail.
+
+#### Verified live — the whole pipeline, for real, twice over
+
+Rebuilt and redeployed `report` and `notification`. Created a real webhook subscription (tenant, `https://example.com/`, `report.ready`) through the actual store+Vault code path. Rendered a real report through the actual worker: it published `report.ready` over the real NATS bus; the real Consumer picked it up, matched the subscription, enqueued a delivery, and POSTed a real signed request to `https://example.com/` — which answered 405 (POST not accepted on that path), correctly classified as non-retryable and dead-lettered, exactly per `webhook.Classify`'s existing logic. Separately seeded a `pending` row with `next_retry_at` in the past and watched the live Poller's next tick claim it via `claim_due_deliveries`, correctly re-attempt at `attempt=2` (not 1), and record the same outcome — proving the atomic claim and the attempt-numbering both work under the running container, not just in a test double. Sent a real email through the real `mail.Sender` to the real Mailpit container and confirmed it arrived — correct From/To/Subject — via Mailpit's own API. `go build ./...`, `golangci-lint run ./...`, `go test ./... -count=1`, `docs lint`, `profile lint`/`guardrails`/`evidence --check` all pass repo-wide. All throwaway verification code and test data deleted/cleaned up afterward.
+
+#### What's left, honestly
+
+`scan.completed` and `campaign.failed` have a fully-built, tested delivery mechanism and zero caller — bounded wiring work at two identified, specific call sites (see "Next action" at the top of this file). `findings.new_critical` has no detection logic anywhere — comparing a scan's findings against the prior scan of the same project is a real, unscoped design task, not wiring, and was deliberately not improvised here. The frontend's subscription-management UI was not touched or re-verified this session. No Playwright/axe coverage exists for it either, unchanged from (o).
+
+### 2026-08-25 (o) — Re-audited Phases 14–16 against reality, then closed four concrete Phase 16 gaps
+
+**Goal:** user asked to "reaudit phase 14-16 then jump on phase 16" after (n) closed the report-viewer gap — the same skepticism (n) itself was built on (Phase 9's and Phase 13's claimed-done work both had real, previously-undiscovered gaps found only by actually exercising the feature).
+
+#### The re-audit (three parallel, independent, read-only passes)
+
+**Phase 14 (campaigns/notifications):** the scheduling half is real and MORE exercised than this file's 2026-08-18 section credited — `migrations/campaign/0002` is now applied (that section's claim it never was is stale), the scheduler runs as a live background process, real routes and frontend exist. The notification half is hollow: `services/notification/deps.go`'s `startBackground` is a literal no-op, `grep -rn MatchingSubscriptions` finds zero callers outside its own package (nothing anywhere publishes a notification event — not scan completion, not a new critical finding, not a campaign failure), and there is no SMTP client despite templates existing. **This is the single largest concrete gap surfaced by any of the three audits** — not "unverified," genuinely nonexistent.
+
+**Phase 15 (HBOM):** better than its own stale 2026-08-18 section says. The 2026-08-24 (i) "WIRED" claim holds up under independent verification: 5/5 live-DB store tests pass against real Postgres, including an actual CSV-import-to-database round trip and cross-tenant RLS isolation — this directly disproves the old section's "no HBOM row has ever been written." Real gaps that remain in both narratives: no CycloneDX HBOM export, `findings[]` (§10.4.1.4's fourth mandatory element) not modelled, zero frontend test coverage.
+
+**Phase 16 (hardening):** this file's own "half done" narrative was accurate, not stale — nothing in later sessions had quietly closed any of its gaps. Confirmed live: the compliance evidence pack, `auditexport`, and `apikey.go` are all real, non-stub code. One gap worse than implied: `.github/workflows/` had ONLY `verify.yml` — no security-scan or load-test CI existed at all, not even a stub.
+
+User picked, from the consolidated gap list: **API-key HTTP surface, audit-export CLI+HTTP, SPDX/CycloneDX conformance run, CI workflows** — deliberately NOT the notification worker (a materially larger, separate piece of work) or SSO/SCIM/pentest/chaos (need their own scoping pass).
+
+#### API keys: the HTTP surface `apikey.go` never had
+
+`libs/go-shared/auth/apikey.go`'s `Mint`/`Verify`/`AuthorizeKey` were complete and tested pure functions with nothing calling them. Closed end to end:
+
+- **`migrations/auth/0004_api_keys.sql`** — `auth.api_keys`, RLS-covered, plus `auth.api_key_by_key_id(key_id)`, a SECURITY DEFINER pre-tenant lookup with the exact shape `migrations/auth/0002`'s login lookup already established (a key presents itself before its tenant is known, same as a login credential does).
+- **Request-time authentication lives in `libs/go-shared/oidcauth`, not in the service that mints keys** — because a key holder calls `project`/`scan-orchestrator`/`report` to start a scan or read a report, never `auth` itself. New `oidcauth/apikey.go`: `Authenticate()` now branches on the `ebk_` prefix before attempting JWT verification, looks the key up via `pool.Raw()` (never `WithTenant` — the tenant is what's being discovered), sets role to `RoleAnalyst` (matching the existing service-token precedent AND `AuthorizeKey`'s own embedded assumption — confirmed by an existing, unmodified test, `TestEveryScopeIsWithinTheAnalystRole`, passing unchanged), and carries scopes forward via a new `ctxkey.APIKeyScopes`.
+- **Scope narrowing lives in `libs/go-shared/auth`'s `Authorize`** — the ONE per-route middleware every one of the 7 services already mounts. After the ordinary role-based `authz.Allow` check passes, an API-key request additionally requires that one of its presented scopes names the exact (resource, action) being called. A session or service-token request is unaffected — the check is skipped entirely when no scopes are in context.
+- **New `ResourceAPIKey`, gated `RoleOwner`** (stricter than `RoleAdmin`'s member-management floor — a key is a durable, unattended credential, closer to "grant standing tenant access" than to inviting a member). `POST/GET /v1/api-keys`, `DELETE /v1/api-keys/{id}`, mounted in `services/auth` via a NEWLY-added `oidcauth.Guard` — the sixth service to gain one, sitting alongside (not replacing) that service's own pre-ZITADEL local-JWT routes, which nothing in the current frontend calls any more except the gateway-special-cased `/v1/auth/signup`.
+- **A real, previously-nonexistent bug class avoided by construction**: `services/auth/routes_test.go`'s static route-guard parser only recognizes wrapper identifiers named `guard`/`authenticated` by default; the new ZITADEL-authenticated routes use a differently-named wrapper (`zitadel`) on purpose (this service has two authentication systems side by side) — `routeguard.CheckWith` extended the recognized-wrapper list rather than either wrongly reusing `authenticated`'s name or silently leaving the new routes unchecked.
+- **Verified live**, with the actual production code paths, not mocks: minted a real key via `services/auth/internal/store`, authenticated a real request with it via `oidcauth.authenticateAPIKey` (confirmed correct tenant, `apikey:<id>` subject, `analyst` role, and scopes), confirmed `scan:run` permits and `member:delete` refuses, then confirmed a revoked key is refused with `AUTH_TOKEN_INVALID`.
+
+#### Audit-log export: the renderer `auditexport` never had a caller
+
+- **`GET /v1/audit-log/export?format=jsonl|csv[&from=&to=]`** in `services/auth`, ZITADEL-authenticated like the API-key routes, gated `ResourceAuditLog`/`ActionList` (the existing RoleAdmin matrix entry — no new RBAC needed). Tenant-scoped, ordinary `WithTenant`, no explicit `tenant_id` filter (RLS does that).
+- **`axebom audit export --tenant --actor [--format] [--from] [--to] [--out]`** — an operator tool connecting as the database OWNER, the one place in this codebase a hand-written `WHERE tenant_id = ?` is the CORRECT code rather than the invariant-6 violation it would be in application code: there is no RLS to lean on outside the application path, so the explicit filter is the only thing standing between two tenants' data, written once, on purpose, with the reasoning in a comment at the exact line.
+- Both record the export as its own audit event via the existing `auth.record_auth_event` SECURITY DEFINER function, **before** streaming starts — `auditexport.ExportRecord`'s own doc comment insists on this ordering, and it was actually followed rather than merely quoted.
+- Added `apikey mint` as a companion CLI command (needed for the load-test CI workflow below to get a credential without a browser) — same owner-connection shape, same "this is a break-glass operator tool, not a second way to skip `ResourceAPIKey`'s RoleOwner gate" reasoning.
+- **Verified live**: exported both formats against the real dev database; confirmed the export's own audit row appears in what it exports.
+
+#### SPDX/CycloneDX conformance: real validators, a real bug found
+
+`task test:conformance` (`pip install -e ".[conformance]"`, a new optional dependency group — `cyclonedx-python-lib[json-validation]` and `spdx-tools`, both Apache-2.0) runs the golden fixtures through the OFFICIAL schema validators, not our own serializer's opinion of itself. CycloneDX 1.6 passes clean. **SPDX does not**, and the failure is real: `services/report/internal/export`'s `toNode()` feeds the raw `component_key` (shaped `purl:pkg:maven/...` — a normalizer dedup identity, not an SPDX identifier) straight into every `PackageSPDXIdentifier` and relationship reference. SPDX 2.3 allows at most one colon in an SPDXID; ours has several. Confirmed CycloneDX's `bom-ref` has no such restriction — same underlying key, only one format's spec rejects it, so this is a targeted, well-understood bug, not a general identity problem. **Deliberately left unfixed and captured as `xfail(strict=True)`** rather than silently fixed alongside a verification task: the real fix touches shared ID-generation code feeding BOTH exported formats and would change the golden fixtures, which CLAUDE.md treats as requiring its own explicit, reviewed justification — not something to bundle into "I added a conformance check."
+
+#### CI: two workflows that did not exist, with an honest limit stated on both
+
+`.github/workflows/security-scan.yml` (govulncheck, pip-audit, npm audit, trivy fs — scheduled + manifest-change-triggered, deliberately NOT on every PR since dependency CVEs don't change between commits an hour apart) and `.github/workflows/load-test.yml` (brings up a full ephemeral stack via `task dev`/`iam:bootstrap`/`db:migrate`/`db:seed`, mints a real API key with the new `apikey mint` CLI against the fixed seed identity `alice@acme.test`, runs all three `perf/*.js` scenarios — first real execution of scripts that, per their own README, "had never been run"). Both pass `actionlint` clean. **Neither has been executed by an actual GitHub Actions runner** — this environment has no way to trigger one — so both carry an explicit top-of-file comment saying so, and the first real trigger of each should be treated as a dry run, not a proven gate.
+
+#### Verified live, against the real dev database and the real running stack
+
+Applied `migrations/auth/0004`. Ran the actual `store`/`oidcauth`/`service` production code (not mocks, throwaway tests deleted after use) for both API keys and audit export, end to end, including the negative case (revoked key refused). Rebuilt and redeployed `auth`, `gateway`, `project`, `scan-orchestrator`, `report`, `campaign`, `notification`, `comment` — all started cleanly, database-connected, no crash loops; confirmed `/v1/api-keys` and `/v1/audit-log/export` both route correctly through the gateway to `auth` (401, not 404). `go build ./...`, `golangci-lint run ./...`, and `go test ./... -count=1` all pass repo-wide (two unrelated pre-existing flaky tests in `scan-orchestrator`, confirmed unrelated by running each 3× in isolation — same flake class as (n) already documented, untouched by this session).
+
+#### What's left, honestly
+
+Phase 14's notification-delivery worker is the standout gap — see "Next action" above. Phase 15's CycloneDX HBOM export and vulnerability-matching element remain open. Phase 16 still has no SSO/SCIM, no penetration test, no Helm dry-run (`helm` still not installed here), no restore/chaos/PITR, and `docs/RUNBOOKS.md` is still a forward reference. The SPDX exporter bug found above is real and reproducible but deliberately not fixed this session. Neither new CI workflow has actually run.
+
+### 2026-08-25 (n) — Phase 9's report-viewer gap actually closed: real coverage, engine, project and sibling data now flows end to end
+
+**Goal:** close the gap (m) found and only patched around — `GET /v1/reports/{id}` sending none of the coverage/engine/project data the viewer needs, forcing a defensive frontend-only fix. User's explicit direction: "fix the report viewer coverage gap, then continue to the next phase."
+
+#### The real fix: capture render.BOM's summary at MarkReady, not discard it
+
+`services/report/internal/store/store.go`'s `Completion`/`MarkReady` previously recorded only artifact-storage metadata. New migration `migrations/report/0003_report_summary.sql` adds `project_name`, `bom_generated_at`, `level_note`, `completeness_pct`/`declaration_pct` (nullable — NULL means "not yet computed," never a lying zero), `coverage_formula`, `coverage_fields`/`engine_coverage` (jsonb), `ecosystems_with_no_engine` to `report.reports`. `worker.go`'s `Render()` now captures all of it from the exact `render.BOM` it already loaded — the same data that produced the artifact bytes, never re-queried from the normalizer afterward, which would risk disagreeing with a concurrent re-normalization. `enrichCoverageFields` looks each field up against `render.FieldsFor(bomType)` to attach `name`/`weight`/`source_page` (absent for CBOM, which has no single field set — the count still persists, just unlabeled). `handler.go`'s `reportResponse`/`toResponse` now expose all of it, `omitempty` on every one so a queued/rendering report sends none of it rather than a lying zero.
+
+#### Three more real bugs found in the process, all fixed
+
+1. `render.BOM.ProjectName` was **never populated anywhere** — `LoadBOM` builds the struct and leaves it at its zero value; `summarySheet` has been printing a blank project name in every rendered report since Phase 9. New `loadProjectName` in `bomsource.go` resolves it via the existing `resolveProjectIDForScan` (two queries, not a cross-schema join — the same discipline `loadPractices` above it is flagged as violating).
+2. `loadDocumentMeta` collapses a genuinely-never-scored document's nil completeness/declaration into a plain `0.0` — its own comment says "must not render as 0.00%" but nothing downstream actually preserved that. Traced this all the way through: it would have made this exact fix dishonest for any BOM that hasn't been scored yet (the seeded dev report is one). Added `render.BOM.CoverageComputed bool`; the worker only persists a number when it's true, otherwise the column stays NULL and the viewer correctly shows "not yet computed."
+3. **The one that actually blocked verification**: `bomsource.go`'s `loadFindings` (added in (m), for VEX resolution) queried `resolveProjectIDForScan`/`loadVEXStatementsForReport` on the same `tx` while the findings query's `Rows` were still open and undrained — pgx's `conn busy`, deterministically, on every single call. **This meant no report of any format could render at all** since (m) landed, not a flaky or edge-case failure. Fixed by moving both calls before the findings query opens.
+
+#### Siblings: a live query, not a snapshot
+
+`GET /v1/reports/{id}` (Get only, not List) now also runs `store.Siblings` — a same-schema self-join on `report.reports` by `(tenant_id, scan_id, bom_type)` excluding itself — because "what other formats exist" changes after this report goes ready, and freezing it at render-completion would go stale the moment a second format finished.
+
+#### Frontend: the coverage gap was worse than the crash
+
+`lib/reports.ts`'s own `Report` type (already correctly snake_case, used nowhere until now) exposed that `ReportViewer.tsx`'s locally-declared `Report` interface was wrong on a second axis nobody had caught: **every backend-sent field it named was camelCase** (`bomType`, `sizeBytes`, `signingKeyId`...) **against a backend that has always sent snake_case** (confirmed against every other handler in the codebase) — meaning most of this page's "working" fields were silently reading `undefined` before (m)'s crash-prevention patch ever ran, independent of the coverage gap entirely. Deleted the local interface, extended `lib/reports.ts`'s real one with the new optional fields plus `FieldCoverage`/`EngineCoverage`/`ReportSibling`, moved the render-status polling into `useReport`, rewrote every access site to the real field names.
+
+#### Verified live, against the real dev database
+
+`task db migrate` applied 0003 against the running stack. Ran the actual `worker.Render`/`store.Get`/`service.Siblings` production code (not mocks, a throwaway test deleted after use) against a real report row for a real seeded scan — confirmed `project_name: "payments-api"`, a real `bom_generated_at`, `completeness_pct`/`declaration_pct: null` (this bom_document has never been scored — proves the `CoverageComputed` fix), `ecosystems_with_no_engine: ["npm"]`, and a real sibling row. Rebuilt and redeployed `report` and `frontend`; `tsc -b` inside the frontend build passed clean against the new contract. `go build ./...`, `golangci-lint run ./...`, and `go test ./... -count=1` all pass repo-wide (one unrelated pre-existing flaky test in `scan-orchestrator` confirmed unrelated — passes 3/3 in isolation, untouched by this session). **No browser automation tool was available in this session** to click through the rendered page the way (m) did — verification stopped at the API/data layer, which is real and complete, but nobody has looked at the rendered DOM this time.
+
+#### What's left, honestly
+
+`ShareDialog.tsx` has the identical camelCase-vs-snake_case defect in its own local `ShareLink` type — not exercised by this fix, flagged, not fixed. No new automated test asserts the new `reportResponse` fields (`services/report/internal/handler`'s tests predate them). `libs/py-shared/axebom_shared/normalize/vex.py`, the CSAF JSON-Schema decision, and Playwright coverage remain exactly as (m) left them. Which phase is actually next (14, 15, or re-auditing 14–16 against reality) is still an open question — flagged at the top of this file rather than guessed.
+
+### 2026-08-25 (m) — Phase 13: VEX, CSAF and comments work end to end, live — plus a severe pre-existing bug found along the way
+
+**Goal:** the master plan's Phase 13. User picked this explicitly after Milestone 5 closed out the separate sidebar-reorg plan; asked "continue to the next phase" without saying which, and rather than guess among several plausible readings (Phase 12's own unmet ML-BOM exit criterion, Phase 13 itself, or re-auditing Phases 13–15 against reality first) I asked — the cost of guessing wrong here was a full phase's misdirected work. A research fork mapped the actual state before any code: **the hard logic was already done and well-tested** (`vex.go`'s specificity-then-recency resolver, `csaf.go`'s round-tripping types) — what was missing was entirely storage, HTTP, and UI. Split three ways: I did VEX+CSAF storage/HTTP/report-wiring myself (closely follows this session's own established patterns), dispatched the comments service as an independent agent (fully self-contained), built the frontend myself once both landed.
+
+#### VEX — moved to shared space, then given a write path
+
+`vex.go` moved from scan-orchestrator's own internal package to `libs/go-shared/vex` — a real architectural fix, not a reorganization for its own sake: `services/report` needs the identical `Resolve()` logic at render time to compute `render.Finding.VEXStatus`, and a service cannot import another service's internal package (CLAUDE.md invariant 11; depguard enforces it). New `orchestr` store methods (`CreateVEXStatement`, `ListVEXStatements`, `GetVEXHistory`) — **supersession is automatic, never caller-specified**: the store finds whichever statement is currently in force for the exact (cluster, component, scope) tuple and supersedes it itself, so a stale or wrong "supersedes this id" from a client can never fork the history. New `POST/GET /v1/vex/{projectId}/statements`, project-scoped rather than scan-scoped (a triage decision outlives the scan that found it), new `/v1/vex` gateway prefix. 5 new live-DB tests, all passing, including the one proving two different scopes on the same cluster coexist rather than clobbering each other.
+
+#### A real, second VEX-resolution bug found and fixed — on the READ side this time
+
+`services/project/internal/store/findings.go` already had VEX wired into the live findings table from an earlier session, but `loadClusterVEX` picked "whichever statement has the highest id" for a whole cluster with **no regard for scope specificity at all** — the exact ordering `vex.Resolve`'s own doc comment calls a decision, not an accident, gotten backwards. A cluster spans several affected components; a broadly-scoped statement inserted slightly later could outrank a narrower, more specific, older one. Fixed by using the real `vex.Resolve()` (only importable here now that it lives in `libs/go-shared`) per member component, keeping whichever result is NOT de-emphasized when any disagree — the same "OR the worse signal across cluster members" rule `SeverityConflict` already uses. A new regression test (two components, one cleared after the other) proves the exact case the old code got wrong. Also wired `services/report`'s `bomsource.go`, which had never read `normalize.vex_statements` at all — its `render.Finding.VEXStatus`/`VEXJustification` fields existed but were never populated — and replaced `pdf.go`'s hardcoded `vexPage()` stub with a real per-status count table.
+
+#### CSAF — a generator proven to always produce a valid document
+
+New `services/report/internal/csafgen` package: pure function, VEX statement in, `csaf.Document` out, always the smallest document `csaf.Document.Validate()` accepts — never a maximal one, since AxeBOM does not hold data (CVSS scores, a full product tree) it would otherwise have to invent. 5 tests including one for every one of the four VEX statuses. New `services/report/internal/store/csaf.go`: looks up the real VEX statement server-side (a client can never submit its own status/justification — those already came from the VEX write path, and re-typing them here would let a client publish an advisory that disagrees with the record behind it), resolves the tenant's own name for `Publisher.Name` (CSAF's publisher is the customer, never AxeBOM), and is **idempotent per VEX statement** — generating twice returns the existing advisory rather than a duplicate. New `ResourceCSAF` in the authz matrix, `POST/GET /v1/csaf/{projectId}/advisories`, new `/v1/csaf` gateway prefix.
+
+#### Comments — dispatched to an agent, survived a session interruption mid-flight
+
+The agent built a complete, real `services/comment` service — depth-5 threading enforced server-side, ownership checked in the store (403 `PERM_COMMENT_NOT_OWNER`, distinct from the 404-for-cross-tenant CLAUDE.md invariant 6 case), soft-delete-with-live-children rendering as a `[deleted]` placeholder rather than orphaning replies, `@handle` mention extraction computed at read time from the body text rather than stored or resolved against a real member (a deliberately scoped-down interpretation, stated rather than silent) — before this session's process was interrupted and restarted mid-task. Verified the interruption cost nothing: 12 live-DB tests already existed and all passed on resumption, `go build ./...` was clean, only the frontend piece (never reached) was missing. Built that myself: `lib/comments.ts`, `components/CommentRail.tsx` (threaded display, inline edit/reply, indent capped at depth 5), mounted on `ReportViewer.tsx`.
+
+#### A severe, pre-existing bug found live, unrelated to any of the above
+
+Verifying the comment rail meant loading a real report page for the first time this session — and it crashed outright, on every report, regardless of status. `services/report/internal/handler/handler.go`'s `reportResponse` (the actual `GET /v1/reports/{id}` wire shape) has **no project name, no generated-at timestamp, no coverage numbers, no coverage-field breakdown, no engine coverage, and no sibling-format list** — fields the frontend's `Report` interface has always declared as required and always assumed present. `DownloadMenu` spread `report.siblings` unguarded (`TypeError: s.siblings is not iterable`); `CoveragePanel` called `.toFixed()` on an undefined `completenessPct`; `EngineCoverageTable` called `.map()`/`.length` on undefined arrays. Every one of these ran unconditionally in the page header or body — there was no path through this page that avoided them. **Not something this session introduced or fixed at the root** — the underlying data genuinely exists (`normalize.bom_documents.completeness_pct`/`declaration_pct`/`coverage_breakdown`, `scan.engine_runs`, `project.projects.name`), just never wired into this specific endpoint, which is Phase 9's scope, not Phase 13's. Applied the minimal, honest fix: normalized the missing fields to empty/undefined at one point in `ReportViewer.tsx`, rendering "not yet computed" and "no engine ran for this report" — the SAME honest-gap philosophy this codebase already applies to a scan that hasn't run, just applied here to data the backend hasn't wired yet. The crash is gone; the actual feature (a report page that shows its own coverage and engine story) is not built. Flagged at the top of this file rather than buried — this is a core, "prominent, not footer material" page per its own doc comment, broken for every user, every time, until now discovered.
+
+#### Also found, not touched
+
+`libs/py-shared/axebom_shared/normalize/vex.py` is a second, complete, Python port of the same VEX join logic — used only by one SBOM golden test proving the join concept (`test_vex_joins_to_findings_without_changing_them`), never called by any real pipeline. Now that the real system's VEX logic lives in Go (`libs/go-shared/vex`, used by scan-orchestrator's real writes and both project's and report's real reads), this Python copy is either dead weight from an earlier, different design direction, or was intentionally kept as a normalizer-level proof — worth a deliberate decision, not left as ambiguous duplication.
+
+#### Verified live
+
+Rebuilt `scan-orchestrator`/`report`/`project`/`gateway`/`frontend`/`comment` (the last one deployed live for the first time). Seeded a real SBOM finding, drove the browser through: opening the findings table, triaging a finding to `not_affected` with a justification (whole-project scope), confirming the VEX badge and history updated live, generating a CSAF advisory and confirming the stored document in Postgres is genuinely valid CSAF 2.0 with the real tenant name as publisher, a real CVE, a real GHSA alias, and a real impact-statement threat — not a stub. Separately verified the comment rail: posted a top-level comment and a threaded reply, both rendering correctly with timestamps, after fixing the report-viewer crash above. Zero console errors on final pass. `task verify` — the full gate, including a `golangci-lint` `unparam` finding (a dead error return `nolint` had been papering over) that got fixed rather than suppressed — passes clean.
+
+#### What's left, honestly
+
+The Phase 9 report-metadata gap above is the big one. No official CSAF 2.0 JSON Schema validation (a prior, already-documented, deliberate scope decision in `libs/go-shared/csaf` — not new to this session). The stray Python `vex.py`. No Playwright/axe test coverage for any of the three new frontend surfaces. `libs/py-shared`'s own normalizer pipeline still has no VEX integration of its own (the Go path is what's live).
+
+### 2026-08-25 (l) — Milestone 5 finishes: AIBOM works end to end, including its own container engine
+
+**Goal:** finish the sidebar reorg plan's last milestone — AIBOM, blocked from the start by a real contradiction (i)'s report flagged: `ai-bom`'s adapter needs a sandboxed container, its manifest says `pip:`. User explicitly approved containerizing it (locally-built image, not external hosting) before any work started. Same shape as (k): one workstream I did myself (Python normalizer write path, Go backend/report/frontend), one dispatched agent (engine containerization + a concrete enrichment Fetcher), then my own integration/verification pass — which is exactly where the gateway-prefix bug and a stale-NULL bug turned up, the same pattern (k) established.
+
+#### Engine containerization — a genuinely new category of artifact for this repo
+
+Every existing sandboxed engine (syft, trivy, cbomkit-theia, ...) is a third-party image pulled from a registry and pinned by digest. `ai-bom` publishes none — only a pip package — so `deploy/docker/engines/Dockerfile.ai-bom` is the first *locally-built* engine image in this codebase: `python:3.12-slim`, the full 23-package dependency closure hash-pinned in `ai-bom-requirements.lock.txt` and verified with `pip install --require-hashes --network none` inside the same base image, tagged `axebom/ai-bom-engine:dev` (honestly tag-pinned — there is no upstream digest for a locally-built image to pin against). A research pass before any code was written found the sandbox/resolver stack needed **zero changes** to support this: `ManifestResolver` builds its docker reference from `image`+`image_tag`/`image_digest` with nothing registry-specific, and `SandboxedAdapter.classify()` already has a branch for "no digest resolved, probably built locally." New: the Dockerfile itself, one manifest edit (`pip:` → `container:`), and `task osint:build-ai-bom` wired as a dependency of `task osint:pull`.
+
+**A bug nobody had ever caught, because the engine had never actually run**: `AIBomAdapter.build_argv()` passed `--output -`, following the Unix "`-` means stdout" convention — `ai-bom==3.1.0` does not honor it; `--output` is a literal file path (`Path(path).write_text(...)`, no special case), so every invocation would have written a file named `-` into a sandbox with no writable mount, left stdout empty, and failed `ENGINE_OUTPUT_UNPARSEABLE` on every single scan. Fixed by omitting `--output` entirely — the CLI prints CycloneDX straight to stdout for any non-`table` format. Verified twice: once inside the dispatched agent's own sandbox-bridge run, and again by me directly (`docker run --user 65534:65534 --read-only --network none ... scan /src --format cyclonedx --quiet` against a LangChain+OpenAI fixture directory) — real container, real sandbox posture, real CycloneDX output, LangChain correctly detected.
+
+#### A concrete `aibom-generator` enrichment Fetcher — and two more real upstream bugs
+
+`workers/aibom/adapters/aibom_generator.py`'s `Fetcher` protocol had no implementation before this session (`runner.py`'s own docstring said so explicitly). Built `workers/aibom/adapters/aibom_generator_fetch.py` — a subprocess call to `python -m src.cli`, run outside the sandbox as a trusted dependency of the worker's own environment (a network call to a public API over a bare model id, never over customer code, matching CLAUDE.md invariant 7's actual boundary rather than its letter). Installing and actually running the real package (`owasp-aibom-generator==1.0.2`, HEAD of `main` since it ships no tagged release) found two bugs no unit test against synthetic data would ever have caught:
+
+1. **It fabricates a plausible component for a model that does not exist.** `AIBOMService.generate_aibom()` never checks the Hugging Face repo resolves before synthesizing one from guessed defaults — exit 0, "Successfully generated," nothing in the output shape distinguishes it from a real card. Guarded by calling `huggingface_hub.HfApi().model_info()` (the same SDK aibom-generator itself uses) *before* invoking it at all.
+2. **No revision-pinning parameter exists anywhere** — not the CLI, not `CLIController`, not `AIBOMService`, checked against the real 1.0.2 source at all three layers. `enrich_models`'s own `ModelCache` already documents why serving the wrong revision's card under the requested revision's name is a compliance problem, not a convenience one; a non-default revision now raises a specific `RevisionNotSupportedError` rather than being silently served from `main`.
+
+Captured a real response (`distilbert-base-uncased`) as a pinned fixture rather than only testing synthetically. **Not wired into a live scan path** — `build_canonical_aibom` already accepts a `cards` argument, but nothing calls `enrich_models` from a real trigger yet, and doing so raises genuine open questions (when relative to the job lifecycle, whether the HTTP response needs to become a stored raw artifact for invariant 10, retry semantics) documented in `runner.py` rather than guessed at. Also found, by the same real run, and left as a stated gap rather than patched (out of this task's scope): `parse_model_card._developer()` reads `author`/`publisher`; real output uses `authors`/`supplier`, so `developer` comes back empty against genuine cards today.
+
+#### Python normalizer write path — `workers/aibom/normalize/pipeline.py`, extending `bulk.py`
+
+New `build_canonical_aibom(discovery, cards, ...)`, the AIBOM equivalent of CBOM's `build_canonical_cbom` — merge (already built in `../merge.py`, long before this pipeline existed), normalize each model (`.ai.normalize_model`, also pre-existing), link dependencies against the SBOM, score coverage. `bulk.py` gained `_ai_models_batch`/`_ai_datasets_batch`/`_ai_model_dependencies_batch`, mirroring the crypto-assets precedent but needing a client-minted surrogate id (uuid5, same replayability reasoning as `_component_id`) since — unlike a crypto asset — an AI model's row IS referenced by two sibling tables in the same transaction. Building the end-to-end pipeline test (reusing `test_aibom.py`'s own LangChain/HF fixtures rather than inventing parallel ones) surfaced a real integration bug of my own: `.ai.link_dependencies` needs the discovery-wide `frameworks` list attached to each model before it can report anything — `test_aibom.py`'s own two existing tests already did this by hand inline, but nothing did it inside the pipeline function itself, so a first pass produced empty dependencies and no diagnostic for every model, silently. Fixed by having `build_canonical_aibom` do that join once, from the full `extract_discovery()` return value, rather than a bare model list. Also fixed in passing: `docs/01-DATA-MODEL.md` said `ai_model_dependencies (ai_model_id, component_id)`; the actual migration column is `component_key`, a plain text field, not a foreign key — doc corrected to match the migration (ground truth), matching `crypto_assets.component_key`'s identical situation.
+
+#### Go backend, report rendering, frontend
+
+New `services/project/internal/aibom` package — deliberately NOT a full BOM-type port like `qbom`/`hbom`'s, because AIBOM is mostly Python-discovered; this package covers only the four Table 10 elements no tool can ever report. New `store.AIModel`/`ai_models.go` (list + a **targeted UPDATE**, not a new normalization version — a real, documented, narrower-than-invariant-10 scope decision: an AI model's row is 16-of-19-columns Python-owned, so treating a 4-field edit like QBOM's full-document versioned save would mean cloning an entire model and its children to touch four columns). New `GET /v1/projects/{id}/ai-models`, `GET /v1/aibom/{projectId}/form`, `POST /v1/projects/{id}/ai-models/{modelId}/fields`; new `ResourceAIModel` in the authz matrix. **A store-level test caught a real bug before it shipped**: the update path was writing `NULL` for an empty user-field submission instead of the explicit `not-provided` sentinel Python's normalizer always writes for the exact same case — the identical "declared vs. silently omitted" failure CLAUDE.md invariant 3 exists to prevent, just found on the Go side of a boundary CBOM's certificate bug found on the Python side. Fixed with `aibom.OrNotProvided`, mirroring Python's `_empty_for` precisely.
+
+Report rendering gets its own `render/aibom.go` — AI models are NOT run through the generic `componentSheet`/`componentPages` (an AI model has no PURL, dependency depth, or ecosystem for those SBOM-shaped columns to mean anything), the identical reasoning CBOM's crypto assets already established. New XLSX sheets (AI Models, AI Model Datasets, AI Model Dependencies), a PDF page, and a JSON bundle section, all covered by new tests.
+
+Frontend: new `/projects/:id/ai-models` tab and page — a model inventory table (clearly labeling `risk_score`/`owasp_llm_top10` as AxeBOM extensions, never CERT-In elements) with inline per-model editing for the four user-supplied fields. `BomTypeHome.tsx`'s AIBOM section now links to a real page — the sidebar's last "detail view not yet available" placeholder is gone.
+
+#### Two bugs my own integration pass caught, neither from either workstream in isolation
+
+- **The gateway had no `/v1/aibom` proxy prefix** — the exact same class of gap (i)'s session hit for `/v1/qbom` (a route that works against the project service directly but 404s through the real ingress because nobody added the prefix). Fixed in `services/gateway/internal/proxy/proxy.go`.
+- The Go `NULL`-vs-`not-provided` bug above, caught only because I wrote a test asserting the *raw column value* rather than just `field_status`.
+
+#### Scoped out, not half-built
+
+A standards-conformant CycloneDX ML-BOM export (`services/report/internal/export/mlbom.go`, an explicit Phase-12 deliverable) does not exist. `protobom` — the OpenSSF library this package's own docstring says exists specifically "so we do not hand-roll either format" — has no support for CycloneDX's ML-BOM/`modelCard` extension anywhere in its `sbom.Node` type. Building a real one means either hand-rolling CycloneDX JSON for this one case (violating that package's stated design principle) or extending protobom upstream; flagged here as a genuine architectural decision rather than attempted unilaterally. AIBOM's data is not unexportable — it has full XLSX/PDF/JSON coverage via this session's own report work — only a strict industry-standard ML-BOM envelope is missing.
+
+#### Verified live
+
+Rebuilt `project`/`report`/`gateway`/`frontend` containers with all of the above. Seeded a real model (Llama-3-8B, one dataset, one SBOM dependency reference) directly into Postgres for the seeded `payments-api` project and drove the actual browser through a scripted Playwright login: the AI Models tab correctly lists the model with real datasets/dependencies counts and clearly-labeled extension columns; opening the edit form, typing a real Intended Usage value, and saving round-tripped through gateway → project service → Postgres and back — confirmed both via a re-render of the page and directly in the database. Zero console errors. `task verify` — the full gate, including the profile-guardrails check and the report package's static schema-agreement checker (which validates every SQL column this session added against the live migrations without needing a database connection) — passes clean.
+
+#### What's left, honestly
+
+No live NATS trigger for the AIBOM write path (same deliberate boundary as SBOM/CBOM, see (e)). Enrichment (`aibom-generator`) is proven correct but not wired into any real scan trigger. No `ai-langchain` golden-corpus fixture with pinned `raw/`/`expected/` files (real engine output has been verified live and captured as evidence, just not assembled into that shape yet). `parse_model_card._developer()`'s field-name mismatch against real aibom-generator output. The ML-BOM export gap above. This closes every milestone in the original sidebar-reorg plan.
+
+### 2026-08-24 (k) — Milestone 4 finishes: CBOM writes for real, QBOM gets a form, both get a live UI
+
+**Goal:** close the two gaps (j) left explicit — the normalizer WRITE path and the frontend detail views — so a CBOM scan and a QBOM form produce something a person can actually look at, not just a downloadable report. Three parallel workstreams (two Go, one Python), plus my own follow-up fixing a real bug the first live-engine run surfaced and a live-worker test flake `task verify` caught.
+
+#### CBOM normalizer write path — `workers/cbom/normalize/pipeline.py`, `bulk.py`
+
+New `build_canonical_cbom(raw_assets)` — the CBOM equivalent of the SBOM pipeline's `normalize()`, deliberately two stages instead of seven (no merge/graph/alias-closure: one engine, no dependency edges, no vulnerability-alias concept for a certificate). `bulk.py`'s `plan()` now also produces a `CopyBatch` for `normalize.crypto_assets` — no client-minted id needed, unlike components, since nothing else in the write references a crypto asset's row. `field_status` is computed for real (not skipped): `key_state`'s `"unknown"` sentinel is a real non-substantive-but-non-NULL case the profile's own field list has to account for, or a reader inferring coverage from column nullness alone would overcount it. Same scope boundary as (e)'s SBOM precedent, extended deliberately: proven correct and executable against live Postgres via tests (`test_bulk.py`, `test_writer.py`, new `test_pipeline.py`), **not wired into `workers/cbom/runner.py`'s live NATS path** — that's still a live-credential/trigger decision nobody has been asked to make for CBOM specifically, same as SBOM's.
+
+#### A real bug, found only by running against genuine `cbomkit-theia` output
+
+Built a real fixture — `openssl req -x509 -newkey rsa:2048` against a fresh key, run through the pinned `ghcr.io/cbomkit/cbomkit-theia:1.1.2` image directly — and found what no hand-built CycloneDX fixture had ever exercised: `crypto.py:analyse()`'s certificate handling ("the interesting primitive is what SIGNED it") tries to pattern-match the certificate's raw `signatureAlgorithmRef` as if it were an algorithm name. Real engine output sets that field to the engine's own opaque `bom-ref` UUID, not a readable string — `test_crypto_normalize.py`'s existing fixture happened to use a readable fake ref (`"crypto/algorithm/sha256-rsa"`) that accidentally matched the regex, hiding this completely. Against the real fixture: an RSA-2048-signed, SHA256-RSA certificate came back `quantum_vulnerable: false`, `deprecation_status: "current"` — a false negative in exactly the document this whole phase exists to get right. Fixed with a new document-level pass, `_resolve_certificate_analysis` (`pipeline.py`, runs after `normalize_all`, before the ref fields get rewritten to display names): looks up the actual sibling asset the raw ref points to and copies its already-correct verdict onto the certificate, rather than re-deriving one from a string that was never meant to be parsed as a name. Also fixed, found by the same live run: `signature_algo_ref`/`subject_public_key_ref` now show the referenced asset's name (`"SHA256-RSA"`, `"RSA-2048"`) instead of the raw UUID. Along the way: `_bits_from_name` (`axebom_shared/crypto/quantum_rules.py`) had no success-path `return` at all — every symmetric primitive with a sized name (`AES-128`, `AES-256`, ...) was falling through to "no key size reported" and skipping its Grover sizing note; three pre-existing tests were failing before this session touched the file, caught only because `ruff check` flagged the resulting unreachable `return int(match.group(1))` as referencing an undefined name after a first attempt landed it in the wrong function. Committed as `fixtures/crypto-mixed/` (raw pinned output + hand-reviewed `expected/` + a README answering why each value is correct) — no `TestGolden` Go harness reads it yet, that's still open.
+
+#### QBOM device metadata — Go port, `services/project/internal/qbom`
+
+Same precedent as HBOM: no Go→Python bridge exists anywhere in this codebase, so `workers/qbom/metadata.py`'s `normalize_device`/`form_fields`/`FORM_DISCLOSURE` are ported field-for-field into Go, reading `QBOMFields` from the already-generated `libs/go-shared/model/generated_certin.go` rather than hand-typing the eleven elements. New `GET /v1/qbom/{projectId}/form`, `GET /v1/qbom/{projectId}`, `POST /v1/qbom/{projectId}/device` (new `bom_documents` version each save, never mutated in place); `/v1/qbom` added to the gateway's project-service prefix list; new `authz.ResourceQuantumDevice` (Viewer read, Analyst write — same shape as `ResourceHardware`, kept as a distinct resource since the two forms serve different CERT-In tables). `crypto_asset_refs` resolves against the project's current CBOM via the same `resolveCurrentBOMDocument` helper (added in (i)) that SBOM's dependencies endpoint uses. `finding_refs` is always empty and says so in a comment — there is no crypto-asset-to-vulnerability matching concept anywhere in this codebase to derive it from.
+
+**Known limitation, not fixed this session:** refs are resolved only at *save* time, baked into the persisted `field_status`. A project's first, never-saved QBOM load always shows "derived from CBOM discovery, which found nothing to reference" — even when real CBOM data already exists — because `GetQuantumDevice`'s not-yet-saved path calls `NormalizeDevice` with `nil` refs unconditionally rather than resolving live. Confirmed live: seeded four real crypto assets for `payments-api`, and the QBOM tab's Quantum Readiness summary (which reads crypto assets directly) correctly showed them, while the device form's gap list below it still said "found nothing" until a save. A live-resolve-on-read option exists and was considered; the agent that built this chose persisted-and-versioned for consistency with invariant 10 and documented the trade-off rather than picking silently.
+
+#### Interactive reads — `GET /v1/projects/{id}/crypto-assets`
+
+Not built by either parallel workstream (one built the write path, the other built downloadable-report rendering) — the sidebar's CBOM section needed a live, interactive read the way SBOM's Dependencies screen already has one, and nothing produced it. Added directly: `services/project/internal/store/crypto.go` (`ListCryptoAssets`, same `resolveCurrentBOMDocument` + no-cross-schema-SQL-JOIN pattern as `dependencies.go`), new `authz.ResourceCryptoAsset` (kept distinct from `ResourceDependency` — different CERT-In table, different discovery tool), route guarded at Viewer. `store.CryptoAsset` carries its own `json` tags directly rather than a separate handler DTO — deliberate, not an oversight: every field maps straight through with no renaming or transform, so a DTO here would be a copy with no logic in it.
+
+#### Frontend — `CryptoInventory.tsx`, `QuantumDevice.tsx`
+
+New project tabs, "Crypto" and "Quantum", alongside Dependencies/Findings/Hardware. `CryptoInventory.tsx` renders four separate tables (Algorithms/Keys/Protocols/Certificates), each only that type's own columns, plus a Quantum Readiness pill per asset — the same type-discrimination discipline `CBOMSheets` already enforces for the downloadable workbook, now live in the browser. `QuantumDevice.tsx` joins the CBOM-derived readiness summary (grouped by the four `quantum_readiness_group` buckets, read straight off `useCryptoAssets` — no re-derivation) with the eleven-element Table 8 form, rendering every field label from `GET /v1/qbom/{id}/form` rather than a hardcoded list. `BomTypeHome.tsx`'s CBOM/QBOM sections now link to real pages instead of "detail view not yet available" — only AIBOM still shows that state. `task profile guardrails` caught a real invariant-2 violation before this landed: the gap-count copy read "of 11 elements", a literal, where it now reads `form.data?.fields.length`.
+
+#### Two things `task verify` caught that were not code bugs
+
+- **A test-isolation flake in `services/scan-orchestrator`, unrelated to any of the above.** `LatestEngineRunsForProject` (added in (i)) asserted a freshly-created scan's engine status was `"queued"` — true in isolation, false under `go test -race`, because this environment's DB-backed tests run against the SAME live Postgres/NATS a real `task dev` stack's `sbom-worker` container also consumes from, and that live worker can advance a test's scan past `queued` before the test's own assertion runs. Fixed two ways: gave the test file its own dedicated project id (it had been sharing `projectA` with dozens of unrelated tests, which was ALSO capable of producing this exact symptom and is worth knowing about for any future test in this file that queries "the most recent scan" rather than one it holds by id), and stopped asserting a specific transient status in favor of asserting the row is real and correctly associated with the right scan.
+- **The build cache filled the disk to 100% mid-session** (`docker builder prune -a` reclaimed 66.69 GB of a 96 GB volume) from the number of full-image rebuilds this session's iterative Docker-based verification required. Not a code defect, but worth recording: a long session that rebuilds images repeatedly on a modest disk needs this cleanup as routine housekeeping, not a break-glass response to a failure.
+
+#### Verified live, against rebuilt `project`/`report`/`scan-orchestrator`/`gateway`/`frontend` containers
+
+Seeded real crypto-asset data (the same RSA/SHA256/SHA256-RSA/RSA-2048/certificate chain the fixture pins) directly into Postgres for the seeded `payments-api` project and screenshotted both new pages through a scripted Playwright login: the Crypto tab correctly splits into Algorithms/Keys/Certificates sub-tables (no Protocols row seeded) with per-row Quantum Readiness pills in the right colors; the Quantum tab's readiness summary correctly grouped the same data into "2 assets — RSA, example.com" (vulnerable) and "1 asset — SHA256" (Grover note); the device form rendered all eleven Table 8 fields with the disclosure text and a full gap list. Zero browser console errors once gateway/project/report/scan-orchestrator/frontend were all rebuilt with this session's code (the QBOM form 404'd until the gateway specifically was rebuilt — its `/v1/qbom` prefix addition from earlier in this milestone had never actually been deployed).
+
+`task verify` — the full gate, including the profile-guardrails literal-count check that caught the QuantumDevice.tsx bug above — passes clean end to end with everything in this entry included.
+
+#### What Milestone 4 still owes
+
+CBOM/QBOM's write path is proven but not live-triggered (same boundary as SBOM, see (e)) — nothing populates `normalize.crypto_assets` from an actual running scan yet, only from tests and this session's manual seed. `crypto-mixed`'s `expected/` files have no automated golden-diff harness. QBOM's ref-resolution-only-at-save-time gap above. Milestone 5 (AIBOM) has not been started at all — the `ai-bom` manifest/adapter contradiction from (i)'s report still blocks it before any of this session's patterns can be repeated there.
+
+### 2026-08-24 (j) — CBOM and QBOM stop being refused in `services/report`
+
+**Goal:** Milestone 4 (from (i), below) named three CBOM/QBOM gaps: no normalizer write path, no report sections, no frontend detail views. This session is the report-rendering slice only — `services/report`'s own refusal, and wiring it to read the two tables once another workstream writes them. The normalizer write path (`normalize.crypto_assets`/`normalize.quantum_components`) and the frontend detail views are explicitly out of scope, owned elsewhere.
+
+#### The refusal was in the wrong place
+
+`render.FieldsFor` returning an error for `model.BOMTypeCBOM` was always correct — CERT-In Table 9 genuinely has no single flat field list, Algorithms/Keys/Protocols/Certificates each have their own (8/7/5/10 fields). The bug was `Sheets`/`WriteJSON`/`WritePDF` all calling `FieldsFor` *first* and returning that error as a reason to refuse the *whole* report, before a Summary sheet or a coverage number could render at all. `services/report/internal/service/service.go`'s `Queue` had the same refusal one layer up, rejecting a CBOM request before a job was even created. All four call sites now branch on `BOMType == CBOM` *before* calling `FieldsFor`, the same way `Sheets` already special-cased HBOM — `FieldsFor` itself is untouched and still errors for CBOM (`TestACBOMHasNoFlatFieldSet` still passes unmodified).
+
+#### New: `render.CryptoAsset`, `render.QuantumDevice`, `CBOMSheets`, `QBOMSheets`
+
+- **`cbom.go`** — `CryptoAsset` mirrors `workers/cbom/normalize/crypto.py`'s `TYPE_COLUMNS` (every column for every type, empty where inapplicable — same shape as the `normalize.crypto_assets` table) plus the 0005 analysis columns, including `QuantumReadinessGroup`. `CBOMSheets(b BOM)` builds `Crypto Field Coverage` (the `fieldCoverageSheet` replacement, one row per field per type, sourced from the SAME `b.Coverage.Fields` breakdown the normalizer already wrote — never recomputed) plus four inventory sheets, `Crypto - Algorithms/Keys/Protocols/Certificates`, each showing *only* that type's columns. `TestACertificateNeverShowsAKeySizeField` pins the literal invariant-5 failure mode: the Certificates sheet has no `key_size` column at all, not a blank one.
+- **`qbom.go`** — `QuantumDevice` holds Table 8's nine free-form elements (`normalize.quantum_components` has no columns for elements 5/10, the two CBOM-asset/finding reference lists, so those aren't modeled here — see the struct's own comment). Went with a **dedicated** `quantumDeviceSheet`/`Quantum Device` sheet rather than routing through the generic `componentSheet` mechanism: `componentSheet`'s identity columns (PURL, Depth, Orphan, Scope, Detected By) describe a position in a dependency tree and mean nothing for one piece of hardware. `fieldCoverageSheet` DOES still run generically for QBOM in `Sheets` — Table 8 is genuinely one flat list, `FieldsFor(QBOM)` already succeeded before this session — only the per-row component shape was wrong. `quantumReadinessSheet` groups `CryptoAssets` by the four buckets `migrations/normalize/0005`'s `quantum_readiness_group` column already carries (computed once in Python by `axebom_shared.crypto.quantum_rules.readiness_group`); `readinessNote` ports `workers/qbom/derive.py`'s `readiness_note()` prose in counts rather than slices — no percentage anywhere, per that function's own docstring on why one would be invented.
+- **`Sheets`** now branches three ways: CBOM (skip `fieldCoverageSheet`/`componentSheet` entirely, `CBOMSheets` instead), QBOM (keep `fieldCoverageSheet`, replace `componentSheet` with `QBOMSheets`), everything else (unchanged). The CBOM type-discrimination note and the QBOM form-disclosure note are folded into the Notes sheet on a copy of the BOM, not a mutation of the caller's value.
+
+#### Data loading — `bomsource.go`
+
+`loadCryptoAssets`/`loadQuantumDevice` follow `loadComponents`'s exact template: one `normalize`-schema query, scoped by `bom_document_id`, no cross-schema join. Wired unconditionally into `LoadBOM`, matching every other load in that function — the tables are simply empty for a non-CBOM/QBOM document, and gating on `bomType` would duplicate a type list `Sheets` already owns. `formatDateTime` (RFC3339, literal Z) was added alongside the existing date-only `formatDate`, because a certificate's `not_valid_before`/`not_valid_after` are CERT-In `datetime` fields and `formatDate`'s truncation would silently drop the time of day. `TestEveryColumnThisPackageQueriesExists` (the static schema checker) initially failed on a false positive: a doc-comment that wrapped `normalize.crypto_assets` across a line break made the checker's word-boundary regex read the fragment before the newline as the whole table name (`normalize.crypto_`). Fixed by not hyphenating a qualified table name across a comment line wrap — a real gap in what that checker can see, not fixed here (it only reads `.go` source, and a wrapped identifier in prose is not a bug in the SQL itself), but worth knowing if it fires again.
+
+#### JSON and PDF
+
+`WriteJSON`'s CBOM refusal used `FieldsFor` purely as a "is this a known BOM type" check; replaced with `BOMType.Valid()`, which accepts CBOM and still rejects a genuinely unknown type. `BundleCanonical` gained `CryptoAssets`/`QuantumDevice` (both `omitempty`), so the one uncapped export format can carry what SPDX/CycloneDX cannot express at all. `WritePDF` never calls `FieldsFor` for a CBOM (`r.fields` stays nil; nothing reads it on that path) and swaps `coveragePage`/`componentPages` for `cryptoCoveragePage`/`cryptoInventoryPage`; QBOM gets an extra `quantumPage`. **Scope decision, stated rather than silently chosen:** the PDF does NOT get full per-asset-type field tables — `cryptoCoveragePage` shows per-type counts (total / quantum-vulnerable / deprecated) and points to the XLSX/JSON `Crypto Field Coverage` sheet for the real per-field breakdown; `cryptoInventoryPage` lists name/type/readiness only, never a type's own fields (which would risk exactly the column-conflation invariant 5 forbids). `estimatePages` now counts `CryptoAssets` alongside `Components` so a huge CBOM is refused early, same as a huge SBOM. `TestACBOMPDFRendersWithACryptoSummary`/`TestACBOMBundleRendersAndCarriesCryptoAssets` replace the two tests (`TestACBOMPDFIsRefused`, `TestACBOMBundleIsRefused`) that pinned the old, now-wrong behaviour.
+
+#### Not touched, and why
+
+`services/project`, `services/gateway`, `workers/`, `libs/py-shared` — explicitly out of scope per the task brief; those own the normalizer write path and the QBOM device-metadata REST route. `render.BOM.Hardware` (HBOM) still has no corresponding loader in `bomsource.go` — a pre-existing gap, unrelated to this session, left alone. `HBOMNotes` is still never wired into `Sheets`/`notesSheet` — also pre-existing, also left alone (the new CBOM/QBOM notes ARE wired in, since that path was being built fresh this session and repeating a known gap would have been a choice, not an oversight).
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `go build ./...` | clean |
+| `go vet ./...` | clean |
+| `go test ./services/report/...` | all packages pass, including the pre-existing `TestEveryColumnThisPackageQueriesExists` schema check |
+| `go test ./...` (whole repo) | no failures (only pre-existing "no test files" packages) |
+| `golangci-lint run ./services/report/...` | 0 issues |
+| `gofmt -l` | clean |
+
+No live stack, no Playwright — this is Go-only plumbing with no route or frontend surface yet; the sidebar's `BomTypeHome.tsx` still shows "detail view not yet available" for CBOM/QBOM, unchanged by this session.
+
+### 2026-08-24 (i) — the sidebar reorganises around the five BOM types; two dead endpoints and a dead scan family get fixed
+
+**Goal:** the user asked for a sidebar section per BOM type (SBOM/CBOM/QBOM/AIBOM/HBOM), each "managed separately" with its OSINT engines "integrated and linked," and configurable. Scoped via three clarifying questions into: a navigational reorg (not a data-model split — `project.project_classifications` and the single `bom_type` discriminator are unchanged), full CBOM/AIBOM engine-integration completion, and real per-tenant engine configuration. Given the scope, work was sequenced into milestones; this session completed Milestone 0 (foundation fixes), Milestone 1 (Engine Coverage panel) and Milestone 2 (configurable tool management), and shipped Milestone 3's sidebar + home pages wired to what's real today. Milestones 4/5 (finishing CBOM/QBOM and AIBOM engine integration) are follow-up work, not done this session — see "Not yet built" below.
+
+#### Milestone 0 — three real bugs, not just gaps
+
+- **The orchestrator was publishing scan jobs nothing consumes.** `Registry.Resolve` never checked the `Derived`/`RequiresImport` flags it already carried, so `POST /v1/scans` with `families:["hbom"]` or `["qbom"]` published `scan.job.hbom`/`scan.job.qbom` to subjects with no worker (HBOM is import-only, QBOM is derived from CBOM — neither has a `runner.py`, by design). This was already named in the 2026-08-23 (c) entry below and left unfixed. Now `Orchestrator.CreateScan` rejects either family outright, before anything is persisted or published, with a new error code `SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE` naming the redirect (HBOM → `/v1/hbom/*` import; QBOM → automatic once a CBOM report exists). `frontend/lib/wizard.ts` gained `scannableBomTypes()` and a matching client-side block so Generate never sends a family the server will 422 on; `draft.bomTypes` (unfiltered) still drives which reports get requested, since a report can honestly be requested without this run having scanned for it.
+- **`/v1/hbom/*` had no handler at all**, despite the frontend already calling it. Ported `workers/hbom/{model,csv_import,providers}.py` field-for-field into a new `services/project/internal/hbom` package (no Go→Python bridge exists anywhere in this codebase, and none was warranted for import-only logic) — cross-checked against the Python test suite and `fixtures/hbom-nested/parts.csv`. HBOM documents reuse the *project id* as `normalize.bom_documents.scan_id`, a deliberate, commented use of that column's documented lack of an FK, since HBOM has no real scan to key off. New `authz.ResourceHardware` (`ActionRead`: Viewer, `ActionCreate`: Analyst).
+- **`GET /v1/projects/{id}/dependencies` and `/findings` had no handler either** — SBOM's existing Dependencies/Findings screens were calling dead routes. Implemented in `services/project`, following `scan-orchestrator/internal/orchestr/findings.go`'s cross-schema-without-a-cross-schema-JOIN pattern (two queries, joined in Go, per invariant 11) via a new `resolveCurrentBOMDocument` helper generalized from it and `report/internal/store/bomsource.go`.
+- Collapsed the duplicate BOM-type metadata: `frontend/lib/bomTypes.ts` (used only by `ProjectWizard.tsx`) is deleted; everything now reads `design/theme.ts`'s `BOM_TYPES`/`bomMeta`.
+- Corrected this document's own stale claim (below, Phase 11 section) that `cbomkit-theia` "has never run" — it ran once, end to end, on session 2026-08-23 (b), against a fixture with no crypto content.
+
+#### Milestone 1 — Engine Coverage panel
+
+`GET /v1/scans/engines` gained a `mode` field per engine (`container` / `pip` / `internal` — a new static field on `policy.Engine`, populated for all 13 registered engines) and an optional `?project_id=` that adds `last_run` (status, scan id, timestamps) from a new `Store.LatestEngineRunsForProject` — the project's most recent invocation of each engine, across every scan, not just its latest. Frontend `components/EngineCoveragePanel.tsx` renders this per BOM type, with "never run" as its own honest state distinct from "ran and failed" (invariant 12).
+
+#### Milestone 2 — configurable tool management
+
+`scan.engine_policy` (migrated in Phase 6, documented, **never read by anything** — flagged as Phase-7 debt in the 2026-08-23 (c) entry below) is now wired end to end: new `policy.Store` (`Get`/`Upsert`/`Delete`/`ListForTenant`/`OverridesForTenant`), loaded in `handler.Create` and passed as `CreateScanInput.EngineOverrides` — a parameter that existed since Phase 6 and nothing ever populated. New `authz.ActionConfigureEngines` (Admin), mirroring `ActionEnableRiskyResolution`'s precedent of a named action for anything that changes what code executes. New endpoints `GET/PUT/DELETE /v1/scans/engine-policy[/{family}]`. New frontend: `frontend/lib/auth.ts` exports `roleAtLeast`; `useAuth.ts` gained `useRole()` — the first UI consumer of `activeOrg.role` for gating a control, not just displaying it. `routes/settings/Engines.tsx` is the first AxeBOM-native admin settings screen (org/member management is otherwise entirely ZITADEL's).
+
+One correction made mid-implementation: the `scan.engine_policy` migration's own comment says a tenant "may read the global row and its own" — but `enable_tenant_rls_nullable`'s actual `USING` clause (shared by every nullable-tenant table, including `auth.audit_log`) has no `OR tenant_id IS NULL`; only `WITH CHECK` does. So a tenant-scoped connection can never read the global default row — same shape as the already-documented `auth.audit_log` limitation. `policy.Store` only ever touches tenant-scoped rows; reading the global default is out of scope, same as it is for audit_log (a platform-admin surface, not before Phase 16).
+
+#### Milestone 3 (started) — the sidebar
+
+`components/Sidebar.tsx`'s flat 5-item nav is now three groups in one `<nav>`: Projects; a labelled BOM-type group (SBOM/CBOM/QBOM/AIBOM/HBOM, glyph + `data-bom` token from `design/theme.ts`, each with its own active-state accent in `app.css`); Generate/Scheduled/Reports/Settings. Five new routes (`/sbom`, `/cbom`, `/qbom`, `/aibom`, `/hbom`) share one lazy-loaded `routes/boms/BomTypeHome.tsx`: projects classified for that type, the Engine Coverage panel, a link into `/settings/engines` scoped to that family, and — for SBOM/HBOM only — a real link into the existing Dependencies/Hardware views; CBOM/QBOM/AIBOM show "detail view not yet available" rather than a dead link or an empty table that would misread as "nothing found."
+
+Verified live against the rebuilt `project`/`scan-orchestrator` containers (screenshots taken via a scripted Playwright login as `alice@acme.test`, not manual): sidebar renders all three groups with correct per-type accents and glyphs; CBOM home page shows `payments-api` with "detail view not yet available" and an Engine Coverage table correctly reading `cbomkit`/`cbomkit-theia` as `sandboxed container` (was `unknown` before the container rebuild — confirms the `mode` field is live, not just compiling); `/settings/engines` shows all five BOM types with every registered engine pre-checked and `qbom-derive` correctly labelled `derived`; `/projects/{id}/dependencies` now returns an honest "no normalized scan results yet" instead of a dead route; `/hbom` shows the correct empty state and engine coverage (`hbom-csv`, `import only`, `AxeBOM-native, not a scanner`). Zero browser console errors on any of these once both rebuilt containers were live.
+
+`task verify` — fmt, profile lint/guardrails/evidence, docs lint, golangci-lint, ruff, eslint (`--max-warnings 0`), the full Go suite with `-race`, pytest, both builds — passes clean end to end with all of the above included.
+
+#### Not yet built (Milestones 4/5, follow-up)
+
+- CBOM/QBOM detail views (crypto inventory, quantum readiness, QBOM device form) — still no report sections; `render.FieldsFor` still refuses CBOM; no normalizer write path for `normalize.crypto_assets`/`normalize.quantum_components`. **Superseded in part by the 2026-08-24 (j) session**: `services/report` now renders both (FieldsFor itself still correctly refuses a flat CBOM field list; `Sheets`/`WriteJSON`/`WritePDF` no longer treat that as a reason to refuse the report). The normalizer write path and the frontend detail views are still unbuilt.
+- AIBOM detail views, and the `ai-bom` manifest/adapter contradiction (`pip:` in the manifest, `SandboxedAdapter` in the code — cannot resolve as shipped) — unresolved, needs a decision (containerize vs. a genuinely unsandboxed path) before AIBOM can run at all.
+- `engine_policy` is tenant-scoped, not project-scoped, by design for this session — a real per-project override would need a schema change.
+- HBOM's Go port doesn't expose `product_details`/`manufacturing_date` (frontend contract is a subset of the full 24-field model); `manufacturing_date` parses `YYYY-MM-DD` and drops what doesn't parse, since the Python model treats it as free text but the column is `date`.
+
+### 2026-08-24 (h) — self-service organisation signup, and the ZITADEL Host-header trap catches a second victim
+
+**Goal:** verify the ZITADEL integration end to end and, since self-registration
+is deliberately disabled ((a)'s session), give a real visitor a working way to
+arrive — a "create your organisation" form in AxeBOM's own frontend that
+provisions a ZITADEL org + Owner before handing them to the hosted login,
+rather than asking an operator to run `axebom iam bootstrap` by hand for every
+new signup. Also: reframe the pre-auth screens with the glassmorphism
+treatment `design/app.css` already had tokens for but nothing used at full
+strength, while leaving ZITADEL's own hosted login UI unforked — a deliberate,
+user-confirmed choice, not an oversight.
+
+#### `POST /v1/auth/signup` — `services/gateway/internal/signup`, `iam.Client.Signup`
+
+Creates the organisation, grants it the AxeBOM project, and creates its first
+user as Owner — the three steps a self-registered ZITADEL account never gets,
+which is exactly why `Errors.User.GrantRequired` was the failure mode (a)
+found. **Not** `Bootstrap`'s idempotent find-or-create: `iam.Signup` fails
+closed on a name or email collision (`iam.ErrOrgNameTaken` /
+`iam.ErrEmailTaken`, wired to new codes `AUTH_ORG_NAME_TAKEN` /
+`AUTH_EMAIL_TAKEN`, both 409) rather than silently attaching a stranger to an
+existing tenant as its Owner. Verified live via curl for all four paths: 201
+create, 409×2, 422 (ZITADEL's own password-policy rejection surfaced, not
+duplicated). The Postgres side needs no code at all — `auth.identity_for`
+((h)'s predecessor, migrations/auth/0003) already JIT-provisions
+`auth.tenants`/`auth.users` on first sign-in, so the handler only ever talks
+to ZITADEL.
+
+⚠ **The gateway now optionally holds the SAME credential `axebom iam
+bootstrap` does.** Creating a ZITADEL organisation is instance-level; there is
+no narrower permission to grant instead. `config.OIDC.ProvisioningKeyPath`
+(`ZITADEL_BOOTSTRAP_KEY`) defaults to **empty — the feature is off** unless a
+deployment explicitly mounts the bootstrap key and sets the env var, which
+`docker-compose.app.yml`'s gateway entry now does for `task dev`. This is a
+demo/dev-appropriate trade, made explicitly rather than silently: a real
+production exposure of this endpoint needs a scoped ZITADEL service account,
+which is a permission-model decision for that deployment, not a code change.
+
+#### The ZITADEL Host-header trap has a second victim, and it needed a different fix than the first
+
+(a)'s `oidcauth.ServiceTokenSource` already knew ZITADEL selects its instance
+from the Host header and an in-network caller reaching it as `zitadel-api:8080`
+gets `Instance not found`. `libs/go-shared/iam`'s `Connect` is now a **second**
+in-network ZITADEL caller (the CLI's own use dials the public port directly
+and never hit this), and the same Host override was NOT enough for it —two
+new layers of the same problem, found in order:
+
+1. **`zitadel-go`'s own OIDC discovery hardcodes `http.DefaultClient`.**
+   `client.DefaultServiceUserAuthentication` → `profile.NewJWTProfileTokenSource`
+   builds `httpClient: http.DefaultClient` in the struct literal and never
+   reads it from `ctx` — so placing a Host-overriding `*http.Client` in
+   `ctx` via `oauth2.HTTPClient` (what `client.New` itself does when *it*
+   needs to) has zero effect on this specific call. Confirmed by testing:
+   `Instance not found` persisted with a `ctx` override in place. Fix:
+   `iam.serviceUserAuth` calls `profile.NewJWTProfileTokenSource` directly
+   with `profile.WithHTTPClient(...)`, bypassing
+   `DefaultServiceUserAuthentication` entirely — the only way to reach that
+   option, since `zitadel-go`'s wrapper never exposes it.
+2. **Once discovery ran, its own response failed a stricter check:** ZITADEL's
+   discovery document reports `issuer` from **its own** `EXTERNALDOMAIN`
+   (the public value), and the OIDC client correctly refuses a document whose
+   `issuer` doesn't match the address discovery was asked for — which,
+   Host-overridden, is a mismatch **by construction**. `Instance not found`
+   became `issuer does not match`. This is not a bug to route around; it is
+   the protection working as designed one layer up from where the override
+   lives. Fix: skip discovery entirely with
+   `profile.WithStaticTokenEndpoint`, exactly mirroring how
+   `oidcauth.ServiceTokenSource` already hand-builds its token URL instead of
+   discovering it — for the same reason, arrived at independently this
+   session before the parallel was noticed.
+3. The gRPC calls that follow (every actual `OrganizationServiceV2`/
+   `UserServiceV2`/… call) needed a **third**, unrelated mechanism:
+   `grpc.WithAuthority`, gRPC's `:authority` pseudo-header being a distinct
+   channel from both the HTTP `Host` field and `zitadel.WithTransportHeader`'s
+   metadata (confirmed by reading `zitadel-go`'s own dial code — the metadata
+   route append-only affects requests that read metadata, and ZITADEL's
+   instance routing does not).
+
+Net result: `iam.Config` gained `PublicHost`, empty and inert for the CLI's
+existing working case (`Domain` is already the public value there), and
+`iam.Connect` now needs three independent overrides — HTTP client, static
+token endpoint, gRPC authority — to reach ZITADEL from inside the compose
+network at all. Any **third** in-network ZITADEL caller should read
+`iam.Connect`'s doc comments before assuming a plain Host override is enough;
+it visibly was not, twice.
+
+#### `task iam:reset` does not relink a Postgres that already had a *different* link
+
+Running the reset-then-rebootstrap cycle this session's earlier verification
+work called for (the user asked to "recreate everything") revealed a gap
+`axebom iam bootstrap`'s `linkIdentities` doesn't guard against: its `UPDATE …
+WHERE (zitadel_user_id IS NULL OR zitadel_user_id = $1)` only **adopts** an
+unlinked row or **confirms** an already-correct one — it silently does
+nothing when the row already points at a **different, now-stale** ZITADEL id,
+which is exactly the state every seeded fixture (`alice@acme.test`, `Acme
+Industries`, …) is in after a second `iam:reset`. The bootstrap output says so
+(`note: no seeded user … to link`) but doesn't fail, so it reads as
+"idempotent, nothing to do" rather than "the seed data is now orphaned from
+its own ZITADEL identity." Symptom: `alice@acme.test` could sign in, but
+`payments-api` had vanished — `auth.identity_for` couldn't find the org by its
+new id, so it JIT-created a fresh, empty tenant instead of reusing the one
+that owns the seeded project. Recovery (done this session, not yet a CLI
+command): `NULL` the stale `zitadel_org_id`/`zitadel_user_id` columns on the
+fixture rows, delete whatever JIT placeholders the mismatch produced in the
+meantime, then re-run `iam bootstrap`. **A future `task iam:reset` should
+either clear these columns itself or the next session should expect this.**
+
+#### Frontend: a full-bleed pre-auth shell, not a sidebar around an empty state
+
+`AuthShell` (`components/AuthShell.tsx`) is new: `Ambient` plus a centered
+glass card, used by `SignIn`, `NoAccess`, `AuthCallback` and the new
+`SignupPage`. All four routes for an unauthenticated visitor moved to the
+top-level `<Routes>` in `App.tsx` (alongside `/auth/callback`, which already
+had to live there) — **outside** `<Shell>`, so a signed-out visitor no longer
+sees an empty, non-functional sidebar and top bar around the card they're
+trying to get past. The card itself uses the design system's Tier A glass
+(`--glass-bg` + a real `backdrop-filter: blur() saturate()`, not Tier B's
+tint-only `.card`/`.state`) — correct per `tokens.css`'s own rule that blur is
+wasted on a backdrop with no structure to reveal, because here the card is the
+*entire* page rather than one element floating over scrolling content.
+ZITADEL's own hosted login screen (the one in the user's original screenshot)
+is untouched — kept deliberately unforked, per the existing
+`ensureHostedLoginTranslation` rationale in `libs/go-shared/iam/provision.go`,
+confirmed with the user rather than assumed.
+
+⚠ **Frontend Docker build args bit twice this session, unrelated to this
+feature.** `docker-compose.app.yml` passes `ZITADEL_SPA_CLIENT_ID`/
+`ZITADEL_PROJECT_ID` to the frontend image as **Vite build args**
+(`VITE_OIDC_CLIENT_ID`/`VITE_OIDC_PROJECT_ID`), baked into the bundle at
+`docker build` time, not read at runtime. `auth.ts`'s `overrideFromEnv()`
+prefers these over the live `GET /v1/auth/config` fetch when both are
+non-empty. After re-bootstrapping ZITADEL and updating `.env`, the *running*
+frontend container kept sending the OLD client id in every authorize
+redirect — `docker compose up -d --build gateway` rebuilds the gateway
+config endpoint, but does nothing for a frontend image built from an
+now-stale `.env` snapshot. **Any `.env` change to
+`ZITADEL_PROJECT_ID`/`ZITADEL_SPA_CLIENT_ID` needs `--build frontend` too,
+not just the services that read it at runtime.**
+
+#### Verified
+
+- `task verify` — full green: fmt, profile lint/guardrails/evidence, docs
+  lint, `golangci-lint` (0 issues), `go test ./... -race` (every package),
+  `pytest`, `go build ./...`, `npm run build`.
+- `npx playwright test e2e/` — **7/7 green**: the 4 existing `auth.spec.ts`
+  cases (now sharing a `fillZitadelLogin` helper factored into
+  `e2e/helpers.ts`), `generate.spec.ts` unaffected, and 2 new
+  `signup.spec.ts` cases — the happy path (create → real ZITADEL login →
+  `/projects` with a real role, no `PERM_NO_ROLE_IN_ORG`) and the
+  duplicate-organisation-name refusal (asserts the visitor stays on
+  `/signup`, never reaches ZITADEL's login for an org that isn't theirs).
+- curl against all four `POST /v1/auth/signup` outcomes (201, both 409s,
+  422) directly, before the browser-level tests existed, to isolate backend
+  correctness from frontend wiring.
+
+#### Left for a later session
+
+- **No CLI recovery command for the relink gap above** — the fix this
+  session was three manual SQL statements plus a re-run of
+  `iam bootstrap`, not a repeatable one.
+- **The self-service signup credential trade (gateway holds the bootstrap
+  key) is a dev/demo decision, not a production one** — see the ⚠ above.
+  Revisit before this deployment shape reaches anything but a local stack.
+- Left-over dev-only test organisations from this session's manual curl and
+  Playwright verification exist in the running ZITADEL instance (`Curl Test
+  Org 2`, timestamped `E2E Signup Org …` / `E2E Dup Org …`) — harmless,
+  consistent with `iam verify`'s own comment that the dev database
+  accumulates throwaway tenants from integration tests, not cleaned up.
+
+### 2026-08-24 (g) — live-verified the AxeBOM rename against a fresh stack, and found four bugs the static rename couldn't see
+
+**Goal:** (f)'s rename was verified only statically — `task verify` passing
+proves the code compiles and the goldens match, not that a running stack
+actually forms a `axebom_app` role, an `axebom` bucket, or a ZITADEL org named
+`AxeBOM`. Ran `task dev:nuke && task dev`, then verified each identifier
+directly against the live containers, and ran both Playwright specs through a
+real OIDC login.
+
+#### A stale pre-rename stack was still running, independently of `task dev:nuke`
+
+`docker compose ls -a` found a **second, separate Compose project literally
+named `encorebom`** — up for 43 minutes, started before the compose files were
+edited to say `name: axebom`. `dev:nuke` only ever tears down the project the
+*current* compose files declare, so it had zero effect on this one; it kept
+running the whole time, holding the old `encorebom_{pgdata,miniodata,natsdata}`
+volumes and — critically — **binding the exact host ports** (`55432`, `8080`,
+`5173`, `58080`, `59000`/`59001`) the new `axebom`-named stack needed. The first
+`task dev` failed with `Bind for 0.0.0.0:55432 failed: port is already
+allocated`.
+
+Confirmed with the user before acting (a second running stack wasn't in the
+original plan, and stopping+deleting it needed explicit sign-off — the auto-mode
+classifier itself declined to let the action through without it), then removed
+it: `docker compose -p encorebom down -v`, plus three more `encorebom_*`
+volumes (`artifacts`, `enginedb`, `workspaces`) that `down -v` didn't reach —
+apparently `external: true` in the compose file, so compose doesn't consider
+itself their owner. All dev/seed data, nothing precious.
+
+#### The rename silently broke a length-sensitive secret
+
+`zitadel-setup` failed: `"masterkey must be 32 bytes, but is 29"`. The dev
+placeholder had been `EncoreBOMDevMasterkey32CharsLong` — a **hand-sized
+32-byte string that spells out its own length as a mnemonic** — and the blind
+`encorebom`→`axebom` substitution shortened it by exactly the 3-byte
+difference between the two names (`32 - 3 = 29`). A text rename doesn't know a
+string's length is load-bearing. Replaced with `AxeBOMLocalDevMasterkey32Bytes!!`
+(verified 32 bytes in Python before writing it), fixed identically in `.env`,
+`.env.example`, and both fallback defaults in `docker-compose.iam.yml`. Swept
+`.env.example` for any other `KEY=` value combining a digit with
+`Char`/`Byte`/`Long` — this was the only one.
+
+#### A pre-existing Taskfile bug, unrelated to the rename, that only a full run surfaces
+
+`task dev`'s final line — `echo "  task health   # per-service readiness"` —
+failed with `1:6: reached EOF without closing quote`, even though every
+container was already up. The literal `#` inside the double-quoted argument is
+mis-parsed by go-task's shell tokenizer as a comment start, truncating the
+string. This line's content has never contained `encorebom`/`axebom`, so the
+rename didn't cause it — it's a latent bug that nobody had hit because nobody
+had run `task dev` to completion recently (`docs/STATE.md` notes the Docker
+daemon is frequently stopped between sessions). Fixed by moving the explanation
+out of the quoted string; `task dev` now exits 0.
+
+#### My own bootstrap ran in the wrong order, and left orphan rows behind
+
+Ran `task iam:bootstrap` before `task db:seed` — backwards. Bootstrap logged
+`note: no seeded tenant with slug "acme" to link` and, rather than failing,
+**auto-created placeholder tenant/user rows** to hold the new ZITADEL org and
+user IDs it had just provisioned. Once `db:seed` ran afterward and I re-ran
+bootstrap in the right order, it correctly found the real `acme`/`beta` tenant
+rows — but linking them failed twice on `duplicate key value violates unique
+constraint`, because the orphan rows from the first run already held those
+exact `zitadel_org_id`/`zitadel_user_id` values (`ensureOrg`/`ensureUser` in
+`libs/go-shared/iam/provision.go` are correctly idempotent on the ZITADEL side
+— they found and reused the *same* org/user rather than creating duplicates,
+which is exactly what surfaced the collision). Deleted the two orphan rows
+(one tenant, one user, each with a single dependent membership row — verified
+no other dependents first) and re-ran bootstrap clean. **Operational lesson,
+recorded here so the next session doesn't repeat it: `task dev` →
+`task db:seed` → `task iam:bootstrap`, in that order** — bootstrap's tenant/user
+linking step needs the seed rows to already exist.
+
+Also found and fixed: the gateway (and every other app-tier container) reads
+`ZITADEL_SPA_CLIENT_ID`/`ZITADEL_PROJECT_ID` from `.env` at container-create
+time, not at request time — so after bootstrap prints fresh IDs and `.env` is
+updated, a plain `docker restart` does **not** pick them up (Compose bakes
+resolved env into the container at creation). `docker compose up -d` without
+`--force-recreate` did, though — it correctly diffed the resolved environment
+and recreated every affected service on its own.
+
+#### Verification actually performed, against the live stack
+
+| Check | Result |
+|---|---|
+| `SELECT current_database(), current_user` | `axebom \| axebom` |
+| `\du axebom_app` in psql | role exists |
+| `\dn` (schemas) | all 9 owned by `axebom` (`app`, `auth`, `campaign`, `comment`, `normalize`, `notify`, `project`, `report`, `scan`) |
+| `mc ls local` (inside the MinIO container) | `axebom/` — the bucket, correctly named, correctly created by `minio-init` |
+| `SELECT name FROM projections.orgs1` (ZITADEL's own DB) | `AxeBOM` (instance org), `Acme Industries`, `Beta Corp` (dev orgs) |
+| `GET /api/v1/auth/config` | `"org_header":"X-AxeBOM-Org"`, live client/project IDs matching bootstrap's output |
+| `go test ./libs/go-shared/platform/db -run TestRLSCoverage\|TestCrossTenant...` | 11/11 pass — **live**, not mocked; `TestCrossTenantCountIsScoped` confirms Acme's seed data is exactly 2 projects, matching the seed file |
+| `go test -run TestSeededUsersCanLogIn` | 4/4 pass — the argon2id hashes regenerated in (f) verify against `axebom-dev-only` **on a live database**, not just the unit-test fixture |
+| `task health` | 9/9 up |
+| `npx playwright test` (both specs, real Chromium, real OIDC round trip through ZITADEL) | **5/5 pass** — anonymous-visitor redirect, full sign-in reaching real seeded project data (`payments-api`), session survival across reload, session-menu identity, and the complete generate-wizard flow (create scan, queue reports, no 422) |
+| `rg -i encorebom` (repo, live-verified session) | zero matches outside this STATE.md entry's own narrative |
+
+#### What is still NOT built or NOT re-verified
+
+- **No fresh `task verify` run after this session's fixes** (the Taskfile echo
+  fix, the masterkey fix). Both are outside anything `task verify` checks
+  (Taskfile syntax and `.env` aren't linted), but worth a final pass before
+  calling the branch done.
+- **The `ENCOREBOM_*`→no-op env var rejection is still not implemented** — flagged
+  in (f), still open.
+- **Nobody has exercised a scan against a real engine** on this fresh stack —
+  the generate-wizard e2e test only confirms the request is accepted and reports
+  are queued, not that an engine completes and produces output. The engine
+  databases were wiped by the nuke and would need the 30–60 minute NVD-style
+  resync on first real use.
+- **Old `encorebom-*` container images were not pruned** (`docker system df`
+  showed 2.58 GB reclaimable before this session; likely more now with a
+  second full image set built under `axebom/*:dev`). `docker image prune` was
+  not run — left for the user, since it affects images outside this repo's
+  volumes.
+
+### 2026-08-24 (f) — renamed to AxeBOM; the frontend gets a real design system
+
+**Goal:** the product was named EncoreBOM everywhere — Go module, Python
+package, CLI binary, infra identifiers, the report signature domain, CERT-In
+extension field IDs — while the git remote was already
+`github.com/SiddhantSShende/AxeBOM`. Rename it, then give the frontend the
+glass/motion visual system it never had: no Tailwind, no component library, no
+animation, no webfont, a single top nav bar, and two CSS files with five live
+duplicate-rule bugs.
+
+#### The rename touched more than branding
+
+Four casings (`encorebom`/`EncoreBOM`/`ENCOREBOM`/`Encorebom`), no separator
+variants, **386 files** across the Go module path (171 files), the Python
+package `encorebom_shared` → `axebom_shared`, the CLI binary, Docker/compose
+identifiers, and five things baked into **already-emitted artifacts**:
+
+- `encorebom.signature/v1` — the report-signature domain-separation prefix, part
+  of the signed bytes. Every previously-issued report signature stops verifying
+  (accepted; no reports exist to invalidate yet).
+- The `encorebom.{crypto,aibom}.*` extension field IDs in `certin-v2.0.yaml`,
+  which had to move together with the hardcoded prefix check in
+  `libs/go-shared/compliance/lint.go` or `profile:lint` fails.
+- `LicenseRef-EncoreBOM-<slug>`, the CycloneDX `encorebom:*` property namespace,
+  and the `schemas.encorebom.io` schema `$id`s.
+- The WS subprotocol `encorebom.v1`/`encorebom.bearer.` and the `X-EncoreBOM-*`
+  headers, which had to move in lockstep with the frontend's `api.ts`/`ws.ts` or
+  the handshake fails outright.
+
+⚠ **Two distinct dev passwords, only one of which a sed can fix.**
+`EncoreBOM-dev-only1!` (ZITADEL) is a plain literal. `encorebom-dev-only` (the
+DB seed) is hashed with real argon2id in
+`migrations/seed/0001_dev_tenants.sql` — renaming the *string* would leave the
+*hash* checking the old password while the comment claimed the new one.
+Regenerated all three hashes with `auth.HashPassword` at the service's own
+params and updated `SeedPassword` in `seed_login_test.go`, which **verifies**
+the committed hashes against the constant and would have failed loudly on a
+mismatch.
+
+`fixtures/hbom-nested/*` was excluded on purpose — `"EncoreBOM Edge Gateway
+4400"` there is fictional third-party hardware in the golden corpus, not
+branding; renaming it would have desynced `parts.csv` from `expected.json`.
+
+Regenerated `profile:gen` → `profile:lint` → `profile:evidence`, and the report
+export goldens (`AXEBOM_WRITE_GOLDEN=1`) — both now carry the new tool name and
+a new UUIDv5 `serialNumber` (namespace-derived, so it changes with the name),
+diffed field-by-field to confirm nothing else moved.
+
+#### A pre-existing flaky test, found and fixed along the way
+
+`TestEqualHashIsCaseInsensitiveAndExact` (`services/report/internal/share`) —
+already flagged as an unrelated flake in 2026-08-24 (d) — turned out to be
+`h[:len(h)-1]+"0"` occasionally producing the *same* hash it was supposed to
+differ from, whenever the token's last hex digit already was `0`. One run in
+sixteen, and the test reported a real bug for it. Fixed to pick a digit that
+provably differs; 200 repeated runs clean.
+
+#### The frontend: glass tokens, a grid shell, motion — and three real bugs the redesign surfaced
+
+Before touching visuals: `app.css` had **five live duplicate rules** where the
+later one silently won — `.table` (the second set `display:block`, breaking
+the sticky `thead` and the 50k-row virtualizer's flex layout), `.card`
+(dropped the shadow the hover-lift depended on), `.page-header`, `.field`
+(the drawer's definition-row style was overriding every form label in
+`ProjectWizard`), `.field-row` (two unrelated intents sharing one name, so the
+wizard's validity-start/end fields stacked instead of sitting side by side).
+Renamed the collisions (`.field`→`.def-row`, `.field-row`→`.field-pair`),
+deleted the dead rules, and gave wide tables their own `.table-wrap` instead of
+forcing `overflow-x` onto every `.table`.
+
+Also found: the `prefers-reduced-motion` block zeroed animation *duration* but
+not *iteration-count*, so the `infinite` skeleton shimmer didn't stop for a
+reduced-motion user — it ran at frame rate instead. And `--text-faint` was
+4.50:1 on white, exactly at the AA floor with nothing to spare, on a token used
+for `.not-provided` — load-bearing compliance information. Both fixed before
+any glass was added, independent of the redesign.
+
+**Glass system:** new tokens in `tokens.css` (`--glass-bg{,-strong,-solid}`,
+`--glass-blur`, `--amb-1..3`, motion durations/easings), declared on bare
+`:root` and duplicated identically into both dark blocks — verified
+programmatically (parsed all three blocks, confirmed byte-identical dark
+blocks and full light/dark coverage). Contrast verified by computing WCAG
+relative luminance for every text token over every glass tier against the
+worst-case ambient stop in both themes: **worst case 4.94:1**, comfortably
+above the 4.5:1 floor. `@supports`/`prefers-reduced-transparency`/
+`forced-colors` fallbacks route everything through the existing `--surface`
+tokens rather than restating three more theme blocks.
+
+Surfaces are tiered by how long someone reads the text on them: sidebar/topbar/
+drawer/dialog/menu get real `backdrop-filter` (they overlap scrolling content,
+so the blur does visible work); cards/panels/states/callouts get a tint plus a
+1px highlight, no filter (blurring a smooth ambient gradient returns the same
+gradient — free, not cheaper). The dependencies table gets **one** blur on the
+`.table-scroll` container and zero on any row — a filter per row across a
+50k-row virtualized table would be 50k stacking contexts.
+
+**Shell:** `App.tsx` rebuilt as a CSS Grid (`sidebar | topbar` / `sidebar |
+main`) with a collapsible glass `Sidebar`, a slim `TopBar`, and an `Ambient`
+background (three radial-gradient blobs, `transform`-only animation, no
+`filter: blur()` — the animation cost is otherwise proportional to element
+area, forever). Sidebar collapse state persists via a new zustand store
+(`design/shell.ts`, `axebom.shell`) and is applied pre-paint by the same
+blocking bootstrap script in `index.html` that already handles the theme, so a
+collapsed sidebar doesn't flash expanded on load. Collapsing hides nav labels
+visually only — the accessible name stays in the DOM (`width:0` clip, not
+`display:none`), verified live: `sidebar-nav a` still reported all 5 names with
+the sidebar collapsed.
+
+**Motion:** `motion` (13.1.1) via `LazyMotion`+`m` with `features={strict}`,
+which makes `motion.div` throw at compile time rather than letting a stray
+import silently add ~34 KB to the entry chunk. `MotionConfig
+reducedMotion="user"` wired at the root — this is the half of reduced-motion
+that the CSS media query cannot reach, since `motion` animates via WAAPI.
+Applied to: route-enter (enter-only, no `AnimatePresence` — an exiting lazy
+route fights `Suspense`, and `generate.spec.ts` clicks Continue and
+immediately expects the next step, which an exiting-but-still-clickable node
+would race), a capped project-card stagger (`Math.min(index, 10)`, so a
+200-project org doesn't stagger for six seconds), and a new shared `Overlay`
+component wrapping the drawer/dialog scrim+panel with a real exit animation via
+`AnimatePresence` at the call sites.
+
+**`Overlay` (`components/Overlay.tsx`) replaced two hand-rolled, incomplete
+modal implementations.** `ComponentDrawer` and `ShareDialog` each had Escape-
+closes and an initial `.focus()` — no focus trap, no focus restore, no `inert`
+on the background. `Overlay` adds all three (Tab cycles within the panel;
+closing restores focus to whatever opened it; `#root` goes `inert` for the
+duration, which is what actually stops a screen reader's virtual cursor and
+Tab from reaching the table/report behind it — the scrim only stops the
+mouse), and is portaled to `document.body` so an ancestor's `transform` (the
+route-enter animation) can never become its containing block and break
+`position: fixed`.
+
+**Typography:** self-hosted `@fontsource-variable/inter` (OFL-1.1, latin +
+latin-ext only — the other five Unicode subsets it ships were left unreferenced
+rather than bundled), `font-display: swap`, system stack as fallback. No
+external request — this ships to strict-CSP and air-gapped customers.
+`--sidebar-w` registered with `@property` so the collapse transition eases via
+pure CSS with no JS and no layout projection.
+
+**Five new routes** closing dead links `GenerateFlow` and `ProjectWizard` have
+carried since they were written (`/projects/:id/settings`,
+`/projects/:id/practices` both 404'd until now): `ReportList` (`/reports`),
+`ProjectScans` (`/projects/:id/scans`), `ProjectPractices`, `ProjectSettings`,
+`SettingsIndex` (`/settings`). All five are thin views over APIs that already
+exist — `useSetPractices` (`lib/projects.ts`) had existed with **zero
+callers** since Phase 4. Two honest gaps surfaced and documented rather than
+worked around: `GET /v1/reports` has no `next_cursor` and no `project_id`, so
+`ReportList` states `truncated` rather than paginating a cursor it cannot
+obtain, and joins project names client-side through the scan list; and
+`/settings`'s organisation panel is read-only with a link to `/ui/console`,
+because no `/v1/orgs` route exists anywhere — identity moved to ZITADEL.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `rg -i encorebom` (repo, tracked + `.env`, excluding the hardware fixture) | zero matches |
+| `task verify` | exit 0 — fmt, profile:lint (131 fields, 17 count assertions matched), profile:guardrails, profile:evidence:check, docs:lint (124 refs resolve), lint, `go test ./... -race` (incl. the newly-fixed flake ×200), build |
+| `task dev` component checks (Postgres role, MinIO bucket, ZITADEL org) | not exercised — no live stack brought up this session; infra rename is code-complete but unverified against a running cluster |
+| Frontend `tsc -b`, `eslint --max-warnings 0`, `prettier --check`, `vitest` (81 tests, 6 files) | all clean |
+| `npm run build` | **134.5 KB gzipped initial JS** (was ~124 KB before `motion`+font), budget 250 KB; `motion`'s 14.3 KB feature bundle and the new `Overlay` chunk both confirmed on lazy chunks, off the critical path |
+| WCAG contrast, glass tiers × text tokens × both themes | computed programmatically (relative-luminance formula, not eyeballed); worst case 4.94:1 against a 4.5:1 floor |
+| Visual, Playwright screenshots, light + dark | shell, sidebar (expanded/collapsed), cards, glass table, coverage panel, callouts, empty state — zero console errors, correct font family, correct `backdrop-filter` per theme |
+| `sidebar-nav a` accessible names with `data-sidebar="collapsed"` | all 5 present — the icon-only visual state does not become an icon-only accessible name |
+
+#### What is still NOT built or NOT re-verified
+
+- **No live-stack verification of the infra rename** (`POSTGRES_DB`, the
+  `encorebom_app`→`axebom_app` role rename, the MinIO bucket, the ZITADEL
+  first-instance org). `task dev:nuke && task dev && task health` is the next
+  session's first step before trusting this in a running environment.
+  `.env.example` and the untracked `.env` were both updated; a fresh `.env`
+  should be diffed against the example.
+- **The two Playwright specs were not re-run against a live stack** this
+  session (no backend was running) — `e2e/auth.spec.ts`'s `Sign out` button
+  assertion and `e2e/generate.spec.ts`'s step-by-step selectors should still
+  match (the top bar keeps a directly-visible Sign out button on purpose, and
+  the route-enter animation is enter-only so no exiting node can intercept a
+  click), but this is inference from the source, not a run.
+- **Only `ProjectList`, the shell, and the shared overlay got bespoke motion.**
+  Every other screen (Dependencies, Findings, GenerateFlow's step transitions,
+  ReportViewer's coverage counters) inherits the glass surfaces for free
+  because they compose the same CSS classes, but none of them got a
+  screen-specific animation pass.
+- **`docs/07-FRONTEND-SPEC.md` §1 still describes Tailwind + shadcn + Recharts +
+  `@xyflow/react`.** None of that is true today or was ever true; the actual
+  stack is now plain CSS + `motion` + a self-hosted font. Not corrected this
+  session — flagging so the next person doesn't build against the stale spec.
+- **The rename's `ENCOREBOM_*`→no-op env vars have no startup rejection.** An
+  operator with a stale `.env` gets silent defaults, not an error. Flagged in
+  the plan, not implemented.
+
+### 2026-08-24 (e) — the normalizer's write path is real, and COPY was never an option
+
+**Goal:** Phase F — "make findings real." The plan's own framing was narrow:
+fix three renamed columns in `bulk.py`, add `psycopg[binary]`, execute the
+COPY batches inside one transaction. Two of those three things turned out
+not to describe anything that could exist.
+
+#### The scope decision, made explicit before writing any code
+
+`bulk.py`'s planned write target is `workers/sbom`, and
+`axebom_shared.config`'s own docstring says, in caps: **"WORKERS HOLD NO
+CREDENTIALS... no database password here... If a future change appears to
+need a credential in a worker, the design has gone wrong; route the work
+through the fetcher instead."** Giving a live, deployed worker a Postgres
+credential is a real security-architecture decision, and nothing about who
+triggers normalization for a live scan exists yet either — the Go
+orchestrator never publishes a "this scan finished, normalize it" signal.
+
+Asked the user directly rather than guessing: fix `bulk.py` and make its
+output genuinely executable and testable, but do **not** wire a live
+Postgres credential into any deployed worker or invent the missing trigger.
+Confirmed. Everything below stays inside that boundary — `writer.py` is
+proven against a live, RLS-protected schema, and nothing calls it from a
+running scan.
+
+#### `bulk.py`: the three named bugs, and three more the plan didn't name
+
+`vuln_cluster_id`→`cluster_id`, `component_key`→`component_id`,
+`severity_rule`→`severity_source` in `_findings_batch`, exactly as scoped.
+Fixing `component_key`→`component_id` turned out to require a real design
+addition: `normalize.components.id` is a server-generated uuid with no way
+to be read back from a bulk write (no `RETURNING` from a multi-row insert of
+unknown-at-plan-time rows), so `component_locations`, `findings` and
+`component_dependencies` had no correct value to put in that column at all.
+Fixed by minting the id **client-side**, via `uuid5(namespace,
+f"component:{bom_document_id}:{component_key}")` — deterministic, so
+replayability (invariant 10) extends to surrogate keys and not only to
+values: re-normalizing the same raw artifacts into the same document
+produces the same component ids, not a fresh random set every run. The same
+technique produces `cluster_id`.
+
+Three more column-name bugs the plan's own text didn't enumerate, found only
+by actually trying to execute a write:
+
+- `_locations_batch` was missing `tenant_id` entirely (NOT NULL, no default).
+- `_dependencies_batch` named `from_key`/`to_key`; the real columns are
+  `from_component_id`/`to_component_id`.
+- `severity_effective` was written as `_text(value)`, which turns an absent
+  value into `""` — and `""` satisfies neither the column's NULL-or-six-enum-
+  values CHECK constraint. A finding with no resolved severity is the
+  **ordinary** case the NotProvided bucket (Phase E, Go side) exists to
+  count; every one of them would have failed the CHECK and taken the whole
+  batch down with it. Fixed to `_text(value) or None`.
+
+A finding or a dependency edge referencing a `component_key` absent from
+this same canonical model — which should never happen, but is exactly the
+kind of thing a pipeline bug produces — is now dropped with a
+`NORMALIZE_DANGLING_COMPONENT_REFERENCE` diagnostic rather than either
+crashing the whole write or silently inserting a row with a missing foreign
+key.
+
+#### Two more defects, found only by actually executing against Postgres
+
+**`COPY FROM` does not work against a row-level-security-enabled table, at
+all, ever.** `psycopg.errors.FeatureNotSupported: COPY FROM not supported
+with row-level security. HINT: Use INSERT statements instead.` This is not a
+permissions gap or a version quirk — it is a permanent Postgres restriction,
+and RLS is FORCE-enabled on every tenant table in this system (invariant 6).
+`bulk.py`'s entire premise ("`COPY` is the only workable shape") was false
+for every table it was ever going to write to, from the day it was written.
+Replaced with chunked, multi-row `INSERT ... VALUES (...), (...), ...`
+(500 rows per statement — comfortably under Postgres's 65535-bind-parameter
+ceiling) — still one round trip per few hundred rows, and, unlike `COPY`,
+subject to RLS's `WITH CHECK` per row like any ordinary insert. `bulk.py`'s
+module docstring and `copy_statement()` (removed — it built a statement that
+could never run) are corrected; `writer.py`'s docstring explains why in
+full, since this will bite the next person who reaches for `COPY` against
+any tenant table in this codebase, not only this one.
+
+**`detected_by` and `fixed_versions` are native Postgres `text[]` columns;
+`cvss_vectors` is genuinely `jsonb`.** `bulk.py` was `json.dumps()`-ing all
+three alike. A JSON array literal (`'[]'`) is not a Postgres array literal
+(`'{}'`) — `psycopg.errors.InvalidTextRepresentation: malformed array
+literal: "[]"`. Fixed by passing the first two as native Python lists
+(per-element `_text()`-sanitized) and letting the driver adapt them; only
+`cvss_vectors` still goes through `json.dumps()`.
+
+#### A third defect, in the *test infrastructure*, not the write path —
+worth its own heading because it produces a specifically dangerous kind of
+false confidence
+
+The first version of `test_writer.py`'s cleanup fixture reported success —
+correct row counts deleted, no exception, the same connection querying
+back `count = 0` immediately after — and the row was still there, visible
+to every other connection, after the test process exited. Root cause:
+`psycopg.Connection.transaction()` behaves differently depending on whether
+a transaction is *already open* on the connection. `write_bom_document`'s
+own `with conn.transaction():` commits for real, being the first use on a
+fresh connection. But the test body then ran bare `cur.execute(...)`
+assertions **outside** any `with conn.transaction():` block — which, on a
+non-autocommit connection, silently starts a new ambient transaction that
+is never explicitly committed. When the cleanup fixture's own
+`with conn.transaction():` ran next, it found that ambient transaction
+already in progress and downgraded to a **savepoint** — a delete that looks
+committed to the session that ran it (read-your-own-writes) and evaporates
+the instant the connection closes and the still-open outer transaction gets
+discarded. Fixed with `autocommit=True` on the test connection — psycopg's
+own recommended default — plus switching bare verification queries'
+`set_config` from `is_local=true` (which reverts at the end of each
+autocommit statement's own one-statement transaction) to session-level
+(`false`), safe here because each test owns a private, unpooled connection.
+`writer.py`'s own docstring now warns any real caller about the same trap.
+
+This is the same class of danger `_locations_batch`'s missing `tenant_id`
+and the COPY/RLS incompatibility both are: a test, or a write, that reports
+success while quietly doing nothing durable. All three were caught by the
+same discipline — actually executing against live Postgres, not reasoning
+about the code — which is the entire argument for `test_writer.py`'s schema-
+agreement test existing at all.
+
+#### Verified
+
+`libs/py-shared/axebom_shared/normalize/test_writer.py`: schema-agreement
+(every column every batch declares, and `bom_documents`' own INSERT column
+list, checked against live `information_schema.columns`), a live write that
+round-trips real severity counts grouped exactly the way
+`GET /v1/scans/{id}/findings-summary` groups them on the Go side, a refused
+plan leaving no trace (not even the header row — a `bom_documents` row with
+nothing under it would resolve as a real, empty document to any reader
+querying by `(scan_id, bom_type)`), and RLS proving tenant B's session
+cannot see tenant A's write. 19 tests total across `test_bulk.py` +
+`test_writer.py`, run 8 times back to back with no flake; `normalize.*` row
+counts verified zero via a separate superuser connection after every run.
+
+Gate: `ruff format --check` and `ruff check` clean across `libs/py-shared`
+and `workers` (109 files), `mypy` clean on `bulk.py` and `writer.py`
+(pre-existing strict-mode gaps in `test_bulk.py`'s `.batch()` Optional
+narrowing are untouched and were never part of this fix), full
+`pytest libs/py-shared workers` suite green (0 regressions), Go side
+unaffected — `go build`, `go test`, `golangci-lint` (0 issues),
+`db verify-rls` (39/39), `profile guardrails` all rerun and still green.
+
+#### Known debt
+
+- **Nothing calls `write_bom_document` from a live scan.** The Go
+  orchestrator does not publish a normalize-trigger event; no deployed
+  worker holds a Postgres credential; `normalize.alias_snapshot` minting
+  (the thing that would give `alias_snapshot_id` a real, non-placeholder
+  value) does not exist. All three are one connected follow-up, deliberately
+  deferred — see the header's Next action.
+- `psycopg[binary]` is a `dev`-only dependency, on purpose — no worker image
+  installs it today.
+- `cvss_primary_score` and `references_json` are never populated by
+  `_findings_batch` (both are nullable / have a default, so this is a
+  completeness gap, not a broken write) — out of scope for this pass.
+
+### 2026-08-24 (d) — Generate could not generate: two resources collapsed into one call
+
+**Goal:** reported via `/debug`: clicking Run in the Generate wizard always
+422'd — `VALIDATION_BODY_MALFORMED`, "request body is not valid JSON" — and
+"Uncaught... message channel closed" (an unrelated browser-extension console
+line, not from this app; ignored).
+
+#### The wizard was posting a shape the endpoint never accepted
+
+`POST /v1/scans` sent `{project_id, bom_types, levels, standards, formats}`.
+`createScanRequest` has always been `{project_id, source_kind, families,
+engines}` and decodes with `DisallowUnknownFields()` — so the request failed
+before validation ever ran, and every decode error (an unrecognised field
+included) is reported as "not valid JSON," which is what made this read as a
+parsing bug rather than a contract mismatch.
+
+⚠ **The fix is not extending `/v1/scans` — it's stopping conflating two
+resources `report.reports` has kept separate since `migrations/report/0001`.**
+A scan is ONE run of the engines; a report is ONE rendered document.
+`POST /v1/reports` already exists, already takes `{scan_id, bom_type, level,
+format}` per combination, and already derives `standard` from `format`
+server-side, refusing (not correcting) a mismatch. The wizard's own "Reports:
+N — one per BOM type × level × format" review line was always describing that
+cross product; it just never called the endpoint that produces it.
+
+`docs/02-CONTRACTS.md §8` had the same conflation baked into it (a line
+claiming scan-creation carries all four dimensions) — likely what the wizard
+was built against. Corrected.
+
+#### Two more found while fixing this
+
+⚠ **`source_kind` was never sent at all.** The wizard doesn't (and shouldn't)
+ask again — the project's source was already collected at registration. Added
+`sourceKindFor(project.source_type)`, mapping github/gitlab/bitbucket→git,
+upload→upload, image→image. `manual` (HBOM-only, no scanner — CLAUDE.md honest
+labels) maps to `null`, refused client-side with a stated reason before the
+API is even called, rather than a doomed request.
+
+⚠ **CBOM reports are refused server-side** ("CERT-In Table 9 discriminates by
+asset type, so there is no single field set to score against" —
+`services/report/internal/service/service.go`) but nothing else in the run
+should die with it. Report creation is `Promise.allSettled` across every
+planned combination; a partial failure still starts the scan and carries a
+stated warning (`navigate` state, rendered once on `ScanProgress`) rather than
+silently dropping some of what was promised on the review screen.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | exit 0 (one unrelated pre-existing flake, `TestEqualHashIsCaseInsensitiveAndExact` in `services/report/internal/share`, reproduced on a clean re-run — not touched by this change) |
+| Playwright, real Chromium, live stack | reproduced the exact reported failure first (422 on Run), then green after the fix — `e2e/generate.spec.ts`, kept as a permanent regression test |
+| Playwright, CBOM path | selecting CBOM alongside SBOM still starts the scan and shows the queued/failed count; verified once, not kept as a permanent test |
+| `tsc`, `eslint`, `vitest` (81) | clean |
+
+#### What is still NOT built
+
+Nothing creates a report automatically when a scan finishes — the wizard
+queues N `report.reports` rows up front (`queued`, resolved by the worker at
+render time), and the existing report-list/report-viewer routes are how a user
+finds them once ready. Whether that list surfaces "still rendering" clearly
+enough was not re-verified here.
+
+### 2026-08-24 (c) — the missing endpoints
+
+**Goal:** Phase E. The dashboard's two most useful figures — recent scans,
+open findings by severity — had no endpoint. `GET /v1/scans` did not exist at
+all; there was no findings aggregate anywhere.
+
+#### `GET /v1/scans` — keyset on id DESC, mirroring `GET /v1/projects` exactly
+
+Same cursor idiom (last id seen, never an offset), same `effectiveLimit`
+clamp, same `{plural, next_cursor}` envelope, `?project_id=&status=` as
+optional filters using the `($1 = '' OR col = $1)` idiom report.Store.List
+already established. New index `scans_tenant_project_id_idx (tenant_id,
+project_id, id DESC)` — the existing `scans_tenant_project_idx` is ordered on
+`created_at`, which a keyset on `id` cannot use without degrading to a scan.
+
+Engine runs for the whole page load in **one** `WHERE scan_id = ANY($1)`
+query (`loadRunsFor`), following `project.loadClassificationsFor`'s
+precedent — reusing the existing per-scan `toDTO` in a loop would have been
+two extra queries per row. The list item DTO deliberately **omits**
+`coverage_gaps` rather than sending `[]`: computing it per row would put the
+N+1 straight back, and an empty array would silently claim "no gaps" for a
+value that was never computed — exactly the false-negative invariant 12
+exists to prevent. `GET /v1/scans/{id}/engine-runs` is where that real
+answer lives; a list row says nothing rather than lying.
+
+#### `GET /v1/scans/{id}/findings-summary` — new file, cross-schema, in Go
+
+`orchestr/findings.go`, deliberately separate from `store.go`: the file
+boundary IS the schema boundary (`scan.*` in store.go, `normalize.*` here),
+mirroring why `report/bomsource.go` is its own file. No SQL join spans the
+two — `normalize.bom_documents` and `normalize.findings` are queried on
+their own and stitched in Go, per ADR-0001.
+
+Resolves the **SBOM** document at the **highest `normalization_version`**
+for the scan (vulnerability matching runs against SBOM components; CBOM,
+QBOM, AIBOM and HBOM have no findings table of their own) — the same
+"latest version, re-normalization never overwrites" reasoning as
+`report.resolveDocument`, tested by writing two document versions directly
+and confirming the summary follows v2, not v1.
+
+**Three severity buckets, not two.** `none` (a source explicitly asserted no
+severity), `unknown` (a source explicitly asserted it could not determine
+one) and — the one existing code did not have a name for — **`not-provided`**
+for SQL `NULL`: nothing computed a severity at all. Collapsing any two of
+these either invents an assertion nobody made or hides a measurement gap.
+Named `not-provided` deliberately, to reuse the vocabulary CLAUDE.md
+invariant 3 already uses everywhere else in this product for exactly this
+state, rather than inventing new terminology for the same idea.
+
+**A scan with nothing normalized yet is a legitimate zero, not an error** —
+still running, or it produced no SBOM. But that state is indistinguishable
+from "this scan does not exist" if the store function alone had to decide,
+since both are zero rows inside `normalize.*`. So the store function does
+**not** re-check existence — its doc comment says so explicitly — and the
+handler calls `GetScan` first, exactly like `EngineRuns` already does, so a
+cross-tenant scan id gets the same 404 every other scan endpoint gives it
+rather than a 200 with an all-zero summary that would make it an oracle for
+probing which scans exist.
+
+`coverage_gaps` rides along on this response too, for the same reason the
+plan called out: it does not depend on normalization having run (it reads
+`scan.ecosystems_detected`, populated as engines report), so a dashboard
+tile rendering "0 critical" next to "3 ecosystems have no engine" is not
+making the reader choose which honest number to show.
+
+#### One defect the wiring exposed, in the *tests*, not the endpoint
+
+The first pass of `ListScans` tests used `orch.CreateScan`, which publishes
+a real NATS job — and this test binary runs against the same broker
+`task dev`'s live `sbom-worker` and `scan-orchestrator` containers are also
+consuming. A live worker picking up a job for a test scan with no real
+archive fails fast and reports a result, and that result's async status
+recompute raced a test's own `UpdateScanStatus` call, intermittently
+clobbering it. This is the exact hazard `pipeline_test.go`'s
+`requireExclusiveSbomSubject` already exists to route around — but these new
+tests do not need fan-out at all, only rows, so the fix was `Store.CreateScan`
+(writes directly, publishes nothing) instead of the guard machinery. Caught
+by running the full package repeatedly, not by the isolated `-run` pass,
+which is why both are now part of how this gets verified.
+
+#### Verified against the running stack, not just compiled
+
+Rebuilt and restarted `scan-orchestrator`; real service token through the
+gateway:
+
+- `GET /v1/scans?limit=2` → real rows, `engine_runs` populated, batched
+- `GET /v1/scans?project_id=…` → exactly the matching scan
+- `GET /v1/scans?status=completed_with_errors` → filtered correctly
+- `GET /v1/scans` with the other tenant's header → `{"scans": [], "next_cursor": ""}` — empty, not leaked
+- `GET /v1/scans/{id}/findings-summary` for a real scan → all-zero counts
+  (honest: nothing normalized yet), `coverage_gaps` populated with six real
+  ecosystems, `bom_document_id` key **absent** from the JSON (not `""`) —
+  confirming `omitempty` renders "no document" as no key rather than an
+  empty one
+- same endpoint, other tenant's header → **404**
+- same endpoint, a scan id that does not exist → **404 `NOTFOUND_SCAN`**,
+  the canonical error shape
+
+Gate: `go build ./...` OK · `go test ./...` clean, `orchestr` package run
+three times back to back with no flake · `golangci-lint` **0 issues** ·
+`db verify-rls` **39 tables, 0 gaps** · `profile guardrails` OK · migration
+`0006_scans_list_index.sql` applied.
+
+#### Known debt
+
+- **Both endpoints are correct and live, and both return zero** for anything
+  findings-related, because `normalize.findings` is never written by
+  anything — Phase F, next.
+- `docs/02-CONTRACTS.md` §8's REST surface table still shows the pre-Phase-E
+  aspirational shape (`GET /projects/:id/findings` etc.) rather than what
+  exists; reconciling that is Phase H's doc pass, not this one.
+
+### 2026-08-24 (b) — light by default, one design system, and the login UI stops saying "Zitadel"
+
+**Goal:** two user-facing complaints after (a) landed: the ZITADEL register
+screen read "Create your Zitadel account," and the app "still looks bad" —
+serif type, flat borders, no elevation, dark by default on this machine.
+
+#### The look was two real defects, not a matter of taste
+
+⚠ `--font` was a token nobody applied. Neither stylesheet ever set
+`font-family` on `html`/`body`, so every screen rendered in the browser's
+UA-default serif — the entire "old/bad" impression traced to one missing rule.
+
+⚠ **The very first screen a user lands on used a second, unrelated design
+system.** ProjectList/ProjectDetail/ProjectWizard used `.button`/`.card`/
+`.page-header` from `index.css` — including a completely UNSTYLED native
+`<button>` (ProjectWizard's "Back") — instead of the `.btn`/`app.css` system
+every other route already used. `index.css`'s own header comment already said
+its primitives were owed a move to `app.css` and it never happened. Migrated
+and unified; `index.css` is deleted.
+
+Found while migrating: **`.btn` had never been applied to an `<a>` before.**
+Every Link-flavoured button in the app (Register a project, All projects,
+sign-in/not-found) kept the browser's default underline — `text-decoration:
+none` on `.btn` was simply missing.
+
+Also fixed: `<main className="shell">` nested inside App.tsx's own outer
+`<main>` — two landmarks for one page. The outer `<main>` now owns page
+padding and max-width for every route for free; per-route wrappers are plain
+`<div>`s.
+
+**Default theme is now `light`, not `system`.** A compliance dashboard read
+during a work day should not open dark because a visitor's OS does. A blocking
+inline script in `index.html` applies the persisted choice before first
+paint — without it, a dark-OS visitor sees one dark frame from the
+`prefers-color-scheme` media query before the store (default `light`) runs.
+
+New tokens: `--primary`/`--primary-hover`/`--primary-active`, distinct from
+`--sbom` — `--sbom` is tuned for small text on a tinted chip, and reusing it as
+a large button fill washes out in dark mode. `--shadow-xs`/`--shadow-sm`/
+`--shadow-card-hover` give buttons and cards real elevation, deliberately
+subtle — this is read for hours, not a marketing page.
+
+#### The ZITADEL text — a server-side override, not a fork
+
+`apps/login` (the pinned login container) is MIT-licensed, so forking it was
+on the table, but not the right trade for three strings. ZITADEL's login UI
+calls `SettingsService.GetHostedLoginTranslation` on every render and deep-
+merges the result over its own English bundle
+(`apps/login/src/i18n/request.ts`) — the extension point it was built for.
+`iam.Client.ensureHostedLoginTranslation` (in the still-uncommitted
+`libs/go-shared/iam/provision.go` — see below) calls the write side of that
+same API, `SetHostedLoginTranslation`, instance-scoped, at bootstrap. Nothing
+touches the container image.
+
+⚠ Only `register.description` ("Create your Zitadel account.") and
+`common.title` are overridden — not `idp.signInWithZitadel` or
+`device.consent.disclaimer`, the other two literal "Zitadel" mentions in the
+locale file. Neither is reachable through this flow: we don't register
+ZITADEL as an external IDP and don't expose the device-code screen.
+Overriding a string nobody can see is dead configuration nobody could verify.
+
+⚠ **The login container caches translations for up to an hour**
+(`apps/login`'s `longCacheTTL`). The write succeeded immediately; the running
+`zitadel-login` container kept serving the old string until restarted.
+Restarted once here to verify; a real deployment either waits out the TTL or
+restarts the container after `iam bootstrap`.
+
+New `Spec.BrandName` field (`--brand-name`, env `ZITADEL_BRAND_NAME`, default
+`AxeBOM` per this request — distinct from "AxeBOM" used everywhere else in
+this codebase; this only reaches the two ZITADEL strings above, nothing else
+was renamed).
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | exit 0 |
+| Frontend: `tsc -b`, `eslint`, `vitest` (81), production build | all clean; CSS 28.6 kB gzipped, within the 250 kB budget |
+| Playwright, real Chromium, live stack | 4/4 (login round trip), unchanged by this session |
+| Live: register screen | fetched and screenshotted — reads "Create your AxeBOM account." |
+| Live: `go build ./services/gateway/...`, `go test` | authconfig package green (see the correction below) |
+
+#### ⚠ A gap in (a)'s own commit, closed here
+
+`3ecaded` ("sign in with ZITADEL") committed `auth.ts` calling
+`GET /v1/auth/config` but never committed `services/gateway/internal/
+authconfig` or the `routes.go` wiring that answers it — written in the same
+working session, never staged. A checkout of `3ecaded` alone 404s on every
+login attempt. Committed now as `ba2b599`, verified via the same `task
+verify` run.
+
+#### What is still NOT committed
+
+`libs/go-shared/iam/` and `cmd/axebom/iam.go` (the ZITADEL provisioning
+CLI — org/project/role/SPA/service-account bootstrap, and now
+`ensureHostedLoginTranslation`) remain **uncommitted, ~1400 lines**, as in
+every prior entry this session that touched them. The branding fix is a small,
+verified diff inside those large files; committing it would mean claiming the
+whole untracked identity system under a "branding fix" message, which is not
+an accurate scope. Applied and confirmed live against the running instance;
+not yet staged.
+
+### 2026-08-24 (a) — the browser signs in
+
+**Goal:** Phase D. The services had moved to ZITADEL; the browser had not moved
+anywhere. `setAccessToken` existed with zero callers, so every authenticated
+request went out with no `Authorization` header and every screen rendered
+`no bearer token`. Unit tests could not have caught it — each screen worked, and
+nothing tested the one thing nobody had written.
+
+#### Configuration is fetched, because the compiled-in version was already broken
+
+The obvious design is a `VITE_OIDC_CLIENT_ID` baked into the bundle, and it is
+what this started as. It does not survive contact with the deployment:
+`deploy/docker/Dockerfile.frontend` takes no build args, so the container image
+that `task dev` builds had an **empty client id** and could not have signed
+anyone in. The dev server would have worked and the product would not.
+
+`GET /v1/auth/config` on the gateway (`services/gateway/internal/authconfig`)
+publishes issuer, client id, project id, the scope list and the ZITADEL claim
+names. One image serves every environment, and re-provisioning identity does not
+require a rebuild. `VITE_OIDC_*` survive as a documented local override for
+running `npm run dev` against something with no gateway in front of it.
+
+Nothing in the document is a secret. The client id belongs to a PKCE public
+client that holds none by design; the issuer is the address the browser is
+already talking to; the project id appears in the audience of every token the
+user receives. A test asserts the document carries neither the internal ZITADEL
+URL nor a service-key path, so a future field cannot quietly change that.
+
+Publishing the CLAIM NAMES matters more than it looks: the SPA now writes no
+ZITADEL URN of its own, so `libs/go-shared/oidcauth` stays the only place those
+strings exist. The roles-claim key contains the project id, and a hand-built
+copy in TypeScript would drift silently — the symptom being an empty roles map
+and a multi-tenant user with no organisation switcher.
+
+#### Four defects the wiring exposed, three of them in code written before today
+
+**1. An expired token was indistinguishable from a forged one.** `Verify`
+collapsed every failure into `AUTH_TOKEN_INVALID`, so `ApiError.isExpired` —
+which the API client already had — could never be true and the retry it guarded
+could never run. The verifier now returns `AUTH_TOKEN_EXPIRED` when
+`errors.Is(err, oidc.ErrExpired)`.
+
+This leaks nothing, and the ordering inside the library is why: `CheckExpiration`
+runs **after** the signature and the issuer, so the code can only ever describe
+a token we genuinely minted. Everything else stays a single opaque code. Without
+the distinction a user with a fifteen-minute token goes through a full login
+every fifteen minutes.
+
+**2. `AUTH_ORG_AMBIGUOUS` answered 401, and 401 is a loop.** A consultant with
+roles in two organisations who names neither gets this code — the token is
+perfect, the account is ambiguous. Answering 401 tells every generic client to
+discard the token and re-authenticate, which returns an identical token and asks
+the identical question. It is now a `statusOverride` to **409**, and the code
+comment says why it sits in the `AUTH_` family with a non-`AUTH_` status.
+
+**3. The organisation switcher was decorative.** It computed the active
+organisation, wrote it to `localStorage` and sent it nowhere: `X-AxeBOM-Org`
+had no producer. carol, who holds analyst in Acme and viewer in Beta, would have
+had every request refused. The api client now owns the header alongside the
+bearer, in one `identityHeaders()` function — the split between "the switcher
+computes it" and "somebody sends it" is exactly how it went missing.
+
+⚠ It is set **during render, not in an effect**. React runs a child's effects
+before its parent's, so the first screen to mount fires its queries before a
+parent effect could install the header — invisible for a single-org user, and a
+console that looks broken on load and fine on refresh for everyone else. Writing
+a module-level slot during render is safe here: idempotent, no state, no
+re-render.
+
+**4. StrictMode silently unregistered the OIDC listeners.** The provider guarded
+its whole effect with a ref and also returned a cleanup. React 19's
+mount → cleanup → mount cycle therefore REMOVED `userLoaded`, `userUnloaded`,
+`silentRenewError` and the token refresher, then skipped the re-add because the
+ref was already set. In development the session authenticated correctly and then
+never saw another token: renewals fired and reached nobody. Split into two
+effects — a ref-guarded bootstrap with no cleanup, and an unguarded listener
+effect whose add and remove stay symmetric.
+
+#### The WebSocket could never have been authenticated
+
+`GET /v1/scans/{id}/progress` is guarded like every other route, and the browser
+`WebSocket` API cannot set an `Authorization` header. Scan progress would have
+401'd on upgrade and reconnected forever.
+
+The token is offered as a **subprotocol** — `axebom.bearer.<jwt>` — which
+lands in the `Sec-WebSocket-Protocol` request header. This is not a loophole in
+"never from the query string": that rule exists because URLs are written to
+access logs, sent in `Referer` and kept in history, none of which is true of a
+header. The Kubernetes API server solves the same problem the same way.
+
+Two things make it safe and one makes it work:
+
+- The subprotocol is read **only on a real upgrade**, so it cannot become a
+  second unaudited way to present a credential on an ordinary request.
+- The `Authorization` header still wins when present.
+- The handler must ECHO a selected subprotocol. RFC 6455 says a server that
+  selects none of the offered protocols makes a conforming browser fail the
+  connection — so `AcceptOptions.Subprotocols` is load-bearing, and omitting it
+  would have rejected every browser socket while leaving curl working.
+
+The client re-reads the token on **every** connect attempt rather than capturing
+it once: tokens live fifteen minutes and the backoff runs to thirty seconds, so
+a laptop woken from sleep would otherwise reconnect forever with a credential
+that expired at lunch.
+
+#### Verified against the running stack, not just compiled
+
+Four Playwright tests (`frontend/e2e/auth.spec.ts`) drive a real browser through
+a real ZITADEL login:
+
+- an anonymous visitor is asked to sign in — and the text `no bearer token`
+  appears nowhere, which is the symptom this phase existed to remove
+- `alice@acme.test` signs in and **sees `payments-api`** — a token that was
+  accepted, resolved to a tenant, and passed by RLS. A signed-in user with a bad
+  tenant claim sees an empty list, which looks like success, so the assertion is
+  on a specific row rather than on the page rendering
+- a reload does not bounce back to the identity provider
+- the header names who is signed in and offers a way out
+
+The helper that fills ZITADEL's login form retries the fill. That is not
+flake-papering: ZITADEL's login is a server-rendered Next.js page whose submit
+button stays disabled until React sees a value, so a `fill` landing before
+hydration is silently discarded — the text is visibly in the box and the button
+never enables. Playwright's click retry waited a full minute on a control that
+was never going to change, because the missing event had already not happened.
+
+By hand, through nginx:
+
+- `GET /api/v1/auth/config` → **200**, `Cache-Control: no-store`, correct ids
+- WebSocket upgrade with the token in the subprotocol → **101**, and
+  `Sec-Websocket-Protocol: axebom.v1` echoed back
+- the same upgrade without a token → **401**
+- the same upgrade with a token but a scan id that does not exist → **404**,
+  proving the credential was accepted rather than the route being open
+
+Gate: `go build ./...` OK · `go test ./...` clean · `golangci-lint` **0 issues**
+· `db verify-rls` **39 tables, 0 gaps** · `profile guardrails` OK · frontend
+`eslint --max-warnings 0`, `tsc --noEmit`, `prettier --check`, **81 unit tests**,
+`npm run build` (≈123 KB gzipped initial load, budget 250 KB).
+
+#### The trade that was made deliberately
+
+The SPA requests `offline_access` and stores the resulting refresh token in
+**session storage** — one tab, discarded when the tab closes. A refresh token is
+renewable credential material the browser has to keep, and anywhere JavaScript
+can read it, an XSS can take it. `localStorage` would have survived a browser
+restart and been readable by every tab on the origin.
+
+The alternative — renewing through a hidden iframe against ZITADEL's session
+cookie, storing nothing renewable — was considered and rejected: ZITADEL's own
+guidance for single-page applications is the refresh token, and building on the
+iframe would put a fifteen-minute session at the mercy of an instance setting
+(iframe embedding is off by default) and of every browser that treats a framed
+document as third-party. The access token itself never leaves memory either way.
+
+#### Known debt
+
+- **`frontend/e2e/shot.spec.ts` is scratch**, not a test: no assertions, screen
+  captures and console dumps. It belongs in a scratch directory or nowhere.
+- **The hand-rolled HS256 auth still compiles**, including the unused issuer in
+  `services/gateway/deps.go`. Phase H.
+- **The findings screens still read an empty table.** Nothing writes
+  `normalize.findings`; Phase F.
+- `docs/07-FRONTEND-SPEC.md` still describes the retired login flow. Phase H
+  rewrites it with the rest of the identity documentation.
+
+### 2026-08-23 (k) — the frontend can sign in
+
+**Goal:** the reported symptom was `no bearer token` on every screen. The SPA
+had no authentication of any kind: `setAccessToken` existed with zero callers,
+there was no `oidc-client-ts` dependency, no `/login`, no callback route.
+
+#### What was added
+
+`oidc-client-ts`, Authorization Code + PKCE against ZITADEL, matching the
+USER_AGENT + AUTH_METHOD_NONE registration the provisioner already created.
+`auth.ts` (UserManager, roles parsing), `authState.ts` (context),
+`AuthContext.tsx` (provider), `useAuth.ts` (hook), `AuthRoutes.tsx`
+(sign-in / callback / silent), `OrgSwitcher.tsx`, and a `RequireAuth` gate.
+
+⚠ **`RequireAuth` renders nothing while the session is being probed.** Rendering
+children first and correcting afterwards means every screen fires its queries
+with no token and shows an error for a session that was about to resume — which
+is what `no bearer token` on a reload actually was.
+
+⚠ **The callback routes are mounted OUTSIDE the gate and outside the shell.**
+Behind the gate they are a redirect loop; inside the shell the silent-renew
+iframe boots a second application inside itself.
+
+⚠ **The authorization code is single-use and StrictMode mounts effects twice.**
+The second exchange fails `invalid_grant` and would report a broken login for a
+session that succeeded. Guarded with a ref.
+
+`request()` retries a 401 once after a silent renewal, through an INJECTED
+refresher rather than importing the OIDC library into the api client. One
+renewal is shared by every waiting request: ZITADEL rotates refresh tokens, so N
+concurrent renewals would invalidate all but one and end the session they were
+trying to save.
+
+#### Three defects found by making it work
+
+1. ⚠ **`auth.identity_for` raised 42702 on every call.** `RETURNS TABLE
+   (tenant_id, user_id, role)` puts those names in scope as OUT variables for
+   the whole body, and `auth.memberships` has columns with the same names — so
+   `ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = …` is ambiguous. It
+   fails at CALL time, not CREATE time, so the migration applied cleanly and
+   every sign-in 500ed with "the account could not be resolved". Fixed with
+   `#variable_conflict use_column` in `migrations/auth/0003`, which is unreleased,
+   and applied to the running database.
+2. ⚠ **ZITADEL puts no profile claims in either token.** Measured: with
+   `openid profile email` requested, the id and access tokens carry sub, aud,
+   the roles claim and nothing else. The header greeted the user by their
+   nineteen-digit subject. `loadUserInfo: true` fixes the greeting; roles still
+   come from the token, so this is a display name and not an authorisation input.
+3. **`WSBearerPrefix` tripped gosec G101** and was failing `task lint` for
+   everyone. Annotated — it is a subprotocol prefix, not a credential.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | exit 0 |
+| Playwright, real Chromium, live stack | 4/4 — anonymous visitor sees a sign-in button and no error; sign-in reaches the projects list with `payments-api` visible; the session survives a reload; the header names the user |
+| Token claims, measured | `aud` contains the project id (the `:aud` scope works), roles claim present |
+| carol, two organisations | header shows `acme-industries.localhost · analyst` and `beta-corp.localhost · viewer` |
+
+The audience assertion matters: `oidcauth.Verifier` rejects a token whose `aud`
+lacks the project id, and ZITADEL only adds it when the
+`urn:zitadel:iam:org:project:id:{id}:aud` scope is requested.
+
+#### ⚠ Written concurrently with another session
+
+That session was wiring `X-AxeBOM-Org` and WebSocket bearer auth in the same
+files at the same time. Its org-header wiring is better than the version written
+here — it sets the header during render rather than in an effect, because
+React runs a child's effects before its parent's and the first screen would
+otherwise fire its queries before the header existed. That version was kept and
+the duplicate removed. `frontend/src/lib/ws.ts`, `ScanProgress.tsx` and
+`nginx.conf` are theirs and are deliberately not in this commit.
+
+### 2026-08-23 (j) — which image bytes produced this result
+
+**Goal:** `invocation.image_digest` was never sent, so nothing recorded what a
+scan actually ran. Completes the provenance triple with (i): what ran, when, and
+now from which bytes.
+
+#### Two statements, and recording one does not give you the other
+
+    image_digest              what actually ran, read back from the daemon
+    ENGINE_IMAGE_NOT_PINNED   the reference was not reproducible in advance
+
+`OSINT/tools.manifest.yaml` carries `image_digest: null` for **every** engine, so
+every one is addressed by tag. The resolved digest makes a run reproducible
+AFTER the fact; only `toolctl pin` makes the reference reproducible in advance.
+Conflating them would be worse than reporting neither — an unpinned fleet would
+look pinned because the digests happen to have been recorded.
+
+`available()` already reported the tag-pinning in its `detail`. That reaches the
+engine list; it does not reach the RESULT, and the result is what a report's
+provenance is built from — so a scan that ran a mutable tag was indistinguishable
+from one that ran a pinned digest.
+
+#### ⚠ Read back from the daemon, not copied from the reference
+
+Asking Docker what it resolved records the bytes even when the manifest gave
+only a tag. The field is the REGISTRY MANIFEST digest; a locally built image has
+none, and empty is honest — the local image ID is a different hash (the config
+digest) and putting it under the same name would be the `purl` /
+`certin_identifier` conflation again.
+
+#### The first implementation returned "" for every real engine
+
+It compared `RepoDigests` names literally. **The daemon does not echo back the
+name you gave it**: `docker.io/anchore/syft:v1.51.0` yields
+`anchore/syft@sha256:…`, and every engine in the manifest carries the
+`docker.io/` prefix. The Go test passed because it used the short form
+`busybox:1.37`.
+
+It was caught on the first live run by the `ENGINE_IMAGE_DIGEST_UNKNOWN`
+diagnostic added in the same change, which is the argument for that diagnostic
+existing. `normalizeRepo` now strips `index.docker.io/`, `docker.io/` and the
+implicit `library/`, and `repoDigestFor` is split out from the daemon call so
+nine cases are unit-tested without Docker — including a private registry whose
+port colon is not a tag separator, and a retagged image carrying two
+repositories.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | exit 0 |
+| Sandbox escape suite | all pass, plus a live digest-resolution test |
+| Live, syft via `scan.job.sbom` | `image_digest sha256:678bfa56…`, `ENGINE_IMAGE_DIGEST_UNKNOWN` gone, `ENGINE_IMAGE_NOT_PINNED` correctly still present |
+| Unit tests | 9 repository-matching cases; 8 worker provenance tests |
+
+#### What is still NOT wired
+
+- **`toolctl pin` has never run.** Every engine runs a mutable tag. Now stated
+  on every result instead of only in the engine list, but the fix is to pin.
+- The report's Engine Coverage section carries neither the summary counts (f)
+  nor the image digest.
+- ⚠ **The frontend cannot log in at all.** `setAccessToken` has zero callers,
+  there is no `oidc-client-ts` dependency and no `/login` route, so every
+  authenticated request goes out with no `Authorization` header regardless of
+  which identity provider is behind it. See (h)'s Phase D.
+
+### 2026-08-23 (i) — when an engine ran, not only how long
+
+**Goal:** `invocation.started_at` and `finished_at` were never sent, so
+`scan.engine_runs` recorded NULL for both on every run ever stored and the API
+rendered `null`. A report could say an engine took 41 seconds and never say when.
+
+#### ⚠ The three fields describe ONE interval
+
+started_at, finished_at and duration_ms are only worth publishing together. The
+sandbox measures the container; the worker measures the whole job, which is
+wider — image resolution, the database check, artifact persistence. Take the
+duration from one clock and the timestamps from the other and
+`finished - started != duration_ms`, at which point a reader cannot verify any
+of the three. Provenance that cannot be checked is not provenance.
+
+So they travel as a set. `sandbox.Result` gains `StartedAt`/`FinishedAt`
+alongside `Duration`; the bridge publishes all three; `classify()` copies all
+three; and the worker falls back to its own clock only when the sandbox reported
+none — replacing all three, never one of them.
+
+#### A run that failed to start reported zero duration
+
+`result.Duration` was assigned only on the success path, so a container that
+could not be created, or a copy-out that failed, published `duration_ms: 0`.
+That reads as "it finished instantly", which is the opposite diagnosis from "it
+never got going". Stamping in a `defer` covers all five exits from the timed
+region, and a new test asserts a wall-clock kill still carries its real interval.
+
+#### Omitted, not zeroed
+
+An engine this worker does not implement was never invoked, so it publishes no
+timestamps rather than `0001-01-01T00:00:00Z`. Go decodes a missing time to the
+zero value and `HandleResult` already skips it, so the column stays NULL. An
+`unavailable` result from an adapter that WAS consulted is timed — that decision
+happened and is worth dating.
+
+RFC3339 with a literal `Z`, truncated to milliseconds to match `duration_ms`'s
+resolution. Python renders UTC as `+00:00`, which Go parses happily — it would
+never have failed a round trip, and would have left stored provenance formatted
+two ways for a human to reconcile by eye.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | exit 0 |
+| Sandbox escape suite | all pass, plus two new timing tests against real containers |
+| Reconciliation, in Go | `FinishedAt - StartedAt == Duration` exactly, on a 1s sleep and on a 3s wall-clock kill |
+| Live, syft via `scan.job.sbom` | `started 04:01:22.529Z`, `finished 04:01:24.253Z`, `duration 1723ms` — reconciles to 1ms |
+| Python suite | 8 new timing tests; whole suite green |
+
+#### ⚠ A correction to entry (g), which this session reported wrongly
+
+(g) fixed a real defect — the seeded `password_hash` values were genuinely
+absent — but it was reported as "you can now log in", and that is not true of
+the application. Every user-facing route is guarded by `oidcauth.Guard`, which
+has no local-JWT fallback, while `/v1/auth/login` still mints a local HS256
+token: the auth service accepts it (`/v1/auth/me` → 200) and `project` rejects
+it (`/v1/projects` → 401). `cmd/axebom/iam.go` provisions the same four users
+in ZITADEL with `AxeBOM-dev-only1!` and says in its own comment "⚠ NOT the
+legacy seed password `axebom-dev-only`". See (h) for the path that works.
+
+Two contributing mistakes worth recording so they are not repeated:
+
+- The identity work was **uncommitted and gitignored** in the working tree at
+  session start, and its effect on `deps.go` across every service was not read
+  before claiming the login path worked.
+- The stack was started twice with `docker compose -f docker-compose.yml -f
+  docker-compose.app.yml`, omitting `docker-compose.iam.yml`. `task dev` layers
+  all three; an ad-hoc compose invocation is not `task dev`.
+
+### 2026-08-23 (h) — ZITADEL is the identity provider
+
+**Goal:** replace the hand-rolled HS256 auth with a real IAM, production-grade,
+without touching the tenancy boundary.
+
+#### The constraint that shaped the whole design
+
+Every one of the 43 RLS policies casts `current_setting('app.current_tenant_id')::uuid`,
+and six tables hold `created_by uuid NOT NULL`. **ZITADEL ids are numeric
+snowflake strings and will not cast.** Swapping the tenant id for a ZITADEL org
+id would have meant rewriting every policy, every seed and every `created_by`.
+
+So `auth.tenants` / `auth.users` / `auth.memberships` survive as a **local
+identity projection**, bridged by `zitadel_org_id` / `zitadel_user_id` and a
+`SECURITY DEFINER` function `auth.identity_for(...)` that resolves — and JIT-provisions
+— the mapping. RLS, the 12 RLS tests, the seeded UUIDs and every `created_by`
+column are unchanged, and the per-service change is one line.
+
+#### Licensing
+
+The ZITADEL **server** is AGPL-3.0-only (since v3, 2025-03-31). It runs as a
+pinned, unmodified container — the pattern CLAUDE.md invariant 9 explicitly
+sanctions — so **no AGPL code is linked into an AxeBOM binary**. Only
+`zitadel-go/v3` and `zitadel/oidc/v3`, both separate Apache-2.0 repositories,
+are imported. A depguard rule fails the build on any `github.com/zitadel/zitadel/`
+import, and the reference checkout lives in gitignored `.reference/`.
+
+#### Three documented facts that were wrong, found by minting a real token
+
+- The org claim is **`urn:zitadel:iam:user:resourceowner:id`**.
+  `urn:zitadel:iam:org:id` is a *scope*, not a claim, and reaching for the
+  obvious name yields an empty tenant on every request.
+- The roles claim is an **object** `{roleKey: {orgId: orgDomain}}`, not the
+  array one documentation page renders.
+- **`iss` is derived from the request Host.** A token minted by calling the
+  container on `:58080` carries a different issuer from one minted through the
+  proxy on `:5173`, and a verifier configured for one rejects the other.
+
+#### Four defects found by running it rather than reading about it
+
+1. **The key set could not be fetched at all.** ZITADEL selects its instance
+   from the Host header, so `GET http://zitadel-api:8080/oauth/v2/keys` answers
+   `404 Instance not found`. Every service then refused every token with
+   *"the access token could not be verified"* — a fleet-wide 401 whose message
+   points at the client. Fixed with a `publicHost` transport that forces the
+   public Host onto in-network calls; the token minter now shares it, because
+   two hand-rolled copies of one rule is how the second call site loses it.
+2. **A machine token carried no roles.** Project-level role assertion covers
+   users signing in through an application; a machine user authenticating by
+   JWT profile has none, so the roles claim only appears when requested by
+   scope. Without `urn:zitadel:iam:org:projects:roles` a service token is one
+   `RequireService` correctly refuses — which reads as a broken machine user.
+3. **campaign and fetcher could not read their own keys.** Written 0600 under
+   the developer's uid; the containers run as distroless nonroot. Now 0640 with
+   the two containers joining the file's group — the narrowest fix that does
+   not make a service credential world-readable.
+4. **Trusted domains are not a substitute for the Host override.**
+   `ZITADEL_FIRSTINSTANCE_TRUSTEDDOMAINS` is applied once at instance creation
+   and lives in the eventstore, so it is lost on `task iam:reset` and absent
+   for anyone pointing at an instance they did not create.
+
+#### The tenant moved out of the token and onto the request
+
+The retired issuer minted a token that NAMED the tenant. A ZITADEL machine
+token belongs to the AxeBOM organisation and says nothing about the customer
+being worked for, so the tenant now travels as `X-AxeBOM-Tenant` — **honoured
+only for a verified service principal, never for a person.** The trust boundary
+is unchanged (our components could always act for any tenant); it is now
+explicit on the wire and tested, rather than buried in a claim.
+
+Multi-org users are **refused with `AUTH_ORG_AMBIGUOUS`** rather than guessed:
+picking one would make the answer depend on map iteration order, which is a
+different tenant's data on every request.
+
+#### Verified
+
+- `go build ./...`, `go test ./...` (live stack up), `golangci-lint` **0 issues**.
+- `axebom db verify-rls`: **39 tenant-scoped tables, 0 gaps.**
+- 13 hermetic middleware tests + 4 transport tests + 2 live tests.
+- End to end through the gateway with a real ZITADEL service token:
+  own tenant **200**, other tenant **404**, no tenant header **401
+  AUTH_TENANT_CONTEXT_MISSING**, header without a token **401**.
+
+#### Known debt from this session
+
+- **`services/auth` and `libs/go-shared/auth/{token,password,apikey,service_token}.go`
+  still exist and still compile.** Deleted in Phase H, once the frontend is on
+  ZITADEL. Nothing is removed before its replacement passes.
+- **The frontend still sends no `Authorization` header** — `setAccessToken` has
+  zero call sites. Until Phase D, every authenticated request from the SPA is a
+  401. This is the single largest gap.
+- **`seed_login_test.go` now accepts both states** (`local` + hash, or `oidc` +
+  `zitadel_user_id`), because the fixture legitimately moves between them at
+  `iam bootstrap`. What it still refuses is neither.
+- `axebom iam verify` caps the unlinked-tenant listing at 5. The dev database
+  holds **859** tenants of test debris; printing them all buried the four rows
+  the command exists to show.
+
+### 2026-08-23 (g) — the seeded users can log in
+
+**Goal:** `migrations/seed/0001_dev_tenants.sql` inserted four users and no
+`password_hash`, so `task db:reset` produced a database nobody could sign into.
+
+#### Why nothing caught it
+
+The seed reported success. The users were there. Every automated test either
+minted a service token or registered its own account through
+`POST /v1/auth/register`, so **the one path a person actually takes was the one
+path nothing exercised.** It surfaced when someone opened the UI.
+
+#### What changed
+
+Real argon2id hashes for alice, aaron and bob, generated with
+`auth.HashPassword` (`libs/go-shared/auth/password.go`) at the parameters the service uses, one
+distinct salt each. Password: **`axebom-dev-only`**, named so it cannot be
+mistaken for a credential.
+
+⚠ **`p=1` explicitly, not `DefaultArgon2Params()`.** The default derives
+parallelism from `runtime.NumCPU()`, so a committed artifact would depend on the
+machine that produced it — this one would have shipped `p=4`. Verification reads
+the parameters back out of the encoded hash, so a fixed `p` verifies anywhere,
+and `NeedsRehash` leaves it alone.
+
+⚠ **`ON CONFLICT (id) DO UPDATE SET password_hash`, not `DO NOTHING`.** Every
+other row in the seed is `DO NOTHING` and that is right, but these users already
+exist in every database seeded before today — `DO NOTHING` would leave those
+developers unable to log in with a seed that looks like it ran. Only the hash is
+written back, so a name or status changed by hand while testing survives.
+Verified: re-running `db seed` against the live database installed the hashes
+without a reset.
+
+⚠ **carol keeps no password, deliberately.** Her `auth_provider` is `github`, and
+`Service.Login` has a branch for a user with an empty hash that returns the same
+generic error as a wrong password — answering "use GitHub instead" would confirm
+the address is registered. She is the only fixture that reaches it. Giving her a
+local password would have made every seeded user log in and deleted that case,
+which is why the obvious version of this fix is the wrong one.
+
+**Publishing the hashes is safe and the reasoning is written into the seed
+header.** The password has to be public for the seed to be usable, so the hash
+adds no secret; and `Migrator.Seed` already refuses any host that is not
+`localhost`, `127.0.0.1` or `postgres`, so these cannot reach a remote database
+by accident.
+
+#### The durability fix
+
+`libs/go-shared/platform/db/seed_login_test.go`, three tests:
+
+- **`TestSeededUsersCanLogIn`** — every local account's hash is VERIFIED against
+  the documented password, not merely checked for presence. A hash of the wrong
+  password is indistinguishable from a correct one until someone tries to log
+  in. Also asserts the wrong password fails, that the hash is not below current
+  policy, and that carol still has none.
+- **`TestSeededHashesUseDistinctSalts`** — identical hashes would mean a shared
+  salt. Irrelevant for a published dev password, and the wrong pattern to copy
+  out of this file into anything that matters.
+- **`TestSeededUsersHaveMemberships`** — a login that succeeds still lands
+  nowhere without one. ⚠ Counted PER TENANT through `WithTenant`: `auth.memberships`
+  is tenant-scoped, so an unscoped count raises `unrecognized configuration
+  parameter` — RLS failing closed, correctly. The first draft of this test hit
+  exactly that.
+
+Verified to FAIL on the defect: nulling alice's hash produces *"alice@acme.test
+has no password_hash, so nobody can log into a freshly seeded database"*, and
+re-seeding restores it.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | exit 0 |
+| Login, all three local users | 200 with the right role and tenant on the JWT — owner/A, analyst/A, owner/B |
+| carol | 401 `AUTH_INVALID_CREDENTIALS`, same error as a wrong password |
+| Wrong password | 401, indistinguishable — no enumeration oracle |
+| Tenant isolation after login | alice sees Acme's 2 projects, bob sees Beta's 1; both named `payments-api` |
+| Regression guard | verified to fail on a nulled hash, then pass after re-seeding |
+
+### 2026-08-23 (f) — the summary is populated, and null is not zero
+
+**Goal:** populate `ScanResultV1.summary`. syft inventoried 21 components on a
+live scan and the envelope carried `{"components": 0, ...}`.
+
+#### ⚠ The obvious fix would have introduced three new lies
+
+Filling the four fields in unconditionally replaces one false zero with three.
+syft catalogues components and matches no vulnerabilities; grype matches
+vulnerabilities and catalogues no licences. "grype found 0 licences" reads as a
+clean result and is really a question grype was never asked — the same failure
+this codebase refuses everywhere else, where an unknown must never present as a
+measured zero (invariant 3) and an unscanned ecosystem must be declared rather
+than omitted (invariant 12).
+
+So `events.Summary` is now four **pointers**, and the two states are distinct on
+the wire:
+
+	null   this engine does not measure this dimension
+	0      it measured, and there were none
+
+Not `omitempty`: an explicit null says "not measured", where an absent key says
+only that the publisher might be old. `events.Count(n)` boxes a measured value
+so a call site reads as what it means.
+
+#### The manifest decides what an engine may report
+
+Not this code's opinion. `OSINT/tools.manifest.yaml` already declares
+`produces:` per engine, and `summarize()` reports exactly those dimensions —
+adding an engine or changing what one produces is a manifest edit, not a code
+edit. `secrets` is mapped deliberately to nothing: a leaked secret is a finding,
+not an inventory count, and folding it into `vulnerabilities` would put a number
+in a compliance report that no CVE backs.
+
+⚠ **The adapters restate `produces` and one copy had already drifted.**
+`dependency-check` said `(vulnerabilities,)` where the manifest says
+`[components, vulnerabilities]`, so its component count would have been dropped
+from every envelope and looked exactly like an engine that does not catalogue
+components. Corrected, and `test_an_adapters_produces_matches_the_manifest`
+now pins every adapter against the manifest — verified to fail on the drift
+before it was fixed.
+
+#### Counting rules worth knowing
+
+- **Findings are not vulnerabilities.** grype emits one match per
+  (vulnerability, package) pair; trivy emits one entry per vulnerability with an
+  `affects` list. Counting rows would make the same project look three times
+  worse under grype than under trivy, in a field both publish under the same
+  name. All engines count DISTINCT identifiers; an unidentified finding still
+  counts, because dropping it would understate.
+- **CycloneDX nests**, and trivy uses that for multi-root repositories. The
+  counter recurses — counting only the top level would report a monorepo's four
+  roots as four components.
+- **A cryptographic asset is a component with a distinct type**, counted in
+  `crypto_assets` and not in `components`; counting both would render a 40-asset
+  CBOM as 40 components AND 40 crypto assets in one envelope.
+- **Licences count real assertions only.** `NOASSERTION`, `unknown` and `""` are
+  not assertions (invariant 3). ⚠ `NONE` is dropped here and still counts as
+  present for COVERAGE scoring — invariant 3's deliberate exception makes it a
+  substantive answer to "what licence is this", and it remains no answer at all
+  to "how many distinct licences were identified".
+
+#### A refused run publishes no counts
+
+`unavailable`, `skipped`, `failed` and `timeout` all mean the output was not
+accepted, and several adapters count before they reach the check that refuses
+the run — osv-scanner counts every finding, then declares itself unavailable
+because it cannot date them. Publishing those numbers would let a consumer sum
+findings the engine itself declined to stand behind. Cleared centrally in
+`_result()`, the one place every family's envelope is built, so a new adapter
+cannot forget it.
+
+#### The column was written from the first result and read by nothing
+
+`scan.engine_runs.summary` has existed since `migrations/scan/0001`. Nothing
+selected it, so even a correct count would have stopped at the database.
+`loadRuns` now reads it and `GET /v1/scans/{id}/engine-runs` returns it.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | exit 0, full stack running, `-race` included |
+| Python suite | 597 pass (`workers/` + `libs/py-shared`) |
+| Live scan, expressjs/express | **syft `components: 21`** — the number the envelope had been reporting as 0 |
+| null vs zero, live | syft `vulnerabilities: null`, grype `vulnerabilities: 0`, trivy-fs `components: 0` |
+| Refused runs, live | dependency-check `unavailable`, mock-engine `skipped`, osv-scanner `partial` — all four dimensions null |
+| Manifest-parity guard | verified to FAIL on the dependency-check drift before the fix |
+| Schema | `proto/schemas/scan-result-v1.schema.json` regenerated; the four fields are `["integer","null"]` |
+
+Live output:
+
+	dependency-check   unavailable  {components: null, vulnerabilities: null, licenses: null, crypto_assets: null}
+	grype              succeeded    {components: null, vulnerabilities: 0,    licenses: null, crypto_assets: null}
+	mock-engine        skipped      {components: null, vulnerabilities: null, licenses: null, crypto_assets: null}
+	osv-scanner        partial      {components: null, vulnerabilities: null, licenses: null, crypto_assets: null}
+	syft               succeeded    {components: 21,   vulnerabilities: null, licenses: 0,    crypto_assets: null}
+	trivy-fs           partial      {components: 0,    vulnerabilities: 0,    licenses: 0,    crypto_assets: null}
+
+#### ⚠ A pre-existing test flake surfaced, and it is NOT this change
+
+`task verify` failed once on `TestReaperTimesOutOverdueJobs` ("the reaper found
+no overdue jobs") and once on `TestScanStatusDerivesFromEngineResults` (scan
+status `failed`, want `completed_with_errors`). Both reproduce on the CLEAN tree
+at `7f05652` with this work stashed — measured, 1 failure in 10 runs of
+`go test ./services/...`.
+
+The cause is the same class already recorded for the bus and pipeline tests,
+now visible in the database: `Reaper.Sweep` is deliberately GLOBAL across every
+tenant (it goes through SECURITY DEFINER functions because `engine_runs` has
+FORCE RLS), it runs on a 20-second ticker in every orchestrator instance, and
+the DB-backed tests share one database with whatever else is running. A sweep
+landing between a test's backdate and its own assertion reaps the row first —
+or times out another test's runs and turns its scan `failed`.
+
+`task verify` passes on a rerun. **The real fix is an isolated database per
+test run, the same conclusion the broker reached; not done, and recorded here
+rather than left as an intermittent mystery.**
+
+#### Corrections to the previous entry
+
+- **Progress weighting never used the summary.** `orchestr.Progress` is a
+  weighted mean over ENGINE WEIGHTS and is unaffected by counts. The previous
+  entry named it as a victim of the zeroed summary; it was not.
+- **The report's Engine Coverage section does not read the summary either.**
+  `loadEngineCoverage` selects engine, version, status, database version,
+  ecosystems and error code — no counts. Surfacing them in the generated report
+  is a separate change with a golden-file cost, and is NOT done.
+
+#### What is still NOT wired
+
+- **`invocation.started_at` / `finished_at` are never set** by the Python
+  worker, so every engine run reports null for both through the API. Only
+  `duration_ms` survives, which says how long an engine took and not when it
+  ran. Visible on any scan now that the runs render. **This is the next task.**
+- The report's Engine Coverage section does not carry the counts (above).
+- Raw artifacts are stored to LOCAL disk, not object storage (ADR-0003).
+- Everything from the previous entries: `ai-bom` cannot resolve, `/v1/hbom/*`
+  is unimplemented, frontend auth is unwired, integration tests still need an
+  isolated broker, and the orchestrator still fans out to engines flagged
+  `derived` / `requires_import`.
+
+### 2026-08-23 (e) — syft's SBOM reaches grype
+
+**Goal:** wire syft's SBOM to grype, which was `skipped` on every real scan.
+
+#### It was two problems, not one
+
+The obvious one was location: syft writes its raw artifact to
+`<output_root>/<job_id>/`, which is per-JOB, while `_build_target` reads
+`sbom.cdx.json` from the per-SCAN workspace. grype has its own job id and cannot
+address syft's output directory, so the SBOM sat one directory away.
+
+The one underneath was **ordering**, and it would have survived fixing the first.
+`Requires: ["vuln_db"]` in the registry is a CAPABILITY, not an engine
+dependency, and nothing sequenced the two: `FanOut` published all six jobs at
+once, so grype was routinely delivered before syft had produced anything.
+`DEPENDS_ON = {"grype": "syft"}` existed only in the Python worker, where it
+turns a missing input into `skipped` — it reports the problem, it does not
+prevent it.
+
+#### The dependency is now modelled and enforced by the orchestrator
+
+`policy.Engine.ConsumesOutputOf` names a producing engine — distinct from
+`Requires`, because it constrains WHEN a job may be published rather than
+whether the engine can run. `FanOut` holds those jobs back; `releaseDependents`
+publishes them when the producer reports.
+
+Observed on a live scan:
+
+	holding an engine job until its producer reports  engine=grype waits_for=syft
+	fanned out engine jobs                            jobs=5
+	published output for a consuming engine           artifact=.../sbom.cdx.json
+	released a dependent engine job                   engine=grype after=syft
+	job complete                                      engine=grype status=succeeded
+
+**A producer that produced nothing must not leave its consumer queued.** If syft
+fails, grype can never run; leaving it `queued` means the scan never reaches a
+terminal state and the reaper reports a timeout half an hour later — a
+misleading cause for a straightforward one. The dependent is marked `skipped`
+immediately with `ENGINE_INPUT_MISSING` naming the producer and its status.
+
+`releaseDependents` runs BEFORE `RecomputeScanStatus`, deliberately: recompute
+asks whether every run is terminal, and a producer arriving last would otherwise
+recompute against a run that had not yet been published.
+
+#### The worker publishes what another engine consumes
+
+`workspace_artifact_name` on the adapter base; `"sbom.cdx.json"` on
+`SyftAdapter`. The worker copies the native output into the shared workspace
+after a successful run, atomically (write-then-replace, same directory) and
+world-readable — engine containers run as uid 65534 and mount the workspace
+read-only, and a 0600 file would be invisible to them.
+
+⚠ **`SyftSPDXAdapter` inherits from `SyftAdapter`**, so it would have written an
+SPDX document over `sbom.cdx.json`. grype would then either fail to parse it or,
+worse, parse it partially and report vulnerabilities against an inventory nobody
+produced. It sets `workspace_artifact_name = None` explicitly, with a test.
+
+A failed or unavailable run publishes nothing: a truncated SBOM becoming
+grype's input would produce findings for a subset of the project while looking
+like a complete scan.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | exit 0, full stack running, `-race` included |
+| Live scan, expressjs/express | **syft and grype both `succeeded`** |
+| Ordering | fan-out published 5, held grype, released it after syft |
+| Producer failure | consumer `skipped` with `ENGINE_INPUT_MISSING`, not left queued |
+| New tests | 5 worker + 3 orchestrator; the orchestrator ones skip when a live worker holds the subject |
+
+#### What is still NOT wired
+
+- **`ScanResultV1.summary` is never populated.** syft reports 21 components and
+  the envelope carries `{"components": 0, ...}`. *Done in (f) — and the claim
+  about progress weighting and Engine Coverage was wrong; see the corrections
+  in that entry.*
+- Raw artifacts are stored to LOCAL disk, not object storage — the result's
+  artifact URI is a filesystem path. It works because every worker shares the
+  bind mount, and it will not survive a distributed deployment (ADR-0003 wants
+  them in object storage).
+- Everything from the previous entries: `ai-bom` cannot resolve, `/v1/hbom/*`
+  is unimplemented, frontend auth is unwired, integration tests still need an
+  isolated broker, and the orchestrator still fans out to engines flagged
+  `derived` / `requires_import`.
+
+### 2026-08-23 (d) — the source reaches the engines
+
+**Goal:** make the engine workers materialize the source archive.
+
+#### What now works
+
+`axebom source materialize --uri --sha256 --dest` downloads the
+content-addressed archive, verifies the digest, and extracts it through the
+SAME hardened `fetcher.ExtractTar` the fetcher uses — traversal, size, inode and
+inflation guards. A second extractor in Python would have been a second thing to
+get right, and the second one would be the weaker; the workers already shell out
+to this binary for the sandbox bridge.
+
+`SBOMWorker.handle` calls it before every engine. Measured on
+expressjs/express: **213 files materialized, syft succeeded with 21 components**,
+and the 2nd and 3rd engines log `already materialized` rather than re-downloading.
+
+Idempotency is by **atomic rename**, not a lock: six engines share one scan
+workspace and may race, so each extracts to a sibling staging directory and
+renames into place. The loser sees the winner's finished tree, and there is no
+lock file to leak when a worker is killed mid-extraction. The stamp is written
+LAST, so a directory without one is treated as absent.
+
+#### ⚠ A 0700 WORKSPACE MADE EVERY ENGINE REPORT NOTHING
+
+`os.MkdirTemp` creates 0700 and rename preserves it, so the published workspace
+was root-owned and unreadable by the engine containers, which run as uid 65534.
+They did not fail — they walked a directory they could not enter, found nothing,
+and reported `partial`. **express materialized 213 files and syft still reported
+zero packages.**
+
+This is the same rule the engine-database provisioner already applies
+(`_make_world_readable`, and the `_readable_as_scan_user` check that proves it),
+for the same reason: a tree the scanner cannot read is indistinguishable, in the
+output, from a project with nothing in it.
+
+The chmod is **root-scoped and by descriptor**. The tree is a customer's
+repository, so `filepath.Walk` + `os.Chmod` is a symlink TOCTOU — an entry that
+was a regular file at Lstat can be a symlink by the time chmod runs, and the
+chmod lands outside the tree. Traversal goes through `os.Root` and every chmod
+is applied to an `O_NOFOLLOW` descriptor. `os.Root.Chmod` alone is not enough;
+its own documentation records that it stays racy on Unix.
+
+#### osv-scanner's exit 128 means two opposite things
+
+*"No package sources found"* is emitted both when a repository genuinely commits
+no lockfile — express — and when the workspace was never materialized. Both were
+observed here; the second while the archive was being mounted from a tmpfs the
+daemon could not read.
+
+Reporting the first as `failed` puts a false alarm in a compliance document.
+Reporting the second as zero coverage would hide a real defect. The only signal
+separating them is osv-scanner's own walk summary:
+
+	End status: 69 dirs visited, 283 inodes visited, 0 Extract calls
+
+A walk that visited a real tree and found no manifests is a **coverage gap**
+(`partial` + `ENGINE_ZERO_RESULTS`). A walk that visited nothing **did not see
+the source** (`failed` + `ENGINE_INPUT_UNREADABLE`). Parsing stderr is fragile
+against upstream rewording, so an unparsed count falls through to `failed` —
+overstating the problem visibly rather than understating it. Added
+`classify_nonzero` to the adapter base for this; every other exit code keeps the
+default.
+
+#### The distinction the tests pin
+
+A job with **no** archive reference is a legitimate shape — an upload or manual
+scan has nothing to fetch, and refusing it would break every non-repository
+source kind. A job that **names** an archive which cannot be materialized is a
+real failure, and the engine must not run: an engine pointed at a missing tree
+reports a clean project, which is the worst outcome this codebase has. Failure
+is `unavailable` + `SOURCE_UNAVAILABLE`, carrying the CLI's own reason (digest
+mismatch, missing object, extraction guard) so the report names the cause rather
+than saying the engine found nothing.
+
+Writing those tests caught a bug in the new code immediately:
+`EngineUnavailableError` takes `(engine, reason)` and was being raised with one
+argument.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | exit 0, full stack running, `-race` included |
+| Live scan, expressjs/express | syft **succeeded**, 21 components; 213 files materialized |
+| Idempotency | 2nd and 3rd engines log `already materialized` |
+| No engine `failed` | every non-success carries a stated reason |
+| Python suite | passes, including 10 new tests |
+
+#### What is still NOT wired
+
+- **syft's SBOM never reaches grype.** grype matches against OUR SBOM rather
+  than re-cataloguing the tree, and `DEPENDS_ON` records the dependency, but
+  syft writes its artifact to the OUTPUT directory while `_build_target` looks
+  for `sbom.cdx.json` in the WORKSPACE. So grype is `skipped` on every real
+  scan — correctly, and for a reason nothing yet resolves. **This is the next
+  task.**
+- `summary.components` stays 0 even when syft reports 21 — the count is not
+  propagated into the result envelope, so progress and coverage numbers
+  understate what was found.
+- trivy-fs reports `partial` on express because it needs a lockfile; that is
+  honest, not a defect.
+- Everything from the previous entries: `ai-bom` cannot resolve, `/v1/hbom/*`
+  is unimplemented, frontend auth is unwired, and integration tests still need
+  an isolated broker.
+
+### 2026-08-23 (c) — the fetcher is wired; a clone that produced no files
+
+**Goal:** subscribe something to `scan.job.fetch` so the fan-out can start.
+
+#### The fetcher became the ninth service, and that was not a preference
+
+The consumer could not live in the orchestrator. It needs Vault, object
+storage, a Docker runner and a repository credential, and the orchestrator is
+reachable from the gateway — putting them together would give a request-path
+service a Vault token with repository access, which is precisely what ADR-0008
+and invariant 7 forbid. The README's architecture diagram already showed the
+fetcher as a separate box.
+
+`services/scan-orchestrator/internal/fetcher` moved to `libs/go-shared/fetcher`
+(nothing outside its own tests imported it, so the move was free), and
+`gen-service` produced the scaffold — which is what that tool exists for.
+
+Source resolution is an HTTP call to a new **service-principals-only** route,
+`GET /v1/projects/{id}/source`. It returns `credential_ref`, and a Vault path is
+a read primitive, so `project:read` is not sufficient to reach it:
+`auth.RequireService` answers 404 to anyone who is not a service. The public
+connections endpoint still returns only `has_credential: bool`. The fetcher
+re-derives the Vault path from (tenant, kind, connection id) rather than
+trusting the stored one, so a tampered row cannot become a cross-tenant read.
+
+`ScanResultV1` gained `source_meta`. The orchestrator had been reading the
+commit sha out of `engine_db_version` — a field documented as the
+vulnerability-database vintage — which made a fetch result claim a database it
+had never consulted and hid the commit sha where nobody would look.
+
+#### ⚠ THE CLONE PRODUCED NO FILES, AND EVERY STEP REPORTED SUCCESS
+
+`Clone` ran entirely inside a container whose `/workspace` is a tmpfs, and
+returned `WorkspacePath: policy.WorkspacePath` — `/workspace`, a path that had
+only ever existed inside a container that no longer existed. Every unit test
+passed, because they assert on argv and on the parsed commit sha. Nothing
+consumed the tree until this worker tried to archive it:
+
+	walk source: lstat /workspace: no such file or directory
+
+Fixing it took four measured findings, each of which looked like success:
+
+1. **`docker cp` does not descend into a tmpfs.** Measured directly: a file
+   written to a tmpfs mount and copied out yields a tar containing only the
+   empty directory. The first copy-out therefore produced an archive of
+   **0 files** while reporting `source materialized`.
+2. **A writable host bind is not an option** — `mountsFor` forces ReadOnly on
+   every bind, deliberately. The answer is an anonymous VOLUME, copied out
+   through the Docker API after the process exits, so the running container
+   never holds a writable handle to the host.
+3. **A fresh volume is root-owned.** Over a path absent from the image it is
+   root:root 0755, and the sandbox runs as uid 65534. Docker seeds a new volume
+   with the ownership of the image path it covers, so the mount target must be
+   one the image already makes world-writable — `/tmp`, 1777. Hence
+   `CopyOut.MountPath` separate from `CopyOut.ContainerPath`.
+4. **git refuses to work in a directory it does not own** — *"detected dubious
+   ownership in repository at '/tmp'"*. The clone goes into a subdirectory it
+   creates itself rather than silencing the check with `safe.directory`.
+
+The copied tar is extracted through the existing hardened `ExtractTar`
+(traversal, size, inode and inflation guards) — which until now also had no
+production caller.
+
+#### ⚠ backoff DESTROYS ack_wait — and max_ack_pending=1 turns that into an outage
+
+Already fixed in the previous session for the workers; the fetcher hit the
+consequence. With `ack_wait=30m` and `max_ack_pending=1`, a worker restarted
+while holding a message blocks **every scan in the system** until ack_wait
+expires — observed as `Outstanding Acks: 1 out of maximum 1` with no log line
+at all. Raised to 4.
+
+#### Silent retries, and the one-line fix that found three bugs
+
+The handler returned `bus.ErrRetry` without logging, and `bus.dispatch` does not
+log the retry path either. A message naking every 30 seconds produced **no
+output whatsoever** — the queue showed one outstanding ack and the log showed
+nothing. Adding a log on entry and on every retryable return immediately
+surfaced, in order: a `permission denied` on the workspace, a missing
+`alpine/git` image, and the S3 key defect below.
+
+Corollaries fixed at the same time:
+
+- **The shared workspace must be mode 1777.** The fetcher runs as distroless
+  `nonroot` while the workers run as root, and both write there.
+- **`toolctl pull` now pulls `alpine/git`.** It is not a scanner and not in the
+  manifest, but the clone container cannot fetch its own image either.
+- **An object key is not a URI.** `ArtifactPrefix` defaults to `s3://axebom`,
+  so the key literally began `s3://` and MinIO rejected it with *"Object name
+  contains unsupported characters"* — naming neither the key nor the colon.
+  `objectKeyPrefix` strips the scheme and any leading slash, with a test.
+
+#### A poison message can saturate a consumer
+
+`handleFetchResult` treated a result for a NON-EXISTENT scan as retryable. Test
+leftovers filled every slot — `Outstanding Acks: 16 out of maximum 16,
+Unprocessed: 42` — and every real scan sat at `queued` behind them. An unknown
+scan is permanent: it now terminates to the DLQ.
+
+#### Integration tests were fighting the running application
+
+Three orchestrator pipeline tests took 45–60 seconds and failed with
+`scan status = "failed", want completed`. Two distinct causes, neither a product
+defect:
+
+- The fake worker claimed `scan.job.sbom` with `ReleaseFilterSubject`, which
+  claims a subject by **deleting whatever consumer is already there** — silently
+  dropping a live worker's in-flight deliveries, after which the two compete
+  anyway.
+- A test calling `ConsumeResults` creates the durable `orchestrator-fetch` —
+  the same name the running orchestrator uses. On a WorkQueue that is a consumer
+  GROUP, so NATS load-balanced the test's own messages to a process it could not
+  observe.
+
+Both now detect and **skip with a remedy**, via the new non-destructive
+`bus.ConsumersOn`. A test that cannot run should say why, not fight the
+application and report a defect that is not there. Note the trap in the first
+attempt: `t.Skipf` was called from the worker goroutine, where it does not skip
+anything — the test carried on and failed later for an unrelated-looking reason.
+
+**The durable fix is an isolated broker per test run.** Not done.
+
+#### Also
+
+The Python worker never recovered from a deleted consumer: it retried `fetch()`
+forever against a dead subscription while the process looked healthy and the log
+said "consuming". It now re-establishes after three consecutive failures.
+
+`KnownServices()` was a second hardcoded service list beside `servicePorts` —
+exactly the drift its own test guards against, and it caught it: adding the
+fetcher left the list at eight, which would have defaulted the ninth service to
+port 8080 and collided with the gateway. Now derived.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | exit 0, with the full stack running, `-race` included |
+| End-to-end scan | `POST /v1/scans` → fetch → archive → fan-out (6 jobs) → results → `completed_with_errors`, 100% |
+| Commit pinned | `7fd1a60b…`, the real Hello-World master commit |
+| Archive | 1 file (README); `.git` correctly excluded |
+| Orchestrator tests | pass with the stack live; pipeline tests skip with a remedy |
+
+#### What is still NOT wired
+
+- **The engine workers do not materialize the archive.** This is the next gap
+  and the reason the scan above reported empty results: the fetcher uploads a
+  content-addressed `source.tar.zst` and pins `source_archive_ref`, but nothing
+  downloads and extracts it into `<workspace_root>/<scan_id>`, so every engine
+  scans a tree that is not there. syft and trivy-fs returned `partial`,
+  osv-scanner `failed`.
+- `ai-bom` still cannot resolve (pip-only in the manifest, container-only
+  adapter).
+- `/v1/hbom/*` is still implemented by no service.
+- Frontend auth is still unwired; seeded users still have no password hash.
+- The orchestrator still fans out to engines flagged `derived` /
+  `requires_import`, which have no worker by design.
+
+### 2026-08-23 (b) — the workers consume NATS; two more silent defects
+
+**Goal:** wire the Python workers to JetStream so scans can be dispatched
+rather than only driven directly.
+
+#### What now works
+
+`libs/py-shared/axebom_shared/bus.py` (the consumer loop) and
+`worker_runtime.py` (the process lifecycle). Three families consume their own
+subject with their own durable — `worker-sbom`, `worker-cbom`, `worker-aibom` —
+and publish to `scan.result.<family>`. Proven end to end: a job published to
+`scan.job.sbom` ran syft in the sandbox and its result reached the
+orchestrator's consumer; the same for `cbomkit-theia` on `scan.job.cbom`.
+
+`SBOMWorker` gained optional `adapters`/`depends_on` parameters so CBOM and
+AIBOM reuse its job path rather than copying it. The sequence that matters —
+idempotency check first, manifest written LAST — is identical per family, and a
+copy is how one worker ends up acking before it has stored its evidence while
+still passing its own tests. All 142 sbom tests pass unchanged.
+
+#### ⚠ `backoff` SILENTLY DESTROYS `ack_wait`, ON BOTH SIDES
+
+nats-server overrides AckWait with `backoff[0]` whenever a backoff list is set.
+Measured against the running server:
+
+| consumer | reported Ack Wait |
+|---|---|
+| `ack_wait=30m` + `backoff=[30s,2m,8m]` | **30.00s** |
+| `ack_wait=30m`, no backoff | 30m0s |
+
+So `bus.go` has documented a thirty-minute ack window since Phase 6 and every
+consumer it created has really had thirty seconds. For the results consumers
+that is harmless — processing a result is milliseconds. For a **scan job** it is
+not: scans are minutes of container, so the message is redelivered while the
+first worker is still running it, producing duplicate engine containers for one
+job and, after four deliveries, a DLQ entry for work that was succeeding.
+
+Idempotency does not rescue it. The manifest is written LAST — deliberately, so
+a crash mid-run does not look complete — so a redelivery at thirty seconds finds
+no manifest and starts the engine again.
+
+Fixed in both languages by dropping the consumer-level backoff. Nothing is lost:
+the schedule is still applied explicitly via `NakWithDelay` / `nak(delay=...)`,
+which is the path that actually matters. The Go redelivery test still measures
+30.001s, confirming it was never the consumer setting driving it.
+
+#### ⚠ A DATA RACE ON THE DECOMPRESSION-BOMB GUARD
+
+`go test -race` (which `task verify` runs, and which had never run on this
+machine) found `CountingReader.n` written by the **zstd decoder's own goroutine**
+and read by `ExtractTar` on the caller's. Nothing in `extract.go` suggests
+concurrency; the second goroutine belongs to klauspost/compress.
+
+It is not merely a detector complaint. That counter is the inflation-ratio guard
+against decompression bombs, and an unsynchronised read can evaluate the ratio
+against fewer compressed bytes than were actually consumed. Now `atomic.Int64`,
+read once per check and only after the nil test.
+
+#### The bus tests claimed production subjects
+
+`bus_test.go` used `scan.job.sbom`, `scan.job.cbom`, `scan.job.aibom` and
+`scan.job.hbom`. A WorkQueue stream permits ONE consumer per filter subject, so
+every one of those tests failed at setup with *"filtered consumer not unique on
+workqueue stream"* the moment a real worker was running — which is now the
+normal state of a dev machine. The available workaround, `ReleaseFilterSubject`,
+would have passed by deleting the live worker's consumer and dropping its
+in-flight deliveries. Moved to dedicated families (`testpub`, `testdedup`,
+`testretry`, `testdlq`) instead: the tests now pass with the stack running.
+
+#### `cbomkit-theia`'s argv was wrong and had never been run
+
+It built `dir get <path> --quiet`. There is no `get` subcommand and no `--quiet`
+flag; the real form is `cbomkit-theia dir <path>`. The engine printed its usage
+text and exited 1, reported as `ENGINE_NONZERO_EXIT: exited 1` — accurate, and
+useless for working out that the command itself was malformed. Corrected against
+the pinned image's own `--help`, and `HOME` now points at the writable tmpfs so
+its startup warning about a read-only application folder cannot become fatal.
+
+It now returns `partial` on the monorepo fixture with two honest diagnostics —
+no `components` array, and `ENGINE_ZERO_RESULTS` — rather than claiming success
+on a tree that genuinely contains no crypto assets.
+
+#### Drift guards added
+
+`test_bus_contract.py` parses `bus.go` and asserts the stream names, MaxDeliver,
+AckWait and the backoff schedule match the Python constants. Two runtimes cannot
+share a constant, and duplication without a guard is how they diverge — the
+divergence here would be invisible in both codebases. Mutation-tested: setting
+`MAX_DELIVER = 7` fails the test with a message naming both values.
+
+The result envelope is validated against `proto/schemas/scan-result-v1.schema.json`,
+which is generated from the Go types, so worker/orchestrator drift is reported
+rather than silently dropped on the far side.
+
+Also corrected two Python config defaults that pointed at ports the stack does
+not publish: `NATS_URL` (4222 → 54222) and `S3_ENDPOINT` (9000 → 59000).
+
+#### No qbom or hbom worker, deliberately
+
+Neither family is a scan, so neither has an engine to dispatch. QBOM is a
+derivation from CBOM crypto assets plus Table 8 device metadata captured by
+form; HBOM is a CSV/form import. Adding a worker for either would mean inventing
+a scan where none exists.
+
+**The real gap is on the Go side:** the orchestrator's fan-out does not skip
+engines flagged `derived` or `requires_import`, so it would publish jobs nobody
+should consume. `registry.go` carries both flags; `orchestr` never reads them.
+
+#### Still not wired
+
+- **`scan.job.fetch` has no consumer.** 75 jobs were sitting on it from the
+  orchestrator's own tests. The fetcher has hardened clone logic and no
+  subscription, so the fan-out never starts and a scan cannot be triggered from
+  the API — only by publishing a job with a pre-staged workspace, which is how
+  the dispatch above was proven.
+- `ai-bom` still cannot resolve: its adapter subclasses `SandboxedAdapter`
+  (needs a container image) while the manifest declares it pip-only. The
+  manifest is SSOT, so that contradiction has to be settled there first.
+- `/v1/hbom/*` is still called by the frontend and implemented by no service.
+- Frontend auth is still unwired, and seeded users still have no password hash.
+
+### 2026-08-23 — the stack runs; six engines verified live; five real defects found
+
+**Goal:** install and run the application, and get every OSINT integration working.
+
+#### The machine was bare
+
+Ubuntu 26.04 (`resolute`) on KVM with only `git` and `python3`. Installed Go
+1.26.2, Docker Engine 29.7.2 + Compose v5.5.0, Node 24.19.0, go-task 3.53.1,
+golangci-lint 2.12.2, cosign 2.6.5. Two Ubuntu-26.04 specifics worth recording:
+`ensurepip` is split out (`python3-venv` and `python3-pip` are separate packages,
+so a bare `python3 -m venv` produces a venv with no pip), and a fresh
+`usermod -aG docker` does not affect the current login session — use `sg docker -c`
+until the next login.
+
+#### Nothing above infrastructure was wired to start
+
+`docker-compose.yml` was infrastructure only and said so. `08-OPERATIONS.md` §2
+and `README.md` both claimed the core profile included the services, the workers
+and the frontend. It did not, and there was no Procfile, supervisor or
+`dev:services` target either. The eight service Dockerfiles existed but were
+referenced by nothing **and could not build**: `golang:1.24-alpine` against a
+`go 1.26.2` module fails at `go mod download`.
+
+Built: the gateway proxy, a worker image, a frontend image, a CLI image, a
+`.dockerignore`, and `docker-compose.app.yml`. The Dockerfile template now reads
+the Go version from `go.mod` (`serviceSpec.GoVersion`), so the base image cannot
+drift from the module again, and `EXPOSE` uses the derived metrics port rather
+than a wrong literal.
+
+#### The gateway did no proxying at all
+
+`services/gateway/routes.go` was the 23-line generator stub, so the frontend
+could not reach any backend even with everything running. Added
+`services/gateway/internal/proxy` (9 tests, 38 assertions) and the four missing
+upstreams — `config.Services` modelled only three of the seven.
+
+Three decisions in it are worth keeping:
+
+- **Prefixes match on a segment boundary.** A plain `HasPrefix("/v1/projects")`
+  also matches `/v1/projectsummary`. No such route exists today, so the bug would
+  be invisible until someone added one.
+- **Each prefix is mounted four times** — bare, subtree, and both again under
+  `/api`. Mounting only the subtree form makes ServeMux answer the exact path
+  with a 301, and a browser downgrades a redirected POST to GET: "create project"
+  would silently become "list projects", returning 200.
+- **`Rewrite`, not `Director`.** Rewrite clears inbound `X-Forwarded-*` before
+  repopulating them, so a client cannot forge its own rate-limit bucket.
+
+Gateway upstreams are registered as **optional** health checks. Critical would
+mean one restarting service takes the gateway out of the load balancer — and
+with the gateway gone every other service becomes unreachable, escalating a
+partial outage into a total one.
+
+#### Five defects in the OSINT layer, all of which reported themselves as honest gaps
+
+Each of these produced a plausible-looking `unavailable` rather than an error,
+which is why they survived 74 passing worker tests.
+
+| Defect | Effect |
+|---|---|
+| `trivy-image` and `dependency-check` set `requires_db_version` with **no `database_id`** | `database()` returned None, `generate()` refused before the container started, and the message read *"no provisioned **None** database was found"*. Permanently dead. `dependency-check` also had no `DatabaseSpec`, so nothing could have provisioned it even with the id set. |
+| `test_database_guard.VULN_ADAPTERS` was a **hand-written list** of the three working engines | The test that existed to catch exactly the above never saw either broken adapter. Now derived from the runner's registry, with a guard asserting the derivation is non-empty — a list that silently became empty would make every parameterised test vacuously pass. |
+| `cbomkit-theia` read `target.image_ref` | `ScanTarget` has `image_digest`. `AttributeError` on every image-mode scan; the `or ""` fallback beside it could never fire. |
+| `ManifestResolver.MANIFEST_PATH` was **CWD-relative** | `_load()` catches `OSError` and returns an empty map, so a wrong working directory reported **every engine unavailable** — indistinguishable from a correctly detected gap. Now anchored to the repo root, matching `registry.py`, which already did it properly. |
+| `SBOMWorker` constructed adapters **without `artifact_dir`** | `artifact_dir=None` means "the caller collects output from the result", which is right for tests and silently wrong here. Every live scan ran the engine, parsed the output and **discarded the bytes** — so there was no immutable raw artifact to re-normalize (ADR-0003, invariant 10) and nothing to show later as evidence. |
+
+#### `toolctl pull` — the provisioning step that did not exist
+
+`toolctl sync` skipped container-mode engines with the note that "containers are
+pulled by the sandbox at run time". They are not, and **cannot be**: engines run
+with `--network=none`. The sandbox has `EnsureImage`, deliberately kept out of
+`Run` so pulling never happens inside a sandboxed execution — and nothing ever
+called it. Every container engine reported `No such image`: an honest gap, and
+entirely avoidable. Added `axebom toolctl pull` / `task osint:pull`.
+
+That surfaced a stale pin: `cbomkit-theia` was `image_tag: "v1.1.2"` and 404s.
+The version was right; the `v` prefix was not. Its sibling `cbomkit` in the same
+org publishes `2.2.0` with no prefix — the same "a project is not internally
+consistent about its own naming" trap already recorded for Trivy's asset names.
+
+#### `trivy-image`'s premise was wrong, and the fix is architectural
+
+The adapter documented "the image must already be in the daemon's store — pulled
+by the fetcher". Being in the daemon's store is useless to a container with no
+socket and no network; trivy fails across all four of its image sources. Mounting
+the socket would hand a container running untrusted third-party binaries the
+equivalent of host root.
+
+So the image must be materialised outside the sandbox and scanned as a **tarball**
+(`--input`), at `<workspace>/image.tar` — the same shape as grype's dependency on
+`sbom.cdx.json`. Verified working against a real `docker save` export.
+
+A second bug surfaced underneath: `trivy image` maintains a layer cache inside its
+`--cache-dir` and the database mount is read-only, so it fails with
+`mkdir /enginedb/fanal: read-only file system`. (`trivy fs` has no layer cache,
+which is why only image mode hit it.) The cache now lives on the writable tmpfs
+with the database symlinked in.
+
+Added a general `input_gap(target)` hook to `SandboxedAdapter`: an engine missing
+a required input is `unavailable` **with a stated reason** rather than `failed`
+with a bare `ENGINE_NONZERO_EXIT: exited 1`. A failed engine reads as a defect to
+debug; an unavailable one reads as reduced coverage, which is what it is.
+
+#### Two sibling-container path traps, both silent
+
+The worker starts engines on the **host** daemon, so every `-v` it passes is
+resolved host-side. A named volume and a container-local temp directory both
+mount as an **empty host directory**, and the daemon creates it without
+complaint.
+
+1. The engine-database volume. An empty OSV database makes osv-scanner print
+   `{"results": []}` and exit 0 — a clean bill of health for a scan that checked
+   nothing, which is the precise failure the stamp rule exists to prevent.
+2. `dbsync`'s warm tree, built in `tempfile.TemporaryDirectory()`. osv-scanner
+   reported `1 dirs visited, 0 Extract calls / No package sources found` and
+   exited 128 — a message that says nothing about mounts.
+
+Both are now identical-path bind mounts under `/var/lib/axebom`, with the
+reasoning recorded where the mounts are declared.
+
+#### Also fixed
+
+- **`.env.example` was broken as shipped.** `JWT_SIGNING_KEY` was 22 bytes against
+  a 32-byte minimum (killing 7 of 8 services at `buildDeps`), `POSTGRES_PASSWORD`
+  was `CHANGE_ME` against a compose default of `axebom`, and `METRICS_PORT=9090`
+  reintroduced the exact port collision `config/service.go` documents fixing.
+  Removed the keys nothing reads (`GITHUB_CALLBACK_URL`, `REPORT_SIGNING_KEY_REF`,
+  `NEXAR_CLIENT_ID/SECRET`, the `SMTP_*` block, `VITE_*`) and added the ~14 real
+  ones that were missing. It is now runnable unedited.
+- **The worker entrypoint swallowed commands.** `sh -c "..."` assigns appended
+  arguments to `$0, $1, ...` rather than executing them, so
+  `compose run sbom-worker python -m workers.sbom.dbsync` silently started the
+  idle worker loop instead. Every operator command arrives that way.
+- **`gen-service` panicked at import.** Reading `go.mod` relative to the working
+  directory works under `go run` from the repo root and fails under `go test`,
+  which sets the package directory as CWD — and doing it in `init()` made that a
+  panic before any test ran. Now lazy, walks up, returns an error.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | see below |
+| Go tests | 51 packages, 0 failures |
+| Python tests | full suite passes |
+| Golden files | pass, **unchanged** — no normalizer output moved |
+| DB-backed RLS suite | **12 tests, first ever run**, 0 skips |
+| Sandbox escape suite | **12 cases, first ever run** against a real Linux daemon |
+| `db verify-rls` | 39 tenant-scoped tables, FORCE RLS, 0 gaps |
+| `task health` | 8/8 services `up` |
+| Live engine matrix | 6 succeeded, 1 stated gap (`dependency-check`, needs the free NVD key) |
+| Engine databases | grype 2.0 GB, trivy 1.3 GB, osv 263 MB — all stamped |
+| Browser path | register → `/auth/me` → `/projects` through nginx and the gateway |
+| `gen-service --all --dry-run` | 0 regenerated — CI's generator-diff job will pass |
+
+#### What is still NOT wired
+
+- **No Python worker consumes NATS.** `SBOMWorker.handle()` is complete and
+  tested but reached only from tests and the smoke tool; `main()` logs "ready"
+  and sleeps. There is no `nats` dependency in `pyproject.toml`. The only
+  consumer of `scan.job.sbom` is the Go mock in `workers/_mock`.
+- **Nothing consumes `scan.job.fetch`**, so the orchestrator's fan-out never
+  starts, and nothing consumes `scan.job.{cbom,aibom,qbom,hbom}`.
+- **No runner for cbom / aibom / qbom / hbom.** Their adapters and normalizers
+  are real and tested; only the sbom family has a `runner.py`.
+- **`/v1/hbom/*` is called by the frontend and implemented by no service.**
+- **Frontend auth is not wired**: `setAccessToken` still has zero callers, and
+  the seeded users have no `password_hash`, so they cannot log in. Register works.
+- **`ai-bom` cannot resolve** — its adapter subclasses `SandboxedAdapter` (needs a
+  container image) while the manifest declares it pip-only. The manifest is SSOT,
+  so that contradiction has to be settled there first.
+- **`aibom-generator` has no concrete `Fetcher`** — no HTTP client exists.
+- **cosign still verifies nothing.** `toolctl sync` checks SHA256 only;
+  `haveCosign()` merely warns when absent, and nothing reads the manifest's
+  `Signature.Kind`. Installing cosign does not change this.
 
 ### 2026-08-18 (e) — the windows job, running for the first time
 
@@ -1995,10 +4888,10 @@ to satisfy a broken check would have been the actual bug.
 the empty tree; the lint step did not. Both are now guarded by one detect step.
 The old guard also used `compgen -G "proto/**/*.proto"`, which without
 `shopt -s globstar` silently means `proto/*/*.proto` — it would have missed the
-nested `proto/encorebom/scan/v1/` layout Phase 6 will introduce. Replaced with
+nested `proto/axebom/scan/v1/` layout Phase 6 will introduce. Replaced with
 `find`.
 
-**PyYAML was imported but never declared.** `encorebom_shared.adapters.registry`,
+**PyYAML was imported but never declared.** `axebom_shared.adapters.registry`,
 `workers/sbom/adapters/common.py` and `workers/sbom/normalize_runner.py` all
 `import yaml` at module scope, but `pyproject.toml` listed only pydantic and
 structlog. It resolved on this machine because PyYAML was already present, and
@@ -2208,7 +5101,7 @@ leaks. Then Playwright.
 ### 2026-08-17 (k) — Phase 9 renderers, signing and share tokens
 
 XLSX, CSV, JSON and PDF renderers; detached Ed25519 signing through Vault
-Transit; `encorebom verify`; share-link tokens and an atomic download claim.
+Transit; `axebom verify`; share-link tokens and an atomic download claim.
 Full Go suite green across 27 packages, `golangci-lint` clean repo-wide.
 
 One defect recurred three times and is worth carrying forward: **anything whose

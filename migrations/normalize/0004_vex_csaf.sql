@@ -65,7 +65,7 @@ SELECT app.enable_tenant_rls('normalize.vex_statements');
 --
 -- UPDATE is retained ONLY so superseded_by can be set on the prior row when a
 -- new statement replaces it. DELETE is revoked outright.
-REVOKE DELETE ON normalize.vex_statements FROM encorebom_app;
+REVOKE DELETE ON normalize.vex_statements FROM axebom_app;
 
 -- ---------------------------------------------------------------------------
 -- csaf_advisories — published AFTER a VEX statement.

@@ -17,8 +17,8 @@ from typing import Any
 import pytest
 from jsonschema import Draft202012Validator
 
-from encorebom_shared.adapters.base import GenerateResult, RawArtifact, ResultStatus
-from encorebom_shared.sandbox import SandboxResult
+from axebom_shared.adapters.base import GenerateResult, RawArtifact, ResultStatus
+from axebom_shared.sandbox import SandboxResult
 
 from .runner import ADAPTERS, DEPENDS_ON, JobContext, SBOMWorker
 

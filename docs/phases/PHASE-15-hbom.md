@@ -30,7 +30,7 @@ MVP works. Nothing else — this phase has no scanner dependency.
 
 ## Out of scope
 
-Inventory management, purchasing, stock levels. EncoreBOM is a BOM platform, not an ERP.
+Inventory management, purchasing, stock levels. AxeBOM is a BOM platform, not an ERP.
 
 ## Deliverables
 

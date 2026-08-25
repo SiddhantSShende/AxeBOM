@@ -3,8 +3,8 @@ package main
 import (
 	"net/http"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/authz"
+	"github.com/axebom/axebom/libs/go-shared/auth"
+	"github.com/axebom/axebom/libs/go-shared/authz"
 )
 
 // registerRoutes mounts this service's HTTP surface.
@@ -46,7 +46,7 @@ var publicRoutes = map[string]string{
 func registerRoutes(mux *http.ServeMux, d *deps) {
 	// Health endpoints (/healthz, /readyz) are mounted separately in main.go.
 	h := d.handler
-	authenticated := auth.Authenticate(d.issuer, nil)
+	authenticated := d.identity.Authenticate()
 
 	// guard composes authentication and one matrix cell, so a route's
 	// permission is declared next to the handler it protects rather than
@@ -88,6 +88,16 @@ func registerRoutes(mux *http.ServeMux, d *deps) {
 		guard(authz.ResourceShareLink, authz.ActionDelete, h.Revoke))
 	mux.Handle("GET /v1/shares/{share_id}/accesses",
 		guard(authz.ResourceShareLink, authz.ActionRead, h.ShareAccessLog))
+
+	// --- CSAF advisories ------------------------------------------------------
+	// Project-scoped, not report-scoped — like the VEX statements they
+	// publish (services/scan-orchestrator/routes.go's own comment on why),
+	// an advisory is a fact about a project's vulnerability landscape, not
+	// tied to one rendered report.
+	mux.Handle("POST /v1/csaf/{projectId}/advisories",
+		guard(authz.ResourceCSAF, authz.ActionCreate, h.GenerateCSAFAdvisory))
+	mux.Handle("GET /v1/csaf/{projectId}/advisories",
+		guard(authz.ResourceCSAF, authz.ActionRead, h.ListCSAFAdvisories))
 
 	// --- The anonymous download ---------------------------------------------
 	//

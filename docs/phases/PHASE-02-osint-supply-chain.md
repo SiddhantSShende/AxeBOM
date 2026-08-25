@@ -40,14 +40,14 @@ No adapters that parse output (Phase 7), no sandbox (Phase 5), no scanning. This
 ## Deliverables
 
 ```
-cmd/encorebom/toolctl.go        sync | verify | list | dryrun
+cmd/axebom/toolctl.go        sync | verify | list | dryrun
 libs/go-shared/toolctl/
   manifest.go   parse + validate
   fetch.go      download, sha256, cosign
   resolve.go    container -> binary -> unavailable
   probe.go      availability check
 
-libs/py-shared/encorebom_shared/adapters/
+libs/py-shared/axebom_shared/adapters/
   base.py       ToolAdapter protocol: available() / generate() / parse()
   registry.py   engine_id -> adapter
   <one stub per engine — available() only>
@@ -67,7 +67,7 @@ OSINT/tools.manifest.yaml    updated with real versions + digests
 ## Steps
 
 1. `task osint:dryrun`, resolve every placeholder, update the manifest, set `verified_against_network: true`.
-2. Implement `toolctl sync`: download to `.encorebom/tools/<id>/<version>/`, verify SHA256 against the upstream checksum file, verify cosign where `cosign: true`.
+2. Implement `toolctl sync`: download to `.axebom/tools/<id>/<version>/`, verify SHA256 against the upstream checksum file, verify cosign where `cosign: true`.
 3. **Handle a missing `cosign` explicitly**: degrade to checksum-only, print a loud warning, and record the degradation in the provenance manifest. Never silently.
 4. Implement `toolctl verify`: probe each engine, print `available` / `unavailable` with the reason.
 5. Write adapter stubs. `available()` runs the tool's version command and parses the version — this is what catches a container that pulls but does not run.

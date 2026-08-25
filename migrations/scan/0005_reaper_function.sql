@@ -60,7 +60,7 @@ takes no parameters, writes one status transition, and returns only ids — ther
 is no input that could widen it and no way to read scan content through it.';
 
 -- Only the application role may call it; the tables stay protected.
-GRANT EXECUTE ON FUNCTION scan.reap_overdue_runs() TO encorebom_app;
+GRANT EXECUTE ON FUNCTION scan.reap_overdue_runs() TO axebom_app;
 
 -- ---------------------------------------------------------------------------
 -- Recomputing a scan's status after a reap is likewise cross-tenant.
@@ -86,7 +86,7 @@ AS $fn$
 $fn$;
 -- +goose StatementEnd
 
-GRANT EXECUTE ON FUNCTION scan.terminal_statuses_for(uuid) TO encorebom_app;
+GRANT EXECUTE ON FUNCTION scan.terminal_statuses_for(uuid) TO axebom_app;
 
 -- +goose StatementBegin
 CREATE OR REPLACE FUNCTION scan.set_scan_status(p_scan_id uuid, p_status text, p_terminal boolean)
@@ -109,7 +109,7 @@ COMMENT ON FUNCTION scan.set_scan_status(uuid, text, boolean) IS
 'Used by the reaper only. Ordinary status updates go through the tenant-scoped
 path in Go; this exists because a reaped scan has no tenant session to write in.';
 
-GRANT EXECUTE ON FUNCTION scan.set_scan_status(uuid, text, boolean) TO encorebom_app;
+GRANT EXECUTE ON FUNCTION scan.set_scan_status(uuid, text, boolean) TO axebom_app;
 
 -- +goose Down
 DROP FUNCTION IF EXISTS scan.set_scan_status(uuid, text, boolean);

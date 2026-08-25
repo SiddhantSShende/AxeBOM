@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/sandbox"
+	"github.com/axebom/axebom/libs/go-shared/sandbox"
 )
 
 // ⚠ THE ESCAPE SUITE.
@@ -570,4 +570,96 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "…"
+}
+
+// ---------------------------------------------------------------------------
+// Timing provenance
+// ---------------------------------------------------------------------------
+
+// ⚠ StartedAt, FinishedAt AND Duration DESCRIBE ONE INTERVAL.
+//
+// The worker copies all three into ScanResultV1.invocation, where a reader must
+// be able to check finished - started against duration_ms. If they disagree,
+// none of the three can be trusted, and provenance that cannot be checked is
+// not provenance.
+func TestRunReportsWhenItRanAndNotOnlyHowLong(t *testing.T) {
+	r := newRunner(t)
+
+	before := time.Now().UTC()
+	res := run(t, r, spec("sh", "-c", "sleep 1; echo done"))
+	after := time.Now().UTC()
+
+	if res.StartedAt.IsZero() || res.FinishedAt.IsZero() {
+		t.Fatalf("no timestamps: started=%v finished=%v", res.StartedAt, res.FinishedAt)
+	}
+	if res.StartedAt.Location() != time.UTC || res.FinishedAt.Location() != time.UTC {
+		t.Errorf("timestamps are not UTC: %v / %v — no local time anywhere, ever",
+			res.StartedAt.Location(), res.FinishedAt.Location())
+	}
+	if res.StartedAt.Before(before) || res.FinishedAt.After(after) {
+		t.Errorf("the run claims %v .. %v, outside the call at %v .. %v",
+			res.StartedAt, res.FinishedAt, before, after)
+	}
+
+	// The reconciliation invariant, exactly.
+	if got := res.FinishedAt.Sub(res.StartedAt); got != res.Duration {
+		t.Errorf("finished - started = %v but Duration = %v; these came from "+
+			"different clocks and a consumer cannot reconcile them", got, res.Duration)
+	}
+	if res.Duration < time.Second {
+		t.Errorf("Duration = %v for a run that slept a second", res.Duration)
+	}
+}
+
+// ⚠ A RUN THAT FAILED TO START MUST NOT REPORT ZERO DURATION.
+//
+// Duration was assigned only on the success path, so anything that returned
+// early — a container that could not be created, a copy-out that failed —
+// published `duration_ms: 0`. That reads as "it finished instantly", which is
+// the opposite diagnosis from "it never got going". Stamping in a defer covers
+// every exit.
+func TestATimedOutRunStillCarriesItsInterval(t *testing.T) {
+	r := newRunner(t)
+
+	s := spec("sh", "-c", "sleep 60")
+	s.Limits = fastLimits()
+	s.Limits.WallClock = 3 * time.Second
+
+	res := run(t, r, s)
+	if !res.TimedOut {
+		t.Fatalf("expected a timeout, got exit %d", res.ExitCode)
+	}
+	if res.StartedAt.IsZero() || res.FinishedAt.IsZero() {
+		t.Fatal("a killed run reported no interval, so a report cannot say when it ran")
+	}
+	if got := res.FinishedAt.Sub(res.StartedAt); got != res.Duration {
+		t.Errorf("finished - started = %v but Duration = %v", got, res.Duration)
+	}
+	if res.Duration < 2*time.Second {
+		t.Errorf("Duration = %v; the wall clock was 3s, so this is not the real interval",
+			res.Duration)
+	}
+}
+
+// ⚠ WHAT RAN, READ BACK FROM THE DAEMON RATHER THAN COPIED FROM THE REFERENCE.
+//
+// The manifest addresses every engine by tag today, and a tag is mutable: the
+// same reference scanned twice can be two different binaries. Asking the daemon
+// what it resolved is what lets a report state the bytes it examined even when
+// the reference itself was not reproducible in advance.
+func TestRunRecordsTheImageItActuallyResolved(t *testing.T) {
+	r := newRunner(t)
+	res := run(t, r, spec("sh", "-c", "true"))
+
+	if res.ImageDigest == "" {
+		// The test image is pulled from a registry in newRunner, so it has a
+		// repo digest. An empty value here means the resolution silently
+		// failed, which is the whole field being useless.
+		t.Fatalf("no image digest recorded for %s", testImage)
+	}
+	if !strings.HasPrefix(res.ImageDigest, "sha256:") {
+		t.Errorf("image digest = %q, want a sha256: manifest digest — the local "+
+			"image ID is a different hash and must not appear here", res.ImageDigest)
+	}
+	t.Logf("%s resolved to %s", testImage, res.ImageDigest)
 }

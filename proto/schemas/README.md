@@ -3,7 +3,7 @@
 The three envelopes that cross a process boundary, as JSON Schema.
 
 These are **generated from the Go types** in `libs/go-shared/events` by
-`encorebom schema gen`, so they cannot drift from what the code actually
+`axebom schema gen`, so they cannot drift from what the code actually
 publishes. `docs/02-CONTRACTS.md` §4–§6 remains the SSOT for intent; these
 files are the machine-readable form.
 
@@ -28,5 +28,5 @@ report; an unrecognized field in a queue message is a newer publisher.
 ## Regenerating
 
 ```
-go run ./cmd/encorebom schema gen
+go run ./cmd/axebom schema gen
 ```

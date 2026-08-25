@@ -5,7 +5,7 @@ what keeps the differences between engines visible:
 
     1. resolve the pinned image from OSINT/tools.manifest.yaml
     2. build an argv and REDACT it
-    3. run it in the sandbox (never directly — see encorebom_shared.sandbox)
+    3. run it in the sandbox (never directly — see axebom_shared.sandbox)
     4. classify the outcome, including the statuses that are not failures
     5. write the raw artifact, which is Phase 8's input and is never mutated
 
@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,7 +33,7 @@ from typing import Any
 
 import yaml
 
-from encorebom_shared.adapters.base import (
+from axebom_shared.adapters.base import (
     Availability,
     Capabilities,
     EngineMode,
@@ -42,14 +43,41 @@ from encorebom_shared.adapters.base import (
     ScanTarget,
     ToolAdapterBase,
 )
-from encorebom_shared.enginedb import EngineDatabase, database_root
-from encorebom_shared.enginedb import resolve as enginedb_resolve
-from encorebom_shared.sandbox import Mount, Sandbox, SandboxLimits, SandboxResult, WorkspaceLayout
+from axebom_shared.enginedb import EngineDatabase, database_root
+from axebom_shared.enginedb import resolve as enginedb_resolve
+from axebom_shared.sandbox import Mount, Sandbox, SandboxLimits, SandboxResult, WorkspaceLayout
+
 
 #: Where the pinned engine versions and images live. ONE source of truth for
 #: what actually runs — a hardcoded image tag in an adapter would drift from the
 #: manifest the supply-chain checks verify.
-MANIFEST_PATH = Path("OSINT/tools.manifest.yaml")
+def _default_manifest_path() -> Path:
+    """Locate OSINT/tools.manifest.yaml regardless of the working directory.
+
+    This was the bare relative Path("OSINT/tools.manifest.yaml"), resolved
+    against the CWD. The failure mode is the dangerous kind: _load() catches
+    OSError and returns an empty map, so a wrong CWD does not raise — it
+    reports EVERY ENGINE UNAVAILABLE, which reads as a correctly-detected gap
+    rather than as a misconfiguration.
+
+    Resolution order matches registry.py, which already did this properly:
+      1. $OSINT_MANIFEST, if set
+      2. the repo root, found by walking up to the directory holding go.mod
+      3. the CWD-relative path, so an unusual layout still has a last resort
+    """
+    override = os.environ.get("OSINT_MANIFEST", "").strip()
+    if override:
+        return Path(override)
+
+    here = Path(__file__).resolve()
+    for candidate in here.parents:
+        if (candidate / "go.mod").exists():
+            return candidate / "OSINT" / "tools.manifest.yaml"
+
+    return Path("OSINT/tools.manifest.yaml")
+
+
+MANIFEST_PATH = _default_manifest_path()
 
 
 @dataclass
@@ -229,7 +257,7 @@ class SandboxedAdapter(ToolAdapterBase):
     #: Engines that match vulnerabilities MUST report a dated database.
     requires_db_version = False
     #: Which provisioned database this engine reads, if any. Set on every
-    #: engine with ``requires_db_version``; see :mod:`encorebom_shared.enginedb`
+    #: engine with ``requires_db_version``; see :mod:`axebom_shared.enginedb`
     #: for why the two travel together.
     database_id: str | None = None
     #: Where the provisioned database is mounted inside the container.
@@ -251,6 +279,27 @@ class SandboxedAdapter(ToolAdapterBase):
         #: the result instead — used by the fixture generator and by tests.
         self._artifact_dir = artifact_dir
         self._database_root = database_root
+
+    def classify_nonzero(self, result: SandboxResult) -> tuple[ResultStatus, str, str] | None:
+        """Reclassify an unacceptable exit code, if this engine knows better.
+
+        Returns (status, code, message), or None to accept the default
+        `failed` / ENGINE_NONZERO_EXIT. Overridden by engines whose error codes
+        are ambiguous — see OSVScannerAdapter.
+        """
+        _ = result
+        return None
+
+    def input_gap(self, target: ScanTarget) -> str | None:
+        """Why this engine cannot run against this target, if it cannot.
+
+        Returns None when the engine has everything it needs. Overridden by
+        engines that depend on an artefact the fetcher produces — currently
+        trivy-image, which needs an exported image tarball because a sandboxed
+        container can reach neither the daemon nor a registry.
+        """
+        _ = target
+        return None
 
     # -- availability -------------------------------------------------------
 
@@ -317,6 +366,20 @@ class SandboxedAdapter(ToolAdapterBase):
         and so never found anything to exit 1 over.
         """
         return frozenset({0})
+
+    #: File name to publish this engine's native output under, inside the SHARED
+    #: per-scan workspace, when another engine consumes it.
+    #:
+    #: ⚠ THE WORKSPACE, NOT THE OUTPUT DIRECTORY, AND THE DIFFERENCE IS THE BUG.
+    #:
+    #: Raw artifacts go to <output_root>/<job_id>/, which is per-JOB — grype has
+    #: its own job id and cannot know syft's. The workspace is per-SCAN and is
+    #: what _build_target reads, so an engine whose output another engine needs
+    #: must publish it there. Until it did, grype was `skipped` on every real
+    #: scan with ENGINE_INPUT_MISSING while syft's SBOM sat one directory away.
+    #:
+    #: None means nothing else reads this engine's output.
+    workspace_artifact_name: str | None = None
 
     def artifact_name(self) -> str:
         """File name for this engine's raw output."""
@@ -393,6 +456,32 @@ class SandboxedAdapter(ToolAdapterBase):
                 ],
             )
 
+        # ⚠ NO REQUIRED INPUT, NO RUN — and `unavailable`, not `failed`.
+        #
+        # Some engines need something the fetcher must produce first. Letting
+        # them start anyway means the engine fails deep inside its own error
+        # handling, and what reaches the report is a bare
+        # "ENGINE_NONZERO_EXIT: exited 1" that names neither the missing input
+        # nor who was supposed to supply it.
+        #
+        # A stated gap is the useful outcome here: a `failed` engine reads as a
+        # defect to debug, while `unavailable` with a reason reads as reduced
+        # coverage, which is what it actually is.
+        gap = self.input_gap(target)
+        if gap is not None:
+            return GenerateResult(
+                status=ResultStatus.UNAVAILABLE,
+                diagnostics=[
+                    {
+                        "severity": "warn",
+                        "code": "ENGINE_INPUT_MISSING",
+                        "message": gap,
+                        "hint": "the scan continues; this appears in Engine Coverage",
+                    }
+                ],
+                engine_version=availability.version,
+            )
+
         # ⚠ NO DATABASE, NO RUN. CHECKED BEFORE THE CONTAINER STARTS.
         #
         # A vulnerability engine with no database does not fail — it matches
@@ -457,7 +546,7 @@ class SandboxedAdapter(ToolAdapterBase):
             env=env or None,
             mounts=mounts,
             limits=self.limits(),
-            labels={"encorebom.engine": self.engine_id, "encorebom.job": target.job_id},
+            labels={"axebom.engine": self.engine_id, "axebom.job": target.job_id},
         )
 
         generated = self.classify(target, result, redacted, image, database)
@@ -508,10 +597,60 @@ class SandboxedAdapter(ToolAdapterBase):
         base = GenerateResult(
             status=ResultStatus.FAILED,
             engine_version=image.version,
+            # All three from the sandbox, which is the clock that actually
+            # bracketed the container. Taking the duration from here and the
+            # timestamps from the worker would put a wider interval next to a
+            # narrower number and make both unverifiable.
+            started_at=result.started_at,
+            finished_at=result.finished_at,
             duration_ms=result.duration_ms,
             exit_code=result.exit_code,
             argv_redacted=argv_redacted,
+            image_digest=result.image_digest,
         )
+
+        # ⚠ THE SCAN RAN A MUTABLE REFERENCE, AND THE REPORT HAS TO SAY SO.
+        #
+        # `toolctl pin` fills image_digest in the manifest; until it has, every
+        # engine is addressed by tag, and the same tag scanned twice can be two
+        # different binaries. The resolved digest above records what ran THIS
+        # time, which is what makes the run reproducible after the fact — but it
+        # does not make the reference reproducible in advance, and only the
+        # second of those is what "digest-pinned" means.
+        #
+        # `available()` already reports this in its detail. That reaches the
+        # engine list; it does not reach the result, and the result is what a
+        # report's provenance is built from.
+        if not image.digest_pinned:
+            base.diagnostics.append(
+                {
+                    "severity": "info",
+                    "code": "ENGINE_IMAGE_NOT_PINNED",
+                    "message": (
+                        f"{self.engine_id} was addressed by tag ({image.reference}), not by digest"
+                    ),
+                    "hint": (
+                        "the digest it resolved to is recorded on this result; run "
+                        "`axebom toolctl pin` to make the reference itself "
+                        "reproducible"
+                    ),
+                }
+            )
+        if not result.image_digest and result.error == "":
+            # Distinct from the above: the reference may have been pinned and
+            # the daemon still reported no registry digest, which is what a
+            # locally built or tarball-loaded image looks like.
+            base.diagnostics.append(
+                {
+                    "severity": "warn",
+                    "code": "ENGINE_IMAGE_DIGEST_UNKNOWN",
+                    "message": f"the image for {self.engine_id} has no registry digest",
+                    "hint": (
+                        "this run cannot state which published image bytes produced "
+                        "its output; the image was probably built locally"
+                    ),
+                }
+            )
         # ⚠ THE VINTAGE COMES FROM OUR STAMP, NOT FROM THE ENGINE.
         #
         # An engine reporting its own database version is reporting a claim we
@@ -566,6 +705,30 @@ class SandboxedAdapter(ToolAdapterBase):
                     base.status = ResultStatus.UNAVAILABLE
                     base.diagnostics.append(self.db_stale_diagnostic(reason))
                     return base
+
+            # An engine may know that one of its own error codes is not
+            # actually an error for this project. osv-scanner's 128 is the
+            # case: "no package sources found" covers both a repository that
+            # commits no lockfile and a workspace the engine could not read,
+            # and those deserve opposite statuses.
+            #
+            # Only the adapter can tell them apart, and only from the stderr —
+            # so the decision is delegated rather than guessed at here. A
+            # non-answer falls through to `failed`, which overstates the
+            # problem visibly rather than understating it.
+            special = self.classify_nonzero(result)
+            if special is not None:
+                status, code, message = special
+                base.status = status
+                base.diagnostics.append(
+                    {
+                        "severity": "error" if status is ResultStatus.FAILED else "warn",
+                        "code": code,
+                        "message": message,
+                        "hint": _tail(result.stderr),
+                    }
+                )
+                return base
 
             base.status = ResultStatus.FAILED
             base.diagnostics.append(

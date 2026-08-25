@@ -1,6 +1,6 @@
 # Forward references — paths a specification names that a later phase creates.
 #
-# `encorebom docs lint` treats these as expected-absent rather than broken.
+# `axebom docs lint` treats these as expected-absent rather than broken.
 # Format:  <repo-relative path>  # phase N — why
 #
 # A path may stay listed after it exists; the linter only uses this to suppress

@@ -28,7 +28,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
 )
 
 // ErrNotFound is returned when an object does not exist.

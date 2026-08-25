@@ -25,8 +25,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from encorebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
-from encorebom_shared.sandbox import SandboxResult, WorkspaceLayout
+from axebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
+from axebom_shared.adapters.summary import count_cyclonedx, summarize
+from axebom_shared.sandbox import SandboxResult, WorkspaceLayout
 
 from ...sbom.adapters.common import SandboxedAdapter
 
@@ -68,15 +69,66 @@ class CBOMkitTheiaAdapter(SandboxedAdapter):
         self.mode = mode
         super().__init__(CAPABILITIES, **kwargs)
 
+    def extra_env(self, layout: WorkspaceLayout) -> dict[str, str]:
+        """Give the tool a writable HOME on the tmpfs.
+
+        cbomkit-theia creates an application folder under $HOME on startup. The
+        sandbox rootfs is read-only and the engine runs as uid 65534, so the
+        default resolves somewhere unwritable and it prints
+
+            could not create application folder '/root/.cbomkit-theia':
+            read-only file system
+
+        It currently continues and still writes its CBOM to stdout, so this is a
+        warning rather than a failure today — which is exactly why it is worth
+        fixing now. It is one upstream change away from being fatal, and at that
+        point the symptom would be an engine that had "always worked" suddenly
+        exiting non-zero for a reason unrelated to any scan.
+        """
+        return {"HOME": layout.container_scratch}
+
     def build_argv(self, target: ScanTarget, layout: WorkspaceLayout) -> list[str]:
         """Discover crypto assets and write CycloneDX to stdout.
 
         The sandbox has no writable host mount — every mount is read-only,
-        deliberately — so stdout is the only channel out.
+        deliberately — so stdout is the only channel out. cbomkit-theia writes
+        the enriched CBOM to stdout natively, which suits that exactly.
+
+        ⚠ THE ARGV WAS WRONG FOR v1.1.2 AND HAD NEVER BEEN RUN.
+
+        It built ``dir get <path> --quiet``. There is no ``get`` subcommand and
+        no ``--quiet`` flag; the real form is ``cbomkit-theia dir <path>``. The
+        engine printed its usage text and exited 1, which the adapter reported
+        as ``ENGINE_NONZERO_EXIT: exited 1`` — accurate, and useless for working
+        out that the command itself was malformed.
+
+        Verified against the pinned image:
+
+            $ cbomkit-theia dir --help
+            Usage:
+              cbomkit-theia dir [flags]
+            Examples:
+              cbomkit-theia dir my/cool/directory
         """
         if self.mode == "image":
-            return ["image", "get", target.image_ref or "", "--quiet"]
-        return ["dir", "get", layout.container_source, "--quiet"]
+            # ScanTarget has image_digest, never image_ref. This read
+            # `target.image_ref`, which raises AttributeError rather than
+            # returning None — the `or ""` fallback next to it could never fire.
+            # Image mode had simply never been executed; the dir-mode tests all
+            # take the branch below.
+            digest = target.image_digest
+            if not digest:
+                raise ValueError(
+                    "cbomkit-theia image mode requires an image digest; none was supplied"
+                )
+            if "@sha256:" not in digest:
+                # Same rule as trivy-image, for the same reason: a tag is
+                # mutable, so a report naming one cannot say what was examined.
+                raise ValueError(
+                    f"cbomkit-theia requires a DIGEST-pinned reference, got {digest!r}"
+                )
+            return ["image", digest]
+        return ["dir", layout.container_source]
 
     def interpret(
         self,
@@ -101,6 +153,13 @@ class CBOMkitTheiaAdapter(SandboxedAdapter):
 
         # Discovery surfaces, not package ecosystems.
         base.ecosystems_covered = sorted({a["surface"] for a in assets if a.get("surface")})
+
+        # Counted from the DOCUMENT, not from `assets`. The summary describes
+        # the raw artifact, which is the immutable evidence (ADR-0003);
+        # normalization is a separate replayable pass, and an asset this
+        # adapter skipped today may be understood by a later ruleset. The
+        # diagnostics above already say how many were skipped.
+        base.summary = summarize(self.capabilities, count_cyclonedx(payload))
 
         if not assets:
             # ⚠ ZERO CRYPTO ASSETS IS `partial`, NOT `succeeded`.

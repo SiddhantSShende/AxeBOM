@@ -17,12 +17,12 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/model"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/blob"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/services/report/internal/level"
-	"github.com/encorebom/encorebom/services/report/internal/share"
-	"github.com/encorebom/encorebom/services/report/internal/store"
+	"github.com/axebom/axebom/libs/go-shared/model"
+	"github.com/axebom/axebom/libs/go-shared/platform/blob"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/services/report/internal/level"
+	"github.com/axebom/axebom/services/report/internal/share"
+	"github.com/axebom/axebom/services/report/internal/store"
 )
 
 // Service is the report domain.
@@ -85,17 +85,6 @@ func (s *Service) Queue(ctx context.Context, req QueueRequest) (store.Report, er
 	bomType, err := model.ParseBOMType(req.BOMType)
 	if err != nil {
 		return store.Report{}, errs.Newf(errs.ValidationFieldInvalid, "%v", err)
-	}
-
-	// ⚠ CBOM IS REFUSED HERE TOO, and for the same reason the renderers refuse
-	// it: CERT-In Table 9 discriminates by asset type, so there is no single
-	// field set to score against. Letting it through would queue a job that
-	// fails at render time with a message the customer cannot act on.
-	if bomType == model.BOMTypeCBOM {
-		return store.Report{}, errs.New(errs.ValidationFieldInvalid,
-			"CBOM reports are not yet renderable: CERT-In Table 9 discriminates "+
-				"by crypto asset type, so a CBOM has no single field set to score "+
-				"against")
 	}
 
 	lvl, err := parseLevel(req.Level)
@@ -249,6 +238,13 @@ func (s *Service) Get(ctx context.Context, tenantID, reportID string) (store.Rep
 // List returns a tenant's reports.
 func (s *Service) List(ctx context.Context, tenantID, scanID string, limit int, cursor string) ([]store.Report, error) {
 	return s.store.List(ctx, tenantID, scanID, limit, cursor)
+}
+
+// Siblings returns a report's other rendered formats for the same scan and
+// BOM type — a live relationship, read at request time, not data captured at
+// render completion.
+func (s *Service) Siblings(ctx context.Context, tenantID string, r store.Report) ([]store.ReportSibling, error) {
+	return s.store.Siblings(ctx, tenantID, r.ID, r.ScanID, r.BOMType)
 }
 
 // Open streams a rendered artifact from object storage.

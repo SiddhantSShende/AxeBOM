@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/events"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
+	"github.com/axebom/axebom/libs/go-shared/events"
+	"github.com/axebom/axebom/libs/go-shared/platform/db"
 )
 
 // The deadline reaper.
@@ -31,7 +31,7 @@ import (
 // namespace, so this number must not collide with another subsystem's — hence
 // the registry comment below rather than a bare literal.
 //
-//	1 encorebom deadline reaper
+//	1 axebom deadline reaper
 //	(next subsystem takes 2)
 const reaperLockID int64 = 1
 

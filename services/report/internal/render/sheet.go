@@ -13,7 +13,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/encorebom/encorebom/services/report/internal/render/safe"
+	"github.com/axebom/axebom/services/report/internal/render/safe"
 )
 
 // Sheet is one table. The writers are format-specific; this is not.

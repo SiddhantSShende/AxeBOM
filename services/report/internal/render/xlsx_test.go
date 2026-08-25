@@ -9,7 +9,7 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 // ddePayload is the canonical formula-injection payload: opening a workbook

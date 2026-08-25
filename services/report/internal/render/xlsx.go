@@ -6,7 +6,7 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 // XLSXMediaType is what the download response and the artifact record carry.

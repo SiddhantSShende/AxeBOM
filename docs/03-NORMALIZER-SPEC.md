@@ -199,7 +199,7 @@ Effective status = most specific scope, then latest timestamp. VEX statements ar
 2. Case- and punctuation-insensitive match.
 3. Curated alias table (~300 entries): `"Apache 2"`, `"ASL 2.0"`, `"Apache License, Version 2.0"` → `Apache-2.0`.
 4. SPDX **expression** parse with grammar validation for `AND`, `OR`, `WITH`, parentheses.
-5. Fallback: `LicenseRef-EncoreBOM-<slug>`, with the raw text preserved in `normalize.license_refs` for later human mapping.
+5. Fallback: `LicenseRef-AxeBOM-<slug>`, with the raw text preserved in `normalize.license_refs` for later human mapping.
 
 **Pin and record the SPDX license-list version** (e.g. 3.25) in `bom_documents.spdx_license_list_version`. Ids are deprecated and added over time; a report must state which list it was validated against.
 
@@ -292,7 +292,7 @@ Scoring a certificate against `key_size` (a Keys field) would report every CBOM 
 
 ### 5.4 Weights and the denominator
 
-- `w = 3` for minimum-element / identity-bearing fields; `w = 1` for enrichment. Weights come from the profile YAML and are **EncoreBOM's judgement, not CERT-In's** — the guideline does not rank its fields. Every report footer says so.
+- `w = 3` for minimum-element / identity-bearing fields; `w = 1` for enrichment. Weights come from the profile YAML and are **AxeBOM's judgement, not CERT-In's** — the guideline does not rank its fields. Every report footer says so.
 - Components with `scope = excluded` or `identity_rule = opaque` go to `unidentified_count` and are **never silently dropped from the denominator.** Dropping them lets a bad scan report 100%.
 - Always render a **per-field breakdown table** and the **Engine Coverage table** — including ecosystems detected with *no* available engine. That last row is the honest denominator most tools hide, and it is a genuine differentiator.
 

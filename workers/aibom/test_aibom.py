@@ -8,13 +8,22 @@ split that makes the network boundary safe.
 
 from __future__ import annotations
 
+import json
+import subprocess
+from pathlib import Path
+
 import pytest
+from workers.aibom.adapters import aibom_generator_fetch as fetch_mod
 from workers.aibom.adapters.ai_bom import AIBomAdapter, extract_discovery
 from workers.aibom.adapters.aibom_generator import (
     ModelCache,
     ModelCard,
     enrich_models,
     parse_model_card,
+)
+from workers.aibom.adapters.aibom_generator_fetch import (
+    RevisionNotSupportedError,
+    fetch_model_card,
 )
 from workers.aibom.merge import identity, merge, model_refs
 from workers.aibom.normalize.ai import (
@@ -24,7 +33,8 @@ from workers.aibom.normalize.ai import (
     normalize_model,
 )
 
-from encorebom_shared.model.generated_certin import AIBOM_FIELDS
+from axebom_shared.errors import EngineOutputMalformedError, EngineUnavailableError
+from axebom_shared.model.generated_certin import AIBOM_FIELDS
 
 # ---------------------------------------------------------------------------
 # Fixtures — a LangChain app calling OpenAI and referencing an HF model
@@ -322,6 +332,145 @@ def test_an_expired_entry_is_refetched_rather_than_served_stale() -> None:
 
 
 # ---------------------------------------------------------------------------
+# The concrete Fetcher — aibom_generator_fetch.fetch_model_card
+#
+# ⚠ THESE RUN NO SUBPROCESS AND TOUCH NO NETWORK, except the one test marked
+# `integration` below. `fetch_model_card` is exercised through monkeypatched
+# `subprocess.run` and `_assert_model_exists`, exactly like `test_runner.py`
+# monkeypatches `source.materialize` rather than touching a real fetcher.
+# ---------------------------------------------------------------------------
+
+
+def test_a_pinned_revision_is_refused_not_silently_served_from_default() -> None:
+    """⚠ aibom-generator HAS NO REVISION PARAMETER, ANYWHERE — checked against
+    the real 1.0.2 source (CLI argparse, CLIController.generate,
+    AIBOMService.generate_aibom). Serving the default branch's card back under
+    a pinned revision's name would attribute a licence to the wrong point in
+    the model's history, so this is refused before any subprocess or network
+    call — not silently downgraded to "whatever is current"."""
+    with pytest.raises(RevisionNotSupportedError) as exc:
+        fetch_model_card("meta-llama/Llama-3-8B", "abc1234")
+
+    message = str(exc.value)
+    assert "abc1234" in message
+    assert "no revision parameter" in message
+
+
+@pytest.mark.parametrize("revision", ["", "main", "HEAD", "  main  "])
+def test_no_pin_and_the_default_branch_spellings_are_not_refused(
+    monkeypatch: pytest.MonkeyPatch, revision: str
+) -> None:
+    """ "" / "main" / "HEAD" all mean the one thing aibom-generator can serve:
+    whatever the default branch currently is. None of these should reach
+    RevisionNotSupportedError."""
+    monkeypatch.setattr(fetch_mod, "_assert_model_exists", lambda ref: None)
+
+    def fake_run(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        output_path = Path(argv[argv.index("--output") + 1])
+        model_component = {"type": "machine-learning-model", "name": "m/x"}
+        output_path.write_text(json.dumps(cdx([model_component])), encoding="utf-8")
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = fetch_model_card("m/x", revision)
+    assert result["components"][0]["name"] == "m/x"
+
+
+def test_a_nonexistent_model_raises_instead_of_being_fabricated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ aibom-generator==1.0.2 DOES NOT VERIFY A MODEL EXISTS.
+
+    Verified in this session: pointed at a deliberately nonexistent model id,
+    `AIBOMService.generate_aibom()` still logs "Successfully generated
+    CycloneDX 1.6 SBOM", exits 0, and writes a real file containing a
+    plausible-looking component synthesised from guessed defaults (org parsed
+    off the slug, architecture "transformer", `supplier: {"name": "unknown"}`).
+    Nothing about the CycloneDX SHAPE distinguishes that from a real model, so
+    `fetch_model_card` must reject a nonexistent model BEFORE aibom-generator
+    ever runs — this is what `_assert_model_exists` is for."""
+
+    def fake_assert_model_exists(model_ref: str) -> None:
+        raise EngineUnavailableError("aibom-generator", "model does not exist")
+
+    monkeypatch.setattr(fetch_mod, "_assert_model_exists", fake_assert_model_exists)
+
+    with pytest.raises(EngineUnavailableError):
+        fetch_model_card("this-org-does-not-exist-xyz/nonexistent-model-abc123", "")
+
+
+def test_the_tool_not_being_installed_is_a_clear_engine_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`python -m src.cli` failing with `No module named` means aibom-generator
+    (or a same-named `src` shadowing it — see the module docstring on why the
+    top-level package name `src` is a genuine collision risk) is not installed
+    in this interpreter. That must be diagnosable, not a bare traceback."""
+    monkeypatch.setattr(fetch_mod, "_assert_model_exists", lambda ref: None)
+
+    def fake_run(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess(
+            argv, 1, stdout="", stderr="ModuleNotFoundError: No module named 'src'"
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(EngineUnavailableError) as exc:
+        fetch_model_card("m/x", "")
+    assert "not installed" in str(exc.value)
+
+
+def test_a_run_that_produces_no_file_is_a_malformed_output_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Distinct from "not installed": the tool ran, but for some other reason
+    (a Hugging Face timeout inside aibom-generator, an unexpected crash) no
+    output file exists. `enrich_models` only needs SOME exception to degrade
+    this one lookup — but which one is worth being specific about."""
+    monkeypatch.setattr(fetch_mod, "_assert_model_exists", lambda ref: None)
+
+    def fake_run(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess(argv, 1, stdout="", stderr="boom: connection reset")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(EngineOutputMalformedError):
+        fetch_model_card("m/x", "")
+
+
+def test_real_upstream_output_round_trips_into_a_populated_card() -> None:
+    """⚠ PROVEN AGAINST REAL UPSTREAM OUTPUT, NOT ONLY SYNTHETIC FIXTURES.
+
+    `workers/aibom/testdata/aibom-generator-distilbert-base-uncased.cdx.json`
+    is the ACTUAL response `fetch_model_card("distilbert-base-uncased", "")`
+    returned in this session, running the real owasp-aibom-generator==1.0.2
+    against the real Hugging Face API — captured the same way
+    `fixtures/crypto-mixed/raw/` pins a real cbomkit-theia response. This test
+    touches no network; it replays that captured response.
+    """
+    raw = json.loads(
+        (
+            Path(__file__).parent / "testdata" / "aibom-generator-distilbert-base-uncased.cdx.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    card = parse_model_card("distilbert-base-uncased", "", raw)
+
+    assert card.name == "distilbert-base-uncased"
+    assert card.model_type == "distilbert"
+    assert card.architectures == ["DistilBertForMaskedLM"]
+    assert card.license  # "apache-2.0 datasets" -- passed through as-is, not corrected
+    assert card.datasets and card.datasets[0]["name"] == "consisting"
+    # ⚠ KNOWN GAP, NOT A BUG IN THIS FETCHER: real aibom-generator output names
+    # the publisher via `authors`/`supplier`, but `_developer()` only reads
+    # `author`/`publisher` (singular, no vendor prefix) plus a `properties`
+    # fallback -- none of which real 1.0.2 output populates. `developer` comes
+    # back "", honestly `not-provided`, rather than guessed from `authors[0]`.
+    assert card.developer == ""
+
+
+# ---------------------------------------------------------------------------
 # Merge
 # ---------------------------------------------------------------------------
 
@@ -471,7 +620,7 @@ def test_a_user_typed_not_provided_still_scores_zero() -> None:
 
 
 def test_the_extensions_never_acquire_a_field_status() -> None:
-    """⚠ `risk_score` AND `owasp_llm_top10` ARE ENCOREBOM'S ANALYSIS.
+    """⚠ `risk_score` AND `owasp_llm_top10` ARE AXEBOM'S ANALYSIS.
 
     Letting them count would move a customer's compliance percentage because a
     third party changed a heuristic, with no change to their software.

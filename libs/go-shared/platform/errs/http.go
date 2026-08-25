@@ -9,7 +9,7 @@ import (
 // DocsBaseURL is where error-code documentation lives. The `docs` field in
 // every error response points here so a developer hitting an unfamiliar code
 // has somewhere to go.
-var DocsBaseURL = "https://docs.encorebom.io/errors/"
+var DocsBaseURL = "https://docs.axebom.io/errors/"
 
 // wireError is the serialized shape. Contract: docs/02-CONTRACTS.md §9.
 //

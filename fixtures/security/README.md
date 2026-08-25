@@ -1,6 +1,6 @@
 # Security fixtures — the escape suite
 
-Every attack EncoreBOM defends against, where it is exercised, and what happens.
+Every attack AxeBOM defends against, where it is exercised, and what happens.
 
 **These are not decorative.** From Phase 5 the product executes third-party
 binaries over untrusted user code — remote code execution by design. Each row
@@ -89,7 +89,7 @@ The generators live beside their assertions:
 ```
 go test ./libs/go-shared/sandbox -run TestEscape -v      # needs Docker
 go test ./services/scan-orchestrator/... -v              # needs Docker + MinIO
-ENCOREBOM_NETWORK_TESTS=1 go test ./services/scan-orchestrator/... -v   # + a real clone
+AXEBOM_NETWORK_TESTS=1 go test ./services/scan-orchestrator/... -v   # + a real clone
 ```
 
 Docker-dependent cases **skip** rather than fail when the daemon is absent, and

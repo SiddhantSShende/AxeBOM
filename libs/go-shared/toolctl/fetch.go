@@ -62,7 +62,7 @@ func Probe(ctx context.Context, url, label string) URLStatus {
 		st.Err = err
 		return st
 	}
-	req.Header.Set("User-Agent", "encorebom-toolctl")
+	req.Header.Set("User-Agent", "axebom-toolctl")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -86,7 +86,7 @@ func probeRanged(ctx context.Context, url, label string) URLStatus {
 		st.Err = err
 		return st
 	}
-	req.Header.Set("User-Agent", "encorebom-toolctl")
+	req.Header.Set("User-Agent", "axebom-toolctl")
 	req.Header.Set("Range", "bytes=0-0")
 
 	resp, err := httpClient.Do(req)
@@ -139,7 +139,7 @@ func FetchChecksums(ctx context.Context, url string) (map[string]string, error) 
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "encorebom-toolctl")
+	req.Header.Set("User-Agent", "axebom-toolctl")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -185,7 +185,7 @@ func Download(ctx context.Context, url, dest string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("User-Agent", "encorebom-toolctl")
+	req.Header.Set("User-Agent", "axebom-toolctl")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {

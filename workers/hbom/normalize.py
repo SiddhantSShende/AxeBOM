@@ -17,8 +17,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from encorebom_shared.model.generated_certin import HBOM_FIELDS
-from encorebom_shared.normalize.coverage import CoverageResult, Field, score
+from axebom_shared.model.generated_certin import HBOM_FIELDS
+from axebom_shared.normalize.coverage import CoverageResult, Field, score
 
 from .model import USER_SUPPLIED_FIELDS, HardwareComponent, to_profile_row
 

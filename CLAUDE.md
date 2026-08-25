@@ -1,11 +1,11 @@
-# CLAUDE.md — EncoreBOM
+# CLAUDE.md — AxeBOM
 
 Read this first, every session. It contains **invariants only**, not a plan.
 The plan lives in `docs/00-MASTER-PLAN.md`. What has actually been built lives in `docs/STATE.md`.
 
 ---
 
-## What EncoreBOM is
+## What AxeBOM is
 
 An enterprise Bill of Materials + Software Composition Analysis platform producing five BOM types — **SBOM, CBOM** (cryptographic), **QBOM** (quantum), **AIBOM**, **HBOM** (hardware) — against the **CERT-In Technical Guidelines v2.0 (09.07.2025)**. Go microservices, Python scan workers, React frontend, PostgreSQL, NATS JetStream, MinIO.
 
@@ -133,7 +133,7 @@ An SBOM that silently omits an ecosystem is worse than no SBOM: it converts an u
 
 **Tests.** Table-driven in Go. Normalizer changes require a golden-file update, and changing a golden requires an explicit justification in the commit message — goldens are the guardrail against silently wrong output.
 
-**No bash scripts.** `make` and `task` are not installed on the primary dev machine, and PowerShell 5.1 has no `&&`. Orchestration is `Taskfile.yml` (go-task, shell-independent) plus the `encorebom` Go CLI. Anything a script would do, the CLI does.
+**No bash scripts.** `make` and `task` are not installed on the primary dev machine, and PowerShell 5.1 has no `&&`. Orchestration is `Taskfile.yml` (go-task, shell-independent) plus the `axebom` Go CLI. Anything a script would do, the CLI does.
 
 ---
 
@@ -189,4 +189,4 @@ Probed on the primary dev machine (Windows 11), and the reason for two design ch
 
 - **There is no open-source HBOM scanner.** HBOM is a structured CSV/form import plus a data model. Label it that way in the UI. Never imply discovery.
 - **QBOM is largely a derivation.** Crypto assets come from CBOM discovery with quantum-vulnerability rules applied; only Table 8's *device* metadata is separately captured. There is no quantum-hardware scanner.
-- **EncoreBOM reports violations against a configured policy.** It never asserts "compliant." That word does not appear in generated output.
+- **AxeBOM reports violations against a configured policy.** It never asserts "compliant." That word does not appear in generated output.

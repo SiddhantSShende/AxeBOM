@@ -28,8 +28,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from encorebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
-from encorebom_shared.sandbox import (
+from axebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
+from axebom_shared.adapters.summary import count_distinct_vulnerabilities, summarize
+from axebom_shared.sandbox import (
     SandboxLimits,
     SandboxResult,
     WorkspaceLayout,
@@ -42,7 +43,7 @@ CAPABILITIES = Capabilities(
     engine_id="dependency-check",
     families=("sbom",),
     source_kinds=("git", "upload"),
-    produces=("vulnerabilities",),
+    produces=("components", "vulnerabilities"),
     native_format="dependency-check-json",
     ecosystems=("maven", "npm", "nuget", "pypi", "golang"),
     db_backed=True,
@@ -60,6 +61,17 @@ class DependencyCheckAdapter(SandboxedAdapter):
 
     media_type = "application/json"
     requires_db_version = True
+
+    # The NVD/CPE database, provisioned by `python -m workers.sbom.dbsync nvd`.
+    #
+    # This was missing, and its absence made the adapter permanently dead:
+    # database() returns None without it, and generate() refuses any adapter
+    # with requires_db_version before the container starts. The resulting
+    # message read "no provisioned None database was found", which looks like an
+    # unprovisioned engine rather than the bug it was. There was also no
+    # DatabaseSpec for it in dbsync, so nothing could have provisioned it even
+    # if the id had been set.
+    database_id = "nvd"
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(CAPABILITIES, **kwargs)
@@ -97,6 +109,12 @@ class DependencyCheckAdapter(SandboxedAdapter):
             "JSON",
             "--out",
             REPORT_DIR,
+            # Read the database we provisioned, mounted read-only at /enginedb.
+            # Without this dependency-check looks in its image default
+            # (/usr/share/dependency-check/data), which is empty, and then
+            # --noupdate means it reports a clean project instead of failing.
+            "--data",
+            "/enginedb",
             "--noupdate",
             "--disableAssembly",
             "--prettyPrint",
@@ -161,18 +179,39 @@ class DependencyCheckAdapter(SandboxedAdapter):
 
         low_confidence = 0
         identified = 0
+        vuln_ids: list[Any] = []
         for dep in dependencies:
             if not isinstance(dep, dict):
                 continue
             packages = dep.get("packages") or []
             evidence = dep.get("evidenceCollected")
             confidence = highest_confidence(evidence)
-            if packages or dep.get("vulnerabilities"):
+            vulns = dep.get("vulnerabilities")
+            if isinstance(vulns, list):
+                vuln_ids.extend(v.get("name") for v in vulns if isinstance(v, dict))
+            if packages or vulns:
                 identified += 1
                 if confidence in ("LOW", "MEDIUM"):
                     low_confidence += 1
 
         base.ecosystems_covered = list(CAPABILITIES.ecosystems)
+
+        # `components` counts dependencies that carry an IDENTITY, not every
+        # file walked. dependency-check reports one entry per file it opened —
+        # including the JARs it could not identify — and counting those would
+        # inflate an inventory with rows the normalizer never creates.
+        #
+        # The identity may still be a LOW-confidence CPE, which attaches as a
+        # CANDIDATE and never merges into a PURL component. That is a merge
+        # rule, not a reason to hide the count: the diagnostic below states how
+        # many rest on weak evidence.
+        base.summary = summarize(
+            self.capabilities,
+            {
+                "components": identified,
+                "vulnerabilities": count_distinct_vulnerabilities(vuln_ids),
+            },
+        )
 
         if not dependencies:
             base.status = ResultStatus.PARTIAL

@@ -6,7 +6,7 @@ import (
 	"crypto/rand"
 	"fmt"
 
-	"github.com/encorebom/encorebom/libs/go-shared/vault"
+	"github.com/axebom/axebom/libs/go-shared/vault"
 )
 
 // VaultSigner signs through Vault Transit.
@@ -67,7 +67,7 @@ func (s *VaultSigner) PublicKey() (ed25519.PublicKey, string, error) {
 //
 // ⚠ FOR DEVELOPMENT AND TESTS ONLY, AND IT SAYS SO IN EVERY SIGNATURE IT
 // ISSUES. Its key id carries DevKeyPrefix, so Verify reports Trusted=false and
-// `encorebom verify` prints a warning instead of a clean pass. A development
+// `axebom verify` prints a warning instead of a clean pass. A development
 // signature that was indistinguishable from a production one would be worse
 // than no signature at all — it would let an unsigned pipeline look signed.
 type LocalSigner struct {

@@ -13,7 +13,7 @@ func data() Data {
 		Components:  412, Findings: 37, Critical: 3, High: 9,
 		EnginesUnavailable: 1,
 		UnavailableEngines: []string{"dependency-check"},
-		URL:                "https://app.encorebom.example/scans/0199",
+		URL:                "https://app.axebom.example/scans/0199",
 		OccurredAt:         "2026-08-17T09:14:03Z",
 	}
 }

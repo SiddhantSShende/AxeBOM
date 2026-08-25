@@ -6,7 +6,7 @@ import "testing"
 //
 // These strings come from the guideline itself, so they are the closest thing
 // to an authoritative conformance check that exists. If this test fails,
-// EncoreBOM's field 21 does not match what the standard's own examples show.
+// AxeBOM's field 21 does not match what the standard's own examples show.
 func TestDeriveCERTInIdentifier_Table6(t *testing.T) {
 	tests := []struct {
 		name string

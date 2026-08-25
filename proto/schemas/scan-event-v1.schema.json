@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.encorebom.io/scan-event-v1.schema.json",
+  "$id": "https://schemas.axebom.io/scan-event-v1.schema.json",
   "title": "ScanEventV1",
   "description": "An ADVISORY progress event. The database is the source of truth; no event is ever required for correctness. `seq` is monotonic per job_id so consumers can reorder and DETECT gaps. `message` never contains a user path, a repository URL, or anything from the scanned code — event streams reach browsers and logs.",
   "type": "object",

@@ -100,7 +100,7 @@ func GenerateSchemas(dir string) ([]string, error) {
 	for _, d := range docs {
 		doc := SchemaDoc{
 			Schema:      "https://json-schema.org/draft/2020-12/schema",
-			ID:          "https://schemas.encorebom.io/" + d.file,
+			ID:          "https://schemas.axebom.io/" + d.file,
 			Title:       d.title,
 			Description: d.description,
 			Type:        "object",

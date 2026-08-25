@@ -10,8 +10,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from encorebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
-from encorebom_shared.sandbox import SandboxResult, WorkspaceLayout
+from axebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
+from axebom_shared.adapters.summary import count_cyclonedx, count_spdx, summarize
+from axebom_shared.sandbox import SandboxResult, WorkspaceLayout
 
 from .common import SandboxedAdapter, ecosystems_from_purls
 
@@ -42,6 +43,11 @@ CAPABILITIES = Capabilities(
 
 class SyftAdapter(SandboxedAdapter):
     """Runs syft over a directory."""
+
+    #: grype matches against THIS document rather than re-cataloguing the tree,
+    #: so it is published into the shared per-scan workspace under the name
+    #: _build_target looks for.
+    workspace_artifact_name = "sbom.cdx.json"
 
     media_type = "application/vnd.cyclonedx+json; version=1.6"
 
@@ -100,6 +106,7 @@ class SyftAdapter(SandboxedAdapter):
             if isinstance(c, dict) and isinstance(c.get("purl"), str)
         ]
         base.ecosystems_covered = ecosystems_from_purls(purls)
+        base.summary = summarize(self.capabilities, count_cyclonedx(payload))
 
         if not components:
             # ⚠ ZERO IS A CLAIM. partial, not succeeded.
@@ -137,6 +144,18 @@ class SyftSPDXAdapter(SyftAdapter):
 
     media_type = "application/spdx+json"
 
+    #: ⚠ EXPLICITLY None, BECAUSE THIS CLASS INHERITS FROM SyftAdapter.
+    #:
+    #: The parent publishes its CycloneDX to the shared workspace as
+    #: sbom.cdx.json for grype to match against. Inheriting that would make this
+    #: pass overwrite it with an SPDX document under a CycloneDX name — grype
+    #: would then either fail to parse it or, worse, parse it partially and
+    #: report vulnerabilities against an inventory nobody produced.
+    #:
+    #: Nothing consumes the SPDX pass's output; it exists because CERT-In's
+    #: Automation Support element requires both formats.
+    workspace_artifact_name = None
+
     def build_argv(self, target: ScanTarget, layout: WorkspaceLayout) -> list[str]:
         return [f"dir:{layout.container_source}", "-o", "spdx-json", "-q"]
 
@@ -154,6 +173,8 @@ class SyftSPDXAdapter(SyftAdapter):
         packages = payload.get("packages")
         if not isinstance(packages, list):
             packages = []
+
+        base.summary = summarize(self.capabilities, count_spdx(payload))
 
         base.status = ResultStatus.SUCCEEDED if packages else ResultStatus.PARTIAL
         if not packages:

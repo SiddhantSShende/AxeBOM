@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/encorebom/encorebom/libs/go-shared/model"
-	"github.com/encorebom/encorebom/services/report/internal/export"
+	"github.com/axebom/axebom/libs/go-shared/model"
+	"github.com/axebom/axebom/services/report/internal/export"
 )
 
 // exportedDocuments serializes a small BOM through the real exporters, so the
@@ -20,7 +20,7 @@ func exportedDocuments(t *testing.T) (spdx, cdx []byte) {
 		GeneratedAt: "2026-08-17T09:14:03Z",
 		DocumentID:  "0199-report",
 		ProjectName: "acme-web",
-		ToolName:    "EncoreBOM",
+		ToolName:    "AxeBOM",
 		ToolVersion: "0.1.0",
 		Roots:       []string{"purl:pkg:npm/lodash@4.17.20"},
 		Components: []export.Component{{
@@ -164,7 +164,7 @@ func TestTheBundleCarriesBothCoverageNumbersAndTheirCaveats(t *testing.T) {
 	if bundle.Coverage.Formula == "" {
 		t.Error("the coverage formula is missing, so the numbers are not auditable")
 	}
-	if !strings.Contains(bundle.Report.WeightsNote, "EncoreBOM's judgement") {
+	if !strings.Contains(bundle.Report.WeightsNote, "AxeBOM's judgement") {
 		t.Error("the bundle does not say whose the weights are")
 	}
 	if bundle.Report.Scope == "" {
@@ -201,12 +201,71 @@ func TestAMalformedEmbeddedDocumentIsRefused(t *testing.T) {
 	}
 }
 
-// TestACBOMBundleIsRefused — the same type-discrimination refusal as the
-// spreadsheet, so the two formats cannot disagree about what a CBOM is.
-func TestACBOMBundleIsRefused(t *testing.T) {
+// TestACBOMBundleRendersAndCarriesCryptoAssets.
+//
+// ⚠ THE JSON BUNDLE MUST NOT REFUSE A CBOM. It once did, using FieldsFor's
+// "no flat field list" error as a reason to reject the whole bundle — the
+// same mistake the spreadsheet and PDF renderers made. FieldsFor's answer is
+// still correct (CBOM genuinely has no flat list); what changed is that the
+// bundle no longer treats that answer as fatal.
+func TestACBOMBundleRendersAndCarriesCryptoAssets(t *testing.T) {
 	b := sampleBOM()
 	b.BOMType = model.BOMTypeCBOM
+	b.CryptoAssets = []CryptoAsset{
+		{AssetType: "certificate", Name: "leaf-cert", CertSubject: "CN=example"},
+	}
+
+	data, err := WriteJSON(b, nil, nil)
+	if err != nil {
+		t.Fatalf("a CBOM bundle was refused: %v", err)
+	}
+
+	var bundle Bundle
+	if err := json.Unmarshal(data, &bundle); err != nil {
+		t.Fatalf("re-reading the bundle: %v", err)
+	}
+	if len(bundle.Canonical.CryptoAssets) != 1 {
+		t.Fatalf("the bundle carries %d crypto assets, want 1", len(bundle.Canonical.CryptoAssets))
+	}
+	if bundle.Canonical.CryptoAssets[0].CertSubject != "CN=example" {
+		t.Errorf("the certificate's own field did not round-trip: %+v", bundle.Canonical.CryptoAssets[0])
+	}
+}
+
+// TestAnAIBOMBundleCarriesAIModels — the same round-trip guarantee as
+// TestACBOMBundleRendersAndCarriesCryptoAssets, for AIModels.
+func TestAnAIBOMBundleCarriesAIModels(t *testing.T) {
+	risk := 7.5
+	b := sampleBOM()
+	b.BOMType = model.BOMTypeAIBOM
+	b.AIModels = []AIModel{
+		{Name: "Llama-3-8B", RiskScore: &risk, OwaspLLMTop10: []string{"LLM01"}},
+	}
+
+	data, err := WriteJSON(b, nil, nil)
+	if err != nil {
+		t.Fatalf("an AIBOM bundle was refused: %v", err)
+	}
+
+	var bundle Bundle
+	if err := json.Unmarshal(data, &bundle); err != nil {
+		t.Fatalf("re-reading the bundle: %v", err)
+	}
+	if len(bundle.Canonical.AIModels) != 1 {
+		t.Fatalf("the bundle carries %d AI models, want 1", len(bundle.Canonical.AIModels))
+	}
+	if bundle.Canonical.AIModels[0].Name != "Llama-3-8B" || *bundle.Canonical.AIModels[0].RiskScore != 7.5 {
+		t.Errorf("the model's own fields did not round-trip: %+v", bundle.Canonical.AIModels[0])
+	}
+}
+
+// TestAnUnknownBOMTypeIsStillRefused — the bundle must still reject a type the
+// product does not know, just not by way of FieldsFor's type-discrimination
+// error.
+func TestAnUnknownBOMTypeIsStillRefused(t *testing.T) {
+	b := sampleBOM()
+	b.BOMType = model.BOMType("NOT-A-REAL-TYPE")
 	if _, err := WriteJSON(b, nil, nil); err == nil {
-		t.Fatal("a CBOM bundle was rendered against the flat SBOM field set")
+		t.Fatal("an unknown BOM type was rendered without complaint")
 	}
 }

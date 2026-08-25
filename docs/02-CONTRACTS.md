@@ -25,7 +25,7 @@ Every envelope carries `schema_version` as `<name>/v<N>`. Rules:
 | `SCAN_EVENTS` | `scan.event.<scan_id>` | Limits, 24 h | push, ephemeral | **advisory only** |
 | `SCAN_RESULTS` | `scan.result.<family>` | WorkQueue | pull, normalizer | |
 | `SCAN_DLQ` | `scan.dlq.<family>` | Limits, 30 d | manual | poison messages, retained for diagnosis |
-| `NOTIFY` | `notify.<event_type>` | WorkQueue | notification-svc | |
+| `NOTIFY` | `notify.<event_type>` | WorkQueue | notification-svc | envelope: `events`' `NotifyEventV1` (§11) |
 
 `<family>` ∈ `fetch`, `sbom`, `cbom`, `qbom`, `aibom`, `hbom`.
 
@@ -90,7 +90,7 @@ Two structural decisions, both load-bearing:
   "deadline_at":"2026-08-16T09:29:22Z",
 
   "workspace": {
-    "artifact_uri": "s3://encorebom/workspaces/<scan_id>/source.tar.zst",
+    "artifact_uri": "s3://axebom/workspaces/<scan_id>/source.tar.zst",
     "sha256":       "…",
     "size_bytes":   0,
     "root_subpath": ""
@@ -111,7 +111,7 @@ Two structural decisions, both load-bearing:
     "pids_max":       512,
     "max_output_bytes": 268435456
   },
-  "output": { "prefix": "s3://encorebom/scans/<scan_id>/raw/<engine>/<job_id>/" },
+  "output": { "prefix": "s3://axebom/scans/<scan_id>/raw/<engine>/<job_id>/" },
   "trace":  { "traceparent": "00-…", "correlation_id": "…" }
 }
 ```
@@ -255,6 +255,8 @@ Runtime availability: **container → local binary → `unavailable`**. A missin
 
 **Invalid combinations are rejected at scan-create time with a 422 enumerating every offending pair.** Discovering at worker time that `cbomkit-theia` cannot process an `image` source, twenty minutes in, is a design failure.
 
+**`hbom` and `qbom` cannot be requested as a scan family.** `hbom-csv` (`requires_import`) and `qbom-derive` (`derived`) are the only engines registered for those families, and neither has a worker — `workers/hbom` and `workers/qbom` deliberately have no runner, because HBOM is a CSV/form import and QBOM is derived from CBOM discovery (CLAUDE.md honest labels). `POST /v1/scans` rejects `families: ["hbom"]` or `["qbom"]` — alone or mixed with other, scannable families, naming only the actual offender — and any explicit `engines: [...]` entry naming `hbom-csv` or `qbom-derive` directly, with `SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE` (§9) at create time — never by publishing a job nothing consumes and letting the scan sit unconsumed until the reaper times it out. Import hardware inventory via `/v1/hbom/*` instead; QBOM becomes available automatically once a CBOM report exists for the project.
+
 ---
 
 ## 8. REST conventions
@@ -281,6 +283,9 @@ GET /projects/{id}/dependencies?limit=100&cursor=<opaque>
 ### Surface
 
 ```
+GET    /auth/config                                            # unauthenticated, OIDC bootstrap for the SPA
+POST   /auth/signup                                            # unauthenticated, creates an organisation + its Owner in ZITADEL
+
 POST   /auth/register                POST /auth/login          POST /auth/refresh
 GET    /auth/github/authorize        POST /auth/github/callback
 POST   /auth/logout                  GET  /auth/me
@@ -300,7 +305,8 @@ GET    /projects/:id/findings        GET  /findings/:id
 GET    /reports/:id                  GET  /reports/:id/download
 POST   /reports/:id/share            DELETE /shares/:token
 GET    /shared/:token                                          # unauthenticated, token-gated
-GET    /reports/:id/comments         POST /reports/:id/comments
+GET    /comments?report_id=:id       POST /comments
+PUT    /comments/:id                 DELETE /comments/:id
 
 POST   /projects/:id/vex             PATCH /vex/:id            GET /vex/:id/history
 GET    /vex/:id/csaf
@@ -310,7 +316,39 @@ PATCH  /campaigns/:id                POST /campaigns/:id/run-now
 GET    /campaigns/:id/runs
 ```
 
-Every scan-creation request carries `bom_types[]`, `report_levels[]`, `standards[]`, `formats[]`, and optionally `engines[]`.
+Every scan-creation request (`POST /v1/scans`) carries `project_id`,
+`source_kind` and `families[]`, and optionally `engines[]` — `families` is
+which engine groups run (`sbom`, `cbom`, …), lowercase, matching
+`events.Family`.
+
+**`families[]` may never contain `hbom` or `qbom`** — see §7. Both are valid
+values of `events.Family` (`scan.engine_policy` still keys tenant overrides
+by them) but neither is something an engine scans; requesting either, or
+naming `hbom-csv` / `qbom-derive` in `engines[]` directly, is refused at
+create time with `SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE` (§9), not resolved into
+a job that nothing consumes.
+
+**`POST /auth/signup`** takes `{organisation_name, email, password, given_name,
+family_name}` and returns `201 {organisation_name, email}` — no ZITADEL or
+AxeBOM id, because the `auth.tenants`/`auth.users` projection for the new
+organisation is created lazily on the visitor's first sign-in
+(`auth.identity_for`, `migrations/auth/0003_zitadel_identity.sql`), not by
+this call. It creates the organisation and its first user, as Owner, in
+ZITADEL — see `services/gateway/internal/signup` for why this exists
+alongside ZITADEL's own (deliberately disabled) self-registration. A taken
+organisation name or email answers `AUTH_ORG_NAME_TAKEN` /
+`AUTH_EMAIL_TAKEN` (§9), never by silently attaching the visitor to the
+existing one.
+
+**`bom_types[]`, `report_levels[]`, `standards[]` and `formats[]` belong to
+report creation, not scan creation.** A report is one rendered document —
+`POST /v1/reports` takes one `scan_id` plus one `bom_type` / `level` /
+`format` (see §6 of `01-DATA-MODEL.md` for `report.reports`, one row per
+combination) — so a client requesting N report types × levels × formats
+sends N separate `POST /v1/reports` calls after the scan exists, not one
+call carrying all four dimensions. `standard` is optional and derived from
+`format` server-side (`spdx`→SPDX, `cyclonedx`→CycloneDX, everything
+else→`native`) — sending a mismatched one is refused, not corrected.
 
 ---
 
@@ -325,7 +363,7 @@ Every error returns the same shape. **Never a bare string.**
     "message": "cbomkit-theia cannot process source kind 'image' for this project",
     "details": [{ "engine": "cbomkit-theia", "source_kind": "image" }],
     "request_id": "01J…",
-    "docs": "https://docs.encorebom.io/errors/SCAN_ENGINE_COMBINATION_INVALID"
+    "docs": "https://docs.axebom.io/errors/SCAN_ENGINE_COMBINATION_INVALID"
   }
 }
 ```
@@ -334,11 +372,11 @@ Codes are `SCREAMING_SNAKE`, stable forever, and grouped by prefix. `message` is
 
 | Prefix | HTTP | Examples |
 |---|---|---|
-| `AUTH_` | 401 | `AUTH_TOKEN_EXPIRED`, `AUTH_INVALID_CREDENTIALS`, `AUTH_MFA_REQUIRED` |
-| `PERM_` | 403 | `PERM_ROLE_INSUFFICIENT`, `PERM_REPORT_PRIVATE` |
+| `AUTH_` | 401 / 409 | `AUTH_TOKEN_EXPIRED`, `AUTH_INVALID_CREDENTIALS`, `AUTH_MFA_REQUIRED`, `AUTH_ORG_AMBIGUOUS` (409), `AUTH_ORG_NAME_TAKEN` (409), `AUTH_EMAIL_TAKEN` (409) |
+| `PERM_` | 403 | `PERM_ROLE_INSUFFICIENT`, `PERM_REPORT_PRIVATE`, `PERM_COMMENT_NOT_OWNER` |
 | `NOTFOUND_` | 404 | `NOTFOUND_PROJECT`, `NOTFOUND_REPORT` |
 | `VALIDATION_` | 422 | `VALIDATION_FIELD_REQUIRED`, `VALIDATION_FILTER_UNKNOWN` |
-| `SCAN_` | 422 / 409 | `SCAN_ENGINE_COMBINATION_INVALID`, `SCAN_ALREADY_RUNNING`, `SCAN_SOURCE_UNREACHABLE` |
+| `SCAN_` | 422 / 409 | `SCAN_ENGINE_COMBINATION_INVALID`, `SCAN_ALREADY_RUNNING`, `SCAN_SOURCE_UNREACHABLE`, `SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE` |
 | `FETCH_` | 422 | `FETCH_URL_SCHEME_FORBIDDEN`, `FETCH_PRIVATE_ADDRESS_BLOCKED`, `FETCH_ARCHIVE_TOO_LARGE`, `FETCH_INFLATION_RATIO_EXCEEDED` |
 | `ENGINE_` | — | `ENGINE_UNAVAILABLE`, `ENGINE_PARTIAL_ECOSYSTEM`, `ENGINE_TIMEOUT`, `ENGINE_DB_STALE` |
 | `NORMALIZE_` | — | `NORMALIZE_IDENTITY_OPAQUE`, `NORMALIZE_ALIAS_CLUSTER_OVERSIZE`, `NORMALIZE_LICENSE_AMBIGUOUS`, `NORMALIZE_NO_VERSION_COMPARATOR` |
@@ -348,7 +386,35 @@ Codes are `SCREAMING_SNAKE`, stable forever, and grouped by prefix. `message` is
 
 **Cross-tenant access returns `NOTFOUND_*` with 404, never 403.** A 403 confirms the resource exists, which is itself a leak.
 
+**`PERM_COMMENT_NOT_OWNER`** (403) is the one legitimate same-tenant 403 in this
+taxonomy that is not a role check. `comment:update` / `comment:delete` are
+granted to every Viewer in the authz matrix — anyone may edit or delete their
+*own* comment — so the matrix cannot express "not this row"; the comment
+service's handler checks authorship itself and returns this code when a
+same-tenant caller who can see a comment is not the one who wrote it. This is
+distinct from cross-tenant access (`NOTFOUND_RESOURCE`, above): RLS already
+makes another tenant's comment invisible before ownership is ever checked.
+
 `ENGINE_*` and `NORMALIZE_*` codes are usually **diagnostics attached to a result**, not HTTP responses. They surface in the report rather than failing a request.
+
+**`SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE`** (422) — `families[]` (or an explicit
+`engines[]` entry) named `hbom` / `hbom-csv` or `qbom` / `qbom-derive` (§7,
+§8). Every offending family and engine is listed in `details`, not just the
+first:
+
+```jsonc
+{
+  "error": {
+    "code": "SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE",
+    "message": "1 BOM family(s) cannot be requested as a scan: hbom. Every offending family and engine is listed in the error details, so one correction fixes all of them.",
+    "details": [
+      { "family": "hbom", "reason": "HBOM has no scanner; import hardware inventory via the /v1/hbom/* endpoints instead of requesting a scan." }
+    ],
+    "request_id": "01J…",
+    "docs": "https://docs.axebom.io/errors/SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE"
+  }
+}
+```
 
 ---
 
@@ -374,16 +440,22 @@ The snapshot is why the stream can be lossy: a client that reconnects is immedia
 `POST` to the subscriber URL with:
 
 ```
-X-EncoreBOM-Event: scan.completed
-X-EncoreBOM-Delivery: <uuid>
-X-EncoreBOM-Signature: t=<unix>,v1=<hex hmac-sha256 of "t.body">
+X-AxeBOM-Event: scan.completed
+X-AxeBOM-Delivery: <uuid>
+X-AxeBOM-Signature: t=<unix>,v1=<hex hmac-sha256 of "t.body">
 ```
 
 The timestamp is inside the signed payload to prevent replay; reject deliveries older than 5 minutes. Retries: 5 attempts, exponential backoff to 1 h, then dead-letter.
 
-Events: `scan.completed`, `scan.failed`, `report.ready`, `finding.critical.new`, `campaign.run.completed`, `vex.updated`.
+Events: `scan.completed`, `findings.new_critical`, `campaign.failed`, `report.ready` — `services/notification/internal/webhook`'s `Event` type has these four values, and is the SSOT for this list. (An earlier draft of this section named six events under different spellings — `scan.failed`, `finding.critical.new`, `campaign.run.completed`, `vex.updated` — before the webhook package was actually built and tested; those four extra/renamed entries were never implemented and are not planned work, just a stale draft corrected here.)
 
-Payloads carry **ids and counts, never component or finding detail** — a webhook body may be logged by the receiver, and BOM content is confidential under CERT-In §5.3.
+Payloads carry **ids and counts, never component or finding detail** — a webhook body may be logged by the receiver, and BOM content is confidential under CERT-In §5.3. See `webhook.Payload`'s own doc comment for the exact field list.
+
+### The internal event that produces a webhook delivery
+
+A webhook delivery is downstream of an internal event published to `notify.<event>` on the `NOTIFY` stream (§2) — `libs/go-shared/events`'s `NotifyEventV1`, consumed only by `services/notification`. It is deliberately RICHER than `webhook.Payload` above: an internal message between our own services never reaches a third party, so it may carry what the EMAIL channel needs to render a human-readable message (a project name, a campaign name, a failure cause) that a webhook body must not. `services/notification` derives the narrower `webhook.Payload` from this envelope at delivery time.
+
+Publishers today: `services/report`'s render worker, for `report.ready`, once per finished render, deduplicated on the report id. `scan.completed`, `campaign.failed` and `findings.new_critical` have no publisher yet — the event type and its delivery mechanism (retry, backoff, both channels) are fully built and tested; only the "something happened, publish it" call at the point each thing happens remains.
 
 ---
 

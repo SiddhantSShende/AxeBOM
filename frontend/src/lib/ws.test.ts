@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  backoffMs,
-  connectProgress,
-  parseFrame,
   type ConnectionState,
   type ScanProgress,
+  WS_BEARER_PREFIX,
+  WS_SUBPROTOCOL,
   type WebSocketLike,
+  backoffMs,
+  bearerProtocols,
+  connectProgress,
+  parseFrame,
 } from './ws';
 
 /** A socket a test can drive. */
@@ -285,6 +288,57 @@ describe('the platform default', () => {
       clearTimeoutFn: () => {},
     });
     expect(spy).toHaveBeenCalledWith({ kind: 'connecting' });
+    dispose();
+  });
+});
+
+describe('the handshake credential', () => {
+  it('offers the plain subprotocol and the bearer one', () => {
+    expect(bearerProtocols('abc.def.ghi')).toEqual([
+      WS_SUBPROTOCOL,
+      `${WS_BEARER_PREFIX}abc.def.ghi`,
+    ]);
+  });
+
+  it('still offers a subprotocol when there is no token', () => {
+    // RFC 6455: a server that selects none of the offered protocols makes the
+    // browser fail the connection. Offering nothing at all would turn a 401
+    // into an unexplained close, so the plain protocol is always present and
+    // the server refuses the request on its own terms.
+    expect(bearerProtocols(null)).toEqual([WS_SUBPROTOCOL]);
+    expect(bearerProtocols(undefined)).toEqual([WS_SUBPROTOCOL]);
+  });
+
+  it('is read again on every reconnect, not captured once', () => {
+    // A socket that reconnects after a long backoff must present the token the
+    // session holds NOW. Capturing it at connect time is how a laptop woken
+    // from sleep reconnects forever with a credential that expired at lunch.
+    const offered: (string[] | undefined)[] = [];
+    const sockets: FakeSocket[] = [];
+    let token = 'first';
+    const timers: (() => void)[] = [];
+
+    const dispose = connectProgress({
+      url: 'wss://example/scan',
+      handlers: { onProgress: () => {}, onConnection: () => {} },
+      protocols: () => bearerProtocols(token),
+      factory: (_url, p) => {
+        offered.push(p);
+        const s = new FakeSocket();
+        sockets.push(s);
+        return s;
+      },
+      random: () => 0.5,
+      setTimeoutFn: (fn) => timers.push(fn),
+      clearTimeoutFn: () => timers.splice(0),
+    });
+
+    token = 'renewed';
+    sockets[0]!.onclose?.({});
+    timers.shift()?.();
+
+    expect(offered[0]).toEqual([WS_SUBPROTOCOL, `${WS_BEARER_PREFIX}first`]);
+    expect(offered[1]).toEqual([WS_SUBPROTOCOL, `${WS_BEARER_PREFIX}renewed`]);
     dispose();
   });
 });

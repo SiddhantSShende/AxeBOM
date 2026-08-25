@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './App';
 import './design/tokens.css';
 import './design/app.css';
-import './index.css';
 
 // Server state lives here and ONLY here (docs/07-FRONTEND-SPEC.md §1).
 // Zustand holds theme, sidebar and the generate-wizard draft — nothing that

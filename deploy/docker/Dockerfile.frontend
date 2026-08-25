@@ -1,0 +1,66 @@
+# AxeBOM frontend — built SPA served by nginx.
+#
+# Build from the repository root:
+#   docker build -f deploy/docker/Dockerfile.frontend -t axebom/frontend .
+#
+# Static build rather than a containerised `vite dev`. The dev server is for
+# hot reload on a developer's machine; running it as the deployed artefact
+# means shipping the toolchain, a watcher and source maps, and it exits on any
+# type error — so a stack meant to stay up would go down on a bad edit.
+#
+# `npm run build` is `tsc -b && vite build`, so a type error fails the IMAGE
+# BUILD. That is the intent: a broken build should never reach a running
+# container.
+
+# ---- build ----------------------------------------------------------------
+FROM node:24-alpine AS build
+
+WORKDIR /app
+
+# Lockfile-only install first, for layer caching. `npm ci` (not `npm install`)
+# so the lockfile is authoritative and a build can never silently float a
+# dependency — this product's own SBOM has to be trustworthy.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+COPY frontend/ ./
+
+# ⚠ THE SPA'S OIDC IDENTITY IS BAKED IN AT BUILD TIME.
+#
+# Vite substitutes `import.meta.env.VITE_*` during the build, so these must be
+# present HERE and not merely in the container's environment — a runtime env var
+# reaches nginx and never reaches the bundle. `axebom iam bootstrap` prints
+# both values and compose passes them from .env.
+#
+# Neither is a secret. The application is registered with AUTH_METHOD_NONE
+# precisely because a browser cannot hold one, so the client id is public by
+# design; the project id appears in every token's audience.
+#
+# ⚠ AN EMPTY CLIENT ID PRODUCES A BUILD THAT CANNOT SIGN ANYONE IN. It is not
+# a build failure — the app says so on its sign-in screen and names the fix —
+# because failing the image build would make `task dev` unusable before the
+# identity tier has ever been bootstrapped.
+ARG VITE_OIDC_ISSUER
+ARG VITE_OIDC_CLIENT_ID
+ARG VITE_OIDC_PROJECT_ID
+ENV VITE_OIDC_ISSUER=$VITE_OIDC_ISSUER \
+    VITE_OIDC_CLIENT_ID=$VITE_OIDC_CLIENT_ID \
+    VITE_OIDC_PROJECT_ID=$VITE_OIDC_PROJECT_ID
+
+RUN npm run build
+
+# ---- runtime ---------------------------------------------------------------
+# nginx-unprivileged runs as uid 101 with no root master process, so the
+# container needs no capabilities at all.
+FROM nginxinc/nginx-unprivileged:alpine AS runtime
+
+# The stock config listens on 8080 and would collide with the gateway's port
+# in any host-network scenario; ours listens on 8085.
+COPY --chown=nginx:nginx deploy/docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html
+
+USER nginx
+
+EXPOSE 8085
+
+# nginx already runs in the foreground under this image's default command.

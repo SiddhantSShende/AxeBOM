@@ -1,0 +1,256 @@
+# ============================================================================
+# AxeBOM — identity tier (ZITADEL)
+# ============================================================================
+#   task dev      -> docker-compose.yml + THIS FILE + docker-compose.app.yml
+#   task iam:up   -> docker-compose.yml + THIS FILE only
+#
+# ⚠ ZITADEL IS RUN, NEVER VENDORED, NEVER FORKED.
+#
+# The ZITADEL server is AGPL-3.0-only (everything outside `proto/`,
+# `apps/docs/`, `apps/login/` and `packages/`). CLAUDE.md invariant 9 puts
+# copyleft in a subprocess or a separate service and never in our binaries, so
+# it runs here as a pinned, unmodified published image and we talk to it over
+# OIDC and its gRPC management API. The only ZITADEL code linked into an
+# AxeBOM binary is `zitadel-go` / `zitadel/oidc`, which live in separate
+# Apache-2.0 repositories. `.golangci.yml` fails the build on any
+# `github.com/zitadel/zitadel/...` import so this cannot regress silently.
+#
+# ---------------------------------------------------------------------------
+# WHY init / setup / start ARE THREE SERVICES AND NOT `start-from-init`
+#
+# `start-from-init` runs migrations inside the serving process. With more than
+# one replica that is N processes racing to migrate the same database. Splitting
+# them means the schema is migrated exactly once, by a container that exits, and
+# the serving containers only ever start against a schema that already exists —
+# the same discipline the `migrate` one-shot already enforces for AxeBOM's
+# own schema in docker-compose.app.yml.
+#
+# ---------------------------------------------------------------------------
+# WHY LOGIN IS A SECOND CONTAINER
+#
+# ZITADEL v4 moved the login UI out of the Go binary into a Next.js app served
+# at /ui/v2/login. The two are wired together by a bootstrap PAT that the API
+# writes to a shared volume and the login app reads. If you have seen a v2/v3
+# deployment, this topology is new.
+#
+# ---------------------------------------------------------------------------
+# THE ONE SETTING THAT BREAKS EVERYTHING IF IT IS WRONG
+#
+# EXTERNALDOMAIN + EXTERNALPORT + EXTERNALSECURE must equal the URL the browser
+# actually uses, because ZITADEL routes on the Host header. Any mismatch is
+# reported as "Instance not found", which reads like a database problem and is
+# not one. Here the public origin is http://localhost:5173 — the frontend nginx,
+# which proxies ZITADEL's canonical paths through to this container.
+#
+# Changing EXTERNALDOMAIN later requires re-running the setup phase; it is not
+# a config edit. Pick it before anything resembling production.
+# ============================================================================
+
+name: axebom
+
+x-zitadel-db: &zitadel-db
+  # Structured connection, not DSN. In DSN mode `zitadel init` cannot use the
+  # admin connection to create the database and role, so both would have to
+  # exist already; here ZITADEL provisions its own `zitadel` database and its
+  # own unprivileged `zitadel` role inside the Postgres we already run.
+  #
+  # ⚠ A SEPARATE DATABASE, NOT A SCHEMA IN `axebom`. ZITADEL owns
+  # `eventstore`, `projections` and `system`, runs its own migrations, and has
+  # no RLS. Sharing a database would put a foreign migration tool next to the
+  # 43 tables whose tenancy is enforced by policies it knows nothing about.
+  ZITADEL_DATABASE_POSTGRES_HOST: postgres
+  ZITADEL_DATABASE_POSTGRES_PORT: 5432
+  ZITADEL_DATABASE_POSTGRES_DATABASE: ${ZITADEL_POSTGRES_DB:-zitadel}
+  ZITADEL_DATABASE_POSTGRES_MAXOPENCONNS: ${ZITADEL_POSTGRES_MAXOPENCONNS:-25}
+  ZITADEL_DATABASE_POSTGRES_USER_USERNAME: ${ZITADEL_POSTGRES_USER:-zitadel}
+  ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${ZITADEL_POSTGRES_PASSWORD:-zitadel}
+  ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+  ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ${POSTGRES_USER:-axebom}
+  ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_PASSWORD:-axebom}
+  ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+  # Connected to in order to CREATE the target database — you cannot create a
+  # database from inside it.
+  ZITADEL_DATABASE_POSTGRES_ADMIN_EXISTINGDATABASE: ${POSTGRES_DB:-axebom}
+
+x-zitadel-external: &zitadel-external
+  ZITADEL_EXTERNALDOMAIN: ${ZITADEL_DOMAIN:-localhost}
+  ZITADEL_EXTERNALPORT: ${ZITADEL_EXTERNALPORT:-5173}
+  ZITADEL_EXTERNALSECURE: ${ZITADEL_EXTERNALSECURE:-false}
+
+services:
+
+  # --------------------------------------------------------------- init (1/3)
+  # Creates the database, the unprivileged role and the base schemas. One-shot.
+  zitadel-init:
+    image: ghcr.io/zitadel/zitadel:${ZITADEL_VERSION:-v4.17.1}
+    restart: "no"
+    command: init
+    environment:
+      <<: *zitadel-db
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [default]
+
+  # -------------------------------------------------------------- setup (2/3)
+  # Applies ZITADEL's own migrations and bootstraps the first instance. One-shot.
+  #
+  # FirstInstance seeds the instance, one organisation, the human IAM_OWNER and
+  # a machine user whose JSON key is written to the shared volume. That key is
+  # the ONLY credential `axebom iam bootstrap` needs; everything else —
+  # project, roles, applications, the per-tenant orgs — is created through the
+  # API by that command, because FirstInstance cannot express any of them.
+  zitadel-setup:
+    image: ghcr.io/zitadel/zitadel:${ZITADEL_VERSION:-v4.17.1}
+    restart: "no"
+    user: "0"
+    command: setup --masterkey "${ZITADEL_MASTERKEY:-AxeBOMLocalDevMasterkey32Bytes!!}" --init-projections=true
+    environment:
+      <<: [*zitadel-db, *zitadel-external]
+
+      ZITADEL_FIRSTINSTANCE_INSTANCENAME: AxeBOM
+      ZITADEL_FIRSTINSTANCE_ORG_NAME: ${ZITADEL_ADMIN_ORG:-AxeBOM}
+
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: ${ZITADEL_ADMIN_USERNAME:-axebom-admin}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_FIRSTNAME: AxeBOM
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_LASTNAME: Admin
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_ADDRESS: ${ZITADEL_ADMIN_EMAIL:-admin@axebom.test}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_VERIFIED: "true"
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD:-AxeBOM-dev-only1!}
+      # Development only. A change-on-first-login prompt makes an automated
+      # bootstrap impossible; production overrides this to true.
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "false"
+
+      # The provisioning credential. Type 1 is a JSON key file; the private key
+      # never leaves the volume, which is why this is preferred over a PAT.
+      ZITADEL_FIRSTINSTANCE_MACHINEKEYPATH: /zitadel/bootstrap/admin-sa.json
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: ${ZITADEL_BOOTSTRAP_SA:-axebom-bootstrap}
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: AxeBOM bootstrap service account
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINEKEY_TYPE: "1"
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINEKEY_EXPIRATIONDATE: ${ZITADEL_BOOTSTRAP_KEY_EXPIRY:-2099-01-01T00:00:00Z}
+
+      # The v4 login container authenticates as this machine user.
+      ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH: /zitadel/bootstrap/login-client.pat
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_USERNAME: login-client
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_NAME: Automatically Initialized IAM_LOGIN_CLIENT
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_PAT_EXPIRATIONDATE: ${ZITADEL_LOGIN_PAT_EXPIRY:-2099-01-01T00:00:00Z}
+
+      # ⚠ HOSTNAMES ONLY — NO PORT, NO COMMA-SEPARATED LIST.
+      #
+      # ZITADEL validates each trusted domain against ^[a-zA-Z0-9.-]+$ and
+      # rejects anything else with "Errors.Instance.Domain.InvalidCharacter",
+      # which surfaces as a failed setup migration rather than as a config
+      # error. The port is irrelevant anyway: instance lookup strips it
+      # (internal/api/http/request_context.go hostnameFromHost), so `localhost`
+      # already covers both :5173 through nginx and the direct API port.
+      #
+      # This entry exists only for in-network callers that present the compose
+      # service name as their Host header.
+      ZITADEL_FIRSTINSTANCE_TRUSTEDDOMAINS: zitadel-api
+
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "true"
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI: ${ZITADEL_PUBLIC_URL:-http://localhost:5173}/ui/v2/login/
+      ZITADEL_OIDC_DEFAULTLOGINURLV2: ${ZITADEL_PUBLIC_URL:-http://localhost:5173}/ui/v2/login/login?authRequest=
+      ZITADEL_OIDC_DEFAULTLOGOUTURLV2: ${ZITADEL_PUBLIC_URL:-http://localhost:5173}/ui/v2/login/logout?post_logout_redirect=
+
+      # ⚠ 15 MINUTES, NOT THE 12-HOUR DEFAULT.
+      #
+      # Our services validate access tokens locally against JWKS rather than
+      # calling introspection on every request, so the token lifetime IS the
+      # revocation window. Twelve hours of validity after a user is disabled is
+      # not a window anyone would accept in writing. This setting is
+      # instance-wide, and it only takes effect on a restart.
+      ZITADEL_OIDC_DEFAULTACCESSTOKENLIFETIME: ${ZITADEL_ACCESS_TOKEN_TTL:-15m}
+      ZITADEL_OIDC_DEFAULTIDTOKENLIFETIME: ${ZITADEL_ID_TOKEN_TTL:-15m}
+
+      # Invitations need working mail. mailpit is already in the stack, and its
+      # web UI on ${MAILPIT_UI_PORT:-58025} is where dev invite links are read.
+      ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_SMTP_HOST: mailpit:1025
+      ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_TLS: "false"
+      ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_FROM: ${ZITADEL_SMTP_FROM:-noreply@axebom.test}
+      ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_FROMNAME: AxeBOM
+      # The sender domain is axebom.test while the instance domain is
+      # localhost; without this ZITADEL refuses to send.
+      ZITADEL_DEFAULTINSTANCE_DOMAINPOLICY_SMTPSENDERADDRESSMATCHESINSTANCEDOMAIN: "false"
+    volumes:
+      - ./.data/zitadel-bootstrap:/zitadel/bootstrap:rw
+    depends_on:
+      postgres: { condition: service_healthy }
+      zitadel-init: { condition: service_completed_successfully }
+    networks: [default]
+
+  # ---------------------------------------------------------------- api (3/3)
+  zitadel-api:
+    image: ghcr.io/zitadel/zitadel:${ZITADEL_VERSION:-v4.17.1}
+    restart: unless-stopped
+    user: "0"
+    command: start --masterkey "${ZITADEL_MASTERKEY:-AxeBOMLocalDevMasterkey32Bytes!!}"
+    environment:
+      <<: [*zitadel-db, *zitadel-external]
+      ZITADEL_PORT: 8080
+      # TLS terminates at nginx. ZITADEL still advertises the public scheme
+      # from EXTERNALSECURE, so discovery URLs stay correct.
+      ZITADEL_TLS_ENABLED: "false"
+      ZITADEL_LOGSTORE_ACCESS_STDOUT_ENABLED: ${ZITADEL_ACCESS_LOG:-false}
+      ZITADEL_INSTRUMENTATION_LOG_FORMAT: json
+    # Not an HTTP probe: the image is distroless-adjacent and ships `ready` as
+    # a subcommand of its own binary.
+    healthcheck:
+      test: ["CMD", "/app/zitadel", "ready"]
+      interval: 10s
+      timeout: 30s
+      retries: 12
+      start_period: 20s
+    # Published so `axebom iam bootstrap` and `iam verify` work even when
+    # the frontend container is down. Listed in TRUSTEDDOMAINS above.
+    ports: ["${ZITADEL_API_PORT:-58080}:8080"]
+    volumes:
+      - ./.data/zitadel-bootstrap:/zitadel/bootstrap:rw
+    depends_on:
+      postgres: { condition: service_healthy }
+      zitadel-setup: { condition: service_completed_successfully }
+    networks: [default]
+
+  # ------------------------------------------------------------------- login
+  zitadel-login:
+    image: ghcr.io/zitadel/zitadel-login:${ZITADEL_VERSION:-v4.17.1}
+    restart: unless-stopped
+    user: "0"
+    environment:
+      # In-network, by service name — never the public URL.
+      ZITADEL_API_URL: http://zitadel-api:8080
+      NEXT_PUBLIC_BASE_PATH: /ui/v2/login
+      ZITADEL_SERVICE_USER_TOKEN_FILE: /zitadel/bootstrap/login-client.pat
+      # The login app calls the API in-network but must present the PUBLIC host,
+      # or ZITADEL routes the request to no instance.
+      CUSTOM_REQUEST_HEADERS: >-
+        Host:${ZITADEL_DOMAIN:-localhost}:${ZITADEL_EXTERNALPORT:-5173},X-Forwarded-Proto:${ZITADEL_PUBLIC_SCHEME:-http}
+    healthcheck:
+      test: ["CMD", "/bin/sh", "-c", "node /app/healthcheck.mjs http://localhost:3000/ui/v2/login/healthy"]
+      interval: 10s
+      timeout: 30s
+      retries: 12
+      start_period: 20s
+    volumes:
+      - ./.data/zitadel-bootstrap:/zitadel/bootstrap:ro
+    depends_on:
+      zitadel-api: { condition: service_healthy }
+    networks: [default]
+
+# ---------------------------------------------------------------------------
+# NO NAMED VOLUME FOR THE BOOTSTRAP CREDENTIALS — A BIND MOUNT, DELIBERATELY.
+#
+# `deploy/compose/.data/zitadel-bootstrap` carries the machine key and the
+# login-client PAT between the setup one-shot and the long-running containers.
+# It is a HOST PATH rather than a named volume because `axebom iam bootstrap`
+# runs on the host and has to read that key. A named volume would leave the CLI
+# shelling out to `docker cp` to reach it, which turns a Go program into a
+# script with a Docker dependency — exactly what the CLI exists to avoid.
+#
+# `deploy/compose/.data/` is already gitignored, so the private key cannot be
+# committed by accident.
+#
+# ⚠ `task iam:reset` deletes this directory together with ZITADEL's database.
+# The two must go together: a surviving key against a fresh instance
+# authenticates as a user that no longer exists, which reports as an opaque 401
+# rather than as the state mismatch it is.
+# ---------------------------------------------------------------------------

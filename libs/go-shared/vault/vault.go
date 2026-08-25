@@ -96,7 +96,7 @@ func (r Ref) Path() (string, error) {
 	if err := r.validate(); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("encorebom/tenants/%s/%s/%s", r.TenantID, r.Kind, r.ID), nil
+	return fmt.Sprintf("axebom/tenants/%s/%s/%s", r.TenantID, r.Kind, r.ID), nil
 }
 
 func (r Ref) validate() error {

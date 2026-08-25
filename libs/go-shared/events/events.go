@@ -460,6 +460,18 @@ type ScanResultV1 struct {
 	// Validate, which enforces it.
 	EngineDBVersion string `json:"engine_db_version,omitempty"`
 
+	// SourceMeta is what the FETCHER pinned: the exact commit it materialized.
+	//
+	// It exists because the orchestrator previously read the commit sha out of
+	// EngineDBVersion — a field documented as the vulnerability-database
+	// vintage. That overload worked, and it made both fields dishonest: a fetch
+	// result claimed a database version it had never consulted, and the commit
+	// sha lived somewhere nobody would look for it.
+	//
+	// Optional, so every existing engine result is unaffected. Only the fetch
+	// family populates it.
+	SourceMeta *SourceMeta `json:"source_meta,omitempty"`
+
 	Invocation Invocation   `json:"invocation"`
 	Status     EngineStatus `json:"status"`
 
@@ -497,11 +509,48 @@ type Artifact struct {
 }
 
 // Summary is the headline count from one engine.
+//
+// ⚠ EVERY FIELD IS A POINTER, AND nil IS NOT ZERO.
+//
+//	nil  this engine does not measure this dimension
+//	0    it measured, and there were none
+//
+// The distinction is not pedantry. syft catalogues components and never looks
+// for vulnerabilities; grype matches vulnerabilities and never catalogues
+// licences. Rendering either as `0` asserts a fact the engine never
+// established — "grype found 0 licences" reads as a clean result and is really
+// a question grype was never asked. That is the same failure this codebase
+// refuses everywhere else: an unknown presented as a measured zero (CLAUDE.md
+// invariant 3), and an ecosystem silently omitted rather than declared unseen
+// (invariant 12).
+//
+// Which dimensions an engine measures is declared once, in the manifest's
+// `produces` list, and the workers derive the summary from it.
+//
+// Fields are NOT omitempty: an explicit null says "not measured", where an
+// absent key says only that something is old. `not-provided` is reported,
+// never silently dropped.
 type Summary struct {
-	Components      int `json:"components"`
-	Vulnerabilities int `json:"vulnerabilities"`
-	Licenses        int `json:"licenses"`
-	CryptoAssets    int `json:"crypto_assets"`
+	Components      *int `json:"components"`
+	Vulnerabilities *int `json:"vulnerabilities"`
+	Licenses        *int `json:"licenses"`
+	CryptoAssets    *int `json:"crypto_assets"`
+}
+
+// Count boxes a measured count, so a call site can say what it means.
+//
+//	Summary{Components: events.Count(0)}   measured, none found
+//	Summary{}                              nothing measured
+func Count(n int) *int { return &n }
+
+// Measured reports whether any dimension was measured at all.
+//
+// An engine that produced output and measured nothing is reporting an envelope
+// that says nothing about what it found, which is how a report understates a
+// scan without anything looking wrong.
+func (s Summary) Measured() bool {
+	return s.Components != nil || s.Vulnerabilities != nil ||
+		s.Licenses != nil || s.CryptoAssets != nil
 }
 
 // Diagnostic is a non-fatal problem worth surfacing.
@@ -576,6 +625,18 @@ func (r ScanResultV1) Validate() error {
 		}
 		if a.URI == "" {
 			problems = append(problems, fmt.Sprintf("artifact %d has no uri", i))
+		}
+	}
+
+	// A negative count is a parser that subtracted, not a measurement. Caught
+	// here because it would otherwise reach a report as a plausible-looking
+	// number and be believed.
+	for name, v := range map[string]*int{
+		"components": r.Summary.Components, "vulnerabilities": r.Summary.Vulnerabilities,
+		"licenses": r.Summary.Licenses, "crypto_assets": r.Summary.CryptoAssets,
+	} {
+		if v != nil && *v < 0 {
+			problems = append(problems, fmt.Sprintf("summary.%s is %d", name, *v))
 		}
 	}
 

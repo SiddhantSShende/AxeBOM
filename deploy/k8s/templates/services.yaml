@@ -18,8 +18,8 @@ metadata:
   name: {{ $.Release.Name }}-{{ $name }}
   labels:
     app.kubernetes.io/name: {{ $name }}
-    app.kubernetes.io/part-of: encorebom
-    encorebom.io/trust: trusted
+    app.kubernetes.io/part-of: axebom
+    axebom.io/trust: trusted
 spec:
   replicas: {{ $svc.replicas }}
   selector:
@@ -29,7 +29,7 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: {{ $name }}
-        encorebom.io/trust: trusted
+        axebom.io/trust: trusted
     spec:
       affinity:
         podAntiAffinity:
@@ -43,7 +43,7 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchLabels:
-                  encorebom.io/trust: untrusted
+                  axebom.io/trust: untrusted
               topologyKey: kubernetes.io/hostname
           preferredDuringSchedulingIgnoredDuringExecution:
             {{/*

@@ -31,8 +31,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/encorebom/encorebom/libs/go-shared/authz"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/authz"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 // Claims is the access-token payload.
@@ -100,7 +100,7 @@ func NewIssuer(cfg TokenConfig) (*Issuer, error) {
 		cfg.RefreshTTL = 30 * 24 * time.Hour
 	}
 	if cfg.Issuer == "" {
-		cfg.Issuer = "encorebom"
+		cfg.Issuer = "axebom"
 	}
 	return &Issuer{cfg: cfg}, nil
 }

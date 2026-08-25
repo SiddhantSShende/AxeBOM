@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/encorebom/encorebom/libs/go-shared/model"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/services/project/internal/store"
+	"github.com/axebom/axebom/libs/go-shared/model"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/services/project/internal/store"
 )
 
 // CERT-In "Practices and Processes" — Table 5, category 3 (PDF p.22).
@@ -57,7 +57,7 @@ type PracticesReport struct {
 
 // practiceValue maps a profile field id to the stored value.
 //
-// The binding is declared in the profile as `encorebom_binding`; this is the Go
+// The binding is declared in the profile as `axebom_binding`; this is the Go
 // side of that binding. Keeping it in one function means a field added to the
 // profile fails here loudly rather than being silently skipped in scoring.
 func practiceValue(p store.Practices, fieldID string) (*string, bool) {

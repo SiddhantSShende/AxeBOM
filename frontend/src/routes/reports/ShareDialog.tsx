@@ -11,10 +11,10 @@
  *
  * docs/07-FRONTEND-SPEC.md §6, CERT-In §5.3.2.
  */
-
-import { useEffect, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api';
+import { Overlay } from '../../components/Overlay';
 import { StatusPill } from '../../components/Chips';
 import { CopyableCode, EmptyState, ErrorState, SkeletonRows } from '../../components/States';
 
@@ -47,20 +47,14 @@ export function ShareDialog({
   visibility: 'public' | 'private';
   onClose: () => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const [expiryHours, setExpiryHours] = useState(24 * 7);
   const [cap, setCap] = useState<number | ''>('');
   const [minted, setMinted] = useState<ShareLink | null>(null);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    ref.current?.focus();
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  // A stable id for aria-labelledby: useMemo, not a module-level counter —
+  // two dialogs mounted at once (never in this app, but a future test
+  // harness might) would otherwise collide on the same DOM id.
+  const headingId = useMemo(() => `share-h-${reportId}`, [reportId]);
 
   const links = useQuery({
     queryKey: ['shares', reportId],
@@ -90,141 +84,131 @@ export function ShareDialog({
   });
 
   return (
-    <div className="drawer-scrim" onClick={onClose}>
-      <div
-        className="dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="share-h"
-        tabIndex={-1}
-        ref={ref}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="drawer-head">
-          <h2 id="share-h">Share this report</h2>
-          <button type="button" className="btn btn-quiet" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
-        </header>
+    <Overlay variant="dialog" onClose={onClose} aria-labelledby={headingId}>
+      <header className="drawer-head">
+        <h2 id={headingId}>Share this report</h2>
+        <button type="button" className="btn btn-quiet" onClick={onClose} aria-label="Close">
+          ✕
+        </button>
+      </header>
 
-        {visibility === 'private' && (
-          <div className="callout callout-warn" role="alert">
-            <h3>This report is private</h3>
-            <p>
-              It contains vulnerability detail (CERT-In §5.3.2). A share link is a{' '}
-              <strong>bearer credential</strong> — anyone who has the URL can download it, with no
-              sign-in and no record of who they are beyond an IP address.
-            </p>
-            <p>
-              Set an expiry and a download cap unless you have a reason not to, and revoke the link
-              when the review is over.
-            </p>
-          </div>
-        )}
-
-        {minted ? (
-          <MintedLink link={minted} onDone={() => setMinted(null)} />
-        ) : (
-          <form
-            className="share-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              create.mutate();
-            }}
-          >
-            <label className="filter">
-              <span>Expires</span>
-              <select value={expiryHours} onChange={(e) => setExpiryHours(Number(e.target.value))}>
-                {EXPIRY_PRESETS.map((p) => (
-                  <option key={p.label} value={p.hours}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="filter">
-              <span>Download limit</span>
-              <input
-                type="number"
-                min={1}
-                value={cap}
-                placeholder="unlimited"
-                onChange={(e) => setCap(e.target.value === '' ? '' : Number(e.target.value))}
-              />
-            </label>
-
-            {expiryHours === 0 && (
-              <p className="share-warn">
-                A link with no expiry lasts until it is revoked. It will outlive the review it was
-                created for.
-              </p>
-            )}
-
-            {create.error != null && <ErrorState error={create.error} action="create the link" />}
-
-            <button type="submit" className="btn btn-primary" disabled={create.isPending}>
-              {create.isPending ? 'Creating…' : 'Create link'}
-            </button>
-          </form>
-        )}
-
-        <section>
-          <h3>Existing links</h3>
-          {links.isPending && <SkeletonRows rows={3} columns={4} />}
-          {links.isError && <ErrorState error={links.error} action="load the existing links" />}
-          {links.data?.share_links.length === 0 && (
-            <EmptyState
-              title="No links yet"
-              guidance="Nobody outside this tenant can reach this report."
-            />
-          )}
-          {(links.data?.share_links.length ?? 0) > 0 && (
-            <table className="table table-compact">
-              <thead>
-                <tr>
-                  <th scope="col">Created</th>
-                  <th scope="col">State</th>
-                  <th scope="col">Expires</th>
-                  <th scope="col">Downloads</th>
-                  <th scope="col" />
-                </tr>
-              </thead>
-              <tbody>
-                {links.data?.share_links.map((l) => (
-                  <tr key={l.id}>
-                    <td>{l.createdAt}</td>
-                    <td>
-                      <StatusPill status={l.state} />
-                    </td>
-                    <td>{l.expiresAt ?? <span className="not-provided">never</span>}</td>
-                    <td>
-                      {l.downloadCount}
-                      {l.maxDownloads !== null && ` / ${l.maxDownloads}`}
-                    </td>
-                    <td>
-                      {l.revokedAt === null && (
-                        <button
-                          type="button"
-                          className="btn btn-quiet"
-                          onClick={() => revoke.mutate(l.id)}
-                        >
-                          Revoke
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          <p className="section-note">
-            Revocation takes effect immediately — every download re-checks the link, and nothing is
-            cached.
+      {visibility === 'private' && (
+        <div className="callout callout-warn" role="alert">
+          <h3>This report is private</h3>
+          <p>
+            It contains vulnerability detail (CERT-In §5.3.2). A share link is a{' '}
+            <strong>bearer credential</strong> — anyone who has the URL can download it, with no
+            sign-in and no record of who they are beyond an IP address.
           </p>
-        </section>
-      </div>
-    </div>
+          <p>
+            Set an expiry and a download cap unless you have a reason not to, and revoke the link
+            when the review is over.
+          </p>
+        </div>
+      )}
+
+      {minted ? (
+        <MintedLink link={minted} onDone={() => setMinted(null)} />
+      ) : (
+        <form
+          className="share-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            create.mutate();
+          }}
+        >
+          <label className="filter">
+            <span>Expires</span>
+            <select value={expiryHours} onChange={(e) => setExpiryHours(Number(e.target.value))}>
+              {EXPIRY_PRESETS.map((p) => (
+                <option key={p.label} value={p.hours}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="filter">
+            <span>Download limit</span>
+            <input
+              type="number"
+              min={1}
+              value={cap}
+              placeholder="unlimited"
+              onChange={(e) => setCap(e.target.value === '' ? '' : Number(e.target.value))}
+            />
+          </label>
+
+          {expiryHours === 0 && (
+            <p className="share-warn">
+              A link with no expiry lasts until it is revoked. It will outlive the review it was
+              created for.
+            </p>
+          )}
+
+          {create.error != null && <ErrorState error={create.error} action="create the link" />}
+
+          <button type="submit" className="btn btn-primary" disabled={create.isPending}>
+            {create.isPending ? 'Creating…' : 'Create link'}
+          </button>
+        </form>
+      )}
+
+      <section>
+        <h3>Existing links</h3>
+        {links.isPending && <SkeletonRows rows={3} columns={4} />}
+        {links.isError && <ErrorState error={links.error} action="load the existing links" />}
+        {links.data?.share_links.length === 0 && (
+          <EmptyState
+            title="No links yet"
+            guidance="Nobody outside this tenant can reach this report."
+          />
+        )}
+        {(links.data?.share_links.length ?? 0) > 0 && (
+          <table className="table table-compact">
+            <thead>
+              <tr>
+                <th scope="col">Created</th>
+                <th scope="col">State</th>
+                <th scope="col">Expires</th>
+                <th scope="col">Downloads</th>
+                <th scope="col" />
+              </tr>
+            </thead>
+            <tbody>
+              {links.data?.share_links.map((l) => (
+                <tr key={l.id}>
+                  <td>{l.createdAt}</td>
+                  <td>
+                    <StatusPill status={l.state} />
+                  </td>
+                  <td>{l.expiresAt ?? <span className="not-provided">never</span>}</td>
+                  <td>
+                    {l.downloadCount}
+                    {l.maxDownloads !== null && ` / ${l.maxDownloads}`}
+                  </td>
+                  <td>
+                    {l.revokedAt === null && (
+                      <button
+                        type="button"
+                        className="btn btn-quiet"
+                        onClick={() => revoke.mutate(l.id)}
+                      >
+                        Revoke
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <p className="section-note">
+          Revocation takes effect immediately — every download re-checks the link, and nothing is
+          cached.
+        </p>
+      </section>
+    </Overlay>
   );
 }
 

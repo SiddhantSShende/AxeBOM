@@ -1,0 +1,39 @@
+# AxeBOM CLI — migrations, seeding, profile checks, the sandbox bridge.
+#
+# Build from the repository root:
+#   docker build -f deploy/docker/Dockerfile.cli -t axebom/cli .
+#
+# In the compose stack this runs as a one-shot `migrate` service that the
+# application services wait on. Running migrations from a dedicated container
+# rather than from each service's startup is deliberate: eight services racing
+# to apply the same goose migrations means seven of them block on an advisory
+# lock at best, and interleave at worst.
+#
+# Migrations are EMBEDDED (migrations/embed.go), so this image carries its own
+# schema and cannot be paired with the wrong SQL.
+
+FROM golang:1.26-alpine AS build
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+
+ARG VERSION=dev
+RUN CGO_ENABLED=0 GOOS=linux go build \
+      -trimpath \
+      -ldflags="-s -w -X main.version=${VERSION}" \
+      -o /out/axebom ./cmd/axebom
+
+FROM gcr.io/distroless/static-debian12:nonroot
+
+COPY --from=build /out/axebom /axebom
+
+# The compliance profile and the OSINT manifest are read from disk at runtime
+# by `profile` and `toolctl`, so the CLI image carries them.
+COPY --from=build /src/docs/reference /docs/reference
+COPY --from=build /src/OSINT /OSINT
+
+USER nonroot:nonroot
+WORKDIR /
+ENTRYPOINT ["/axebom"]

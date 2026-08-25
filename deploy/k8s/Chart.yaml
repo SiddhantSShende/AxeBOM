@@ -1,6 +1,6 @@
 apiVersion: v2
-name: encorebom
-description: EncoreBOM — BOM and SCA platform for CERT-In Technical Guidelines v2.0
+name: axebom
+description: AxeBOM — BOM and SCA platform for CERT-In Technical Guidelines v2.0
 type: application
 # The chart's own version. Bumped when the templates change, independently of
 # the application, because a customer upgrading a chart is a different event

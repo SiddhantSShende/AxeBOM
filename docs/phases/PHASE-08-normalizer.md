@@ -27,7 +27,7 @@ No exporters, no reports (Phase 9). Output is canonical rows in `normalize.*`.
 ## Deliverables
 
 ```
-libs/py-shared/encorebom_shared/normalize/
+libs/py-shared/axebom_shared/normalize/
   purl.py        canonicalization, per-ecosystem rules
   identity.py    the 7-rule fallback chain
   merge.py       component merge
@@ -40,7 +40,7 @@ libs/py-shared/encorebom_shared/normalize/
   versions/      semver, pep440, maven, rpm_evr, deb, golang
 
 workers/sbom/normalize_runner.py
-cmd/encorebom/renormalize.go            re-run over stored artifacts
+cmd/axebom/renormalize.go            re-run over stored artifacts
 fixtures/**/expected/*.json             hand-reviewed
 ```
 
@@ -91,7 +91,7 @@ Beyond the golden corpus, the unit list in `03-NORMALIZER-SPEC.md §9` in full. 
 ```
 task test:golden               # all 15 fixtures
 go test ./... -run TestNormalize -v
-python -m pytest libs/py-shared/encorebom_shared/normalize -v
+python -m pytest libs/py-shared/axebom_shared/normalize -v
 task verify
 ```
 

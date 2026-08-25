@@ -18,6 +18,17 @@ import { api } from '../../lib/api';
 import { ProvenanceChips, SeverityBadge, Value } from '../../components/Chips';
 import { EmptyState, ErrorState, SkeletonRows } from '../../components/States';
 import { compareSeverity } from '../../design/theme';
+import { useGenerateCSAFAdvisory, useCSAFAdvisories } from '../../lib/csaf';
+import {
+  useCreateVEXStatement,
+  useVEXHistory,
+  VEX_JUSTIFICATIONS,
+  VEX_SCOPES,
+  VEX_STATUSES,
+  type CreateVEXStatementInput,
+  type VEXScope,
+  type VEXStatus,
+} from '../../lib/vex';
 
 export interface SeveritySource {
   engine: string;
@@ -104,7 +115,7 @@ export function Findings() {
         </thead>
         <tbody>
           {findings.map((f) => (
-            <FindingRow key={f.clusterId} finding={f} />
+            <FindingRow key={f.clusterId} finding={f} projectId={id} />
           ))}
         </tbody>
       </table>
@@ -112,8 +123,9 @@ export function Findings() {
   );
 }
 
-function FindingRow({ finding: f }: { finding: Finding }) {
+function FindingRow({ finding: f, projectId }: { finding: Finding; projectId: string }) {
   const [expanded, setExpanded] = useState(false);
+  const [triaging, setTriaging] = useState(false);
 
   return (
     <>
@@ -175,6 +187,10 @@ function FindingRow({ finding: f }: { finding: Finding }) {
           ) : (
             <span className="text-faint">none</span>
           )}
+          {' · '}
+          <button type="button" className="btn" onClick={() => setTriaging((v) => !v)}>
+            {triaging ? 'Close' : 'Triage'}
+          </button>
         </td>
       </tr>
 
@@ -185,7 +201,182 @@ function FindingRow({ finding: f }: { finding: Finding }) {
           </td>
         </tr>
       )}
+
+      {triaging && (
+        <tr>
+          <td colSpan={6}>
+            <TriagePanel finding={f} projectId={projectId} />
+          </td>
+        </tr>
+      )}
     </>
+  );
+}
+
+/**
+ * TriagePanel records a VEX statement for one finding, shows its history,
+ * and — once a statement exists — generates the CSAF form of it.
+ *
+ * ⚠ "APPLY TO" IS PICKED PER SUBMISSION, NOT PER FINDING ROW. A cluster can
+ * affect several components (f.components); the same vulnerability might be
+ * a real risk in one and absent in another (a vendored copy vs. a
+ * dynamically-loaded one, say). Defaulting to "project-wide" is the
+ * broadest, least-specific assertion — a reviewer narrowing it to one
+ * component is a deliberate choice, not the default.
+ */
+function TriagePanel({ finding: f, projectId }: { finding: Finding; projectId: string }) {
+  const firstComponent = f.components[0]?.key ?? '';
+  const [scope, setScope] = useState<VEXScope>('project');
+  const [componentKey, setComponentKey] = useState(firstComponent);
+  const [status, setStatus] = useState<VEXStatus>('under_investigation');
+  const [justification, setJustification] = useState('');
+  const [remediation, setRemediation] = useState('');
+  const [workarounds, setWorkarounds] = useState('');
+  const [downtime, setDowntime] = useState('');
+
+  const create = useCreateVEXStatement(projectId);
+  const effectiveComponentKey = scope === 'project' ? '' : componentKey;
+  const history = useVEXHistory(projectId, f.clusterId, effectiveComponentKey);
+  const generateCSAF = useGenerateCSAFAdvisory(projectId);
+  const advisories = useCSAFAdvisories(projectId);
+
+  const latestStatement = history.data?.statements.filter((s) => !s.superseded_by).at(-1);
+  const existingAdvisory = advisories.data?.advisories.find(
+    (a) => a.vex_statement_id === latestStatement?.id,
+  );
+
+  return (
+    <div className="panel">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const input: CreateVEXStatementInput = {
+            cluster_id: f.clusterId,
+            scope,
+            status,
+            ...(effectiveComponentKey && { component_key: effectiveComponentKey }),
+            ...(justification && { justification }),
+            ...(remediation && { remediation }),
+            ...(workarounds && { workarounds }),
+            ...(downtime && { downtime }),
+          };
+          create.mutate(input);
+        }}
+      >
+        <label className="field">
+          <span>Applies to</span>
+          <select value={scope} onChange={(e) => setScope(e.target.value as VEXScope)}>
+            {VEX_SCOPES.map((s) => (
+              <option key={s} value={s}>
+                {s === 'project' ? 'Whole project' : s}
+              </option>
+            ))}
+          </select>
+        </label>
+        {scope !== 'project' && (
+          <label className="field">
+            <span>Component</span>
+            <select value={componentKey} onChange={(e) => setComponentKey(e.target.value)}>
+              {f.components.map((c) => (
+                <option key={c.key} value={c.key}>
+                  {c.name} {c.version}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label className="field">
+          <span>Status</span>
+          <select value={status} onChange={(e) => setStatus(e.target.value as VEXStatus)}>
+            {VEX_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s.replace(/_/g, ' ')}
+              </option>
+            ))}
+          </select>
+        </label>
+        {status === 'not_affected' && (
+          <label className="field">
+            <span>Justification (required for not affected)</span>
+            <select value={justification} onChange={(e) => setJustification(e.target.value)}>
+              <option value="">—</option>
+              {VEX_JUSTIFICATIONS.map((j) => (
+                <option key={j} value={j}>
+                  {j.replace(/_/g, ' ')}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label className="field">
+          <span>Remediation</span>
+          <input type="text" value={remediation} onChange={(e) => setRemediation(e.target.value)} />
+        </label>
+        <label className="field">
+          <span>Workarounds</span>
+          <input type="text" value={workarounds} onChange={(e) => setWorkarounds(e.target.value)} />
+        </label>
+        <label className="field">
+          <span>Downtime</span>
+          <input type="text" value={downtime} onChange={(e) => setDowntime(e.target.value)} />
+        </label>
+        <div className="step-actions">
+          <button type="submit" className="btn btn-primary" disabled={create.isPending}>
+            Record statement
+          </button>
+        </div>
+        {create.isError && <p className="status status-down">{create.error.message}</p>}
+      </form>
+
+      <h3>History</h3>
+      {history.isPending && <p className="field-hint">Loading…</p>}
+      {history.data && history.data.statements.length === 0 && (
+        <p className="field-hint">No statements recorded yet for this scope.</p>
+      )}
+      {history.data && history.data.statements.length > 0 && (
+        <ul>
+          {history.data.statements.map((s) => (
+            <li key={s.id}>
+              <strong>{s.status.replace(/_/g, ' ')}</strong> (v{s.version})
+              {s.superseded_by ? ' — superseded' : ' — current'} · {s.justification || 'no justification'}{' '}
+              · {new Date(s.created_at).toLocaleString()}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {latestStatement && !latestStatement.superseded_by && (
+        <div>
+          <h3>CSAF</h3>
+          {existingAdvisory ? (
+            <p className="field-hint">
+              Published as <code>{existingAdvisory.tracking_id}</code> on{' '}
+              {new Date(existingAdvisory.created_at).toLocaleString()}.
+            </p>
+          ) : (
+            <button
+              type="button"
+              className="btn"
+              disabled={generateCSAF.isPending}
+              onClick={() =>
+                generateCSAF.mutate({
+                  vex_statement_id: latestStatement.id,
+                  cluster_display_id: f.displayId,
+                  cluster_aliases: f.aliases,
+                  component_name: f.components.find((c) => c.key === effectiveComponentKey)?.name ?? '',
+                  component_purl: effectiveComponentKey,
+                })
+              }
+            >
+              Generate CSAF advisory
+            </button>
+          )}
+          {generateCSAF.isError && (
+            <p className="status status-down">{generateCSAF.error.message}</p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -223,8 +414,8 @@ function ConflictDetail({ sources }: { sources: SeveritySource[] }) {
   return (
     <div className="conflict-panel">
       <p>
-        These engines assessed the same vulnerability differently. EncoreBOM does not average or
-        take the maximum: CVSS v2, v3.1 and v4.0 use different formulas and ranges and{' '}
+        These engines assessed the same vulnerability differently. AxeBOM does not average or take
+        the maximum: CVSS v2, v3.1 and v4.0 use different formulas and ranges and{' '}
         <strong>are not comparable</strong>. The precedence-selected value is shown in the row;
         every source is here.
       </p>

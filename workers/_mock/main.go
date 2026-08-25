@@ -30,10 +30,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/bus"
-	"github.com/encorebom/encorebom/libs/go-shared/events"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/obs"
+	"github.com/axebom/axebom/libs/go-shared/bus"
+	"github.com/axebom/axebom/libs/go-shared/events"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/obs"
 
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -190,7 +190,7 @@ func (w *worker) buildResult(job events.ScanJobV1, attempt int) events.ScanResul
 		},
 		Status:            events.StatusSucceeded,
 		EcosystemsCovered: []string{"npm", "pypi"},
-		Summary:           events.Summary{Components: 42, Licenses: 7},
+		Summary:           events.Summary{Components: events.Count(42), Licenses: events.Count(7)},
 	}
 
 	switch w.behaviour {
@@ -199,7 +199,7 @@ func (w *worker) buildResult(job events.ScanJobV1, attempt int) events.ScanResul
 		// reach the report.
 		result.Status = events.StatusPartial
 		result.EcosystemsCovered = []string{"npm"}
-		result.Summary.Components = 21
+		result.Summary.Components = events.Count(21)
 		result.Diagnostics = []events.Diagnostic{{
 			Severity: "warn", Code: "ENGINE_PARTIAL_ECOSYSTEM", Ecosystem: "pypi",
 			Message: "requirements.txt failed to parse",
@@ -269,7 +269,7 @@ func (w *worker) writeManifest(job events.ScanJobV1, result events.ScanResultV1)
 func (w *worker) manifestPath(job events.ScanJobV1) string {
 	root := os.Getenv("MOCK_ARTIFACT_DIR")
 	if root == "" {
-		root = os.TempDir() + "/encorebom-mock"
+		root = os.TempDir() + "/axebom-mock"
 	}
 	return root + "/" + job.JobID + "/manifest.json"
 }

@@ -8,7 +8,7 @@ Tenancy enforcement, the untrusted-code sandbox, the threat model, RBAC, secrets
 
 ## 1. Threat model
 
-What makes EncoreBOM unusual is that **executing hostile input is the core function**. We clone arbitrary repositories and run third-party binaries over them. That is remote code execution by design; the only question is blast radius.
+What makes AxeBOM unusual is that **executing hostile input is the core function**. We clone arbitrary repositories and run third-party binaries over them. That is remote code execution by design; the only question is blast radius.
 
 | Actor | Capability | Primary concern |
 |---|---|---|
@@ -143,7 +143,7 @@ Filenames may contain newlines, NUL bytes, 4-byte emoji, RTL overrides and 8 KB 
 
 ## 5. Output-side vulnerabilities
 
-Unusually for a backend product, EncoreBOM's **output** is an attack surface: hostile strings from a scanned repository end up in files that other people open.
+Unusually for a backend product, AxeBOM's **output** is an attack surface: hostile strings from a scanned repository end up in files that other people open.
 
 ### Spreadsheet formula injection
 
@@ -173,14 +173,29 @@ The `/shared/:token` endpoint is unauthenticated by design and therefore rate-li
 | Manage members and roles | ✅ | ✅ | | |
 | Create / connect projects | ✅ | ✅ | ✅ | |
 | Edit project practices | ✅ | ✅ | ✅ | |
+| View hardware BOM (HBOM) and its part-lookup provider | ✅ | ✅ | ✅ | ✅ |
+| Import / edit hardware BOM, run a part lookup | ✅ | ✅ | ✅ | |
+| View quantum BOM (QBOM) device metadata and form | ✅ | ✅ | ✅ | ✅ |
+| Save quantum BOM device metadata | ✅ | ✅ | ✅ | |
 | Run scans, manage campaigns | ✅ | ✅ | ✅ | |
+| View which engines run for a BOM family | ✅ | ✅ | ✅ | ✅ |
+| Configure which engines run for a BOM family (`scan.engine_policy`) | ✅ | ✅ | | |
 | Enable package-manager resolution | ✅ | ✅ | | |
+| View VEX statements and history | ✅ | ✅ | ✅ | ✅ |
 | Edit VEX / triage | ✅ | ✅ | ✅ | |
+| View CSAF 2.0 advisories | ✅ | ✅ | ✅ | ✅ |
+| Publish a CSAF advisory from a VEX statement | ✅ | ✅ | ✅ | |
+| View and add comments | ✅ | ✅ | ✅ | ✅ |
+| Edit or delete a comment | ✅ (own) | ✅ (own) | ✅ (own) | ✅ (own) |
 | View reports and dependencies | ✅ | ✅ | ✅ | ✅ |
+| View crypto BOM (CBOM) asset inventory | ✅ | ✅ | ✅ | ✅ |
+| View AI BOM (AIBOM) model inventory | ✅ | ✅ | ✅ | ✅ |
+| Record an AI model's user-supplied elements (intended usage, out-of-scope usage, security requirements, attestation) | ✅ | ✅ | ✅ | |
 | Download reports | ✅ | ✅ | ✅ | ✅* |
 | Create share links | ✅ | ✅ | ✅ | |
 | Comment | ✅ | ✅ | ✅ | ✅ |
 | Read audit log | ✅ | ✅ | | |
+| Manage API keys (mint, list, revoke) | ✅ | | | |
 
 \* Viewer download is gated by the report's `visibility`. A `private` report — which by CERT-In §5.3.2 is the one containing vulnerability detail — requires Analyst or above.
 
@@ -210,7 +225,7 @@ Rules: nothing secret in an image, a log, an event payload, or `argv` (it is wor
 
 **At rest:** Postgres and object storage encrypted (CERT-In §5.3.3, p.32). Raw scan artifacts are immutable — **never mutated or deleted** — because they are the evidence that makes a report defensible and normalization replayable.
 
-**Reports are signed.** Detached Ed25519 signature per report, verifiable with `encorebom verify <report>` using the published public key. Satisfies CERT-In §5.3.3.2 and §5.3.5 (integrity, and consumer-side verification).
+**Reports are signed.** Detached Ed25519 signature per report, verifiable with `axebom verify <report>` using the published public key. Satisfies CERT-In §5.3.3.2 and §5.3.5 (integrity, and consumer-side verification).
 
 **Audit log is append-only.** No `UPDATE` or `DELETE` grant to the application role. Records auth events, project changes, scan triggers, report downloads, share creation and access, VEX edits, and role changes. Exportable. Required by CERT-In §5.3.6 (p.33).
 

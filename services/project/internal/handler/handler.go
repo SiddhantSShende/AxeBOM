@@ -15,13 +15,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/model"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/ctxkey"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/services/project/internal/github"
-	"github.com/encorebom/encorebom/services/project/internal/service"
-	"github.com/encorebom/encorebom/services/project/internal/store"
+	"github.com/axebom/axebom/libs/go-shared/auth"
+	"github.com/axebom/axebom/libs/go-shared/model"
+	"github.com/axebom/axebom/libs/go-shared/platform/ctxkey"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/services/project/internal/github"
+	"github.com/axebom/axebom/services/project/internal/service"
+	"github.com/axebom/axebom/services/project/internal/store"
 )
 
 // Handler serves the project endpoints.
@@ -386,6 +386,58 @@ func (h *Handler) ListConnections(w http.ResponseWriter, r *http.Request) {
 		items = append(items, toConnectionResponse(c))
 	}
 	errs.WriteJSON(w, http.StatusOK, map[string]any{"connections": items})
+}
+
+// Source handles GET /v1/projects/{id}/source.
+//
+// ⚠ SERVICE PRINCIPALS ONLY, AND THAT IS THE POINT OF THE ENDPOINT.
+//
+// It returns `credential_ref` — a Vault PATH, which is a read primitive: the
+// holder of a token scoped to the mount can exchange it for the repository
+// token. The public connections endpoint deliberately returns only
+// `has_credential: bool`, and this route would undo that if a person could
+// reach it. The route is wrapped in auth.RequireService, which answers 404 to
+// anyone else so the endpoint does not advertise itself.
+//
+// The only caller is the fetcher, which is the one component permitted to hold
+// a git credential (ADR-0008).
+func (h *Handler) Source(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := auth.RequireTenant(r.Context())
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+
+	conns, err := h.svc.ListConnections(r.Context(), tenantID, r.PathValue("id"))
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	if len(conns) == 0 {
+		// Not an internal error: a project with no repository connection is a
+		// legitimate state (manual registration, upload-only). The fetcher
+		// turns this into a stated reason on the scan rather than a crash.
+		errs.Write(w, r, errs.New(errs.NotFoundResource,
+			"the project has no repository connection to fetch from"))
+		return
+	}
+
+	// The FIRST connection. Multi-repository projects are not modelled — the
+	// table is UNIQUE(project_id, repo_url) so several rows are possible, but
+	// nothing upstream chooses between them, and silently picking one while
+	// pretending otherwise would be worse than the explicit limitation.
+	c := conns[0]
+	errs.WriteJSON(w, http.StatusOK, map[string]any{
+		"connection_id":  c.ID,
+		"provider":       c.Provider,
+		"repo_url":       c.RepoURL,
+		"default_branch": c.DefaultBranch,
+		// The PATH, which the caller re-derives from (tenant, kind,
+		// connection_id) and uses only as a mismatch check. vault.Get refuses a
+		// ref that does not match its owner before Vault is contacted, so a
+		// tampered row cannot become a read of somebody else's secret.
+		"credential_ref": c.CredentialRef,
+	})
 }
 
 // ListRepos handles GET /v1/github/repos.

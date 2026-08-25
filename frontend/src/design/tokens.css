@@ -16,6 +16,11 @@
  * colour from a parent that did define it. Every token below has a value on
  * bare :root.
  *
+ * ⚠ THE TWO DARK BLOCKS ARE GENERATED FROM ONE SOURCE AND MUST STAY IDENTICAL.
+ * They were hand-duplicated once and that is a standing invitation to drift —
+ * a token corrected in one block and not the other produces a theme that is
+ * right until the user touches the toggle. If you edit one, edit both.
+ *
  * docs/07-FRONTEND-SPEC.md §2.
  */
 
@@ -31,7 +36,12 @@
   /* --- Text -------------------------------------------------------------- */
   --text: #16161a;
   --text-muted: #55555f;
-  --text-faint: #76767f;
+  /* ⚠ #76767f WAS EXACTLY 4.50:1 ON WHITE — AA with nothing to spare, and
+   * below AA on any translucent surface. `.not-provided` uses this token, and
+   * `not-provided` is load-bearing compliance information (CLAUDE.md
+   * invariant 3), not decoration. Darkened so it still clears 4.5:1 composited
+   * over the most saturated ambient stop behind glass. */
+  --text-faint: #6b6b75;
   --text-inverse: #ffffff;
 
   /* --- BOM-type accents --------------------------------------------------
@@ -82,6 +92,74 @@
   --down-bg: #fee2e2;
   --info-bg: #dbeafe;
 
+  /* --- Primary action --------------------------------------------------
+   * Distinct from --sbom, deliberately. --sbom is TUNED for small text on a
+   * tinted chip background; a primary button is a large filled surface with a
+   * different contrast requirement, and light/dark need genuinely different
+   * hues here (a pastel dark-mode --sbom washes out as a button fill). Every
+   * primary CTA and the focus ring read this token, never --sbom directly.
+   */
+  --primary: #4338ca;
+  --primary-hover: #3730a3;
+  --primary-active: #312e81;
+  --primary-text: #ffffff;
+
+  /* --- Elevation --------------------------------------------------------- */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-card-hover: 0 8px 20px rgba(15, 23, 42, 0.1), 0 2px 6px rgba(15, 23, 42, 0.06);
+  --shadow-drawer: 0 8px 40px rgba(0, 0, 0, 0.16);
+  --shadow-menu: 0 4px 16px rgba(0, 0, 0, 0.12);
+
+  /* --- Glass -------------------------------------------------------------
+   *
+   * ⚠ THE TIER IS CHOSEN BY HOW LONG SOMEONE READS THE TEXT ON IT.
+   *
+   *   A  --glass-bg         chrome you look AT      blur, low alpha
+   *      sidebar, top bar, drawer, dialog, menu, scrim — and nothing else
+   *   B  --glass-bg-strong  cards, panels, states   no blur, mid alpha
+   *   C  --glass-bg-solid   tables, code, reports   no blur, high alpha
+   *
+   * ⚠ AND backdrop-filter IS ONLY APPLIED WHERE THE BACKDROP HAS STRUCTURE.
+   *
+   * Blurring a smooth radial gradient returns the same smooth radial gradient
+   * — it is a per-frame GPU cost that produces no pixels. So the filter goes
+   * only on surfaces that overlap SCROLLING CONTENT (top bar, sidebar, drawer,
+   * dialog, menu). Everything that floats over the ambient wash gets tint plus
+   * a hairline highlight instead, which is optically identical and free.
+   *
+   * ⚠ AND backdrop-filter DOES NOT NEST. An ancestor with backdrop-filter,
+   * filter, opacity < 1 or a transform becomes the backdrop root, so a blurred
+   * surface inside another blurred surface samples an empty fill and renders
+   * flat. `motion` animates with transform — animate a WRAPPER around glass,
+   * never the glass element itself.
+   */
+  --glass-bg: rgb(255 255 255 / 0.72);
+  --glass-bg-strong: rgb(255 255 255 / 0.86);
+  --glass-bg-solid: rgb(255 255 255 / 0.95);
+  --glass-border: rgb(255 255 255 / 0.7);
+  --glass-border-strong: rgb(15 23 42 / 0.1);
+  --glass-highlight: rgb(255 255 255 / 0.9);
+  --glass-blur: blur(16px) saturate(160%);
+  --glass-blur-sm: blur(10px) saturate(140%);
+  --glass-shadow: 0 1px 2px rgb(15 23 42 / 0.05), 0 8px 24px rgb(15 23 42 / 0.07);
+  --glass-shadow-lg: 0 2px 6px rgb(15 23 42 / 0.07), 0 18px 48px rgb(15 23 42 / 0.12);
+  --glass-row-hover: rgb(15 23 42 / 0.045);
+  --glass-row-alt: rgb(15 23 42 / 0.018);
+  --glass-head-bg: rgb(246 246 250 / 0.94);
+  --scrim: rgb(15 23 42 / 0.28);
+
+  /* --- Ambient wash ------------------------------------------------------
+   * ⚠ ITS OWN TOKENS, NOT --sbom / --aibom. Dark --sbom is a pastel (#a5b4fc);
+   * reusing it would put a bright blob behind dark glass and blow the
+   * luminance band open, which is exactly what the contrast budget depends on
+   * staying narrow. Low chroma, narrow lightness: hue varies, lightness does
+   * not, so the worst-case composite is close to the best case.
+   */
+  --amb-1: #dfe3fb;
+  --amb-2: #e3f5f0;
+  --amb-3: #f7e8f3;
+
   /* --- Geometry ----------------------------------------------------------
    * Enterprise-dense but legible. 32px rows carry a lot without shrinking
    * type, which is the wrong lever — the screen exists to answer "what changed
@@ -89,6 +167,8 @@
    */
   --radius: 8px;
   --radius-sm: 5px;
+  --radius-lg: 12px;
+  --radius-xl: 18px;
   --row-height: 32px;
 
   --space-1: 0.25rem;
@@ -99,11 +179,37 @@
   --space-6: 2rem;
   --space-7: 3rem;
 
-  --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* --- Type --------------------------------------------------------------
+   * 'InterVariable' is self-hosted (see app.css @font-face) — no external
+   * request, because this ships to air-gapped and strict-CSP customers. The
+   * system stack behind it is the fallback, not an afterthought: it renders
+   * during swap and forever if the file is missing.
+   *
+   * The variable face also earns the weights this design system already asks
+   * for. app.css uses 550, 650 and 750; a static system stack silently rounds
+   * every one of them to 500 or 700.
+   */
+  --font:
+    'InterVariable', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    sans-serif;
   --mono: ui-monospace, SFMono-Regular, 'Cascadia Code', Consolas, monospace;
 
-  --shadow-drawer: 0 8px 40px rgba(0, 0, 0, 0.16);
-  --shadow-menu: 0 4px 16px rgba(0, 0, 0, 0.12);
+  /* --- Motion ------------------------------------------------------------
+   * Shared by CSS transitions and by `motion`. Both honour
+   * prefers-reduced-motion, and they do it by different mechanisms — the media
+   * query in app.css covers CSS, <MotionConfig reducedMotion="user"> covers
+   * JS. Neither covers the other.
+   */
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* Shell geometry. --sidebar-w is registered with @property in app.css so it
+   * can be transitioned; the collapsed value lives on [data-sidebar]. */
+  --sidebar-w: 15rem;
+  --topbar-h: 3.25rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -117,7 +223,8 @@
 
     --text: #ececf1;
     --text-muted: #a6a6b2;
-    --text-faint: #83838f;
+    /* See the light-theme note: #83838f was 4.43:1 and failed AA. */
+    --text-faint: #8e8e9a;
     --text-inverse: #0e0e11;
 
     --sbom: #a5b4fc;
@@ -155,8 +262,38 @@
     --down-bg: #450a0a;
     --info-bg: #172554;
 
+    /* A pastel --sbom works as small text on a dark chip; it is too washed
+     * out to read as a confident primary-button fill, so dark mode gets its
+     * own more saturated indigo rather than inheriting --sbom. */
+    --primary: #6366f1;
+    --primary-hover: #818cf8;
+    --primary-active: #4f46e5;
+    --primary-text: #ffffff;
+
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.35);
+    --shadow-card-hover: 0 10px 24px rgba(0, 0, 0, 0.5);
     --shadow-drawer: 0 8px 40px rgba(0, 0, 0, 0.55);
     --shadow-menu: 0 4px 16px rgba(0, 0, 0, 0.45);
+
+    --glass-bg: rgb(30 30 37 / 0.66);
+    --glass-bg-strong: rgb(30 30 37 / 0.84);
+    --glass-bg-solid: rgb(23 23 28 / 0.95);
+    --glass-border: rgb(255 255 255 / 0.1);
+    --glass-border-strong: rgb(255 255 255 / 0.16);
+    --glass-highlight: rgb(255 255 255 / 0.08);
+    --glass-blur: blur(18px) saturate(140%);
+    --glass-blur-sm: blur(12px) saturate(130%);
+    --glass-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.45);
+    --glass-shadow-lg: 0 2px 6px rgb(0 0 0 / 0.45), 0 18px 48px rgb(0 0 0 / 0.55);
+    --glass-row-hover: rgb(255 255 255 / 0.055);
+    --glass-row-alt: rgb(255 255 255 / 0.022);
+    --glass-head-bg: rgb(16 16 20 / 0.92);
+    --scrim: rgb(0 0 0 / 0.55);
+
+    --amb-1: #191a35;
+    --amb-2: #0f2a2a;
+    --amb-3: #2a1526;
   }
 }
 
@@ -170,7 +307,8 @@
 
   --text: #ececf1;
   --text-muted: #a6a6b2;
-  --text-faint: #83838f;
+  /* See the light-theme note: #83838f was 4.43:1 and failed AA. */
+  --text-faint: #8e8e9a;
   --text-inverse: #0e0e11;
 
   --sbom: #a5b4fc;
@@ -208,6 +346,88 @@
   --down-bg: #450a0a;
   --info-bg: #172554;
 
+  /* A pastel --sbom works as small text on a dark chip; it is too washed
+   * out to read as a confident primary-button fill, so dark mode gets its
+   * own more saturated indigo rather than inheriting --sbom. */
+  --primary: #6366f1;
+  --primary-hover: #818cf8;
+  --primary-active: #4f46e5;
+  --primary-text: #ffffff;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.35);
+  --shadow-card-hover: 0 10px 24px rgba(0, 0, 0, 0.5);
   --shadow-drawer: 0 8px 40px rgba(0, 0, 0, 0.55);
   --shadow-menu: 0 4px 16px rgba(0, 0, 0, 0.45);
+
+  --glass-bg: rgb(30 30 37 / 0.66);
+  --glass-bg-strong: rgb(30 30 37 / 0.84);
+  --glass-bg-solid: rgb(23 23 28 / 0.95);
+  --glass-border: rgb(255 255 255 / 0.1);
+  --glass-border-strong: rgb(255 255 255 / 0.16);
+  --glass-highlight: rgb(255 255 255 / 0.08);
+  --glass-blur: blur(18px) saturate(140%);
+  --glass-blur-sm: blur(12px) saturate(130%);
+  --glass-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.45);
+  --glass-shadow-lg: 0 2px 6px rgb(0 0 0 / 0.45), 0 18px 48px rgb(0 0 0 / 0.55);
+  --glass-row-hover: rgb(255 255 255 / 0.055);
+  --glass-row-alt: rgb(255 255 255 / 0.022);
+  --glass-head-bg: rgb(16 16 20 / 0.92);
+  --scrim: rgb(0 0 0 / 0.55);
+
+  --amb-1: #191a35;
+  --amb-2: #0f2a2a;
+  --amb-3: #2a1526;
+}
+
+/* ---------------------------------------------------------------------------
+ * Degradations. All three route through --surface / --surface-sunken, which
+ * are already theme-aware — that is what makes one flat block correct for all
+ * three theme states rather than needing to be written out three more times.
+ * --------------------------------------------------------------------------- */
+
+/* No backdrop-filter: translucency over scrolling content is unreadable
+ * without a blur, so the surfaces that overlap content go opaque. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --glass-bg: var(--surface);
+    --glass-bg-strong: var(--surface);
+    --glass-bg-solid: var(--surface);
+    --glass-head-bg: var(--surface-sunken);
+    --glass-blur: none;
+    --glass-blur-sm: none;
+    --scrim: rgb(15 23 42 / 0.45);
+  }
+}
+
+/* The user asked for less transparency. Honour it literally: no translucency,
+ * no wash. This is a real accessibility setting on Windows and macOS, and an
+ * enterprise buyer's users have it on. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass-bg: var(--surface);
+    --glass-bg-strong: var(--surface);
+    --glass-bg-solid: var(--surface);
+    --glass-head-bg: var(--surface-sunken);
+    --glass-blur: none;
+    --glass-blur-sm: none;
+    --glass-row-alt: transparent;
+  }
+}
+
+/* Forced colours (Windows high contrast): the OS owns every colour. Translucency
+ * and shadows carry no information there, and borders have to do the work
+ * a background tint was doing. */
+@media (forced-colors: active) {
+  :root {
+    --glass-bg: Canvas;
+    --glass-bg-strong: Canvas;
+    --glass-bg-solid: Canvas;
+    --glass-head-bg: Canvas;
+    --glass-blur: none;
+    --glass-blur-sm: none;
+    --glass-shadow: none;
+    --glass-shadow-lg: none;
+    --glass-row-alt: transparent;
+  }
 }

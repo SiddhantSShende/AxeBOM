@@ -14,7 +14,7 @@
  * docs/07-FRONTEND-SPEC.md §6, CLAUDE.md invariant 4.
  */
 
-import { useEffect, useRef } from 'react';
+import { Overlay } from '../../components/Overlay';
 import { NotProvided, ProvenanceChips, Value } from '../../components/Chips';
 import { ErrorState, SkeletonRows } from '../../components/States';
 
@@ -24,7 +24,7 @@ export interface ProfileFieldValue {
   value: string;
   /** Which page of the guideline defines this field. */
   sourcePage: number;
-  /** False for EncoreBOM extensions, which cannot move a compliance number. */
+  /** False for AxeBOM extensions, which cannot move a compliance number. */
   scored: boolean;
 }
 
@@ -52,52 +52,28 @@ export function ComponentDrawer({
   error: unknown;
   onClose: () => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  // ⚠ ESCAPE CLOSES IT, AND FOCUS MOVES IN. A drawer that traps neither focus
-  // nor Escape is a dead end for keyboard users: they tab past it into the
-  // table behind, which is still there and still scrollable.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    ref.current?.focus();
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   return (
-    <div className="drawer-scrim" onClick={onClose}>
-      <aside
-        className="drawer"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Component ${componentKey}`}
-        tabIndex={-1}
-        ref={ref}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="drawer-head">
-          <h2>{detail?.fields.find((f) => f.name === 'Component Name')?.value ?? componentKey}</h2>
-          <button type="button" className="btn btn-quiet" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
-        </header>
+    <Overlay variant="drawer" onClose={onClose} aria-label={`Component ${componentKey}`}>
+      <header className="drawer-head">
+        <h2>{detail?.fields.find((f) => f.name === 'Component Name')?.value ?? componentKey}</h2>
+        <button type="button" className="btn btn-quiet" onClick={onClose} aria-label="Close">
+          ✕
+        </button>
+      </header>
 
-        {loading && <SkeletonRows rows={10} columns={2} />}
-        {error != null && <ErrorState error={error} action="load this component" />}
+      {loading && <SkeletonRows rows={10} columns={2} />}
+      {error != null && <ErrorState error={error} action="load this component" />}
 
-        {detail && (
-          <div className="drawer-body">
-            <Identifiers detail={detail} />
-            <ProfileFields fields={detail.fields} />
-            <Locations locations={detail.locations} />
-            <CandidateIdentities candidates={detail.candidateIdentities} />
-            <Provenance entries={detail.provenance} />
-          </div>
-        )}
-      </aside>
-    </div>
+      {detail && (
+        <div className="drawer-body">
+          <Identifiers detail={detail} />
+          <ProfileFields fields={detail.fields} />
+          <Locations locations={detail.locations} />
+          <CandidateIdentities candidates={detail.candidateIdentities} />
+          <Provenance entries={detail.provenance} />
+        </div>
+      )}
+    </Overlay>
   );
 }
 
@@ -170,7 +146,7 @@ function ProfileFields({ fields }: { fields: ProfileFieldValue[] }) {
       </p>
       <dl className="fields">
         {fields.map((f) => (
-          <div key={f.fieldId} className="field">
+          <div key={f.fieldId} className="def-row">
             <dt>
               {f.name}
               {!f.scored && <span className="tag tag-quiet">extension</span>}

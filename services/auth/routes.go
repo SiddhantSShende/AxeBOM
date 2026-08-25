@@ -3,8 +3,8 @@ package main
 import (
 	"net/http"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/authz"
+	"github.com/axebom/axebom/libs/go-shared/auth"
+	"github.com/axebom/axebom/libs/go-shared/authz"
 )
 
 // registerRoutes mounts this service's HTTP surface.
@@ -69,4 +69,26 @@ func registerRoutes(mux *http.ServeMux, d *deps) {
 	mux.Handle("POST /v1/auth/invitations", authenticated(
 		auth.Authorize(authz.ResourceMember, authz.ActionCreate)(
 			http.HandlerFunc(h.CreateInvite))))
+
+	// --- API keys (Phase 16) ---
+	//
+	// ⚠ ZITADEL-AUTHENTICATED, NOT `authenticated` ABOVE. A person managing
+	// their tenant's keys today signs in through ZITADEL like every other
+	// screen in the product; the local `issuer` above backs only this
+	// service's own pre-ZITADEL routes. See deps.go's identity field.
+	zitadel := d.identity.Authenticate()
+	mux.Handle("POST /v1/api-keys", zitadel(
+		auth.Authorize(authz.ResourceAPIKey, authz.ActionCreate)(
+			http.HandlerFunc(h.CreateAPIKey))))
+	mux.Handle("GET /v1/api-keys", zitadel(
+		auth.Authorize(authz.ResourceAPIKey, authz.ActionList)(
+			http.HandlerFunc(h.ListAPIKeys))))
+	mux.Handle("DELETE /v1/api-keys/{id}", zitadel(
+		auth.Authorize(authz.ResourceAPIKey, authz.ActionDelete)(
+			http.HandlerFunc(h.RevokeAPIKey))))
+
+	// --- audit log export (Phase 16) ---
+	mux.Handle("GET /v1/audit-log/export", zitadel(
+		auth.Authorize(authz.ResourceAuditLog, authz.ActionList)(
+			http.HandlerFunc(h.ExportAuditLog))))
 }

@@ -5,8 +5,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/authz"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
+	"net/http"
+
+	"github.com/axebom/axebom/libs/go-shared/authz"
+	"github.com/axebom/axebom/libs/go-shared/platform/ctxkey"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 // ServicePrefix marks a subject as a service rather than a person.
@@ -86,4 +89,42 @@ func ServiceName(subject string) string {
 		return ""
 	}
 	return strings.TrimPrefix(subject, ServicePrefix)
+}
+
+// RequireService rejects any caller that is not a service principal.
+//
+// # Why a permission check is not enough
+//
+// Some data must reach another SERVICE and must never reach a PERSON, however
+// privileged. The repository source lookup is the case that forced this: it
+// returns `credential_ref`, a Vault path, and a Vault path is a READ PRIMITIVE
+// — the holder of a token scoped to the mount can exchange it for the secret.
+//
+// Guarding that route with `project:read` would hand every owner and analyst in
+// the tenant a path to their own repository credential through the public API.
+// The public connections endpoint deliberately returns only
+// `has_credential: bool` for exactly this reason, and an internal route that
+// undid that would be a regression wearing an authorization check.
+//
+// Mount INSIDE Authenticate and alongside Authorize, never instead of either:
+// this narrows who may call, it does not decide what they may do.
+func RequireService(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		subject := ctxkey.UserID(r.Context())
+		if subject == "" {
+			// No subject means the route was mounted without Authenticate.
+			// A wiring bug, and it must fail closed rather than fall through.
+			errs.Write(w, r, errs.New(errs.AuthTenantContextMiss,
+				"no authenticated subject in context — the route is missing the Authenticate middleware"))
+			return
+		}
+		if !IsService(subject) {
+			// 404, not 403. A 403 confirms the endpoint exists and is worth
+			// probing; this route is not part of the public surface and should
+			// not look like one.
+			errs.Write(w, r, errs.New(errs.NotFoundResource, "no such endpoint"))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

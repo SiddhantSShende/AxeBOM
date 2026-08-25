@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/encorebom/encorebom/services/notification/internal/webhook"
+	"github.com/axebom/axebom/services/notification/internal/webhook"
 )
 
 func webhookSub() Subscription {
 	return Subscription{
 		ID: "sub-1", TenantID: "tenant-a",
-		Kind: KindWebhook, Target: "https://hooks.example.com/encorebom",
+		Kind: KindWebhook, Target: "https://hooks.example.com/axebom",
 		SecretRef: "secret/data/tenants/tenant-a/webhooks/sub-1",
 		Enabled:   true,
 	}
@@ -71,7 +71,7 @@ func TestAnOrdinaryWebhookURLIsAccepted(t *testing.T) {
 	// nobody can satisfy gets removed, not fixed.
 	for _, raw := range []string{
 		"https://hooks.slack.com/services/T000/B000/XXXX",
-		"https://example.com:8443/encorebom?source=prod",
+		"https://example.com:8443/axebom?source=prod",
 		"https://sub.domain.example.co.in/hook",
 	} {
 		if err := ValidateWebhookURL(raw); err != nil {
@@ -204,7 +204,7 @@ func TestAnEmailTargetCannotInjectHeaders(t *testing.T) {
 func TestAnOrdinaryAddressIsAccepted(t *testing.T) {
 	for _, target := range []string{
 		"security@customer.example",
-		"first.last+encorebom@customer.co.in",
+		"first.last+axebom@customer.co.in",
 	} {
 		s := Subscription{Kind: KindEmail, Target: target, Enabled: true}
 		if err := s.Validate(); err != nil {

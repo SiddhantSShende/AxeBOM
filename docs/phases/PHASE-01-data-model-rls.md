@@ -42,9 +42,9 @@ libs/go-shared/model/
   generated_certin.go     from certin-v2.0.yaml — DO NOT hand-edit
   certinid.go             CERT-In identifier derivation (hand-written, golden-tested)
 
-libs/py-shared/encorebom_shared/model/generated_certin.py
+libs/py-shared/axebom_shared/model/generated_certin.py
 
-cmd/encorebom/
+cmd/axebom/
   db.go          migrate | reset | seed
   profile.go     lint | gen
 

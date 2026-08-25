@@ -68,7 +68,7 @@ type Options struct {
 	TrackingID string
 	Title      string
 	// PublisherName and Namespace identify the issuing organisation — the
-	// CUSTOMER's, not EncoreBOM's. We are the tool, not the asserting party.
+	// CUSTOMER's, not AxeBOM's. We are the tool, not the asserting party.
 	PublisherName string
 	PublisherNS   string
 

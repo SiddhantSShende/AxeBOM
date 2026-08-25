@@ -1,0 +1,68 @@
+# ai-bom (Trusera) engine wrapper — code-level AI/LLM discovery.
+#
+# ⚠ THIS IS NOT ONE OF AXEBOM'S OWN SERVICES. Every other Dockerfile in
+# deploy/docker/ builds a service AxeBOM wrote (gateway, worker, fetcher, ...).
+# This one packages a THIRD-PARTY SCANNER — workers/aibom/adapters/ai_bom.py's
+# `AIBomAdapter` runs it in the scan sandbox over untrusted customer source
+# (CLAUDE.md invariant 7: --network=none, read-only rootfs, cap-drop ALL,
+# non-root, resource quotas — all imposed by libs/go-shared/sandbox at
+# container-CREATE time, regardless of anything declared below). That is a
+# different category of artifact with a different threat model, which is why
+# it lives under deploy/docker/engines/ rather than beside AxeBOM's own images.
+#
+# WHY THIS DOCKERFILE HAS TO EXIST AT ALL
+#
+# ai-bom (https://github.com/Trusera/ai-bom, Apache-2.0) publishes NO container
+# image of its own — only a pip package (https://pypi.org/project/ai-bom/).
+# Every other sandboxed engine (syft, grype, trivy, cbomkit-theia, ...) is an
+# upstream-published, digest-pinnable image; ai-bom has none, so this
+# Dockerfile IS the "upstream image" OSINT/tools.manifest.yaml's `ai-bom.
+# container` entry points at.
+#
+# Build (from the repo root):
+#   docker build -f deploy/docker/engines/Dockerfile.ai-bom \
+#     -t axebom/ai-bom-engine:dev .
+#   — or —
+#   task osint:build-ai-bom
+#
+# ⚠ TAG-PINNED, NOT DIGEST-PINNED, AND THAT IS HONEST HERE.
+#
+# ADR-0002 wants images pinned by digest. There is no upstream digest for a
+# LOCALLY BUILT image to pin against — the digest only exists after this
+# Dockerfile is built, on this machine, and would be a different digest on
+# every machine that rebuilds it byte-for-byte-identically or not.
+# `image_tag: dev` (OSINT/tools.manifest.yaml) records that plainly.
+# `SandboxedAdapter.classify()` (workers/sbom/adapters/common.py) already has
+# a branch for exactly this: no registry digest resolves at run time, and it
+# emits ENGINE_IMAGE_DIGEST_UNKNOWN with "the image was probably built
+# locally" — visible in Engine Coverage, never silently assumed away.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# --require-hashes, verifying the FULL dependency closure (23 packages:
+# ai-bom plus typer, rich, pydantic, gitpython and everything under them) —
+# not only the top-level package. See ai-bom-requirements.lock.txt for how
+# this was generated and verified: a `pip install --require-hashes` from
+# these exact hashes was run and confirmed inside python:3.12-slim with
+# --network none in this session, and `ai-bom version` reported 3.1.0.
+COPY deploy/docker/engines/ai-bom-requirements.lock.txt /tmp/ai-bom-requirements.lock.txt
+RUN pip install --require-hashes -r /tmp/ai-bom-requirements.lock.txt \
+    && rm /tmp/ai-bom-requirements.lock.txt
+
+# Non-root. Belt-and-suspenders: libs/go-shared/sandbox/policy.go forces
+# `--user 65534:65534` at container-CREATE time regardless of what an image
+# declares, so this is defense in depth, not the control itself — the same
+# posture Dockerfile.worker documents for the engines it launches.
+RUN useradd --uid 65532 --no-create-home --shell /usr/sbin/nologin aibom
+USER aibom
+
+# The installed console-script entrypoint (ai_bom.cli:app, from
+# entry_points.txt). AIBomAdapter.build_argv() supplies the subcommand and
+# flags at run time — `scan <path> --format cyclonedx` — the same pattern as
+# the syft/grype/trivy images, whose ENTRYPOINT is the tool itself and whose
+# adapters never repeat the binary name in argv.
+ENTRYPOINT ["ai-bom"]

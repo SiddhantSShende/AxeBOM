@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/services/report/internal/level"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/services/report/internal/level"
 )
 
 // TestAnUnimplementedLevelIsRefusedWithTheRightAnswer.

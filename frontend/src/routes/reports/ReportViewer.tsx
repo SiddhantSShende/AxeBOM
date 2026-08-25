@@ -18,74 +18,20 @@
 
 import { useState } from 'react';
 import { useParams } from 'react-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../lib/api';
+import { useQueryClient } from '@tanstack/react-query';
+import { useReport, type Report } from '../../lib/reports';
 import { BomTypeChip, StatusPill, Value } from '../../components/Chips';
+import { CommentRail } from '../../components/CommentRail';
 import { CopyableCode, ErrorState, SkeletonRows } from '../../components/States';
+import { AnimatePresence } from 'motion/react';
 import { ShareDialog } from './ShareDialog';
-
-interface FieldCoverage {
-  fieldId: string;
-  name: string;
-  present: number;
-  declared: number;
-  total: number;
-  weight: number;
-  sourcePage: number;
-}
-
-interface EngineCoverage {
-  engineId: string;
-  version: string;
-  status: string;
-  databaseVersion: string;
-  ecosystems: string[];
-  diagnostic: string;
-}
-
-export interface Report {
-  id: string;
-  projectName: string;
-  bomType: string;
-  level: string;
-  levelNote: string;
-  format: string;
-  visibility: 'public' | 'private';
-  status: 'queued' | 'rendering' | 'ready' | 'failed';
-  sha256: string;
-  sizeBytes: number;
-  signingKeyId: string;
-  truncated: boolean;
-  truncationNote: string;
-  errorCode: string;
-  generatedAt: string;
-
-  completenessPct: number;
-  declarationPct: number;
-  coverageFormula: string;
-  coverageFields: FieldCoverage[];
-
-  engines: EngineCoverage[];
-  ecosystemsWithNoEngine: string[];
-
-  siblings: { id: string; format: string; status: string }[];
-}
 
 export function ReportViewer() {
   const { id = '' } = useParams();
   const [sharing, setSharing] = useState(false);
   const queryClient = useQueryClient();
 
-  const query = useQuery({
-    queryKey: ['report', id],
-    queryFn: () => api.get<Report>(`/v1/reports/${id}`),
-    // ⚠ POLL WHILE RENDERING, THEN STOP FOREVER. A finished report is
-    // immutable, so refetching one costs a request and can never change an
-    // answer; an unfinished one has to be watched or the page lies.
-    refetchInterval: (q) =>
-      q.state.data?.status === 'ready' || q.state.data?.status === 'failed' ? false : 3000,
-    staleTime: 0,
-  });
+  const query = useReport(id);
 
   if (query.isPending) return <SkeletonRows rows={10} columns={3} />;
   if (query.isError) {
@@ -98,16 +44,26 @@ export function ReportViewer() {
     );
   }
 
-  const report = query.data;
+  // ⚠ NORMALIZED HERE, ONCE, RATHER THAN GUARDED AT EVERY USE SITE. A queued
+  // or rendering report genuinely has no coverage/engine data yet (see
+  // lib/reports.ts's Report type) — that is an honest "not yet computed"
+  // state, not a bug, and the `?? []` fallbacks below let every section
+  // render that state instead of crashing on it.
+  const report: Report = {
+    ...query.data,
+    coverage_fields: query.data.coverage_fields ?? [],
+    engines: query.data.engines ?? [],
+    ecosystems_with_no_engine: query.data.ecosystems_with_no_engine ?? [],
+  };
 
   return (
     <div className="report">
       <header className="report-head">
         <div>
-          <h1>{report.projectName}</h1>
+          <h1>{report.project_name}</h1>
           <p className="tagline">
-            <BomTypeChip type={report.bomType} /> {levelLabel(report.level)} · generated{' '}
-            {report.generatedAt}
+            <BomTypeChip type={report.bom_type} /> {levelLabel(report.level)} · generated{' '}
+            {report.generated_at}
           </p>
         </div>
         <div className="report-actions">
@@ -128,7 +84,7 @@ export function ReportViewer() {
         <div className="state state-error" role="alert">
           <h3 className="state-title">This report did not render</h3>
           <p className="state-message">
-            The renderer stopped with <code>{report.errorCode}</code>.
+            The renderer stopped with <code>{report.error_code}</code>.
           </p>
         </div>
       )}
@@ -136,31 +92,34 @@ export function ReportViewer() {
       {report.truncated && (
         <div className="callout callout-warn">
           <h3>Truncated</h3>
-          <p>{report.truncationNote}</p>
+          <p>{report.truncation_note}</p>
         </div>
       )}
 
-      {report.levelNote && (
+      {report.level_note && (
         <div className="callout">
           <h3>What this level includes</h3>
-          <p>{report.levelNote}</p>
+          <p>{report.level_note}</p>
         </div>
       )}
 
       <CoveragePanel report={report} />
       <EngineCoverageTable report={report} />
       <Provenance report={report} />
+      <CommentRail reportId={report.id} />
 
-      {sharing && (
-        <ShareDialog
-          reportId={report.id}
-          visibility={report.visibility}
-          onClose={() => {
-            setSharing(false);
-            void queryClient.invalidateQueries({ queryKey: ['shares', report.id] });
-          }}
-        />
-      )}
+      <AnimatePresence>
+        {sharing && (
+          <ShareDialog
+            reportId={report.id}
+            visibility={report.visibility}
+            onClose={() => {
+              setSharing(false);
+              void queryClient.invalidateQueries({ queryKey: ['shares', report.id] });
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -176,20 +135,27 @@ export function ReportViewer() {
 function CoveragePanel({ report }: { report: Report }) {
   const [showFields, setShowFields] = useState(false);
 
+  // ⚠ NOT YET COMPUTED IS NOT ZERO. A `queued` or `rendering` report has no
+  // completeness/declaration numbers yet — the API omits the field entirely
+  // rather than sending 0 — and this renders that honestly instead of
+  // claiming a measured 0.00% (same reasoning as
+  // services/report/internal/store/bomsource.go's loadDocumentMeta).
+  const pct = (v: number | undefined) => (typeof v === 'number' ? `${v.toFixed(2)}%` : 'not yet computed');
+
   return (
     <section className="coverage" aria-labelledby="coverage-h">
       <h2 id="coverage-h">Coverage</h2>
 
       <div className="coverage-numbers">
         <div className="coverage-number">
-          <span className="coverage-value">{report.completenessPct.toFixed(2)}%</span>
+          <span className="coverage-value">{pct(report.completeness_pct)}</span>
           <span className="coverage-label">Completeness</span>
           <p className="coverage-note">
             Substantive values only. <strong>This is the compliance signal.</strong>
           </p>
         </div>
         <div className="coverage-number">
-          <span className="coverage-value">{report.declarationPct.toFixed(2)}%</span>
+          <span className="coverage-value">{pct(report.declaration_pct)}</span>
           <span className="coverage-label">Declaration</span>
           <p className="coverage-note">
             Any value, including an explicit <code>not-provided</code>. A representation check —{' '}
@@ -198,20 +164,20 @@ function CoveragePanel({ report }: { report: Report }) {
         </div>
       </div>
 
-      {report.coverageFormula && (
+      {report.coverage_formula && (
         <p className="coverage-formula">
-          <code>{report.coverageFormula}</code>
+          <code>{report.coverage_formula}</code>
         </p>
       )}
 
       {/*
-        ⚠ WHOSE JUDGEMENT THE WEIGHTS ARE. CERT-In assigns none; EncoreBOM does,
+        ⚠ WHOSE JUDGEMENT THE WEIGHTS ARE. CERT-In assigns none; AxeBOM does,
         so a single percentage can exist. A reader who assumes the weighting is
         the regulator's is treating our judgement as theirs.
       */}
       <p className="coverage-caveat">
-        Field weights are EncoreBOM's judgement, not CERT-In's. The guideline assigns no weights;
-        the per-field breakdown below is the unweighted evidence.
+        Field weights are AxeBOM's judgement, not CERT-In's. The guideline assigns no weights; the
+        per-field breakdown below is the unweighted evidence.
       </p>
 
       <button
@@ -220,7 +186,7 @@ function CoveragePanel({ report }: { report: Report }) {
         aria-expanded={showFields}
         onClick={() => setShowFields((v) => !v)}
       >
-        {showFields ? 'Hide' : 'Show'} per-field breakdown ({report.coverageFields.length} fields)
+        {showFields ? 'Hide' : 'Show'} per-field breakdown ({(report.coverage_fields ?? []).length} fields)
       </button>
 
       {showFields && (
@@ -235,8 +201,8 @@ function CoveragePanel({ report }: { report: Report }) {
             </tr>
           </thead>
           <tbody>
-            {report.coverageFields.map((f) => (
-              <tr key={f.fieldId}>
+            {(report.coverage_fields ?? []).map((f) => (
+              <tr key={f.field_id}>
                 <th scope="row">{f.name}</th>
                 <td>{f.weight}</td>
                 <td>
@@ -245,7 +211,7 @@ function CoveragePanel({ report }: { report: Report }) {
                 <td>
                   {f.declared}/{f.total}
                 </td>
-                <td>CERT-In v2.0 p.{f.sourcePage}</td>
+                <td>CERT-In v2.0 p.{f.source_page}</td>
               </tr>
             ))}
           </tbody>
@@ -285,9 +251,9 @@ function EngineCoverageTable({ report }: { report: Report }) {
           </tr>
         </thead>
         <tbody>
-          {report.engines.map((e) => (
-            <tr key={e.engineId}>
-              <th scope="row">{e.engineId}</th>
+          {(report.engines ?? []).map((e) => (
+            <tr key={e.engine_id}>
+              <th scope="row">{e.engine_id}</th>
               <td>
                 <Value>{e.version}</Value>
               </td>
@@ -295,7 +261,7 @@ function EngineCoverageTable({ report }: { report: Report }) {
                 <StatusPill status={e.status} />
               </td>
               <td>
-                <Value>{e.databaseVersion}</Value>
+                <Value>{e.database_version}</Value>
               </td>
               <td>{e.ecosystems.join(', ') || <span className="not-provided">none</span>}</td>
               <td>
@@ -304,7 +270,7 @@ function EngineCoverageTable({ report }: { report: Report }) {
             </tr>
           ))}
 
-          {report.ecosystemsWithNoEngine.map((eco) => (
+          {(report.ecosystems_with_no_engine ?? []).map((eco) => (
             <tr key={`no-engine-${eco}`} className="row-warn">
               <th scope="row">(none)</th>
               <td>
@@ -321,7 +287,7 @@ function EngineCoverageTable({ report }: { report: Report }) {
             </tr>
           ))}
 
-          {report.engines.length === 0 && report.ecosystemsWithNoEngine.length === 0 && (
+          {(report.engines ?? []).length === 0 && (report.ecosystems_with_no_engine ?? []).length === 0 && (
             <tr className="row-warn">
               <td colSpan={6}>
                 No engine ran for this report. Every number above describes nothing.
@@ -343,8 +309,8 @@ function Provenance({ report }: { report: Report }) {
         <dd>{report.sha256 ? <CopyableCode value={report.sha256} /> : <Value>{''}</Value>}</dd>
         <dt>Signed by</dt>
         <dd>
-          {report.signingKeyId ? (
-            <code>{report.signingKeyId}</code>
+          {report.signing_key_id ? (
+            <code>{report.signing_key_id}</code>
           ) : (
             <span className="not-provided">
               unsigned — this build has no signing key configured
@@ -353,9 +319,9 @@ function Provenance({ report }: { report: Report }) {
         </dd>
       </dl>
       <p className="section-note">
-        Verify a downloaded artifact with <code>encorebom verify &lt;file&gt;</code> and the
-        published public key. That proves the file is the one issued; it says nothing about whether
-        the scan was complete — for that, read Engine Coverage.
+        Verify a downloaded artifact with <code>axebom verify &lt;file&gt;</code> and the published
+        public key. That proves the file is the one issued; it says nothing about whether the scan
+        was complete — for that, read Engine Coverage.
       </p>
     </section>
   );
@@ -370,7 +336,15 @@ function Provenance({ report }: { report: Report }) {
  */
 function DownloadMenu({ report }: { report: Report }) {
   const [open, setOpen] = useState(false);
-  const all = [{ id: report.id, format: report.format, status: report.status }, ...report.siblings];
+  // report.siblings is populated by GET /v1/reports/{id} (Handler.Get calls
+  // store.Siblings, a same-schema query for other formats of the same scan
+  // + bom_type) but never by the list endpoint or a just-created report, so
+  // `?? []` is the ordinary case for a report that is the only format
+  // rendered, not a guard against missing backend support.
+  const all = [
+    { id: report.id, format: report.format, status: report.status },
+    ...(report.siblings ?? []),
+  ];
 
   return (
     <div className="menu">

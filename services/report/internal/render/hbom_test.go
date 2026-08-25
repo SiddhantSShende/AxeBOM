@@ -4,14 +4,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/encorebom/encorebom/libs/go-shared/model"
+	"github.com/axebom/axebom/libs/go-shared/model"
 )
 
 func hardware() []HardwareComponent {
 	return []HardwareComponent{
 		{
 			Depth: 0, Quantity: 1,
-			Name: "EncoreBOM Edge Gateway 4400", ModelNumber: "ENC-GW-4400",
+			Name: "AxeBOM Edge Gateway 4400", ModelNumber: "ENC-GW-4400",
 			ManufacturerName: "Encore Systems Pvt Ltd", ManufacturerLocation: "Pune, India",
 			Origin:       "India",
 			SupplierInfo: "Bharat Integrators Ltd", SupplierLocation: "New Delhi, India",
@@ -111,7 +111,7 @@ func TestTheIndentIsNotPartOfTheName(t *testing.T) {
 			t.Errorf("row %d name %q carries indentation", i, name)
 		}
 	}
-	if rows[0][nameIdx] != "EncoreBOM Edge Gateway 4400" {
+	if rows[0][nameIdx] != "AxeBOM Edge Gateway 4400" {
 		t.Errorf("the root name was altered: %q", rows[0][nameIdx])
 	}
 	// The depth IS available, as a number.

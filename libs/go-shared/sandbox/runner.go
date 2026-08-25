@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -46,6 +47,28 @@ type Spec struct {
 	// see mountsFor.
 	Mounts []Mount
 
+	// CopyOut extracts a directory from the container AFTER the process exits
+	// and before the container is removed.
+	//
+	// ⚠ THIS IS HOW A SANDBOXED PROCESS PRODUCES A FILE TREE WITHOUT A WRITABLE
+	// HOST MOUNT.
+	//
+	// mountsFor forces ReadOnly on every bind, deliberately — a writable host
+	// mount is how a container escape becomes host compromise. That leaves a
+	// process that must produce more than stdout with nowhere to put it. The
+	// fetcher is the case: a clone is a directory tree, potentially hundreds of
+	// megabytes, so stdout is not an option either.
+	//
+	// Copying out through the Docker API after the process has exited keeps the
+	// property that matters: at no point does the running container hold a
+	// writable handle to the host filesystem.
+	//
+	// The result is written as a RAW TAR, not extracted. Extraction of
+	// untrusted content needs path-traversal, size, inode and inflation guards,
+	// and those live in the caller (fetcher.ExtractTar) rather than here — the
+	// sandbox should not be in the business of interpreting what it copied.
+	CopyOut *CopyOut
+
 	// Env is passed to the process.
 	//
 	// ⚠ MUST NOT CONTAIN A CREDENTIAL. Engine containers receive an archive and
@@ -78,6 +101,37 @@ type Spec struct {
 	Labels map[string]string
 }
 
+// CopyOut describes a directory to extract from a finished container.
+type CopyOut struct {
+	// MountPath is where the writable volume is mounted.
+	//
+	// ⚠ IT MUST BE A DIRECTORY THE IMAGE ALREADY MAKES WORLD-WRITABLE, and it
+	// is separate from ContainerPath for exactly that reason.
+	//
+	// A fresh volume inherits the ownership and mode of the image path it
+	// covers. Over a path the image does not have — /tmp/src, say — that is
+	// root:root 0755, and a sandbox running as uid 65534 cannot write to its
+	// own output directory. `mkdir -p` still succeeds, because the parent is
+	// writable and the directory already exists, so the failure surfaces later
+	// and somewhere else:
+	//
+	//	touch: /tmp/src/probe: Permission denied
+	//
+	// Mount at /tmp (1777 by convention) and copy from a subdirectory of it.
+	// Empty means the same as ContainerPath.
+	MountPath string
+
+	// ContainerPath is the directory to copy out. It must be at or below
+	// MountPath.
+	ContainerPath string
+	// HostTarPath is where the raw tar stream is written.
+	HostTarPath string
+	// MaxBytes bounds the copy. A container that produced more than expected is
+	// refused rather than allowed to fill the host disk — the same reasoning as
+	// the output-size cap on stdout.
+	MaxBytes int64
+}
+
 // Mount is a host path exposed to the container.
 type Mount struct {
 	Source string
@@ -101,6 +155,32 @@ type Result struct {
 	// OutputTruncated reports that MaxOutputBytes was reached. Surfaced so a
 	// downstream parser knows its input is incomplete rather than malformed.
 	OutputTruncated bool
+
+	// ImageDigest is the REGISTRY MANIFEST DIGEST of the image that actually
+	// ran — read back from the daemon after the container was created, not
+	// copied from the reference we asked for.
+	//
+	// ⚠ THAT DISTINCTION IS THE ENTIRE VALUE OF THE FIELD. A tag is mutable:
+	// `anchore/syft:v1.51.0` today and tomorrow can be different binaries, and
+	// a compliance report naming a tag cannot say what it examined. Asking the
+	// daemon what it resolved records the bytes, even when the manifest gave us
+	// only a tag.
+	//
+	// Empty when the image has no registry digest at all — built locally, or
+	// loaded from a tarball. Empty is honest; the local image ID is a DIFFERENT
+	// hash (the config digest) and putting it here under the same name would be
+	// the same conflation this codebase refuses between `purl` and
+	// `certin_identifier`.
+	ImageDigest string
+
+	// StartedAt and FinishedAt bracket exactly the interval Duration
+	// measures. They travel together deliberately: a reader who cannot
+	// reconcile finished - started against duration cannot trust any of the
+	// three, and provenance that cannot be checked is not provenance.
+	//
+	// UTC, RFC3339 with a literal Z when serialised. No local time anywhere.
+	StartedAt  time.Time
+	FinishedAt time.Time
 
 	Duration time.Duration
 
@@ -169,7 +249,7 @@ func (r *DockerRunner) Close() error { return r.cli.Close() }
 var ErrSecretInEnvironment = errors.New("sandbox: credential in the engine environment")
 
 // Run executes one command under the full policy.
-func (r *DockerRunner) Run(ctx context.Context, spec Spec) (Result, error) {
+func (r *DockerRunner) Run(ctx context.Context, spec Spec) (res Result, err error) {
 	// ---- refuse before doing anything -------------------------------------
 	//
 	// Every check here is cheap and each one, skipped, is a hole. They run in
@@ -191,7 +271,7 @@ func (r *DockerRunner) Run(ctx context.Context, spec Spec) (Result, error) {
 		// noisy discourages a second component from adopting the flag.
 		r.log.Warn("sandbox: running a container WITH a credential; "+
 			"this is permitted only for the fetcher (ADR-0008)",
-			"image", spec.Image, "role", spec.Labels["encorebom.role"])
+			"image", spec.Image, "role", spec.Labels["axebom.role"])
 	} else if err := assertNoSecrets(spec.Env); err != nil {
 		return Result{}, err
 	}
@@ -205,8 +285,21 @@ func (r *DockerRunner) Run(ctx context.Context, spec Spec) (Result, error) {
 	runCtx, cancel := context.WithTimeout(ctx, spec.Limits.WallClock)
 	defer cancel()
 
-	started := time.Now()
+	started := time.Now().UTC()
 	result := Result{DiskQuotaEnforced: spec.Limits.DiskMB > 0}
+
+	// ⚠ STAMPED IN A DEFER, so EVERY exit carries the timing — including the
+	// four error returns below.
+	//
+	// Duration was previously assigned only on the success path, so a run that
+	// failed to start, or whose copy-out failed, reported `duration_ms: 0`.
+	// That reads as "it finished instantly" rather than "it never got going",
+	// and the two are the opposite diagnosis.
+	defer func() {
+		res.StartedAt = started
+		res.FinishedAt = time.Now().UTC()
+		res.Duration = res.FinishedAt.Sub(started)
+	}()
 
 	hostCfg, containerCfg := r.buildConfig(spec)
 
@@ -245,6 +338,10 @@ func (r *DockerRunner) Run(ctx context.Context, spec Spec) (Result, error) {
 				"container", created.ID, "cause", err.Error())
 		}
 	}()
+
+	// After create, so the image is certainly present locally; before start, so
+	// a long-running scan cannot have the tag re-pointed underneath it.
+	result.ImageDigest = r.resolveImageDigest(runCtx, spec.Image)
 
 	if err := r.cli.ContainerStart(runCtx, created.ID, container.StartOptions{}); err != nil {
 		return result, fmt.Errorf("sandbox: start container: %w", err)
@@ -286,8 +383,117 @@ func (r *DockerRunner) Run(ctx context.Context, spec Spec) (Result, error) {
 		}
 	}
 
-	result.Duration = time.Since(started)
+	// Copy out BEFORE the deferred remove fires. The container has exited, so
+	// nothing is still writing, and the tmpfs is still there to read from.
+	if spec.CopyOut != nil && result.ExitCode == 0 && !result.TimedOut {
+		if err := r.copyOut(logCtx, created.ID, *spec.CopyOut); err != nil {
+			return result, fmt.Errorf("sandbox: copy out: %w", err)
+		}
+	}
+
 	return result, nil
+}
+
+// resolveImageDigest asks the daemon which image bytes a reference resolved to.
+//
+// Returns "" on any failure. A provenance field that cannot be read must not
+// fail a scan that otherwise succeeded — the gap is recorded by its absence,
+// which the worker turns into a stated diagnostic.
+func (r *DockerRunner) resolveImageDigest(ctx context.Context, ref string) string {
+	info, err := r.cli.ImageInspect(ctx, ref)
+	if err != nil {
+		r.log.Debug("could not resolve the image digest", "image", ref, "cause", err.Error())
+		return ""
+	}
+	return repoDigestFor(info.RepoDigests, ref)
+}
+
+// repoDigestFor picks the digest belonging to the repository we asked for.
+//
+// An image can carry digests for several repositories after a retag, and
+// returning another repository's digest would name a coordinate this scan never
+// used. Split out from the daemon call so the matching is testable without
+// Docker — which is how the normalisation below was found to be necessary.
+func repoDigestFor(repoDigests []string, ref string) string {
+	want := normalizeRepo(refWithoutTag(ref))
+	for _, rd := range repoDigests {
+		name, digest, ok := strings.Cut(rd, "@")
+		if ok && normalizeRepo(name) == want {
+			return digest
+		}
+	}
+	return ""
+}
+
+// refWithoutTag strips a `:tag` or `@digest` suffix, leaving the repository.
+//
+// The colon check is bounded by the last slash because a registry may carry a
+// port — `localhost:5000/engine` has a colon that is not a tag separator.
+func refWithoutTag(ref string) string {
+	if i := strings.LastIndex(ref, "@"); i >= 0 {
+		ref = ref[:i]
+	}
+	if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
+		ref = ref[:i]
+	}
+	return ref
+}
+
+// normalizeRepo puts a Docker Hub reference into the one form the daemon uses.
+//
+// ⚠ THE DAEMON DOES NOT ECHO BACK THE NAME YOU GAVE IT. Asking for
+// `docker.io/anchore/syft:v1.51.0` yields a RepoDigest of
+// `anchore/syft@sha256:…`, and `busybox:1.37` yields `busybox@sha256:…` even
+// though its canonical name is `docker.io/library/busybox`. Comparing the two
+// literally matches only when the caller happened to write the short form —
+// which is why every engine in the manifest, all of which use the `docker.io/`
+// prefix, resolved to an empty digest until this existed.
+func normalizeRepo(repo string) string {
+	for _, prefix := range []string{"index.docker.io/", "docker.io/"} {
+		repo = strings.TrimPrefix(repo, prefix)
+	}
+	// `library/` is Docker Hub's implicit namespace for official images.
+	return strings.TrimPrefix(repo, "library/")
+}
+
+// copyOut writes a container directory to a host tar file.
+//
+// Only called after the process has exited successfully — copying from a
+// container that failed or timed out would archive a half-written tree, and a
+// partial clone that looks complete is worse than no clone.
+func (r *DockerRunner) copyOut(ctx context.Context, id string, spec CopyOut) error {
+	rc, _, err := r.cli.CopyFromContainer(ctx, id, spec.ContainerPath)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", spec.ContainerPath, err)
+	}
+	defer func() { _ = rc.Close() }()
+
+	// #nosec G304 -- the destination is chosen by this process, not by the
+	// container or by any user input.
+	f, err := os.Create(spec.HostTarPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+
+	limit := spec.MaxBytes
+	if limit <= 0 {
+		limit = 2 << 30 // 2 GiB
+	}
+
+	// One byte over the limit, so "exactly at the limit" is distinguishable
+	// from "truncated".
+	n, err := io.Copy(f, io.LimitReader(rc, limit+1))
+	if err != nil {
+		return err
+	}
+	if n > limit {
+		// Remove the partial file: leaving it means the next step extracts a
+		// truncated tar and reports a corrupt archive rather than a size limit.
+		_ = os.Remove(spec.HostTarPath)
+		return fmt.Errorf("copied tree exceeds the %d byte limit", limit)
+	}
+	return nil
 }
 
 func (r *DockerRunner) kill(id string) {
@@ -356,7 +562,7 @@ func (r *DockerRunner) buildConfig(spec Spec) (*container.HostConfig, *container
 			spec.Policy.WorkspacePath: fmt.Sprintf("rw,noexec,nosuid,nodev,size=%dm,uid=%d,gid=%d,mode=0700",
 				spec.Policy.TmpfsSizeMB, uid, gid),
 		},
-		Mounts: mountsFor(spec.Mounts),
+		Mounts: mountsFor(spec.Mounts, spec.CopyOut),
 	}
 
 	if spec.Limits.DiskMB > 0 {
@@ -365,7 +571,7 @@ func (r *DockerRunner) buildConfig(spec Spec) (*container.HostConfig, *container
 		}
 	}
 
-	labels := map[string]string{"encorebom.sandbox": "true"}
+	labels := map[string]string{"axebom.sandbox": "true"}
 	for k, v := range spec.Labels {
 		labels[k] = v
 	}
@@ -419,8 +625,8 @@ func dockerNetworkMode(p Policy) container.NetworkMode {
 // ReadOnly is set HERE rather than taken from the caller: a writable host mount
 // is how a container escape becomes host compromise, and it must not be
 // reachable by passing a flag.
-func mountsFor(in []Mount) []mount.Mount {
-	out := make([]mount.Mount, 0, len(in))
+func mountsFor(in []Mount, copyOut *CopyOut) []mount.Mount {
+	out := make([]mount.Mount, 0, len(in)+1)
 	for _, m := range in {
 		out = append(out, mount.Mount{
 			Type:     mount.TypeBind,
@@ -432,6 +638,42 @@ func mountsFor(in []Mount) []mount.Mount {
 				Propagation: mount.PropagationRPrivate,
 			},
 		})
+	}
+
+	// ⚠ AN ANONYMOUS VOLUME, NOT A TMPFS AND NOT A HOST BIND.
+	//
+	// The only writable mount the sandbox will ever create, and each rejected
+	// option was ruled out by measured behaviour rather than preference:
+	//
+	//   host bind  a writable host mount is how a container escape becomes host
+	//              compromise. Never.
+	//   tmpfs      `docker cp` DOES NOT DESCEND INTO A TMPFS. Measured: a file
+	//              written to a tmpfs and copied out yields a tar containing
+	//              only the empty directory. That is exactly what the first
+	//              attempt at this produced — an archive of 0 files while every
+	//              step reported success.
+	//   volume     copies out correctly, and RemoveVolumes cleans it up.
+	//
+	// Anonymous (no Source), so it is collected with the container instead of
+	// accumulating one named volume per scan.
+	//
+	// ⚠ THE TARGET MATTERS, BECAUSE OF OWNERSHIP. A fresh volume over a path
+	// absent from the image is root-owned 0755, and the sandbox runs as uid
+	// 65534 — the process could not write to its own output directory. Docker
+	// seeds a new volume with the ownership and mode of the image path it
+	// covers, so the target must be a directory the image already makes
+	// world-writable: /tmp, which is 1777 by convention.
+	if copyOut != nil {
+		target := copyOut.MountPath
+		if target == "" {
+			target = copyOut.ContainerPath
+		}
+		if target != "" {
+			out = append(out, mount.Mount{
+				Type:   mount.TypeVolume,
+				Target: target,
+			})
+		}
 	}
 	return out
 }

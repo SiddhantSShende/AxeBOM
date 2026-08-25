@@ -12,9 +12,9 @@ import (
 func fixture() Document {
 	return Document{
 		GeneratedAt: "2026-08-17T00:00:00Z",
-		DocumentID:  "urn:encorebom:scan:fixture",
+		DocumentID:  "urn:axebom:scan:fixture",
 		ProjectName: "fixture-project",
-		ToolName:    "EncoreBOM",
+		ToolName:    "AxeBOM",
 		ToolVersion: "0.1.0",
 		Roots:       []string{"purl:pkg:npm/fixture-project@1.0.0"},
 		Components: []Component{

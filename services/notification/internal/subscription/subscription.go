@@ -13,8 +13,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/services/notification/internal/webhook"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/services/notification/internal/webhook"
 )
 
 // Kind is a delivery channel.

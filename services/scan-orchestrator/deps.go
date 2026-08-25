@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/bus"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/db"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/httpx"
-	"github.com/encorebom/encorebom/services/scan-orchestrator/internal/handler"
-	"github.com/encorebom/encorebom/services/scan-orchestrator/internal/orchestr"
-	"github.com/encorebom/encorebom/services/scan-orchestrator/internal/policy"
+	"github.com/axebom/axebom/libs/go-shared/bus"
+	"github.com/axebom/axebom/libs/go-shared/oidcauth"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/db"
+	"github.com/axebom/axebom/libs/go-shared/platform/httpx"
+	"github.com/axebom/axebom/services/scan-orchestrator/internal/handler"
+	"github.com/axebom/axebom/services/scan-orchestrator/internal/orchestr"
+	"github.com/axebom/axebom/services/scan-orchestrator/internal/policy"
 )
 
 // deps holds this service's constructed dependencies.
@@ -27,14 +27,14 @@ import (
 // Return an error rather than exiting: a service that cannot reach its database
 // must fail to START, not start and serve 500s while passing liveness.
 type deps struct {
-	cfg     *config.Service
-	pool    *db.Pool
-	bus     *bus.Bus
-	store   *orchestr.Store
-	orch    *orchestr.Orchestrator
-	reaper  *orchestr.Reaper
-	issuer  *auth.Issuer
-	handler *handler.Handler
+	cfg      *config.Service
+	pool     *db.Pool
+	bus      *bus.Bus
+	store    *orchestr.Store
+	orch     *orchestr.Orchestrator
+	reaper   *orchestr.Reaper
+	identity *oidcauth.Guard
+	handler  *handler.Handler
 }
 
 // buildDeps constructs everything this service needs.
@@ -52,23 +52,22 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 		return nil, fmt.Errorf("connect to NATS: %w", err)
 	}
 
-	issuer, err := auth.NewIssuer(auth.TokenConfig{
-		SigningKey: []byte(cfg.Auth.JWTSigningKey.Reveal()),
-		Issuer:     cfg.Auth.JWTIssuer,
-		AccessTTL:  cfg.Auth.AccessTTL,
-		RefreshTTL: cfg.Auth.RefreshTTL,
-	})
+	// Identity: ZITADEL access tokens are verified against the published
+	// key set and resolved to a local tenant UUID. See oidcauth.Guard.
+	identity, err := oidcauth.Open(cfg.OIDC, pool)
 	if err != nil {
 		_ = b.Close()
 		pool.Close()
-		return nil, fmt.Errorf("token issuer: %w", err)
+		return nil, err
 	}
 
 	registry := policy.DefaultRegistry()
+	policyStore := policy.NewStore(pool)
 	store := orchestr.NewStore(pool)
 	orch := orchestr.New(orchestr.Config{
 		Store: store, Bus: b, Registry: registry,
 		ArtifactPrefix: "s3://" + cfg.S3.Bucket,
+		FrontendURL:    cfg.Auth.FrontendURL,
 	})
 
 	reaper := orchestr.NewReaper(orchestr.ReaperConfig{
@@ -77,8 +76,8 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 
 	return &deps{
 		cfg: cfg, pool: pool, bus: b, store: store, orch: orch,
-		reaper: reaper, issuer: issuer,
-		handler: handler.New(orch, store, b, registry),
+		reaper: reaper, identity: identity,
+		handler: handler.New(orch, store, b, registry, policyStore),
 	}, nil
 }
 

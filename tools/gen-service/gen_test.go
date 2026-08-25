@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
 )
 
 // The generator's registry and the runtime config's service list must agree.

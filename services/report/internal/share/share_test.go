@@ -247,7 +247,17 @@ func TestEqualHashIsCaseInsensitiveAndExact(t *testing.T) {
 		t.Error("hex case defeated the comparison; a stored uppercase hash would " +
 			"never match and the link would silently 404")
 	}
-	if EqualHash(h, h[:len(h)-1]+"0") {
+	// ⚠ THE SUBSTITUTE DIGIT MUST DIFFER FROM THE ONE IT REPLACES.
+	//
+	// This was `h[:len(h)-1]+"0"`, which produced the SAME hash whenever the
+	// last hex digit already was '0' — one run in sixteen, where EqualHash
+	// correctly returned true and the test reported a failure for it. A gate
+	// that fails 6% of the time trains people to re-run it.
+	altered := "0"
+	if h[len(h)-1] == '0' {
+		altered = "1"
+	}
+	if EqualHash(h, h[:len(h)-1]+altered) {
 		t.Error("a different hash compared equal")
 	}
 }

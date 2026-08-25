@@ -4,7 +4,7 @@
 
 ## Context
 
-EncoreBOM is greenfield, built by an AI coding agent one phase per session with **fresh context each time**. The proposed architecture is 8 Go services + 5 Python workers — 13 deployables — before a single line exists.
+AxeBOM is greenfield, built by an AI coding agent one phase per session with **fresh context each time**. The proposed architecture is 8 Go services + 5 Python workers — 13 deployables — before a single line exists.
 
 The alternative considered seriously was a modular monolith: one Go binary with hard package boundaries per domain, plus one Python worker with an adapter registry. Three deployables instead of thirteen.
 

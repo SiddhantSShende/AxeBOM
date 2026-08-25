@@ -10,8 +10,8 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib" // database/sql driver, required by goose
 	"github.com/pressly/goose/v3"
 
-	"github.com/encorebom/encorebom/libs/go-shared/platform/config"
-	"github.com/encorebom/encorebom/migrations"
+	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/migrations"
 )
 
 // MigrationOrder is dependency order, not alphabetical.

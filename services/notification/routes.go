@@ -3,8 +3,8 @@ package main
 import (
 	"net/http"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/authz"
+	"github.com/axebom/axebom/libs/go-shared/auth"
+	"github.com/axebom/axebom/libs/go-shared/authz"
 )
 
 // registerRoutes mounts this service's HTTP surface.
@@ -21,7 +21,7 @@ var publicRoutes = map[string]string{}
 func registerRoutes(mux *http.ServeMux, d *deps) {
 	// Health endpoints (/healthz, /readyz) are mounted separately in main.go.
 	h := d.handler
-	authenticated := auth.Authenticate(d.issuer, nil)
+	authenticated := d.identity.Authenticate()
 
 	guard := func(res authz.Resource, act authz.Action, fn http.HandlerFunc) http.Handler {
 		return authenticated(auth.Authorize(res, act)(fn))

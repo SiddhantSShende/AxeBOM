@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/encorebom/encorebom/libs/go-shared/model"
+	"github.com/axebom/axebom/libs/go-shared/model"
 )
 
 // BOM is everything the tabular renderers need. Populated from the database by
@@ -43,6 +43,22 @@ type BOM struct {
 	// component sheet renders as columns, kept as a tree so the assembly
 	// structure survives into the report.
 	Hardware []HardwareComponent
+	// CryptoAssets is populated for a CBOM, and READ (never re-discovered) by a
+	// QBOM's readiness view, which groups these same assets rather than
+	// running its own detection. Never rendered as one flat table — see
+	// CBOMSheets, which branches on AssetType, and CLAUDE.md invariant 5.
+	CryptoAssets []CryptoAsset
+	// QuantumDevice is CERT-In Table 8's device metadata for a QBOM. Nil is a
+	// legitimate state, not a loading failure: there is no quantum-hardware
+	// scanner, so a project classified QBOM before anybody filled in the
+	// device form has genuinely recorded nothing yet. The QBOM sheets render
+	// that as a stated gap rather than omitting the section (invariant 3).
+	QuantumDevice *QuantumDevice
+	// AIModels is CERT-In Table 10's model inventory for an AIBOM. Never
+	// rendered through componentSheet/componentPages — an AI model's identity
+	// (name, developer, licence) has no PURL/Depth/Scope, the SBOM concepts
+	// those generic sheets are built around — see AIBOMSheets.
+	AIModels []AIModel
 	Findings []Finding
 	Licenses []License
 	Engines  []EngineCoverage
@@ -51,6 +67,11 @@ type BOM struct {
 	EcosystemsWithNoEngine []string
 	Practices              []Practice
 	Coverage               Coverage
+	// CoverageComputed is false when the underlying BOM document has never had
+	// its coverage scored — Coverage.CompletenessPct/DeclarationPct are then
+	// meaningless zero values, not "0%", and a caller persisting them (the
+	// worker, into report.reports) must store an absence, not a number.
+	CoverageComputed bool
 	// Notes are methodology footnotes rendered verbatim.
 	Notes []string
 }
@@ -162,20 +183,31 @@ type FieldCoverage struct {
 // weightsNote states whose judgement the weights are.
 //
 // ⚠ REQUIRED BY THE PHASE FILE, AND IT IS NOT A FORMALITY. CERT-In does not
-// assign weights to its fields; EncoreBOM does, to produce a single percentage.
+// assign weights to its fields; AxeBOM does, to produce a single percentage.
 // A reader who assumes the weighting is the guideline's would treat our
 // judgement as the regulator's.
-const weightsNote = "Field weights are EncoreBOM's judgement, not CERT-In's. " +
+const weightsNote = "Field weights are AxeBOM's judgement, not CERT-In's. " +
 	"The guideline assigns no weights; they exist so a single percentage can be " +
 	"produced, and the per-field breakdown below is the unweighted evidence."
 
 // FieldsFor returns the profile field set for a BOM type.
 //
-// ⚠ CBOM IS REFUSED, NOT APPROXIMATED. CERT-In Table 9 is type-discriminated:
-// algorithms, keys, protocols and certificates have DIFFERENT field sets, so
-// there is no single list to return. Scoring a certificate against `key_size`
-// reports every CBOM at roughly 30% coverage — falsely, in a compliance
-// document. The crypto sheets are built per asset type in the CBOM phase.
+// ⚠ CBOM STILL HAS NO SINGLE FIELD SET, AND THIS FUNCTION STILL SAYS SO.
+//
+// CERT-In Table 9 is type-discriminated: algorithms, keys, protocols and
+// certificates have DIFFERENT field sets, so there is no flat list to return
+// — scoring a certificate against `key_size` reports every CBOM at roughly
+// 30% coverage, falsely, in a compliance document. That reasoning has not
+// changed.
+//
+// What changed is what a caller does with the error. Sheets, WriteJSON and
+// WritePDF no longer treat it as a reason to refuse the WHOLE report — a CBOM
+// report never calls FieldsFor at all, and renders CBOMSheets instead, which
+// builds one inventory and one coverage table per asset type. This function
+// keeps erroring for CBOM so that a caller which is NOT CBOM-aware — a future
+// format, a test — cannot silently receive zero fields and render an empty
+// sheet that reads as "this CBOM has no data" instead of "this caller forgot
+// to branch".
 func FieldsFor(t model.BOMType) ([]model.ProfileField, error) {
 	switch t {
 	case model.BOMTypeSBOM:
@@ -190,7 +222,7 @@ func FieldsFor(t model.BOMType) ([]model.ProfileField, error) {
 		return nil, fmt.Errorf(
 			"a CBOM has no single field set: CERT-In Table 9 discriminates by " +
 				"asset type, and one flat column list would score every asset " +
-				"against fields that do not apply to it")
+				"against fields that do not apply to it — render CBOMSheets instead")
 	default:
 		return nil, fmt.Errorf("unknown BOM type %q", t)
 	}
@@ -200,21 +232,68 @@ func FieldsFor(t model.BOMType) ([]model.ProfileField, error) {
 //
 // Order is deliberate: Summary first because it carries the caveats, Engine
 // Coverage before the data because it says what the data could not see.
+//
+// ⚠ CBOM AND QBOM BRANCH HERE, BEFORE fieldCoverageSheet OR componentSheet ARE
+// EVER CALLED — not by calling them and discarding an error.
+//
+// A CBOM has no flat field list (FieldsFor's whole point) and no rows shaped
+// like a Component, so it gets CBOMSheets in place of BOTH generic sheets,
+// never in addition to them — a "Components" sheet with zero rows next to a
+// correct crypto inventory would read as "the scan found nothing" rather than
+// "this format does not apply here". A QBOM DOES have a flat Table 8 field
+// list — FieldsFor succeeds for it — so fieldCoverageSheet still runs; only
+// componentSheet is replaced, because Table 8 describes one piece of
+// hardware, not a dependency tree, and componentSheet's identity columns
+// (PURL, Depth, Orphan, Scope…) do not mean anything for it.
 func Sheets(b BOM) ([]Sheet, error) {
-	fields, err := FieldsFor(b.BOMType)
-	if err != nil {
-		return nil, err
-	}
-
 	sheets := []Sheet{
 		summarySheet(b),
 		engineCoverageSheet(b),
-		fieldCoverageSheet(b, fields),
-		practicesSheet(b),
-		componentSheet(b, fields),
-		findingSheet(b),
-		licenseSheet(b),
 	}
+
+	// extraNotes carries the type-specific honesty label into the Notes sheet
+	// (below), the same sheet every other methodology note lands on — a
+	// separate "CBOM caveats" sheet nobody thinks to open is how a caveat goes
+	// unread.
+	var extraNotes []string
+
+	switch b.BOMType {
+	case model.BOMTypeCBOM:
+		sheets = append(sheets, practicesSheet(b))
+		sheets = append(sheets, CBOMSheets(b)...)
+		extraNotes = append(extraNotes, CBOMTypeDiscriminationNote)
+
+	case model.BOMTypeQBOM:
+		fields, err := FieldsFor(b.BOMType)
+		if err != nil {
+			return nil, err
+		}
+		sheets = append(sheets, fieldCoverageSheet(b, fields), practicesSheet(b))
+		sheets = append(sheets, QBOMSheets(b)...)
+		extraNotes = append(extraNotes, QBOMFormDisclosure)
+
+	case model.BOMTypeAIBOM:
+		fields, err := FieldsFor(b.BOMType)
+		if err != nil {
+			return nil, err
+		}
+		sheets = append(sheets, fieldCoverageSheet(b, fields), practicesSheet(b))
+		sheets = append(sheets, AIBOMSheets(b, fields)...)
+		extraNotes = append(extraNotes, AIBOMExtensionsNote)
+
+	default:
+		fields, err := FieldsFor(b.BOMType)
+		if err != nil {
+			return nil, err
+		}
+		sheets = append(sheets,
+			fieldCoverageSheet(b, fields),
+			practicesSheet(b),
+			componentSheet(b, fields),
+		)
+	}
+
+	sheets = append(sheets, findingSheet(b), licenseSheet(b))
 
 	// ⚠ THE HARDWARE SHEETS GO BEFORE THE NOTES, NOT AFTER. The notes sheet
 	// carries the provenance line saying this BOM was imported rather than
@@ -224,7 +303,11 @@ func Sheets(b BOM) ([]Sheet, error) {
 		sheets = append(sheets, HBOMSheets(b.Hardware)...)
 	}
 
-	return append(sheets, notesSheet(b)), nil
+	// A copy, not a mutation of the caller's BOM: Sheets must not have a
+	// visible side effect on the value it was handed.
+	notesBOM := b
+	notesBOM.Notes = append(append([]string{}, b.Notes...), extraNotes...)
+	return append(sheets, notesSheet(notesBOM)), nil
 }
 
 // ─── Summary ────────────────────────────────────────────────────────────────
@@ -232,7 +315,7 @@ func Sheets(b BOM) ([]Sheet, error) {
 func summarySheet(b BOM) Sheet {
 	rows := [][]string{
 		{"Report ID", b.ReportID},
-		{"Project", b.ProjectName},
+		{"Project", orNotProvided(b.ProjectName)},
 		{"BOM type", string(b.BOMType)},
 		{"BOM level", b.Level},
 		{"Generated at (UTC)", b.GeneratedAt},
@@ -259,7 +342,7 @@ func summarySheet(b BOM) Sheet {
 
 	// ⚠ THE PRODUCT'S CENTRAL HONEST LABEL, IN EVERY WORKBOOK.
 	//
-	// EncoreBOM reports violations against a configured policy. It never
+	// AxeBOM reports violations against a configured policy. It never
 	// asserts that a project IS compliant, and the word does not appear in
 	// generated output. This line is the positive statement of that, so a
 	// reader does not supply the missing claim themselves.
@@ -378,13 +461,13 @@ func fieldCoverageSheet(b BOM, fields []model.ProfileField) Sheet {
 
 // citation renders where a field came from.
 //
-// An `extension` entry is EncoreBOM's own analysis, and it is labelled that way
+// An `extension` entry is AxeBOM's own analysis, and it is labelled that way
 // so nobody reads our judgement as the guideline's. Extensions carry
 // `scored: false`, so they cannot move a compliance percentage.
 func citation(f model.ProfileField) string {
 	switch f.Status {
 	case "extension":
-		return "EncoreBOM extension — not a CERT-In field"
+		return "AxeBOM extension — not a CERT-In field"
 	case "verified":
 		if f.SourcePage > 0 {
 			return fmt.Sprintf("CERT-In v2.0 p.%d", f.SourcePage)
@@ -437,7 +520,7 @@ func practicesSheet(b BOM) Sheet {
 
 // ─── Components ─────────────────────────────────────────────────────────────
 
-// componentSheet is one column per profile field, plus EncoreBOM's own identity
+// componentSheet is one column per profile field, plus AxeBOM's own identity
 // columns.
 //
 // ⚠ THE TWO IDENTIFIERS ARE SEPARATE COLUMNS, LABELLED.
@@ -621,6 +704,18 @@ func joinList(items []string) string {
 		return model.NotProvided
 	}
 	return strings.Join(items, ", ")
+}
+
+// intOrNotProvided renders a nullable integer explicitly.
+//
+// Same reasoning as depthText: nil is not zero. A classical security level or
+// a key size that was never reported must not render as `0`, which reads as a
+// measured value — "zero bits" — rather than as the absence it actually is.
+func intOrNotProvided(n *int) string {
+	if n == nil {
+		return model.NotProvided
+	}
+	return strconv.Itoa(*n)
 }
 
 func boolText(b bool) string {

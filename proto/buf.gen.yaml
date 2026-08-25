@@ -13,7 +13,7 @@ managed:
   enabled: true
   override:
     - file_option: go_package_prefix
-      value: github.com/encorebom/encorebom/proto/gen/go
+      value: github.com/axebom/axebom/proto/gen/go
 
 plugins:
   # --- Go ---

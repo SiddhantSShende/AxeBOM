@@ -13,7 +13,7 @@ const JSONMediaType = "application/json"
 // Bumped whenever a field changes meaning. A consumer that pinned the old
 // version can then refuse rather than silently misreading a renamed field —
 // which is the failure mode an unversioned envelope guarantees.
-const BundleSchema = "encorebom.report.bundle/v1"
+const BundleSchema = "axebom.report.bundle/v1"
 
 // Bundle is the JSON download: the canonical document plus both standard ones.
 //
@@ -87,12 +87,19 @@ type BundleEngines struct {
 	EcosystemsWithNoEngine []string `json:"ecosystems_with_no_engine"`
 }
 
-// BundleCanonical is EncoreBOM's own model, which neither standard format can
+// BundleCanonical is AxeBOM's own model, which neither standard format can
 // carry in full.
 type BundleCanonical struct {
 	Components []Component `json:"components"`
 	Findings   []Finding   `json:"findings"`
 	Licenses   []License   `json:"licenses"`
+	// CryptoAssets, QuantumDevice and AIModels are omitted (not `null`) for a
+	// BOM type that carries none of them — SPDX and CycloneDX cannot express
+	// Table 9, Table 8 or Table 10 in full, so this is the only artifact
+	// where a CBOM/QBOM/AIBOM consumer can read them structured.
+	CryptoAssets  []CryptoAsset  `json:"crypto_assets,omitempty"`
+	QuantumDevice *QuantumDevice `json:"quantum_device,omitempty"`
+	AIModels      []AIModel      `json:"ai_models,omitempty"`
 }
 
 // BundleDocuments holds the standard serializations.
@@ -112,8 +119,12 @@ type BundleDocuments struct {
 // at when it has to truncate. The escaping belongs to the spreadsheet writers
 // and nowhere else.
 func WriteJSON(b BOM, spdx, cyclonedx []byte) ([]byte, error) {
-	if _, err := FieldsFor(b.BOMType); err != nil {
-		return nil, err
+	// ⚠ NOT FieldsFor. FieldsFor's error means "no flat field list", which is
+	// true and correct for a CBOM and NOT a reason to refuse the bundle — see
+	// bom.go's FieldsFor comment. This only rejects a BOM type that is not one
+	// of the five the product knows about at all.
+	if !b.BOMType.Valid() {
+		return nil, fmt.Errorf("unknown BOM type %q", b.BOMType)
 	}
 
 	bundle := Bundle{
@@ -142,9 +153,12 @@ func WriteJSON(b BOM, spdx, cyclonedx []byte) ([]byte, error) {
 		},
 		Practices: b.Practices,
 		Canonical: BundleCanonical{
-			Components: b.Components,
-			Findings:   b.Findings,
-			Licenses:   b.Licenses,
+			Components:    b.Components,
+			Findings:      b.Findings,
+			Licenses:      b.Licenses,
+			CryptoAssets:  b.CryptoAssets,
+			QuantumDevice: b.QuantumDevice,
+			AIModels:      b.AIModels,
 		},
 		Notes: orEmpty(b.Notes),
 	}
@@ -169,7 +183,7 @@ func WriteJSON(b BOM, spdx, cyclonedx []byte) ([]byte, error) {
 
 // scopeNote is the product's central honest label, carried in every artifact.
 //
-// EncoreBOM reports violations against a configured policy. It never asserts
+// AxeBOM reports violations against a configured policy. It never asserts
 // that a project IS compliant — the word does not appear in generated output —
 // and stating the scope positively stops a reader supplying the missing claim
 // themselves.

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.encorebom.io/scan-job-v1.schema.json",
+  "$id": "https://schemas.axebom.io/scan-job-v1.schema.json",
   "title": "ScanJobV1",
   "description": "One unit of scan work: exactly ONE engine against ONE content-addressed archive (ADR-0004). There is no credential field and there never will be — engine containers receive an archive and nothing else (ADR-0008).",
   "type": "object",

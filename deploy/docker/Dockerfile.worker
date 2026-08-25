@@ -1,0 +1,121 @@
+# AxeBOM Python scan worker — one image, five families.
+#
+# Build from the repository root:
+#   docker build -f deploy/docker/Dockerfile.worker -t axebom/worker .
+#
+# The family is chosen at RUN time by AXEBOM_WORKER_FAMILY (sbom | cbom |
+# aibom | qbom | hbom). One image rather than five because they share the
+# adapter base, the sandbox bridge, the manifest resolver and the normalizer —
+# five images would be five copies of the same layers differing by one module,
+# and five places for a dependency to drift.
+#
+# ---------------------------------------------------------------------------
+# THIS CONTAINER NEEDS THE DOCKER SOCKET, AND THAT IS A REAL PRIVILEGE
+#
+# Scanners run as sibling containers: the worker calls `axebom sandbox run`,
+# which uses the Docker API to start an engine with --network=none, a read-only
+# rootfs, all capabilities dropped, a non-root user and hard quotas. Handing a
+# container /var/run/docker.sock is equivalent to giving it root on the host.
+#
+# It is accepted here for one reason: the alternative is running engines INSIDE
+# this container, which means untrusted third-party binaries executing over
+# untrusted user code with no isolation boundary at all. The socket buys a real
+# boundary around the part that actually runs hostile input.
+#
+# What keeps it bounded:
+#   - The worker holds NO credentials. Only the fetcher has git access
+#     (ADR-0008), and the sandbox escape suite asserts no credential-shaped
+#     env var or file reaches an engine container.
+#   - The Python bridge CANNOT weaken the policy. `allow_network` is refused
+#     outright and the fields for credentials do not exist in the bridge spec;
+#     the Go side reads DefaultPolicy(), not the caller's request.
+#
+# In Kubernetes this becomes a dedicated, tainted node pool with
+# automountServiceAccountToken disabled — see deploy/k8s/values.yaml.
+# ---------------------------------------------------------------------------
+
+# ---- build the sandbox bridge CLI -----------------------------------------
+# The worker shells out to `axebom sandbox run`. Building it here rather
+# than mounting a host binary keeps the image self-contained and means the
+# bridge protocol and the worker that speaks it are always the same commit.
+FROM golang:1.26-alpine AS gobuild
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+
+ARG VERSION=dev
+RUN CGO_ENABLED=0 GOOS=linux go build \
+      -trimpath \
+      -ldflags="-s -w -X main.version=${VERSION}" \
+      -o /out/axebom ./cmd/axebom
+
+# ---- python runtime --------------------------------------------------------
+FROM python:3.13-slim AS runtime
+
+# Not distroless: the workers legitimately need an interpreter, and the
+# provisioner borrows a shell to fix permissions on downloaded databases.
+# Kept slim, with no build toolchain in the final layer.
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+# Dependencies first, so a source edit does not re-resolve the environment.
+COPY pyproject.toml ./
+COPY libs/py-shared ./libs/py-shared
+RUN pip install --no-cache-dir -e .
+
+# Source. Copied after the install so iterating on worker code hits the cache.
+COPY workers ./workers
+COPY OSINT ./OSINT
+COPY proto ./proto
+
+COPY --from=gobuild /out/axebom /usr/local/bin/axebom
+
+# The docker CLI, for database provisioning only.
+#
+# Normal scanning does NOT use it: the sandbox bridge is `axebom sandbox
+# run`, which speaks the Docker API directly through the Go SDK. But
+# `workers.sbom.dbsync` shells out to `docker run` to fetch the grype, trivy,
+# OSV and NVD databases, and provisioning has to happen in this container
+# because that is where the enginedb volume is mounted.
+#
+# Taken from the official pinned CLI image rather than apt: the Debian package
+# pulls in a daemon this container must never run.
+COPY --from=docker:28-cli /usr/local/bin/docker /usr/local/bin/docker
+
+# ---------------------------------------------------------------------------
+# Runs as ROOT, deliberately and unusually.
+#
+# Every other image in this stack is non-root. This one needs to talk to the
+# Docker socket, whose group id differs per host (docker on Debian, but the
+# numeric gid varies), so a baked-in uid/gid cannot reliably reach it. Compose
+# sets group_add to the host's docker gid instead; see docker-compose.yml.
+#
+# The engines this worker launches DO run as uid 65534 with no capabilities —
+# that is the boundary that matters, and it is enforced on the Go side where
+# this process cannot influence it.
+# ---------------------------------------------------------------------------
+
+# The manifest resolver in workers/sbom/adapters/common.py resolves
+# OSINT/tools.manifest.yaml relative to the working directory, so /app must be
+# the CWD or every engine silently reports unavailable.
+ENV OSINT_MANIFEST=/app/OSINT/tools.manifest.yaml \
+    AXEBOM_BIN=/usr/local/bin/axebom \
+    AXEBOM_WORKSPACE_ROOT=/var/lib/axebom/workspaces \
+    AXEBOM_OUTPUT_ROOT=/var/lib/axebom/artifacts \
+    AXEBOM_ENGINE_DB_ROOT=/var/lib/axebom/enginedb \
+    AXEBOM_WORKER_FAMILY=sbom
+
+# Family is read from the environment rather than baked in, so the same image
+# serves all five and a typo names an unknown family loudly instead of starting
+# the wrong worker. The script also execs any command passed to it, which is
+# what makes `docker compose run ... sbom-worker python -m workers.sbom.dbsync`
+# work — see the comment in the script for the trap this replaces.
+COPY deploy/docker/worker-entrypoint.sh /usr/local/bin/worker-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/worker-entrypoint.sh"]

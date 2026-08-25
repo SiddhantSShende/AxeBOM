@@ -1,6 +1,6 @@
 # 01 — Canonical Data Model
 
-> **⚑ SSOT for schema.** Every table, column, type and enum in EncoreBOM is defined here and **nowhere else**. No other document may define a column. If you need a field that is not here, add it here first, in the same change that adds the migration.
+> **⚑ SSOT for schema.** Every table, column, type and enum in AxeBOM is defined here and **nowhere else**. No other document may define a column. If you need a field that is not here, add it here first, in the same change that adds the migration.
 
 **Related:** field semantics come from `reference/certin-v2.0.yaml`. Merge and dedup rules come from `03-NORMALIZER-SPEC.md`. Envelopes crossing process boundaries come from `02-CONTRACTS.md`.
 
@@ -166,7 +166,7 @@ This is the commonly-missed minimum-element category. **Not a report section —
 | `trigger_ref` | UUID NULL | user id or campaign id |
 | `status` | TEXT NOT NULL | CHECK in (`queued`,`fetching`,`running`,`normalizing`,`completed`,`completed_with_errors`,`failed`,`cancelled`) |
 | `source_kind` | TEXT NOT NULL | CHECK in (`git`,`upload`,`image`); denormalized from the project at create time — cross-schema JOINs are forbidden, and a project changing `source_type` later must not retroactively change what an old scan claims to have scanned |
-| `bom_types` | TEXT[] NOT NULL | requested families |
+| `bom_types` | TEXT[] NOT NULL | requested families — never `hbom` or `qbom`; both are rejected at scan-create time (`SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE`, `02-CONTRACTS.md` §7/§9) because neither has a worker (HBOM is a CSV/form import, QBOM is derived from CBOM) |
 | `report_levels` | TEXT[] NOT NULL | |
 | `standards` | TEXT[] NOT NULL | `SPDX`, `CycloneDX` |
 | `formats` | TEXT[] NOT NULL | |
@@ -367,7 +367,7 @@ Every normalized fact records which engine saw it, which artifact it came from, 
 ### `normalize.license_refs`
 `(id, tenant_id, slug, raw_text, first_seen_scan_id, mapped_spdx_id NULL, reviewed_by NULL)`
 
-Unrecognized license text becomes `LicenseRef-EncoreBOM-<slug>` with the raw text preserved for later human mapping.
+Unrecognized license text becomes `LicenseRef-AxeBOM-<slug>` with the raw text preserved for later human mapping.
 
 ---
 
@@ -386,7 +386,7 @@ Unrecognized license text becomes `LicenseRef-EncoreBOM-<slug>` with the raw tex
 | **key** | `key_id`, `key_state` (`active`/`revoked`/`expired`/`unknown`), `key_size INT`, `creation_date`, `activation_date` |
 | **protocol** | `protocol_version`, `cipher_suites TEXT[]`, `oid` |
 | **certificate** | `cert_subject`, `cert_issuer`, `not_valid_before`, `not_valid_after`, `signature_algo_ref`, `subject_public_key_ref`, `cert_format`, `cert_extension` |
-| **EncoreBOM analysis** (not CERT-In fields — excluded from coverage) | `quantum_vulnerable BOOLEAN`, `pqc_recommendation TEXT`, `deprecation_status` (`current`/`deprecated`/`weak`/`broken`) |
+| **AxeBOM analysis** (not CERT-In fields — excluded from coverage) | `quantum_vulnerable BOOLEAN`, `pqc_recommendation TEXT`, `deprecation_status` (`current`/`deprecated`/`weak`/`broken`) |
 
 `quantum_vulnerable` is true for Shor-vulnerable primitives: RSA, ECC/ECDSA/ECDH, DH, DSA.
 
@@ -398,9 +398,11 @@ Unrecognized license text becomes `LicenseRef-EncoreBOM-<slug>` with the raw tex
 ### `normalize.ai_models`  ← Table 10 (p.54–55)
 `(id, tenant_id, bom_document_id, model_name, model_version, model_type, model_developer, licensing, ml_models_algorithms TEXT[], performance_metrics JSONB, data_source, hardware, security_requirements, input, output, intended_usage, out_of_scope_usage, environmental_impact, attestation_signature, risk_score NUMERIC, owasp_llm_top10 TEXT[], field_status JSONB)`
 
-Plus `normalize.ai_datasets` `(id, ai_model_id, name, version, format, limitations, license, source)` and `normalize.ai_model_dependencies` `(ai_model_id, component_id)`.
+Plus `normalize.ai_datasets` `(id, ai_model_id, name, version, format, limitations, license, source)` and `normalize.ai_model_dependencies` `(ai_model_id, component_key)`.
 
-`risk_score` and `owasp_llm_top10` are EncoreBOM extensions from Trusera ai-bom — excluded from coverage scoring.
+> `component_key` is a plain `text` column, **not** a foreign key into `normalize.components` — the referenced SBOM component usually lives in a different `bom_document_id` (a different `bom_type` document entirely) than this AIBOM, so there is no in-transaction id to reference. A reader resolves the join by string match at read time, the same situation as `crypto_assets.component_key` above.
+
+`risk_score` and `owasp_llm_top10` are AxeBOM extensions from Trusera ai-bom — excluded from coverage scoring.
 
 ### `normalize.hardware_components`  ← Table 11 (p.60–61) + §10.4.1.4 (p.62)
 

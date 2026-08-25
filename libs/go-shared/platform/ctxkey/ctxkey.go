@@ -21,6 +21,7 @@ const (
 	userID
 	role
 	sessionID
+	apiKeyScopes
 )
 
 // WithRequestID attaches a request id.
@@ -80,6 +81,28 @@ func WithSessionID(ctx context.Context, id string) context.Context {
 
 // SessionID returns the session id, or "".
 func SessionID(ctx context.Context) string { return str(ctx, sessionID) }
+
+// WithAPIKeyScopes marks a request as authenticated by an API key rather than
+// a session, and carries the scopes it was minted with.
+//
+// ⚠ ABSENT MEANS "NOT AN API KEY REQUEST", NOT "NO SCOPES". auth.Authorize
+// only narrows a permission when this returns a non-empty slice — a session
+// or service-token request never sets it, so their behaviour is unchanged. A
+// key genuinely minted with zero scopes cannot happen (apikey.go's Mint
+// refuses it), so an empty slice here is never a "key with no permissions."
+func WithAPIKeyScopes(ctx context.Context, scopes []string) context.Context {
+	if len(scopes) == 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, apiKeyScopes, scopes)
+}
+
+// APIKeyScopes returns the scopes an API-key-authenticated request carries,
+// or nil for any other kind of request.
+func APIKeyScopes(ctx context.Context) []string {
+	v, _ := ctx.Value(apiKeyScopes).([]string)
+	return v
+}
 
 func str(ctx context.Context, k key) string {
 	if v, ok := ctx.Value(k).(string); ok {

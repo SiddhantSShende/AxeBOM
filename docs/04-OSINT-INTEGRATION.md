@@ -12,7 +12,7 @@
 
 **Download pinned release binaries and pinned container images, verified by checksum and signature. Do not `git clone` and build.** Source is cloned only where no binary distribution exists, and only into gitignored `OSINT/src/` for reference.
 
-`encorebom toolctl sync` — a Go subcommand, cross-platform, no bash — reads `OSINT/tools.manifest.yaml` and populates gitignored `.encorebom/tools/<id>/<version>/`, verifying SHA256 and cosign signatures where upstream publishes them.
+`axebom toolctl sync` — a Go subcommand, cross-platform, no bash — reads `OSINT/tools.manifest.yaml` and populates gitignored `.axebom/tools/<id>/<version>/`, verifying SHA256 and cosign signatures where upstream publishes them.
 
 ### Why not build from source
 
@@ -76,10 +76,14 @@ The unit is **(tool, mode)**, not tool — see `02-CONTRACTS.md §7`.
 
 | engine_id | Upstream | Mode | Role |
 |---|---|---|---|
-| `ai-bom` | `Trusera/ai-bom` | pip package | **Code-level AI discovery** — LLM providers, agent frameworks (LangChain, CrewAI, AutoGen, LlamaIndex, LangGraph), MCP servers, model references, AI containers |
+| `ai-bom` | `Trusera/ai-bom` | **container (built locally)** | **Code-level AI discovery** — LLM providers, agent frameworks (LangChain, CrewAI, AutoGen, LlamaIndex, LangGraph), MCP servers, model references, AI containers |
 | `aibom-generator` | `GenAI-Security-Project/aibom-generator` | pip / service | **Model-metadata AIBOM** from Hugging Face — model card, config, license, completeness score |
 
-`ai-bom` is `pip install ai-bom` — no clone needed. Both emit CycloneDX 1.6, so merging is clean.
+> **`ai-bom` runs in the scan sandbox, over untrusted customer code** — its adapter (`workers/aibom/adapters/ai_bom.py`) subclasses `SandboxedAdapter`, exactly like syft or cbomkit-theia, per `CLAUDE.md` invariant 7. Upstream publishes it only as a pip package (`pip install ai-bom==3.1.0`), which gives `ManifestResolver` nothing to build a sandboxed container invocation from — so `deploy/docker/engines/Dockerfile.ai-bom` wraps that package into a container built **locally** (`task osint:build-ai-bom`, folded into `task osint:pull`), tagged `axebom/ai-bom-engine:dev`. There is no upstream image, so there is no upstream digest to pin against: `OSINT/tools.manifest.yaml` pins it by tag only (`image_tag: dev`), and `SandboxedAdapter.classify()` reports that honestly as `ENGINE_IMAGE_DIGEST_UNKNOWN` in Engine Coverage rather than claiming a digest pin it does not have. The full pip dependency closure (23 packages) is hash-pinned in `deploy/docker/engines/ai-bom-requirements.lock.txt`.
+>
+> `aibom-generator` (below) is the OTHER pip-based AIBOM engine, and it stays `pip` mode deliberately: it makes an outbound call to the Hugging Face API over a model id, not over customer code, so it runs **outside** the sandbox as a trusted dependency of the AIBOM worker's own Python environment — see `workers/aibom/adapters/aibom_generator.py` and `workers/aibom/adapters/aibom_generator_fetch.py`. The two engines' upstream distribution shape looks identical (both are "just a pip package") but what they run *against* is what decides whether they need the sandbox at all.
+
+Both emit CycloneDX 1.6, so merging is clean.
 
 `--llm-enrich` on `ai-bom` resolves concrete model names but requires an LLM key **and sends code context to a third party**. Off by default; enabling it is a per-project decision surfaced in the UI.
 
@@ -103,7 +107,7 @@ Part enrichment sits behind a `PartDataProvider` interface: `nexar` (Octopart's 
 
 | Tool | Verdict |
 |---|---|
-| **Dependency-Track** | A full platform with its own database, API and UI that duplicates a large part of EncoreBOM. Integrated as an optional **export target** for portfolio monitoring — never as a scanner. Compose profile `heavy`; **4 GB heap minimum, docs recommend 8–12 GB.** Off by default. |
+| **Dependency-Track** | A full platform with its own database, API and UI that duplicates a large part of AxeBOM. Integrated as an optional **export target** for portfolio monitoring — never as a scanner. Compose profile `heavy`; **4 GB heap minimum, docs recommend 8–12 GB.** Off by default. |
 | **django-bom / IndaBOM** | **Django applications, not libraries** — cannot be embedded. And `django-bom` is **GPL-3.0**: importing it would make our worker a GPL derivative. **Schema reference only, never imported.** See `CLAUDE.md` invariant 9. |
 | **StockFlow** | Hosted SaaS, no public source. Integrated as a **CSV import shape**. |
 | **Octopart / Nexar** | Hosted commercial API requiring registration and paid quota. Optional enrichment, never required. |
@@ -130,7 +134,7 @@ An engine with no provisioned database is **`unavailable` + `ENGINE_DB_STALE` + 
 
 Provisioning is `python -m workers.sbom.dbsync <id>`. It is **the one place that runs an engine image with a network**, and it differs from a scan in the two ways that make that acceptable: no user repository is mounted, and it is invoked by an operator rather than by a scan. It is not a weakened sandbox; it is a different operation on different data.
 
-The stamp (`encorebom-db.json`) is written by the provisioner **only after a successful download that produced bytes**, and carries the vintage that becomes `engine_db_version`. A directory with database files but no stamp is treated as absent — that is what a half-finished download leaves behind, and its vintage cannot be stated.
+The stamp (`axebom-db.json`) is written by the provisioner **only after a successful download that produced bytes**, and carries the vintage that becomes `engine_db_version`. A directory with database files but no stamp is treated as absent — that is what a half-finished download leaves behind, and its vintage cannot be stated.
 
 > ⚠ **`engine_db_version` comes from our stamp, never from the engine's self-report.** An earlier osv-scanner adapter derived it from the *image* version and described a database "bundled in the image". That image is a single 57 MB binary and bundles no database at all. The fabricated string made the `requires_db_version` check pass for an engine that had nothing to match against — the check certifying the exact condition it existed to catch.
 
@@ -164,7 +168,12 @@ cbomkit-theia dir <path>          # → CycloneDX 1.6 with cryptoProperties
 cbomkit-theia image <image@digest>
 
 # --- AIBOM ----------------------------------------------------------------
-ai-bom scan <path> --format cyclonedx -o aibom.cdx.json
+# NOT `-o aibom.cdx.json`. ai-bom==3.1.0's `--output` is a real file path with
+# no "-" -> stdout special case (`Path(path).write_text(...)`, verbatim) — the
+# sandbox has no writable host mount, so a file written inside the container is
+# unreachable. Omit `--output`: for any non-`table` format ai-bom prints the
+# rendered report straight to stdout, which is the one channel that exists.
+ai-bom scan <path> --format cyclonedx --quiet
 python -m src.cli <hf-model-id> --output model.cdx.json
 ```
 
@@ -203,11 +212,11 @@ CycloneDX `cryptoProperties` maps almost directly: `oid`, `assetType`, `algorith
 
 > Remember the discriminator: `assetType` selects **which field set applies**, and coverage is scored against that set only. See `03-NORMALIZER-SPEC.md §5.3`.
 
-`quantum_vulnerable` is EncoreBOM's derivation, not a tool output: true for RSA, ECC/ECDSA/ECDH, DH, DSA (Shor-vulnerable). Symmetric primitives get a Grover note on effective key strength, not a vulnerability flag.
+`quantum_vulnerable` is AxeBOM's derivation, not a tool output: true for RSA, ECC/ECDSA/ECDH, DH, DSA (Shor-vulnerable). Symmetric primitives get a Grover note on effective key strength, not a vulnerability flag.
 
 ### AI models (CERT-In Table 10)
 
-CycloneDX ML-BOM `modelCard`, `component.properties`, and `data` components; plus Trusera risk properties (`risk_score`, OWASP LLM Top-10) which are **EncoreBOM extensions excluded from coverage scoring**.
+CycloneDX ML-BOM `modelCard`, `component.properties`, and `data` components; plus Trusera risk properties (`risk_score`, OWASP LLM Top-10) which are **AxeBOM extensions excluded from coverage scoring**.
 
 ### Hardware (CERT-In Table 11 + §10.4.1.4)
 
@@ -249,8 +258,8 @@ Adapters **ignore unknown fields**, emit a diagnostic on missing expected fields
 
 ## 6. Licensing
 
-EncoreBOM **invokes** these tools as subprocesses and services. It does not fork, embed, or relicense them. Every tool's license is recorded in `OSINT/tools.manifest.yaml` and tracked in EncoreBOM's own SBOM — a BOM platform that cannot produce its own BOM is not credible.
+AxeBOM **invokes** these tools as subprocesses and services. It does not fork, embed, or relicense them. Every tool's license is recorded in `OSINT/tools.manifest.yaml` and tracked in AxeBOM's own SBOM — a BOM platform that cannot produce its own BOM is not credible.
 
-**Copyleft rule:** GPL/AGPL code runs as a **subprocess or separate service**, or not at all. It is never imported, linked, or vendored into an EncoreBOM binary. `django-bom` (GPL-3.0) is the concrete case: schema reference only.
+**Copyleft rule:** GPL/AGPL code runs as a **subprocess or separate service**, or not at all. It is never imported, linked, or vendored into an AxeBOM binary. `django-bom` (GPL-3.0) is the concrete case: schema reference only.
 
 Before adding any dependency or engine, check its license and record it in the manifest. This check is part of the phase handoff checklist, not an afterthought.

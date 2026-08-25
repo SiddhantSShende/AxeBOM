@@ -21,14 +21,14 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/encorebom/encorebom/libs/go-shared/auth"
-	"github.com/encorebom/encorebom/libs/go-shared/authz"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/ctxkey"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/errs"
-	"github.com/encorebom/encorebom/libs/go-shared/platform/httpx"
-	"github.com/encorebom/encorebom/services/report/internal/service"
-	"github.com/encorebom/encorebom/services/report/internal/share"
-	"github.com/encorebom/encorebom/services/report/internal/store"
+	"github.com/axebom/axebom/libs/go-shared/auth"
+	"github.com/axebom/axebom/libs/go-shared/authz"
+	"github.com/axebom/axebom/libs/go-shared/platform/ctxkey"
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/libs/go-shared/platform/httpx"
+	"github.com/axebom/axebom/services/report/internal/service"
+	"github.com/axebom/axebom/services/report/internal/share"
+	"github.com/axebom/axebom/services/report/internal/store"
 )
 
 // Handler serves the report endpoints.
@@ -49,6 +49,32 @@ func New(svc *service.Service, now func() time.Time) *Handler {
 // Wire types
 // ---------------------------------------------------------------------------
 
+type coverageFieldDTO struct {
+	FieldID    string `json:"field_id"`
+	Name       string `json:"name"`
+	Present    int    `json:"present"`
+	Declared   int    `json:"declared"`
+	Total      int    `json:"total"`
+	Weight     int    `json:"weight"`
+	SourcePage int    `json:"source_page"`
+}
+
+type engineCoverageDTO struct {
+	EngineID        string   `json:"engine_id"`
+	Version         string   `json:"version"`
+	Status          string   `json:"status"`
+	DatabaseVersion string   `json:"database_version"`
+	Ecosystems      []string `json:"ecosystems"`
+	Diagnostic      string   `json:"diagnostic"`
+}
+
+// siblingDTO is another rendered format of the same scan and BOM type.
+type siblingDTO struct {
+	ID     string `json:"id"`
+	Format string `json:"format"`
+	Status string `json:"status"`
+}
+
 type reportResponse struct {
 	ID       string `json:"id"`
 	ScanID   string `json:"scan_id"`
@@ -68,6 +94,26 @@ type reportResponse struct {
 	Truncated      bool   `json:"truncated"`
 	TruncationNote string `json:"truncation_note,omitempty"`
 
+	// ⚠ EVERYTHING BELOW IS OMITTED — NEVER ZERO/FALSE/EMPTY — FOR A REPORT
+	// THAT HAS NOT REACHED `ready`. It is captured once, in store.Completion,
+	// from the exact render.BOM that produced the artifact; a queued or
+	// rendering report has none of it yet, and sending a zero value here would
+	// read as "measured, and empty" rather than "not yet measured"
+	// (CLAUDE.md invariant 3).
+	ProjectName            string              `json:"project_name,omitempty"`
+	GeneratedAt            string              `json:"generated_at,omitempty"`
+	LevelNote              string              `json:"level_note,omitempty"`
+	CompletenessPct        *float64            `json:"completeness_pct,omitempty"`
+	DeclarationPct         *float64            `json:"declaration_pct,omitempty"`
+	CoverageFormula        string              `json:"coverage_formula,omitempty"`
+	CoverageFields         []coverageFieldDTO  `json:"coverage_fields,omitempty"`
+	Engines                []engineCoverageDTO `json:"engines,omitempty"`
+	EcosystemsWithNoEngine []string            `json:"ecosystems_with_no_engine,omitempty"`
+
+	// Siblings is populated only by Get, which fetches it as a separate,
+	// live, same-schema query — see Handler.Get and store.Store.Siblings.
+	Siblings []siblingDTO `json:"siblings,omitempty"`
+
 	ErrorCode string `json:"error_code,omitempty"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
@@ -78,8 +124,12 @@ type reportResponse struct {
 // ⚠ storage_ref IS NOT EXPOSED. It is an object-store key, and a client that
 // learns the key naming scheme learns how to guess at other tenants' keys.
 // Downloads go through this service, which re-checks the tenant every time.
-func toResponse(r store.Report) reportResponse {
-	return reportResponse{
+//
+// siblings is nil for every caller except Get — List and Create answer many
+// reports or a just-queued one respectively, and a sibling list per row would
+// be an N+1 query for a field only the single-report view uses.
+func toResponse(r store.Report, siblings []store.ReportSibling) reportResponse {
+	resp := reportResponse{
 		ID:             r.ID,
 		ScanID:         r.ScanID,
 		BOMType:        r.BOMType,
@@ -93,10 +143,40 @@ func toResponse(r store.Report) reportResponse {
 		SigningKeyID:   r.SigningKeyID,
 		Truncated:      r.Truncated,
 		TruncationNote: r.TruncationNote,
-		ErrorCode:      r.ErrorCode,
-		CreatedAt:      r.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:      r.UpdatedAt.UTC().Format(time.RFC3339),
+
+		ProjectName:            r.ProjectName,
+		GeneratedAt:            r.BOMGeneratedAt,
+		LevelNote:              r.LevelNote,
+		CompletenessPct:        r.CompletenessPct,
+		DeclarationPct:         r.DeclarationPct,
+		CoverageFormula:        r.CoverageFormula,
+		EcosystemsWithNoEngine: r.EcosystemsWithNoEngine,
+
+		ErrorCode: r.ErrorCode,
+		CreatedAt: r.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt: r.UpdatedAt.UTC().Format(time.RFC3339),
 	}
+
+	for _, fc := range r.CoverageFields {
+		resp.CoverageFields = append(resp.CoverageFields, coverageFieldDTO{
+			FieldID: fc.FieldID, Name: fc.Name, Present: fc.Present,
+			Declared: fc.Declared, Total: fc.Total,
+			Weight: fc.Weight, SourcePage: fc.SourcePage,
+		})
+	}
+	for _, e := range r.Engines {
+		resp.Engines = append(resp.Engines, engineCoverageDTO{
+			EngineID: e.EngineID, Version: e.Version, Status: e.Status,
+			DatabaseVersion: e.DatabaseVersion, Ecosystems: e.Ecosystems, Diagnostic: e.Diagnostic,
+		})
+	}
+	for _, sib := range siblings {
+		resp.Siblings = append(resp.Siblings, siblingDTO{
+			ID: sib.ID, Format: sib.Format, Status: string(sib.Status),
+		})
+	}
+
+	return resp
 }
 
 // ---------------------------------------------------------------------------
@@ -145,7 +225,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	errs.WriteJSON(w, http.StatusAccepted, toResponse(report))
+	errs.WriteJSON(w, http.StatusAccepted, toResponse(report, nil))
 }
 
 // Get returns one report's metadata.
@@ -161,7 +241,16 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		errs.Write(w, r, mapNotFound(err))
 		return
 	}
-	errs.WriteJSON(w, http.StatusOK, toResponse(report))
+
+	// ⚠ NOT FATAL. Siblings is a same-schema convenience list; failing the
+	// whole report view over it would refuse a page the customer can
+	// otherwise read completely.
+	siblings, err := h.svc.Siblings(r.Context(), tenantID, report)
+	if err != nil {
+		siblings = nil
+	}
+
+	errs.WriteJSON(w, http.StatusOK, toResponse(report, siblings))
 }
 
 // List returns a tenant's reports.
@@ -182,7 +271,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]reportResponse, 0, len(reports))
 	for _, rep := range reports {
-		out = append(out, toResponse(rep))
+		out = append(out, toResponse(rep, nil))
 	}
 	errs.WriteJSON(w, http.StatusOK, map[string]any{"reports": out})
 }
@@ -273,13 +362,13 @@ func writeDownloadHeaders(w http.ResponseWriter, report store.Report) {
 	// The digest lets a client verify without the signature, and it is the
 	// value the detached signature also covers.
 	if report.SHA256 != "" {
-		w.Header().Set("X-EncoreBOM-SHA256", report.SHA256)
+		w.Header().Set("X-AxeBOM-SHA256", report.SHA256)
 	}
 	if report.SigningKeyID != "" {
-		w.Header().Set("X-EncoreBOM-Signing-Key", report.SigningKeyID)
+		w.Header().Set("X-AxeBOM-Signing-Key", report.SigningKeyID)
 	}
 	if report.Truncated {
-		w.Header().Set("X-EncoreBOM-Truncated", "true")
+		w.Header().Set("X-AxeBOM-Truncated", "true")
 	}
 }
 
@@ -630,7 +719,7 @@ func filename(r store.Report) string {
 	case "cyclonedx":
 		ext = "cdx.json"
 	}
-	return "encorebom-" + safeFilenamePart(r.ID) + "." + ext
+	return "axebom-" + safeFilenamePart(r.ID) + "." + ext
 }
 
 // safeFilenamePart reduces a value to characters a filename may hold.

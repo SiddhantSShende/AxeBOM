@@ -18,7 +18,7 @@ Profile `certin-v2.0` revision 1, generated from `docs/reference/certin-v2.0.yam
 A value of `not-provided` is *reported* but scores zero for completeness,
 because omitting a field hides a gap while declaring it states one.
 
-**Weights are EncoreBOM's judgement, not CERT-In's.** The guideline assigns no
+**Weights are AxeBOM's judgement, not CERT-In's.** The guideline assigns no
 weights. They exist so a single percentage can be produced; the per-element
 table below is the unweighted evidence, and it is the part to check.
 
@@ -29,7 +29,7 @@ having guessed. `imported` means structured entry; for hardware it is the
 only form, because no tool discovers physical parts.
 
 **What this document does not say.** It does not assert that any project is
-compliant. EncoreBOM reports violations against a configured policy; compliance
+compliant. AxeBOM reports violations against a configured policy; compliance
 is a determination an auditor makes about an organisation.
 
 

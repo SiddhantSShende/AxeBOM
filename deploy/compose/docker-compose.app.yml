@@ -1,0 +1,402 @@
+# ============================================================================
+# AxeBOM — application tier
+# ============================================================================
+#   task dev         -> docker-compose.yml + THIS FILE   (infra + the product)
+#   task dev:infra   -> docker-compose.yml only          (infra alone)
+#
+# Layered as an overlay rather than merged into docker-compose.yml so the
+# infrastructure file keeps its stated scope and can still be run alone —
+# useful when running services from an IDE against real backing stores.
+#
+# ---------------------------------------------------------------------------
+# WHY THERE ARE NO HEALTHCHECK BLOCKS ON THE GO SERVICES
+#
+# They run on distroless/static: no shell, no curl, no wget. A Docker
+# HEALTHCHECK needs a command inside the container, so there is nothing to run.
+# The alternative — a debug base image with busybox — would put a shell into
+# every production container to satisfy a status column, which is a bad trade.
+#
+# Readiness is still real and still exposed: every service serves /readyz, the
+# gateway probes all seven upstreams and reports each one by name, and
+# `task health` curls them. `docker compose ps` will say "Up", not "healthy",
+# and that is the honest limit of what the container runtime can observe here.
+# ---------------------------------------------------------------------------
+
+name: axebom
+
+# --------------------------------------------------------------- shared env
+# Inside the compose network, services reach each other by SERVICE NAME on the
+# UPSTREAM port — not by localhost on the published 5xxxx port. The 5xxxx
+# mapping exists for the host only.
+x-service-env: &service-env
+  AXEBOM_ENV: ${AXEBOM_ENV:-development}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  LOG_FORMAT: ${LOG_FORMAT:-json}
+
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: 5432
+  POSTGRES_DB: ${POSTGRES_DB:-axebom}
+  POSTGRES_USER: ${POSTGRES_USER:-axebom}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-axebom}
+  POSTGRES_APP_ROLE: ${POSTGRES_APP_ROLE:-axebom_app}
+  POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-axebom_app}
+  POSTGRES_SSLMODE: disable
+
+  NATS_URL: nats://nats:4222
+  REDIS_URL: redis://redis:6379/0
+
+  S3_ENDPOINT: http://minio:9000
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_BUCKET: ${S3_BUCKET:-axebom}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
+  S3_FORCE_PATH_STYLE: "true"
+
+  VAULT_ADDR: http://vault:8200
+  VAULT_TOKEN: ${VAULT_TOKEN:-dev-root-token}
+
+  # Mailpit, the same one ZITADEL already sends real mail to — never a real
+  # relay in this compose file. 1025 is the INTERNAL port; 51025 (SMTP_PORT)
+  # is only for a caller on the host, same relationship as POSTGRES_HOST/PORT.
+  SMTP_HOST: mailpit
+  SMTP_PORT: 1025
+  SMTP_USERNAME: ${SMTP_USERNAME:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_FROM: ${SMTP_FROM:-noreply@axebom.test}
+
+  JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-dev-only-insecure-signing-key-do-not-use-in-production}
+  JWT_ISSUER: ${JWT_ISSUER:-axebom}
+
+  # --- Identity ------------------------------------------------------------
+  # ⚠ TWO ADDRESSES FOR ONE SERVER, AND THEY ARE NOT INTERCHANGEABLE.
+  #
+  # ZITADEL_ISSUER is the PUBLIC origin. ZITADEL bakes it into the `iss` claim
+  # of every token it mints, so it is what services must validate against —
+  # even though they cannot reach it.
+  #
+  # ZITADEL_INTERNAL_URL is how a service actually reaches ZITADEL from inside
+  # this network, where localhost:5173 resolves to the container itself. Keys
+  # are fetched over it, and the service-token minter calls it while
+  # overriding the Host header so the token still carries the public issuer.
+  #
+  # Set them to the same value and either tokens cannot be verified or the IdP
+  # cannot be reached.
+  ZITADEL_ISSUER: ${ZITADEL_ISSUER:-http://localhost:5173}
+  ZITADEL_INTERNAL_URL: http://zitadel-api:8080
+  # Written by `axebom iam bootstrap`, which prints it as a pasteable line.
+  # Empty means every service refuses to start rather than answering 401 to
+  # every request — see oidcauth.NewVerifier.
+  ZITADEL_PROJECT_ID: ${ZITADEL_PROJECT_ID:-}
+  # Read only by the gateway, which publishes it at GET /v1/auth/config so the
+  # browser bundle stays environment-neutral. Harmless everywhere else.
+  ZITADEL_SPA_CLIENT_ID: ${ZITADEL_SPA_CLIENT_ID:-}
+
+  GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+  GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+  GITHUB_REDIRECT_URL: ${GITHUB_REDIRECT_URL:-http://localhost:5173/auth/github/callback}
+  FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+
+  # Upstreams, by service name. NEVER derived from a request header.
+  AUTH_URL: http://auth:8091
+  PROJECT_URL: http://project:8092
+  SCAN_ORCHESTRATOR_URL: http://scan-orchestrator:8093
+  REPORT_URL: http://report:8094
+  CAMPAIGN_URL: http://campaign:8095
+  COMMENT_URL: http://comment:8096
+  NOTIFICATION_URL: http://notification:8097
+
+  # METRICS_PORT is deliberately NOT set. It is a single global; setting it
+  # here would put all eight services on one port and every one after the
+  # first would die with "address already in use". Each derives HTTP+10000.
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+  networks: [default]
+
+services:
+
+  # -------------------------------------------------------------- migrations
+  # One-shot. Everything else waits for it to exit 0, so no service can start
+  # against a schema that does not exist yet, and eight services never race to
+  # apply the same goose migrations.
+  migrate:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.cli
+    image: axebom/cli:dev
+    environment:
+      <<: *service-env
+    command: ["db", "migrate"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  # ------------------------------------------------------------------ gateway
+  # The ONLY service published to the host on its own port. Everything else is
+  # reachable only inside the compose network — a service that cannot be
+  # addressed directly cannot have its authentication bypassed by addressing it
+  # directly.
+  gateway:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.gateway
+    image: axebom/gateway:dev
+    environment:
+      <<: *service-env
+      # Self-service organisation signup (services/gateway/internal/signup).
+      # Empty in config.OIDC.ProvisioningKeyPath by default; setting it here
+      # is what turns the feature on for the `task dev` stack. Same key
+      # `axebom iam bootstrap` uses — see the package doc for why there is no
+      # narrower ZITADEL credential for "can create organisations".
+      ZITADEL_BOOTSTRAP_KEY: /zitadel/bootstrap/admin-sa.json
+    volumes:
+      # Read-only: this container creates organisations and users through
+      # ZITADEL's API, never touches ZITADEL's own database or filesystem.
+      - ./.data/zitadel-bootstrap:/zitadel/bootstrap:ro
+    ports: ["${GATEWAY_PORT:-8080}:8080"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      # The admin key this container reads doesn't exist until the ZITADEL
+      # one-shot writes it. Without this, a gateway that starts first simply
+      # runs with signup permanently disabled for its lifetime — nothing
+      # retries the connection later.
+      zitadel-setup:
+        condition: service_completed_successfully
+
+  auth:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.auth
+    image: axebom/auth:dev
+    environment:
+      <<: *service-env
+
+  project:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.project
+    image: axebom/project:dev
+    environment:
+      <<: *service-env
+
+  scan-orchestrator:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.scan-orchestrator
+    image: axebom/scan-orchestrator:dev
+    environment:
+      <<: *service-env
+
+  report:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.report
+    image: axebom/report:dev
+    environment:
+      <<: *service-env
+
+  campaign:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.campaign
+    image: axebom/campaign:dev
+    environment:
+      <<: *service-env
+      # campaign -> scan-orchestrator. One of only two services that PRESENT a
+      # credential rather than merely verifying one.
+      ZITADEL_SERVICE_KEY_PATH: /var/run/axebom/service-keys/svc-campaign.json
+    # ⚠ NEEDED TO READ THE KEY ABOVE. It is written 0640 by
+    # `axebom iam bootstrap` under the developer's own uid; this container
+    # runs as distroless nonroot. Joining the file's group is what lets it read
+    # without the key being made world-readable — which on a shared machine is
+    # the same as publishing it.
+    group_add: ["${HOST_GID:-1000}"]
+    volumes:
+      # Read-only: this process must never rewrite its own key. Minted by
+      # `axebom iam bootstrap`; the service refuses to start without it,
+      # because a campaign that cannot trigger a scan is a scheduler that
+      # silently does nothing.
+      - ./.data/zitadel-bootstrap/service-keys:/var/run/axebom/service-keys:ro
+
+  comment:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.comment
+    image: axebom/comment:dev
+    environment:
+      <<: *service-env
+
+  notification:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.notification
+    image: axebom/notification:dev
+    environment:
+      <<: *service-env
+
+  # ------------------------------------------------------------------ fetcher
+  # ⚠ THE ONLY SERVICE THAT HOLDS A GIT CREDENTIAL (ADR-0008).
+  #
+  # Deliberately NOT published to the host and not reachable from the gateway:
+  # work arrives only over the queue. A service holding repository tokens should
+  # not also sit behind the request path.
+  #
+  # It needs the Docker socket because the clone runs in a container — the one
+  # sandboxed operation that must reach the network. fetcher.FetcherPolicy()
+  # names that exception; everything else in the policy (read-only rootfs,
+  # dropped capabilities, non-root, seccomp, quotas) is unchanged.
+  fetcher:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.fetcher
+    image: axebom/fetcher:dev
+    environment:
+      <<: *service-env
+      # fetcher -> project, to resolve where a scan's code lives.
+      ZITADEL_SERVICE_KEY_PATH: /var/run/axebom/service-keys/svc-fetcher.json
+    # DOCKER_GID for the socket below; HOST_GID to read the service key above.
+    # See the campaign service for why the key is group-readable.
+    group_add: ["${DOCKER_GID:-986}", "${HOST_GID:-1000}"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Read-only. See the campaign service above.
+      - ./.data/zitadel-bootstrap/service-keys:/var/run/axebom/service-keys:ro
+      # Clones land here before being archived. Identical host and container
+      # paths, for the same sibling-container reason as the workers: the daemon
+      # resolves mount paths host-side.
+      #
+      # ⚠ THE DIRECTORY MUST BE MODE 1777 ON THE HOST.
+      #
+      # This service runs as distroless `nonroot` (uid 65532) while the scan
+      # workers run as root, and both write here. A directory owned by either
+      # one leaves the other unable to create its per-scan subdirectory, and the
+      # failure is a bare "permission denied" from mkdir on a retryable path —
+      # so the job naks, redelivers, and naks forever while the queue stalls.
+      # Sticky, like /tmp: each writer owns its own subtree and cannot remove
+      # another's.
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/workspaces:/var/lib/axebom/workspaces
+
+  # ----------------------------------------------------------- scan workers
+  # ⚠ THE WORKER MOUNTS THE DOCKER SOCKET. See deploy/docker/Dockerfile.worker
+  # for why that is accepted and what bounds it. Short version: engines run as
+  # sibling containers with --network=none, a read-only rootfs, all caps
+  # dropped and uid 65534, and the worker holds no credentials to leak.
+  #
+  # group_add gives the container the host's docker group so it can reach the
+  # socket without running privileged. DOCKER_GID differs per host; find it
+  # with `getent group docker | cut -d: -f3`.
+  sbom-worker:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.worker
+    image: axebom/worker:dev
+    environment:
+      <<: *service-env
+      AXEBOM_WORKER_FAMILY: sbom
+    group_add: ["${DOCKER_GID:-986}"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+      # ⚠ HOST PATH AND CONTAINER PATH MUST BE IDENTICAL. These are bind
+      # mounts, not named volumes, and that is forced by how engines run.
+      #
+      # The worker starts engines as SIBLING containers on the host daemon. Any
+      # -v it passes is resolved by the DAEMON, against the HOST filesystem —
+      # not inside this container. With a named volume mounted at
+      # /var/lib/axebom/enginedb, the worker would ask the daemon to mount
+      # that path from the host, where nothing exists, and the daemon would
+      # silently create an empty directory. The engine then starts with no
+      # database and osv-scanner reports {"results": []} and exits 0 — a clean
+      # bill of health for a scan that checked nothing.
+      #
+      # Identical paths on both sides make the worker's view and the daemon's
+      # view the same, so a path is meaningful wherever it is used.
+      #
+      # ~4.5 GB once provisioned (`task osint:dbsync`).
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/enginedb:/var/lib/axebom/enginedb
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/workspaces:/var/lib/axebom/workspaces
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/artifacts:/var/lib/axebom/artifacts
+
+  # One image, one process per family — NOT one process consuming five
+  # subjects. A WorkQueue consumer is per filter subject, and mixing families in
+  # one process would make a slow SBOM scan block a CBOM job behind it while
+  # both shared one max_ack_pending budget.
+  cbom-worker:
+    <<: *service-defaults
+    image: axebom/worker:dev
+    environment:
+      <<: *service-env
+      AXEBOM_WORKER_FAMILY: cbom
+    group_add: ["${DOCKER_GID:-986}"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/enginedb:/var/lib/axebom/enginedb
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/workspaces:/var/lib/axebom/workspaces
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/artifacts:/var/lib/axebom/artifacts
+
+  aibom-worker:
+    <<: *service-defaults
+    image: axebom/worker:dev
+    environment:
+      <<: *service-env
+      AXEBOM_WORKER_FAMILY: aibom
+    group_add: ["${DOCKER_GID:-986}"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/enginedb:/var/lib/axebom/enginedb
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/workspaces:/var/lib/axebom/workspaces
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/artifacts:/var/lib/axebom/artifacts
+
+  # ⚠ NO qbom-worker OR hbom-worker, DELIBERATELY.
+  #
+  # Neither family is a scan, so neither has a sandboxed engine to dispatch:
+  #
+  #   qbom  is a DERIVATION from CBOM crypto assets with quantum-vulnerability
+  #         rules applied, plus Table 8 device metadata captured by form. There
+  #         is no quantum-hardware scanner. The registry marks qbom-derive
+  #         `derived: true`.
+  #   hbom  is a CSV/form IMPORT. There is no open-source HBOM scanner. The
+  #         registry marks hbom-csv `requires_import: true`.
+  #
+  # Adding a worker for either would mean inventing a scan where none exists —
+  # exactly the overselling CLAUDE.md's honest-labels section forbids. The real
+  # gap is on the Go side: the orchestrator's fan-out does not currently skip
+  # engines flagged `derived` or `requires_import`, so it would publish jobs
+  # nobody should consume. That is recorded in docs/STATE.md.
+
+  # ----------------------------------------------------------------- frontend
+  frontend:
+    restart: unless-stopped
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.frontend
+      # Vite inlines these during the build, so they cannot be passed as
+      # runtime environment. Changing one changes the build args, which is what
+      # makes compose rebuild the image after `task iam:bootstrap` mints new
+      # ids — without that, the SPA keeps a client id ZITADEL has forgotten.
+      args:
+        VITE_OIDC_ISSUER: ${ZITADEL_ISSUER:-http://localhost:5173}
+        VITE_OIDC_CLIENT_ID: ${ZITADEL_SPA_CLIENT_ID:-}
+        VITE_OIDC_PROJECT_ID: ${ZITADEL_PROJECT_ID:-}
+    image: axebom/frontend:dev
+    depends_on: [gateway]
+    ports: ["${FRONTEND_PORT:-5173}:8085"]
+    networks: [default]
+
+networks:
+  default:
+    name: axebom

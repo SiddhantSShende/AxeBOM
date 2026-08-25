@@ -32,7 +32,7 @@ CREATE TABLE report.reports (
     size_bytes        bigint CHECK (size_bytes IS NULL OR size_bytes >= 0),
 
     -- Detached Ed25519 signature. CERT-In §5.3.3.2 and §5.3.5: integrity, and
-    -- consumer-side verification via `encorebom verify`.
+    -- consumer-side verification via `axebom verify`.
     signature         text,
     signing_key_id    text,
 
