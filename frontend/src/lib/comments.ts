@@ -31,7 +31,8 @@ export interface Comment {
 export function useComments(reportId: string | undefined) {
   return useQuery({
     queryKey: ['comments', reportId],
-    queryFn: () => request<{ comments: Comment[] }>(`/v1/comments?report_id=${reportId}`),
+    queryFn: ({ signal }) =>
+      request<{ comments: Comment[] }>(`/v1/comments?report_id=${reportId}`, { signal }),
     enabled: Boolean(reportId),
     staleTime: 10_000,
   });

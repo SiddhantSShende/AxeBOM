@@ -61,7 +61,7 @@ export function Findings() {
 
   const query = useQuery({
     queryKey: ['findings', id],
-    queryFn: () => api.get<{ findings: Finding[] }>(`/v1/projects/${id}/findings`),
+    queryFn: ({ signal }) => api.get<{ findings: Finding[] }>(`/v1/projects/${id}/findings`, signal),
     staleTime: 30_000,
   });
 

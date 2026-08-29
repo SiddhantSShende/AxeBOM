@@ -94,6 +94,12 @@ func registerRoutes(mux *http.ServeMux, d *deps) {
 	mux.Handle("GET /v1/projects/{id}/uploads",
 		guard(authz.ResourceUpload, authz.ActionRead, h.ListUploads))
 
+	// --- Web sources ----------------------------------------------------------
+	mux.Handle("POST /v1/projects/{id}/web-sources",
+		guard(authz.ResourceWebSource, authz.ActionCreate, h.CreateWebSource))
+	mux.Handle("GET /v1/projects/{id}/web-sources",
+		guard(authz.ResourceWebSource, authz.ActionRead, h.ListWebSources))
+
 	// --- Dependencies and findings -------------------------------------------
 	// normalize.components and normalize.findings, read cross-schema — see
 	// internal/store/dependencies.go and internal/store/findings.go.

@@ -75,6 +75,33 @@ type Config struct {
 	// `task iam:reset`, and this override is a property of the client that
 	// travels with the code instead.
 	PublicHost string
+
+	// PublicScheme is the scheme of the PUBLIC issuer PublicHost belongs to
+	// ("https" ordinarily, "http" only for a stack that has never turned
+	// ZITADEL_EXTERNALSECURE on) — used ONLY to construct that issuer for the
+	// PublicHost override below; it is independent of Insecure, which is
+	// about the TRANSPORT this dials, not what the public origin looks like.
+	//
+	// ⚠ NOT THE SAME THING AS Insecure, AND CONFLATING THEM IS A REAL BUG
+	// THIS FIELD FIXES. TLS terminates at nginx (docker-compose.iam.yml:
+	// ZITADEL_TLS_ENABLED is unconditionally "false") — ZITADEL's own
+	// container never speaks TLS on the direct port either caller here
+	// dials, so Insecure is correctly true/plaintext for BOTH callers
+	// regardless of ZITADEL_EXTERNALSECURE. But the PUBLIC issuer ZITADEL
+	// reports doesn't care how you dialed it — it reflects
+	// ZITADEL_EXTERNALSECURE, which can be "https" while the transport
+	// dialing it stays plaintext. Deriving the issuer's scheme from Insecure
+	// (the old behavior, when this field is left empty) makes that
+	// combination — plaintext transport, https public issuer — construct the
+	// wrong issuer and fail discovery's issuer-match check with exactly the
+	// confusing error this comment is trying to prevent someone re-debugging:
+	// "issuer does not match".
+	//
+	// Empty falls back to deriving it from Insecure, matching the behavior
+	// before this field existed — every caller should still set it
+	// explicitly once ZITADEL_EXTERNALSECURE can be true, which by now is
+	// both of them.
+	PublicScheme string
 }
 
 // Client is an authenticated connection to ZITADEL's management APIs.
@@ -116,9 +143,16 @@ func Connect(ctx context.Context, cfg Config) (*Client, error) {
 	// ⚠ ONLY BUILT WHEN NEEDED — see the field comment on Config.PublicHost.
 	var auth publicHostAuth
 	if cfg.PublicHost != "" && cfg.PublicHost != z.Host() {
-		scheme := "https"
-		if cfg.Insecure {
-			scheme = "http"
+		scheme := cfg.PublicScheme
+		if scheme == "" {
+			// Pre-PublicScheme fallback — see that field's own comment for
+			// why this derivation is wrong once Insecure (transport) and the
+			// public issuer's scheme can differ, which callers should avoid
+			// hitting by setting PublicScheme explicitly.
+			scheme = "https"
+			if cfg.Insecure {
+				scheme = "http"
+			}
 		}
 		auth = publicHostAuth{
 			httpClient: &http.Client{

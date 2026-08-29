@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -47,6 +48,8 @@ func runSource(ctx context.Context, args []string) error {
 	switch args[0] {
 	case "materialize":
 		return sourceMaterialize(ctx, args[1:])
+	case "fetch-artifact":
+		return sourceFetchArtifact(ctx, args[1:])
 	default:
 		return fmt.Errorf("unknown source subcommand %q", args[0])
 	}
@@ -192,6 +195,89 @@ func sourceMaterialize(ctx context.Context, args []string) error {
 
 	fmt.Printf("materialized %s -> %s (%d files, %d bytes)\n",
 		*uri, *dest, res.Files, res.UncompressedB)
+	return nil
+}
+
+// sourceFetchArtifact downloads one object-storage artifact VERBATIM — no
+// extraction, no archive format at all.
+//
+// # Why this exists alongside `materialize`
+//
+// `materialize` downloads and EXTRACTS a content-addressed source archive —
+// the right tool for a tree of files. A native SBOM document the fetcher
+// staged (e.g. GitHub's Dependency Graph SBOM export) is a single JSON file,
+// not an archive: extracting it would be a category error, and this
+// subcommand is the single-file equivalent, sharing the same object-storage
+// client and the same atomic-publish discipline so a second Python
+// implementation of "safely fetch one object" never has to exist.
+func sourceFetchArtifact(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("source fetch-artifact", flag.ContinueOnError)
+	var (
+		uri  = fs.String("uri", "", "object-storage key of the artifact")
+		dest = fs.String("dest", "", "file path to write the artifact to")
+	)
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: axebom source fetch-artifact --uri <key> --dest <file>")
+		fmt.Fprintln(os.Stderr,
+			"\nDownloads one object-storage artifact verbatim — no extraction. For a\n"+
+				"single-file native document (e.g. a GitHub Dependency Graph SBOM) staged\n"+
+				"by the fetcher alongside the source archive, not for the archive itself.")
+	}
+	if err := fs.Parse(args); err != nil {
+		return exitError{code: 2, err: err}
+	}
+	if *uri == "" || *dest == "" {
+		fs.Usage()
+		return exitError{code: 2, err: errors.New("--uri and --dest are required")}
+	}
+
+	cfg, err := config.LoadService("gateway")
+	if err != nil {
+		return err
+	}
+	store, err := blob.Open(ctx, cfg.S3)
+	if err != nil {
+		return fmt.Errorf("open object storage: %w", err)
+	}
+
+	rc, err := store.Get(ctx, *uri)
+	if err != nil {
+		return fmt.Errorf("fetching %s: %w", *uri, err)
+	}
+	defer func() { _ = rc.Close() }()
+
+	if err := os.MkdirAll(filepath.Dir(*dest), 0o755); err != nil { // #nosec G301 -- shared scan workspace
+		return fmt.Errorf("preparing %s: %w", filepath.Dir(*dest), err)
+	}
+
+	// Sibling temp file, then rename — the same atomic-publish discipline
+	// sourceMaterialize uses, for the same reason: several workers can race to
+	// fetch the identical artifact, and a half-written file must never be
+	// visible under the final name.
+	tmp, err := os.CreateTemp(filepath.Dir(*dest), ".fetch-artifact-*")
+	if err != nil {
+		return fmt.Errorf("staging %s: %w", *dest, err)
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+
+	n, copyErr := io.Copy(tmp, rc)
+	closeErr := tmp.Close()
+	if copyErr != nil {
+		return fmt.Errorf("downloading %s: %w", *uri, copyErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("writing %s: %w", *dest, closeErr)
+	}
+	// #nosec G302 -- read by this process and by the same-uid Python worker
+	// that invoked this CLI, never by a container running as a different uid.
+	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
+		return fmt.Errorf("setting permissions on %s: %w", *dest, err)
+	}
+	if err := os.Rename(tmp.Name(), *dest); err != nil {
+		return fmt.Errorf("publishing %s: %w", *dest, err)
+	}
+
+	fmt.Printf("fetched %s -> %s (%d bytes)\n", *uri, *dest, n)
 	return nil
 }
 

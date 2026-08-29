@@ -45,6 +45,14 @@ type Config struct {
 	// FrontendURL is where the OAuth callback lands the browser.
 	FrontendURL string
 	RefreshTTL  time.Duration
+
+	// GitHubRedirectURL and GitHubConnectRedirectURL are the two callback URLs
+	// registered on the same GitHub OAuth App — sign-in and the repo-scoped
+	// "connect" flow (see service.GitHubClient.AuthorizeEndpoint) must send
+	// GitHub the exact redirect_uri they will call back to, and the two flows
+	// use different ones.
+	GitHubRedirectURL        string
+	GitHubConnectRedirectURL string
 }
 
 func New(svc *service.Service, gh *service.GitHubClient, cfg Config) *Handler {
@@ -238,7 +246,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 
 // GitHubAuthorize handles GET /v1/auth/github/authorize.
 func (h *Handler) GitHubAuthorize(w http.ResponseWriter, r *http.Request) {
-	redirect, state, err := h.svc.BeginGitHubLogin(h.github)
+	redirect, state, err := h.svc.BeginGitHubLogin(h.github, h.cfg.GitHubRedirectURL)
 	if err != nil {
 		errs.Write(w, r, err)
 		return
@@ -283,7 +291,8 @@ func (h *Handler) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pair, err := h.svc.CompleteGitHubLogin(r.Context(), h.github,
-		r.URL.Query().Get("code"), r.URL.Query().Get("state"), want, metaOf(r))
+		r.URL.Query().Get("code"), r.URL.Query().Get("state"), want,
+		h.cfg.GitHubRedirectURL, metaOf(r))
 	if err != nil {
 		errs.Write(w, r, err)
 		return

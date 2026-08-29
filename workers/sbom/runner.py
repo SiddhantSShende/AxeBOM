@@ -37,18 +37,28 @@ from axebom_shared.worker_runtime import run_worker
 
 from .adapters import (
     DependencyCheckAdapter,
+    GitHubDependencyGraphAdapter,
     GrypeAdapter,
     OSVScannerAdapter,
     SyftAdapter,
     SyftSPDXAdapter,
     TrivyFSAdapter,
     TrivyImageAdapter,
+    WebreconFingerprintAdapter,
 )
 from .adapters.common import ArtifactWriter, SandboxedAdapter
 
 log = get_logger("sbom-worker")
 
 #: Every engine this worker can run.
+#:
+#: ⚠ THE TYPE HINT UNDERSTATES IT SLIGHTLY: GitHubDependencyGraphAdapter and
+#: WebreconFingerprintAdapter are ToolAdapterBase, not SandboxedAdapter —
+#: neither has a container to sandbox. Both still fit this dict
+#: (structurally, all three accept the same constructor kwargs — see their
+#: own __init__) and the same dispatch path below, which is the point:
+#: adding an engine that needs no sandbox should not need a second worker
+#: class.
 ADAPTERS: dict[str, type[SandboxedAdapter]] = {
     "syft": SyftAdapter,
     "syft-spdx": SyftSPDXAdapter,
@@ -57,6 +67,8 @@ ADAPTERS: dict[str, type[SandboxedAdapter]] = {
     "trivy-image": TrivyImageAdapter,
     "osv-scanner": OSVScannerAdapter,
     "dependency-check": DependencyCheckAdapter,
+    "github-dependency-graph-sbom": GitHubDependencyGraphAdapter,  # type: ignore[dict-item]
+    "webrecon-fingerprint": WebreconFingerprintAdapter,  # type: ignore[dict-item]
 }
 
 #: Engines that consume another engine's output rather than the source tree.
@@ -185,7 +197,13 @@ class SBOMWorker:
                 ),
             )
 
-        target = self._build_target(ctx)
+        # Cheap for the overwhelming majority of jobs: source.native_sbom_ref
+        # returns "" without a subprocess call whenever the job carries none,
+        # which is every job except github-dependency-graph-sbom's own.
+        native_sbom_path = source.materialize_native_sbom(
+            job, ctx.output_dir / "native-sbom-staged.json"
+        )
+        target = self._build_target(ctx, native_sbom_path)
 
         # ⚠ grype NEEDS syft's SBOM. No fallback to scanning the directory.
         dependency = self._depends_on.get(ctx.engine)
@@ -308,7 +326,7 @@ class SBOMWorker:
 
     # -- helpers ------------------------------------------------------------
 
-    def _build_target(self, ctx: JobContext) -> ScanTarget:
+    def _build_target(self, ctx: JobContext, native_sbom_path: Path | None = None) -> ScanTarget:
         sbom_path = None
         candidate = ctx.workspace / "sbom.cdx.json"
         if candidate.exists():
@@ -322,6 +340,7 @@ class SBOMWorker:
             commit_sha=ctx.commit_sha,
             image_digest=ctx.image_digest,
             sbom_path=sbom_path,
+            native_sbom_path=native_sbom_path,
             engine_config=ctx.engine_config or {},
         )
 

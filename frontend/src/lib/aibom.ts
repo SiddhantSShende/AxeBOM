@@ -66,7 +66,8 @@ export interface AIModelUserFields {
 export function useAIModels(projectId: string | undefined) {
   return useQuery({
     queryKey: ['ai-models', projectId],
-    queryFn: () => request<{ ai_models: AIModel[] }>(`/v1/projects/${projectId}/ai-models`),
+    queryFn: ({ signal }) =>
+      request<{ ai_models: AIModel[] }>(`/v1/projects/${projectId}/ai-models`, { signal }),
     enabled: Boolean(projectId),
     staleTime: 30_000,
   });
@@ -75,7 +76,8 @@ export function useAIModels(projectId: string | undefined) {
 export function useAIModelForm(projectId: string | undefined) {
   return useQuery({
     queryKey: ['ai-model-form', projectId],
-    queryFn: () => request<{ fields: AIModelFormField[] }>(`/v1/aibom/${projectId}/form`),
+    queryFn: ({ signal }) =>
+      request<{ fields: AIModelFormField[] }>(`/v1/aibom/${projectId}/form`, { signal }),
     enabled: Boolean(projectId),
     staleTime: Infinity,
   });

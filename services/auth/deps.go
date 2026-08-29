@@ -70,7 +70,6 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 	gh := service.NewGitHubClient(service.GitHubConfig{
 		ClientID:     cfg.Auth.GitHubClientID,
 		ClientSecret: cfg.Auth.GitHubClientSecret.Reveal(),
-		RedirectURL:  cfg.Auth.GitHubRedirectURL,
 	})
 	if !gh.Enabled() {
 		// Loud, not silent. A missing GitHub app is a legitimate configuration
@@ -86,9 +85,11 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 	insecureCookies := cfg.Env == config.EnvDevelopment
 
 	h := handler.New(svc, gh, handler.Config{
-		AllowInsecureCookies: insecureCookies,
-		FrontendURL:          cfg.Auth.FrontendURL,
-		RefreshTTL:           cfg.Auth.RefreshTTL,
+		AllowInsecureCookies:     insecureCookies,
+		FrontendURL:              cfg.Auth.FrontendURL,
+		RefreshTTL:               cfg.Auth.RefreshTTL,
+		GitHubRedirectURL:        cfg.Auth.GitHubRedirectURL,
+		GitHubConnectRedirectURL: cfg.Auth.GitHubConnectRedirectURL,
 	})
 
 	// ⚠ A SIXTH SERVICE GAINS oidcauth. The other five replaced their own

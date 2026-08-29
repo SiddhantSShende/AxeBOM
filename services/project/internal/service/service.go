@@ -94,7 +94,7 @@ type CreateInput struct {
 // hardware project is registered with structured metadata and no repository.
 var sourceTypes = map[string]bool{
 	"github": true, "gitlab": true, "bitbucket": true,
-	"upload": true, "image": true, "manual": true,
+	"upload": true, "image": true, "manual": true, "url": true,
 }
 
 // Create registers a project.
@@ -109,7 +109,7 @@ func (s *Service) Create(ctx context.Context, tenantID, userID string, in Create
 	}
 	if !sourceTypes[in.SourceType] {
 		return store.Project{}, errs.Newf(errs.ValidationFieldInvalid,
-			"source_type must be one of github, gitlab, bitbucket, upload, image, manual (got %q)",
+			"source_type must be one of github, gitlab, bitbucket, upload, image, manual, url (got %q)",
 			in.SourceType)
 	}
 
@@ -388,6 +388,91 @@ func ValidateRepoURL(raw string) (string, error) {
 			"remove the credentials from the URL; supply a token instead, which is stored in the vault")
 	}
 	return u.String(), nil
+}
+
+// ---------------------------------------------------------------------------
+// Web sources
+// ---------------------------------------------------------------------------
+
+// ValidateWebSourceURL checks the SHAPE of a URL source. Deliberately
+// parallel to ValidateRepoURL — same rules (https-only, no embedded
+// credentials, reasonable length), reworded messages — rather than a shared
+// call, because "repository URL must use https" is a confusing thing to tell
+// someone who typed a plain web page. See ValidateRepoURL's own warning: this
+// is shape validation, NOT an SSRF defence. The real defence is connection-
+// time IP blocking, in the fetcher (CLAUDE.md invariant 7).
+func ValidateWebSourceURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", errs.New(errs.ValidationFieldRequired, "a URL is required")
+	}
+	if len(raw) > 2048 {
+		return "", errs.New(errs.ValidationFieldInvalid, "URL is too long")
+	}
+	if strings.ContainsAny(raw, "\x00\n\r \t") {
+		return "", errs.New(errs.ValidationFieldInvalid,
+			"URL contains whitespace or control characters")
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", errs.New(errs.ValidationFieldInvalid, "not a valid URL")
+	}
+	if u.Scheme != "https" {
+		return "", errs.Newf(errs.FetchURLSchemeForbidden, "URL must use https (got %q)", u.Scheme)
+	}
+	if u.Host == "" {
+		return "", errs.New(errs.ValidationFieldInvalid, "URL has no host")
+	}
+	if u.User != nil {
+		return "", errs.New(errs.ValidationFieldInvalid, "remove any credentials embedded in the URL")
+	}
+	return u.String(), nil
+}
+
+// CreateWebSource attaches a URL source to a project.
+func (s *Service) CreateWebSource(ctx context.Context, tenantID, projectID string, in WebSourceInput) (store.WebSource, error) {
+	rootURL, err := ValidateWebSourceURL(in.RootURL)
+	if err != nil {
+		return store.WebSource{}, err
+	}
+
+	maxHosts := in.MaxHosts
+	if maxHosts == 0 {
+		maxHosts = 25 // matches the column default; explicit so the row is honest about what was chosen
+	}
+	if maxHosts < 1 || maxHosts > 100 {
+		return store.WebSource{}, errs.Newf(errs.ValidationFieldInvalid,
+			"max_hosts must be between 1 and 100 (got %d)", maxHosts)
+	}
+
+	w, err := s.store.CreateWebSource(ctx, store.WebSource{
+		TenantID: tenantID, ProjectID: projectID,
+		RootURL: rootURL,
+		// DiscoveryEnabled defaults true unless explicitly turned off — the
+		// common case is "scan what subfinder finds", per docs/07's wizard
+		// spec; a tenant who wants only the one submitted page turns it off.
+		DiscoveryEnabled: !in.DiscoveryDisabled,
+		MaxHosts:         maxHosts,
+	})
+	return w, mapStoreError(err)
+}
+
+// ListWebSources returns a project's URL sources.
+func (s *Service) ListWebSources(ctx context.Context, tenantID, projectID string) ([]store.WebSource, error) {
+	w, err := s.store.ListWebSources(ctx, tenantID, projectID)
+	return w, mapStoreError(err)
+}
+
+// WebSourceInput is the request to attach a URL source.
+type WebSourceInput struct {
+	RootURL  string
+	MaxHosts int
+	// DiscoveryDisabled, not DiscoveryEnabled: the zero value of a bool
+	// defaults to false, and the zero value of this field must mean "leave
+	// discovery on" — inverting the name is what makes an omitted field in a
+	// JSON body do the right thing instead of silently disabling discovery.
+	DiscoveryDisabled bool
 }
 
 // ---------------------------------------------------------------------------

@@ -20,6 +20,7 @@ import { AuthCallback, NoAccess, SignIn, SilentCallback } from './routes/auth/Au
 import { SignupPage } from './routes/auth/SignupPage';
 import { ProjectList } from './routes/projects/ProjectList';
 import { ProjectWizard } from './routes/projects/ProjectWizard';
+import { GitHubConnectCallback } from './routes/projects/GitHubConnectCallback';
 import { ProjectDetail } from './routes/projects/ProjectDetail';
 
 const loadMotionFeatures = () => import('./design/motion-features').then((mod) => mod.default);
@@ -57,7 +58,9 @@ const Notifications = lazy(() =>
 const SettingsIndex = lazy(() =>
   import('./routes/settings/SettingsIndex').then((m) => ({ default: m.SettingsIndex })),
 );
-const Engines = lazy(() => import('./routes/settings/Engines').then((m) => ({ default: m.Engines })));
+const Engines = lazy(() =>
+  import('./routes/settings/Engines').then((m) => ({ default: m.Engines })),
+);
 const BomTypeHome = lazy(() =>
   import('./routes/boms/BomTypeHome').then((m) => ({ default: m.BomTypeHome })),
 );
@@ -107,7 +110,7 @@ export function App() {
           <AuthProvider>
             <Routes>
               {/*
-                ⚠ MOUNTED OUTSIDE THE SHELL AND OUTSIDE RequireAuth.
+                ⚠ MOUNTED OUTSIDE SHELL, WHICH IS THE GATE ITSELF NOW.
                 The callback routes are how a user BECOMES authenticated; putting
                 them behind the gate is a redirect loop, and rendering the header
                 around the silent iframe boots a second application inside it.
@@ -115,10 +118,18 @@ export function App() {
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/auth/silent" element={<SilentCallback />} />
               {/*
-                Also outside RequireAuth, for the same reason: a visitor
-                without a session yet is exactly who this page is for.
+                Also outside Shell, for the same reason: a visitor without a
+                session yet is exactly who this page is for.
               */}
               <Route path="/signup" element={<SignupPage />} />
+              {/*
+                Outside Shell for a third reason: this one renders in a POPUP,
+                not the wizard's own tab. It reads the GitHub connect token
+                out of the URL fragment, hands it to window.opener, and closes
+                itself — mounting the app shell around it would be visible for
+                a single frame before the window vanishes, for no benefit.
+              */}
+              <Route path="/projects/github-connect" element={<GitHubConnectCallback />} />
               <Route path="*" element={<Shell />} />
             </Routes>
           </AuthProvider>
@@ -129,25 +140,30 @@ export function App() {
 }
 
 /**
- * RequireAuth gates everything the API backs.
+ * Shell gates everything the API backs, AND the app chrome around it.
  *
- * ⚠ IT RENDERS NOTHING WHILE THE SESSION IS BEING PROBED. Rendering the
- * children first and correcting afterwards means every screen fires its
- * queries with no token, collects a 401, and shows an error for a session that
- * was about to resume — which is exactly what `no bearer token` on a reload
- * looked like.
+ * ⚠ THE SIDEBAR AND TOPBAR ARE PART OF WHAT'S GATED, NOT SCAFFOLDING AROUND
+ * THE GATE. A visitor who isn't signed in yet (or has no role anywhere) has
+ * nothing behind any of that navigation to go to — showing it anyway reads as
+ * "here is the product" for someone who cannot actually open a single link in
+ * it. So the loading/sign-in/no-access screens below return on their own,
+ * full page, before any of the chrome mounts; only a genuinely usable session
+ * reaches the `<div className="app">` that contains it.
+ *
+ * IT RENDERS NOTHING WHILE THE SESSION IS BEING PROBED, for a second, older
+ * reason: rendering the children first and correcting afterwards means every
+ * screen fires its queries with no token, collects a 401, and shows an error
+ * for a session that was about to resume — which is exactly what `no bearer
+ * token` on a reload looked like.
  */
-function RequireAuth({ children }: { children: ReactNode }) {
+function Shell() {
   const { loading, user, memberships } = useAuth();
   if (loading) return <SkeletonRows rows={6} columns={4} />;
   if (!user) return <SignIn />;
   // Authenticated, but granted nothing here. Rendering the app anyway would
   // show a full console where every screen fails on its own.
   if (memberships.length === 0) return <NoAccess />;
-  return <>{children}</>;
-}
 
-function Shell() {
   return (
     <>
       {/* Outside .app: a z-index:-1 child would paint behind its own parent. */}
@@ -168,112 +184,110 @@ function Shell() {
             slow link should look like the page filling in, not like a stall.
           */}
           <Suspense fallback={<SkeletonRows rows={8} columns={4} />}>
-            <RequireAuth>
-              <RouteTransition>
-                <Routes>
-                  <Route path="/" element={<ProjectList />} />
-                  <Route path="/projects" element={<ProjectList />} />
-                  <Route path="/projects/new" element={<ProjectWizard />} />
-                  <Route path="/projects/:id" element={<ProjectDetail />} />
-                  <Route
-                    path="/projects/:id/dependencies"
-                    element={
-                      <ProjectTabs>
-                        <Dependencies />
-                      </ProjectTabs>
-                    }
-                  />
-                  <Route
-                    path="/projects/:id/findings"
-                    element={
-                      <ProjectTabs>
-                        <Findings />
-                      </ProjectTabs>
-                    }
-                  />
-                  <Route
-                    path="/projects/:id/scans"
-                    element={
-                      <ProjectTabs>
-                        <ProjectScans />
-                      </ProjectTabs>
-                    }
-                  />
-                  <Route
-                    path="/projects/:id/practices"
-                    element={
-                      <ProjectTabs>
-                        <ProjectPractices />
-                      </ProjectTabs>
-                    }
-                  />
-                  <Route
-                    path="/projects/:id/settings"
-                    element={
-                      <ProjectTabs>
-                        <ProjectSettings />
-                      </ProjectTabs>
-                    }
-                  />
-                  <Route path="/sbom" element={<BomTypeHome family="SBOM" />} />
-                  <Route path="/cbom" element={<BomTypeHome family="CBOM" />} />
-                  <Route path="/qbom" element={<BomTypeHome family="QBOM" />} />
-                  <Route path="/aibom" element={<BomTypeHome family="AIBOM" />} />
-                  <Route path="/hbom" element={<BomTypeHome family="HBOM" />} />
-                  <Route path="/generate" element={<GenerateFlow />} />
-                  <Route path="/scans/:id" element={<ScanProgressRoute />} />
-                  <Route path="/reports" element={<ReportList />} />
-                  <Route path="/reports/:id" element={<ReportViewer />} />
-                  <Route path="/campaigns" element={<CampaignList />} />
-                  <Route path="/campaigns/new" element={<CampaignWizard />} />
-                  <Route path="/campaigns/:id" element={<CampaignDetail />} />
-                  <Route path="/settings" element={<SettingsIndex />} />
-                  <Route path="/settings/notifications" element={<Notifications />} />
-                  <Route path="/settings/engines" element={<Engines />} />
-                  <Route
-                    path="/projects/:id/hardware"
-                    element={
-                      <ProjectTabs>
-                        <HardwareTree />
-                      </ProjectTabs>
-                    }
-                  />
-                  <Route
-                    path="/projects/:id/hardware/import"
-                    element={
-                      <ProjectTabs>
-                        <HardwareImport />
-                      </ProjectTabs>
-                    }
-                  />
-                  <Route
-                    path="/projects/:id/crypto"
-                    element={
-                      <ProjectTabs>
-                        <CryptoInventory />
-                      </ProjectTabs>
-                    }
-                  />
-                  <Route
-                    path="/projects/:id/quantum"
-                    element={
-                      <ProjectTabs>
-                        <QuantumDevice />
-                      </ProjectTabs>
-                    }
-                  />
-                  <Route
-                    path="/projects/:id/ai-models"
-                    element={
-                      <ProjectTabs>
-                        <AIModelInventory />
-                      </ProjectTabs>
-                    }
-                  />
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </RouteTransition>
-            </RequireAuth>
+            <RouteTransition>
+              <Routes>
+                <Route path="/" element={<ProjectList />} />
+                <Route path="/projects" element={<ProjectList />} />
+                <Route path="/projects/new" element={<ProjectWizard />} />
+                <Route path="/projects/:id" element={<ProjectDetail />} />
+                <Route
+                  path="/projects/:id/dependencies"
+                  element={
+                    <ProjectTabs>
+                      <Dependencies />
+                    </ProjectTabs>
+                  }
+                />
+                <Route
+                  path="/projects/:id/findings"
+                  element={
+                    <ProjectTabs>
+                      <Findings />
+                    </ProjectTabs>
+                  }
+                />
+                <Route
+                  path="/projects/:id/scans"
+                  element={
+                    <ProjectTabs>
+                      <ProjectScans />
+                    </ProjectTabs>
+                  }
+                />
+                <Route
+                  path="/projects/:id/practices"
+                  element={
+                    <ProjectTabs>
+                      <ProjectPractices />
+                    </ProjectTabs>
+                  }
+                />
+                <Route
+                  path="/projects/:id/settings"
+                  element={
+                    <ProjectTabs>
+                      <ProjectSettings />
+                    </ProjectTabs>
+                  }
+                />
+                <Route path="/sbom" element={<BomTypeHome family="SBOM" />} />
+                <Route path="/cbom" element={<BomTypeHome family="CBOM" />} />
+                <Route path="/qbom" element={<BomTypeHome family="QBOM" />} />
+                <Route path="/aibom" element={<BomTypeHome family="AIBOM" />} />
+                <Route path="/hbom" element={<BomTypeHome family="HBOM" />} />
+                <Route path="/generate" element={<GenerateFlow />} />
+                <Route path="/scans/:id" element={<ScanProgressRoute />} />
+                <Route path="/reports" element={<ReportList />} />
+                <Route path="/reports/:id" element={<ReportViewer />} />
+                <Route path="/campaigns" element={<CampaignList />} />
+                <Route path="/campaigns/new" element={<CampaignWizard />} />
+                <Route path="/campaigns/:id" element={<CampaignDetail />} />
+                <Route path="/settings" element={<SettingsIndex />} />
+                <Route path="/settings/notifications" element={<Notifications />} />
+                <Route path="/settings/engines" element={<Engines />} />
+                <Route
+                  path="/projects/:id/hardware"
+                  element={
+                    <ProjectTabs>
+                      <HardwareTree />
+                    </ProjectTabs>
+                  }
+                />
+                <Route
+                  path="/projects/:id/hardware/import"
+                  element={
+                    <ProjectTabs>
+                      <HardwareImport />
+                    </ProjectTabs>
+                  }
+                />
+                <Route
+                  path="/projects/:id/crypto"
+                  element={
+                    <ProjectTabs>
+                      <CryptoInventory />
+                    </ProjectTabs>
+                  }
+                />
+                <Route
+                  path="/projects/:id/quantum"
+                  element={
+                    <ProjectTabs>
+                      <QuantumDevice />
+                    </ProjectTabs>
+                  }
+                />
+                <Route
+                  path="/projects/:id/ai-models"
+                  element={
+                    <ProjectTabs>
+                      <AIModelInventory />
+                    </ProjectTabs>
+                  }
+                />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </RouteTransition>
           </Suspense>
         </main>
       </div>

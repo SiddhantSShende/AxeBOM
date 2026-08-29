@@ -32,6 +32,14 @@ func newHandler(gh *service.GitHubClient) *handler.Handler {
 	return handler.New(nil, gh, handler.Config{})
 }
 
+// newHandlerWithCfg is newHandler with a caller-supplied Config, for the few
+// tests that assert on GitHubRedirectURL/GitHubConnectRedirectURL — fields
+// that moved here from service.GitHubConfig once one GitHubClient started
+// backing two flows with two different callback URLs.
+func newHandlerWithCfg(gh *service.GitHubClient, cfg handler.Config) *handler.Handler {
+	return handler.New(nil, gh, cfg)
+}
+
 // newLiveHandler builds a fully wired handler against the dev database.
 func newLiveHandler(t *testing.T, gh *service.GitHubClient) *handler.Handler {
 	t.Helper()
@@ -183,10 +191,9 @@ func TestGitHubCallbackClearsTheStateCookie(t *testing.T) {
 }
 
 func TestGitHubAuthorizeSetsAStateCookieAndRedirects(t *testing.T) {
-	h := newHandler(service.NewGitHubClient(service.GitHubConfig{
+	h := newHandlerWithCfg(service.NewGitHubClient(service.GitHubConfig{
 		ClientID: "client-id", ClientSecret: "secret",
-		RedirectURL: "https://axebom.test/v1/auth/github/callback",
-	}))
+	}), handler.Config{GitHubRedirectURL: "https://axebom.test/v1/auth/github/callback"})
 
 	rec := httptest.NewRecorder()
 	h.GitHubAuthorize(rec, httptest.NewRequest(http.MethodGet, "/v1/auth/github/authorize", nil))
@@ -225,6 +232,12 @@ func TestGitHubAuthorizeSetsAStateCookieAndRedirects(t *testing.T) {
 	if strings.Contains(loc, "repo") {
 		t.Errorf("the sign-in flow requests repository scope: %s", loc)
 	}
+	// The configured LOGIN callback, not the connect one — this is the
+	// regression this test guards: redirect_uri now travels per-call rather
+	// than living fixed on the GitHubClient.
+	if !strings.Contains(loc, "redirect_uri=https%3A%2F%2Faxebom.test%2Fv1%2Fauth%2Fgithub%2Fcallback") {
+		t.Errorf("redirect_uri is missing or wrong: %s", loc)
+	}
 }
 
 func TestGitHubAuthorizeFailsWhenNotConfigured(t *testing.T) {
@@ -235,6 +248,200 @@ func TestGitHubAuthorizeFailsWhenNotConfigured(t *testing.T) {
 
 	if rec.Code == http.StatusFound {
 		t.Error("an unconfigured GitHub flow redirected the user anyway")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GitHub "connect" — the repo-scoped flow, distinct from sign-in
+// ---------------------------------------------------------------------------
+//
+// Mirrors the login CSRF tests above almost exactly, on purpose: it is the
+// same state-cookie defence reused for a second flow, and a divergence here
+// is exactly the kind of thing that survives review because "it's basically
+// the same as login" reads as covered when it silently isn't.
+
+// CompleteGitHubConnect's state check runs before it ever touches the
+// service's store (unlike CompleteGitHubLogin, which audits a mismatch) — so,
+// unlike the login equivalents below, these need no live database: a nil
+// *service.Service is a valid receiver as long as the method never
+// dereferences it, and the state check returns before that would happen.
+func TestGitHubConnectCallbackRejectsAMissingState(t *testing.T) {
+	h := newHandler(service.NewGitHubClient(service.GitHubConfig{
+		ClientID: "id", ClientSecret: "secret",
+	}))
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/v1/auth/github/connect/callback?code=abc&state=attacker", nil)
+	// No state cookie: the browser never started this flow.
+	rec := httptest.NewRecorder()
+	h.GitHubConnectCallback(rec, req)
+
+	if rec.Code == http.StatusFound || rec.Code == http.StatusOK {
+		t.Fatalf("a connect callback with no state cookie was accepted (status %d)", rec.Code)
+	}
+	assertErrorCode(t, rec, "AUTH_STATE_MISMATCH")
+}
+
+func TestGitHubConnectCallbackRejectsAMismatchedState(t *testing.T) {
+	h := newHandler(service.NewGitHubClient(service.GitHubConfig{
+		ClientID: "id", ClientSecret: "secret",
+	}))
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/v1/auth/github/connect/callback?code=abc&state=attacker-value", nil)
+	req.AddCookie(&http.Cookie{Name: "axebom_oauth_connect_state", Value: "the-real-value"})
+	rec := httptest.NewRecorder()
+	h.GitHubConnectCallback(rec, req)
+
+	if rec.Code == http.StatusFound || rec.Code == http.StatusOK {
+		t.Fatalf("a connect callback whose state did not match the cookie was accepted (status %d)",
+			rec.Code)
+	}
+}
+
+// The state must be single-use here too: if the cookie survives a failed
+// attempt, a leaked popup callback URL can be replayed.
+func TestGitHubConnectCallbackClearsTheStateCookie(t *testing.T) {
+	h := newHandler(service.NewGitHubClient(service.GitHubConfig{
+		ClientID: "id", ClientSecret: "secret",
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/auth/github/connect/callback?code=abc&state=x", nil)
+	req.AddCookie(&http.Cookie{Name: "axebom_oauth_connect_state", Value: "y"})
+	rec := httptest.NewRecorder()
+	h.GitHubConnectCallback(rec, req)
+
+	var cleared bool
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "axebom_oauth_connect_state" && c.MaxAge < 0 {
+			cleared = true
+		}
+	}
+	if !cleared {
+		t.Error("the connect OAuth state cookie survived a failed callback and can be replayed")
+	}
+}
+
+// ⚠ THE ISOLATION PROOF.
+//
+// Login and connect are two independent OAuth attempts that can be in flight
+// in the same browser at once (a user mid-registration, in another tab,
+// signed out and back in). A shared cookie name or path would let one flow's
+// callback consume the other's state — accepting a connect callback as a
+// completed login, or vice versa.
+func TestGitHubConnectStateCookieIsIsolatedFromLoginStateCookie(t *testing.T) {
+	h := newHandlerWithCfg(service.NewGitHubClient(service.GitHubConfig{
+		ClientID: "client-id", ClientSecret: "secret",
+	}), handler.Config{
+		GitHubRedirectURL:        "https://axebom.test/v1/auth/github/callback",
+		GitHubConnectRedirectURL: "https://axebom.test/v1/auth/github/connect/callback",
+	})
+
+	loginRec := httptest.NewRecorder()
+	h.GitHubAuthorize(loginRec, httptest.NewRequest(http.MethodGet, "/v1/auth/github/authorize", nil))
+	connectRec := httptest.NewRecorder()
+	h.GitHubConnectAuthorize(connectRec,
+		httptest.NewRequest(http.MethodGet, "/v1/auth/github/connect/authorize", nil))
+
+	loginCookie := findCookie(t, loginRec, "axebom_oauth_state")
+	connectCookie := findCookie(t, connectRec, "axebom_oauth_connect_state")
+
+	if loginCookie.Name == connectCookie.Name {
+		t.Fatal("login and connect share a state cookie name")
+	}
+	if loginCookie.Value == connectCookie.Value {
+		t.Error("login and connect minted the same state value — one flow's callback " +
+			"could complete the other's")
+	}
+	if loginCookie.Path == connectCookie.Path {
+		t.Errorf("login and connect share a cookie path (%q) — either flow's callback "+
+			"would receive both cookies", loginCookie.Path)
+	}
+}
+
+func findCookie(t *testing.T, rec *httptest.ResponseRecorder, name string) *http.Cookie {
+	t.Helper()
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == name {
+			return c
+		}
+	}
+	t.Fatalf("no %q cookie was set", name)
+	return nil
+}
+
+func TestGitHubConnectAuthorizeSetsAStateCookieAndRedirectsWithRepoScope(t *testing.T) {
+	h := newHandlerWithCfg(service.NewGitHubClient(service.GitHubConfig{
+		ClientID: "client-id", ClientSecret: "secret",
+	}), handler.Config{
+		GitHubConnectRedirectURL: "https://axebom.test/v1/auth/github/connect/callback",
+	})
+
+	rec := httptest.NewRecorder()
+	h.GitHubConnectAuthorize(rec,
+		httptest.NewRequest(http.MethodGet, "/v1/auth/github/connect/authorize", nil))
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302", rec.Code)
+	}
+
+	c := findCookie(t, rec, "axebom_oauth_connect_state")
+	if !c.HttpOnly {
+		t.Error("the connect state cookie is readable from JavaScript")
+	}
+	if c.SameSite != http.SameSiteLaxMode {
+		t.Errorf("SameSite = %v, want Lax or the OAuth redirect drops the cookie", c.SameSite)
+	}
+	if c.Path != "/v1/auth/github/connect" {
+		t.Errorf("Path = %q, want /v1/auth/github/connect", c.Path)
+	}
+
+	loc := rec.Header().Get("Location")
+	if !strings.Contains(loc, "state="+c.Value) {
+		t.Errorf("the redirect does not carry the cookie's state: %s", loc)
+	}
+	if !strings.HasPrefix(loc, "https://github.com/login/oauth/authorize") {
+		t.Errorf("unexpected redirect target: %s", loc)
+	}
+	// ⚠ THE POINT OF THIS WHOLE FLOW: repo scope, which the login flow
+	// deliberately never requests.
+	if !strings.Contains(loc, "scope=repo") {
+		t.Errorf("the connect flow does not request repository scope: %s", loc)
+	}
+	if !strings.Contains(loc,
+		"redirect_uri=https%3A%2F%2Faxebom.test%2Fv1%2Fauth%2Fgithub%2Fconnect%2Fcallback") {
+		t.Errorf("redirect_uri is missing or wrong: %s", loc)
+	}
+}
+
+func TestGitHubConnectAuthorizeFailsWhenNotConfigured(t *testing.T) {
+	h := newHandler(service.NewGitHubClient(service.GitHubConfig{}))
+
+	rec := httptest.NewRecorder()
+	h.GitHubConnectAuthorize(rec,
+		httptest.NewRequest(http.MethodGet, "/v1/auth/github/connect/authorize", nil))
+
+	if rec.Code == http.StatusFound {
+		t.Error("an unconfigured GitHub connect flow redirected the user anyway")
+	}
+}
+
+// The callback must never set the AxeBOM refresh cookie — this flow mints no
+// session, however it completes.
+func TestGitHubConnectCallbackNeverSetsARefreshCookie(t *testing.T) {
+	h := newHandler(service.NewGitHubClient(service.GitHubConfig{
+		ClientID: "id", ClientSecret: "secret",
+	}))
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/v1/auth/github/connect/callback?code=abc&state=attacker", nil)
+	rec := httptest.NewRecorder()
+	h.GitHubConnectCallback(rec, req)
+
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "axebom_refresh" {
+			t.Fatal("the connect callback set an AxeBOM session cookie")
+		}
 	}
 }
 

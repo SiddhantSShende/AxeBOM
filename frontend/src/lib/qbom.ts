@@ -56,9 +56,10 @@ export interface QuantumDeviceValues {
 export function useQBOMForm(projectId: string | undefined) {
   return useQuery({
     queryKey: ['qbom-form', projectId],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       request<{ fields: QBOMFormField[]; disclosure: string }>(
         `/v1/qbom/${projectId}/form`,
+        { signal },
       ),
     enabled: Boolean(projectId),
     staleTime: Infinity,
@@ -68,7 +69,7 @@ export function useQBOMForm(projectId: string | undefined) {
 export function useQuantumDevice(projectId: string | undefined) {
   return useQuery({
     queryKey: ['qbom-device', projectId],
-    queryFn: () => request<QuantumDevice>(`/v1/qbom/${projectId}`),
+    queryFn: ({ signal }) => request<QuantumDevice>(`/v1/qbom/${projectId}`, { signal }),
     enabled: Boolean(projectId),
   });
 }

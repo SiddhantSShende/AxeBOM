@@ -123,6 +123,27 @@ var CryptoFieldsByAssetType = map[string][]ProfileField{
 		b.WriteString("}\n\n")
 	}
 
+	// --- VEX / CSAF ------------------------------------------------------------
+	if len(p.VEX.AdditionalFields) > 0 {
+		b.WriteString("// VEXFields are CERT-In §6's per-statement fields (p.35) — scored over\n")
+		b.WriteString("// findings that have an effective VEX statement, not over every finding.\n")
+		b.WriteString("var VEXFields = []ProfileField{\n")
+		for _, f := range p.VEX.AdditionalFields {
+			writeGoField(&b, f)
+		}
+		b.WriteString("}\n\n")
+	}
+	if len(p.CSAF.RequiredContent) > 0 {
+		b.WriteString("// CSAFFields are CERT-In §6's per-advisory required content (p.35) —\n")
+		b.WriteString("// scored over findings whose winning VEX statement has a generated CSAF\n")
+		b.WriteString("// advisory.\n")
+		b.WriteString("var CSAFFields = []ProfileField{\n")
+		for _, f := range p.CSAF.RequiredContent {
+			writeGoField(&b, f)
+		}
+		b.WriteString("}\n\n")
+	}
+
 	// --- enums ---------------------------------------------------------------
 	writeGoStringSlice(&b, "BOMLevels", "BOM depth levels (CERT-In §3.1).", levelIDs(p.SBOM.Levels))
 	writeGoStringSlice(&b, "SDLCClassifications", "SDLC stages (CERT-In §3.2).", levelIDs(p.SBOM.Classifications))

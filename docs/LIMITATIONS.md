@@ -55,6 +55,35 @@ is collected from a form.
 The readiness assessment is a *note*, never a score. A number would imply a
 precision the underlying data does not have.
 
+## Web reconnaissance sees a static page, not a running browser
+
+A URL-registered project's SBOM comes from `services/webrecon`: it fetches a
+page's HTML and its `<script>` tags — same-host or from a short CDN allowlist
+— and matches the content against a signature database of known JS
+libraries. **It never runs a browser.** Nothing here executes JavaScript.
+
+Consequence: a library loaded purely by client-side JavaScript after the
+page paints — bundled and injected by a framework's own runtime, fetched
+dynamically, assembled from chunks a static parser cannot follow — is
+invisible. A headless-browser (Playwright) renderer would catch this class
+and is a named, deliberately deferred fast-follow, not built because it is a
+materially larger sandboxed surface (a Chromium binary and its own CVE
+stream) for a gap whose real-world size has not yet been measured.
+
+Detection itself is also necessarily approximate, not exhaustive: it is a
+signature match against ~76 known libraries (`retire.js`'s database), not a
+general-purpose dependency graph the way a lockfile-based SBOM engine
+produces one. Unlike a missing ECOSYSTEM — which the Engine Coverage section
+states explicitly, because a manifest or lockfile names what should have
+been scanned — there is no manifest here to compare against. A library
+outside the signature database, or a version string no signature matches,
+simply contributes nothing, and nothing can name the gap by size. A scan
+that matches nothing across every host it fetched is reported honestly at
+the engine level (the adapter marks the run `partial`, not `succeeded`, in
+that case — never a silent zero), but it cannot say *which* libraries it
+might have missed on any given page, only that it found none of the ~76 it
+knows to look for.
+
 ## Scanners see what scanners see
 
 - **Lockfiles and manifests only.** AxeBOM never runs `npm install`, `mvn`,
@@ -117,7 +146,7 @@ it is updated every session and this summary is not.
 | Notifications | Templates and signing exist; no SMTP client, and no worker drains the delivery queue. |
 | Reports | No CycloneDX ML-BOM or HBOM export (§10.4.1.6). |
 | Enterprise | No SAML/OIDC SSO, no SCIM, no API keys, no audit-log export. |
-| Operations | No Helm charts, no load-test baselines, no restore drill, no penetration test. |
+| Operations | **No production deploy pipeline of any kind.** No CI workflow builds or pushes an image to a registry, and nothing runs `helm upgrade`/`kubectl apply` anywhere. A Helm chart exists (`deploy/k8s/`) and is deliberately shaped for tag-based rollback — `values.yaml`'s `image.tag` is empty by default specifically so a moving `latest` tag never makes a rollback impossible to describe — but it is not wired to any pipeline yet, so that design intent is unexercised. `task dev`/`task dev:rollback` give the local Compose stack a real rollback (last build that passed health, retagged and redeployed without a rebuild); nothing equivalent exists past a developer's own machine. Also missing: load-test baselines, a restore drill, a penetration test. Migration rollback in production is a deliberate boundary, not a gap — see `docs/08-OPERATIONS.md` §7: forward-only, additive-first, so an application-code rollback never needs a schema rollback. |
 
 ## What would change our mind
 

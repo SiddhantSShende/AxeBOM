@@ -109,7 +109,7 @@ func (o *Orchestrator) skipDependent(ctx context.Context, run EngineRun, result 
 		"%s reads %s's output, and %s reported %s",
 		run.EngineID, result.Engine, result.Engine, result.Status)
 
-	if err := o.store.UpsertEngineRun(ctx, run); err != nil {
+	if _, err := o.store.UpsertEngineRun(ctx, run); err != nil {
 		// Not fatal: the reaper will time the run out. Logged because a
 		// silently stuck run is the thing this function exists to prevent.
 		o.log.Error("could not mark a dependent engine as skipped",

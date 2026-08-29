@@ -200,7 +200,8 @@ export function useConfirmImport(projectId: string) {
 export function useHardwareTree(projectId: string) {
   return useQuery({
     queryKey: ['hbom', projectId],
-    queryFn: () => request<{ roots: HardwareComponent[] }>(`/v1/hbom/${projectId}`),
+    queryFn: ({ signal }) =>
+      request<{ roots: HardwareComponent[] }>(`/v1/hbom/${projectId}`, { signal }),
     select: (d) => d.roots,
     enabled: projectId !== '',
   });
@@ -238,7 +239,8 @@ export function usePartLookup() {
 export function usePartProvider() {
   return useQuery({
     queryKey: ['hbom', 'provider'],
-    queryFn: () => request<{ provider: string; configured: boolean }>('/v1/hbom/provider'),
+    queryFn: ({ signal }) =>
+      request<{ provider: string; configured: boolean }>('/v1/hbom/provider', { signal }),
     staleTime: 60 * 60 * 1000,
   });
 }

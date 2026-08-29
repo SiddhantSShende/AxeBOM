@@ -1,0 +1,64 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.7.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.7",
+  "serialNumber": "urn:uuid:6c9f2a3e-1b7d-4e5a-9c3f-2a1e8d4b6f7c",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-08-26T00:00:00Z",
+    "tools": { "components": [{ "type": "application", "author": "anchore", "name": "syft", "version": "1.51.0" }] },
+    "component": { "bom-ref": "a1b2c3d4e5f6a7b8", "type": "file", "name": "/src" }
+  },
+  "components": [
+    {
+      "bom-ref": "pkg:maven/com.example/log4shell-java@1.0.0?package-id=7e1c2b3a4d5e6f70",
+      "type": "library",
+      "group": "com.example",
+      "name": "log4shell-java",
+      "version": "1.0.0",
+      "purl": "pkg:maven/com.example/log4shell-java@1.0.0",
+      "properties": [
+        { "name": "syft:package:foundBy", "value": "java-pom-cataloger" },
+        { "name": "syft:package:language", "value": "java" },
+        { "name": "syft:package:type", "value": "java-archive" },
+        { "name": "syft:location:0:path", "value": "/pom.xml" },
+        { "name": "syft:metadata:-:artifactID", "value": "log4shell-java" },
+        { "name": "syft:metadata:-:groupID", "value": "com.example" }
+      ]
+    },
+    {
+      "bom-ref": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1?package-id=9f1c2b3a4d5e6f70",
+      "type": "library",
+      "group": "org.apache.logging.log4j",
+      "name": "log4j-core",
+      "version": "2.14.1",
+      "cpe": "cpe:2.3:a:apache:log4j:2.14.1:*:*:*:*:*:*:*",
+      "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1",
+      "properties": [
+        { "name": "syft:package:foundBy", "value": "java-pom-cataloger" },
+        { "name": "syft:package:language", "value": "java" },
+        { "name": "syft:package:type", "value": "java-archive" },
+        { "name": "syft:package:metadataType", "value": "java-archive" },
+        { "name": "syft:cpe23", "value": "cpe:2.3:a:apache:log4j:2.14.1:*:*:*:*:*:*:*" },
+        { "name": "syft:cpe23", "value": "cpe:2.3:a:apache:log4j-core:2.14.1:*:*:*:*:*:*:*" },
+        { "name": "syft:location:0:path", "value": "/pom.xml" },
+        { "name": "syft:metadata:-:artifactID", "value": "log4j-core" },
+        { "name": "syft:metadata:-:groupID", "value": "org.apache.logging.log4j" }
+      ]
+    },
+    {
+      "bom-ref": "b2c3d4e5f6a7b8c9",
+      "type": "file",
+      "name": "/src/pom.xml",
+      "hashes": [
+        { "alg": "SHA-256", "content": "3f9a1c2b4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8" }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:maven/com.example/log4shell-java@1.0.0?package-id=7e1c2b3a4d5e6f70",
+      "dependsOn": ["pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1?package-id=9f1c2b3a4d5e6f70"]
+    }
+  ]
+}

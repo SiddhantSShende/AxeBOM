@@ -434,9 +434,77 @@ tools:
     default_weight: 5
 
 # ============================================================================
+# WEB RECON — URL-registered projects only (Milestone 5, project-registration
+# plan). subfinder runs inside services/webrecon's own sandboxed container,
+# NEVER as a normal engine — CLAUDE.md invariant 7 and
+# libs/go-shared/sandbox/policy.go both say flatly that no ENGINE may have
+# network egress. webrecon-fingerprint (the registered SBOM engine,
+# services/scan-orchestrator/internal/policy/registry.go) is Mode: internal —
+# it only parses the JSON services/webrecon already produced, and needs no
+# tool of its own.
+# ============================================================================
+
+  - id: subfinder
+    role: discovery
+    families: [sbom]
+    upstream: https://github.com/projectdiscovery/subfinder
+    license: MIT
+    version: "2.16.0"
+    container:
+      image: docker.io/projectdiscovery/subfinder
+      image_tag: "v2.16.0"
+      image_digest: null          # `toolctl pin` fills this
+    binary:
+      # goreleaser naming: subfinder_2.16.0_linux_amd64.zip
+      url_template: https://github.com/projectdiscovery/subfinder/releases/download/v{version}/subfinder_{version}_{os}_{arch}.zip
+      ext: { linux: zip, darwin: zip, windows: zip }
+      checksum_file: https://github.com/projectdiscovery/subfinder/releases/download/v{version}/subfinder_{version}_checksums.txt
+    verify:
+      checksum: required
+      signature: unavailable
+    supply_chain_gap: >
+      subfinder publishes a checksums.txt but no cosign signature or SLSA
+      provenance for this release — checksum-only verification, same gap
+      class as osv-scanner. Container mode is preferred where available:
+      ghcr.io/docker.io images are content-addressed by digest.
+    source_kinds: [url]
+    produces: [hostnames]
+    default_weight: 2
+    db_backed: false
+    notes: >
+      Passive subdomain enumeration ONLY — queries public sources (crt.sh,
+      certificate transparency logs, DNS aggregators), never brute-forces or
+      actively probes. Run by services/webrecon inside its own
+      sandbox.Runner container, network-egress policy (the same posture the
+      fetcher's git clone gets — see services/webrecon/internal/discover),
+      capped by project.web_sources.max_hosts. Its JSON output is never
+      ingested directly; services/webrecon fetches and JS-fingerprints each
+      discovered host itself, and THAT combined result — not subfinder's raw
+      output — is what webrecon-fingerprint parses.
+
+# ============================================================================
 # Libraries — dependencies, not engines
 # ============================================================================
 libraries:
+  - id: retire-js-signatures
+    upstream: https://github.com/RetireJS/retire.js
+    license: Apache-2.0
+    kind: data
+    version: "commit db79fa77c86e24d91c9ce1934ad9f2a640242774 (2026-08-20)"
+    used_by: services/webrecon
+    notes: >
+      The retire.js vulnerable-JS-library signature database
+      (repository/jsrepository.json), vendored verbatim at
+      services/webrecon/internal/fingerprint/signatures/retire-js-jsrepository.json rather than toolctl-managed — a
+      single JSON data file does not fit the binary/container pinning
+      machinery built for goreleaser-style executable releases. Full
+      provenance (source commit, sha256, fetch date) and the RE2/PCRE
+      compatibility spike's findings are in
+      services/webrecon/internal/fingerprint/signatures/PROVENANCE.md. Matched by a Go-native
+      engine (services/webrecon/internal/fingerprint/retire.go), not
+      retire.js's own Node CLI — embedding a Node runtime inside a
+      network-enabled sandboxed container would roughly double that
+      container's attack surface for no benefit.
   - id: protobom
     upstream: https://github.com/protobom/protobom
     license: Apache-2.0

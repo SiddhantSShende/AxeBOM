@@ -196,6 +196,11 @@ type Auth struct {
 	GitHubClientID     string
 	GitHubClientSecret Secret
 	GitHubRedirectURL  string
+	// GitHubConnectRedirectURL is the callback for the repo-scoped "connect"
+	// flow (service.GitHubClient.AuthorizeEndpoint) — a project's source
+	// connector, not sign-in. Same GitHub OAuth App, a second registered
+	// callback URL: GitHub OAuth Apps support more than one.
+	GitHubConnectRedirectURL string
 
 	// FrontendURL is where the OAuth callback lands the browser. Empty means
 	// the callback answers with JSON instead of redirecting, which is what
@@ -367,9 +372,10 @@ func LoadService(name string) (*Service, error) {
 			AccessTTL:  l.Duration("JWT_ACCESS_TTL", 15*time.Minute),
 			RefreshTTL: l.Duration("JWT_REFRESH_TTL", 30*24*time.Hour),
 
-			GitHubClientID:    l.StringOr("GITHUB_CLIENT_ID", ""),
-			GitHubRedirectURL: l.StringOr("GITHUB_REDIRECT_URL", ""),
-			FrontendURL:       l.StringOr("FRONTEND_URL", ""),
+			GitHubClientID:           l.StringOr("GITHUB_CLIENT_ID", ""),
+			GitHubRedirectURL:        l.StringOr("GITHUB_REDIRECT_URL", ""),
+			GitHubConnectRedirectURL: l.StringOr("GITHUB_CONNECT_REDIRECT_URL", ""),
+			FrontendURL:              l.StringOr("FRONTEND_URL", ""),
 		},
 		OIDC: OIDC{
 			// The public origin, and the default matches the reverse proxy in
@@ -489,6 +495,7 @@ var servicePorts = map[string]int{
 	"comment":           8096,
 	"notification":      8097,
 	"fetcher":           8098,
+	"webrecon":          8099,
 }
 
 // defaultMetricsPort gives each service its OWN metrics port.

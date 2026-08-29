@@ -51,9 +51,9 @@ export interface EngineInfo {
 export function useEngines(projectId?: string, family?: BomType) {
   const query = useQuery({
     queryKey: ['engines', projectId ?? null],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const q = projectId ? `?project_id=${encodeURIComponent(projectId)}` : '';
-      return request<{ engines: EngineInfo[] }>(`/v1/scans/engines${q}`);
+      return request<{ engines: EngineInfo[] }>(`/v1/scans/engines${q}`, { signal });
     },
     staleTime: 30_000,
   });
@@ -90,7 +90,8 @@ export interface EnginePolicy {
 export function useEnginePolicies() {
   return useQuery({
     queryKey: ['engine-policies'],
-    queryFn: () => request<{ engine_policies: EnginePolicy[] }>('/v1/scans/engine-policy'),
+    queryFn: ({ signal }) =>
+      request<{ engine_policies: EnginePolicy[] }>('/v1/scans/engine-policy', { signal }),
     staleTime: 10_000,
   });
 }

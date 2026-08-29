@@ -39,6 +39,21 @@ type BOM struct {
 	ToolVersion          string
 
 	Components []Component
+	// Roots are the component keys with Depth == 0, plus every orphan (Depth
+	// == nil — unreachable from any root, so it has no parent to hang off of
+	// either). Export formats that need a root-element list (SPDX, CycloneDX)
+	// use this; it is NOT a restatement of the normalizer's own "declared
+	// roots" concept (which is legitimately empty when the scan produced no
+	// dependency graph at all — see normalize/graph.py). Folding orphans in
+	// here is an export-layer necessity, not a claim that they were
+	// discovered as roots: a valid SPDX/CycloneDX document must have every
+	// node reachable from its root-element list, and an orphan with no
+	// incoming edge has no other way to be reachable.
+	Roots []string
+	// Dependencies are the direct "depends_on" edges backing Field 07 and the
+	// export formats' dependency graph. Structural — never fabricated: absent
+	// entirely for a source-only scan with no resolved lockfile.
+	Dependencies []Dependency
 	// Hardware is populated for an HBOM only. It is the same data the
 	// component sheet renders as columns, kept as a tree so the assembly
 	// structure survives into the report.
@@ -101,6 +116,12 @@ type Component struct {
 	Fields map[string]string
 }
 
+// Dependency is one direct "depends_on" edge, component keys on both ends.
+type Dependency struct {
+	From string
+	To   string
+}
+
 // Finding is one deduplicated vulnerability against one component.
 type Finding struct {
 	DisplayID    string
@@ -119,6 +140,19 @@ type Finding struct {
 	SeverityConflict string
 	VEXStatus        string
 	VEXJustification string
+	// VEXRemediation, VEXWorkarounds and VEXDowntime are CERT-In §6's
+	// remediation/workarounds/restart-downtime fields (p.35), copied from the
+	// EFFECTIVE VEX statement — human-authored triage text, never generated.
+	// Empty when the finding has no effective statement, or the statement
+	// recorded none of this text.
+	VEXRemediation string
+	VEXWorkarounds string
+	VEXDowntime    string
+	// CSAFMitigation is certin.csaf.mitigation — populated only when a CSAF
+	// advisory was actually generated for the winning VEX statement. A
+	// statement with no generated advisory renders `not-provided`, honestly:
+	// CSAF is generated per statement, on demand, not for every triage.
+	CSAFMitigation string
 }
 
 // License is one row of the licence inventory.
@@ -293,7 +327,7 @@ func Sheets(b BOM) ([]Sheet, error) {
 		)
 	}
 
-	sheets = append(sheets, findingSheet(b), licenseSheet(b))
+	sheets = append(sheets, findingSheet(b), vexFieldCoverageSheet(b), licenseSheet(b))
 
 	// ⚠ THE HARDWARE SHEETS GO BEFORE THE NOTES, NOT AFTER. The notes sheet
 	// carries the provenance line saying this BOM was imported rather than
@@ -611,6 +645,10 @@ func findingSheet(b BOM) Sheet {
 				joinList(f.DetectedBy),
 				orNotProvided(f.VEXStatus),
 				orNotProvided(f.VEXJustification),
+				orNotProvided(f.VEXRemediation),
+				orNotProvided(f.VEXWorkarounds),
+				orNotProvided(f.VEXDowntime),
+				orNotProvided(f.CSAFMitigation),
 			})
 			if err != nil {
 				return err
@@ -625,9 +663,100 @@ func findingSheet(b BOM) Sheet {
 			"Advisory", "Cluster ID", "Aliases", "Component", "Severity",
 			"CVSS version", "CVSS score", "CVSS vector", "Severity conflict",
 			"Fixed in (min)", "Detected By", "VEX status", "VEX justification",
+			"Remediation", "Workarounds", "Restart/Downtime Required",
+			"CSAF recommended mitigation",
 		},
 		Rows:  rows,
 		Width: 20,
+	}
+}
+
+// ─── VEX / CSAF field coverage ──────────────────────────────────────────────
+
+// vexFieldCoverageSheet scores CERT-In §6's remediation/workarounds/downtime
+// and §6's CSAF mitigation field against findings that have SOME effective
+// VEX statement.
+//
+// ⚠ SCORED OVER TRIAGED FINDINGS, NOT EVERY FINDING. A finding nobody has
+// looked at yet is "not yet assessed" — a different fact from "assessed, and
+// remediation text was left out". Scoring the denominator over every finding
+// would conflate the two, which is exactly what CLAUDE.md invariant 3 (a
+// `not-provided` value is reported, never hidden, but also never asserted to
+// mean something it does not) warns against one level up: absence of triage
+// is not evidence of a coverage gap in the remediation fields themselves.
+//
+// ⚠ COMPUTED AT RENDER TIME FROM b.Findings, NOT A STORE QUERY. Mirrors
+// engineCoverageSheet's pattern (compute from already-loaded data), not
+// fieldCoverageSheet's (read a precomputed normalizer breakdown) — nothing
+// upstream computes VEX/CSAF coverage today, and these four fields are not
+// part of any BOM type's flat FieldsFor() list.
+func vexFieldCoverageSheet(b BOM) Sheet {
+	type counter struct{ present, declared, total int }
+	counts := map[string]*counter{
+		model.FieldCertinVexRemediation: {},
+		model.FieldCertinVexWorkarounds: {},
+		model.FieldCertinVexDowntime:    {},
+		model.FieldCertinCsafMitigation: {},
+	}
+	fieldOrder := []string{
+		model.FieldCertinVexRemediation,
+		model.FieldCertinVexWorkarounds,
+		model.FieldCertinVexDowntime,
+		model.FieldCertinCsafMitigation,
+	}
+	values := func(f Finding) map[string]string {
+		return map[string]string{
+			model.FieldCertinVexRemediation: f.VEXRemediation,
+			model.FieldCertinVexWorkarounds: f.VEXWorkarounds,
+			model.FieldCertinVexDowntime:    f.VEXDowntime,
+			model.FieldCertinCsafMitigation: f.CSAFMitigation,
+		}
+	}
+
+	for _, f := range b.Findings {
+		if f.VEXStatus == "" {
+			// Untriaged — excluded from the denominator entirely, per the
+			// doc comment above.
+			continue
+		}
+		fv := values(f)
+		for _, id := range fieldOrder {
+			c := counts[id]
+			c.total++
+			v := strings.TrimSpace(fv[id])
+			if v == "" {
+				continue
+			}
+			c.declared++
+			if v != model.NotProvided {
+				c.present++
+			}
+		}
+	}
+
+	names := map[string]string{
+		model.FieldCertinVexRemediation: "Remediation",
+		model.FieldCertinVexWorkarounds: "Workarounds",
+		model.FieldCertinVexDowntime:    "Restart/Downtime Required",
+		model.FieldCertinCsafMitigation: "CSAF Recommended Mitigation Steps",
+	}
+
+	rows := make([][]string, 0, len(fieldOrder))
+	for _, id := range fieldOrder {
+		c := counts[id]
+		rows = append(rows, []string{
+			id, names[id], strconv.Itoa(c.present), strconv.Itoa(c.declared), strconv.Itoa(c.total),
+		})
+	}
+
+	return Sheet{
+		Name: "VEX Field Coverage",
+		Header: []string{
+			"Field ID", "Field", "Substantive", "Declared (incl. " + model.NotProvided + ")",
+			"Triaged findings",
+		},
+		Rows:  StaticRows(rows),
+		Width: 26,
 	}
 }
 

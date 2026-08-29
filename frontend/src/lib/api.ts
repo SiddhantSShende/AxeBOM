@@ -175,7 +175,14 @@ async function send<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     credentials: 'same-origin',
   };
   if (opts.body !== undefined) init.body = JSON.stringify(opts.body);
-  if (opts.signal) init.signal = opts.signal;
+  // ⚠ A CALLER-SUPPLIED SIGNAL WINS; OTHERWISE A DEFAULT BOUND APPLIES. A
+  // stalled backend — accepted the connection, never answered — otherwise
+  // leaves this fetch neither resolved nor rejected, and a caller that never
+  // settles never gets retried by React Query either. 30s is generous for
+  // every short, bounded call this default is meant to catch; a genuinely
+  // long-running one (report rendering) should pass its own longer signal
+  // rather than rely on this.
+  init.signal = opts.signal ?? AbortSignal.timeout(30_000);
 
   const res = await fetch(`/api${path}`, init);
 

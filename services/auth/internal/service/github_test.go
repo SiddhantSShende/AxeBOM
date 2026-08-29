@@ -76,11 +76,17 @@ func (f *fakeGitHub) client(t *testing.T) *service.GitHubClient {
 	srv := f.start(t)
 	return service.NewGitHubClient(service.GitHubConfig{
 		ClientID: "test-client", ClientSecret: "test-secret",
-		RedirectURL: "https://axebom.test/v1/auth/github/callback",
-		APIBase:     srv.URL, AuthBase: srv.URL,
+		APIBase: srv.URL, AuthBase: srv.URL,
 		HTTPClient: srv.Client(),
 	})
 }
+
+// testRedirectURL is the redirect_uri passed to CompleteGitHubLogin/Connect —
+// GitHubConfig no longer carries one (it now backs two flows with two
+// different callbacks), so every call site supplies its own explicitly, the
+// same way handler.Config's GitHubRedirectURL/GitHubConnectRedirectURL do in
+// production.
+const testRedirectURL = "https://axebom.test/v1/auth/github/callback"
 
 // uniqueGitHubID keeps runs from colliding on the unique index.
 func uniqueGitHubID() int64 { return time.Now().UnixNano() % 1_000_000_000 }
@@ -108,7 +114,7 @@ func TestRenamedGitHubLoginStillResolvesToTheSameUser(t *testing.T) {
 
 	const state = "matching-state-value"
 	pair, err := f.svc.CompleteGitHubLogin(t.Context(), gh.client(t),
-		"code", state, state, service.RequestMeta{})
+		"code", state, state, testRedirectURL, service.RequestMeta{})
 	if err != nil {
 		t.Fatalf("github login after rename: %v", err)
 	}
@@ -140,7 +146,7 @@ func TestGitHubLoginRejectsAMismatchedState(t *testing.T) {
 	}).client(t)
 
 	_, err := f.svc.CompleteGitHubLogin(t.Context(), gh,
-		"code", "state-from-the-attacker", "state-we-issued", service.RequestMeta{})
+		"code", "state-from-the-attacker", "state-we-issued", testRedirectURL, service.RequestMeta{})
 	if err == nil {
 		t.Fatal("a callback with a mismatched state was accepted")
 	}
@@ -160,7 +166,7 @@ func TestGitHubLoginRefusesAnUnverifiedEmail(t *testing.T) {
 	}).client(t)
 
 	const state = "s"
-	_, err := f.svc.CompleteGitHubLogin(t.Context(), gh, "code", state, state, service.RequestMeta{})
+	_, err := f.svc.CompleteGitHubLogin(t.Context(), gh, "code", state, state, testRedirectURL, service.RequestMeta{})
 	if err == nil {
 		t.Fatal("a GitHub account with no verified email was allowed to sign in")
 	}
@@ -176,7 +182,7 @@ func TestGitHubTokenErrorBodyIsDetectedDespiteStatus200(t *testing.T) {
 	}).client(t)
 
 	const state = "s"
-	_, err := f.svc.CompleteGitHubLogin(t.Context(), gh, "code", state, state, service.RequestMeta{})
+	_, err := f.svc.CompleteGitHubLogin(t.Context(), gh, "code", state, state, testRedirectURL, service.RequestMeta{})
 	if err == nil {
 		t.Fatal("a rejected authorization code was treated as a successful sign-in")
 	}
@@ -193,7 +199,7 @@ func TestGitHubLoginRequiresACode(t *testing.T) {
 
 	const state = "s"
 	if _, err := f.svc.CompleteGitHubLogin(t.Context(), gh, "", state, state,
-		service.RequestMeta{}); err == nil {
+		testRedirectURL, service.RequestMeta{}); err == nil {
 		t.Fatal("a callback with no authorization code was accepted")
 	}
 }
@@ -211,7 +217,7 @@ func TestGitHubLoginLinksToAnExistingAccountByVerifiedEmail(t *testing.T) {
 	}).client(t)
 
 	const state = "s"
-	pair, err := f.svc.CompleteGitHubLogin(t.Context(), gh, "code", state, state, service.RequestMeta{})
+	pair, err := f.svc.CompleteGitHubLogin(t.Context(), gh, "code", state, state, testRedirectURL, service.RequestMeta{})
 	if err != nil {
 		t.Fatalf("github login: %v", err)
 	}
@@ -240,8 +246,77 @@ func TestGitHubLoginWithNoMembershipIsRefused(t *testing.T) {
 	}).client(t)
 
 	const state = "s"
-	_, err := f.svc.CompleteGitHubLogin(t.Context(), gh, "code", state, state, service.RequestMeta{})
+	_, err := f.svc.CompleteGitHubLogin(t.Context(), gh, "code", state, state, testRedirectURL, service.RequestMeta{})
 	if err == nil {
 		t.Fatal("a GitHub user with no membership was issued a session")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GitHub "connect" — a repo-scoped flow that mints no session
+// ---------------------------------------------------------------------------
+//
+// CompleteGitHubConnect never dereferences its Service receiver — it does not
+// look up a user, does not touch a tenant, does not write an audit row. Every
+// test below calls it on a NIL *service.Service, which is itself part of what
+// is being asserted: a method that resolves an identity could not do that,
+// and a future change that made it start dereferencing s would panic these
+// tests immediately rather than silently starting to touch the database.
+
+func TestGitHubConnectExchangesTheCodeForATokenAndNothingElse(t *testing.T) {
+	gh := (&fakeGitHub{userID: uniqueGitHubID(), login: "x", email: "x@example.test", verified: true}).client(t)
+
+	var s *service.Service
+	const state = "s"
+	token, err := s.CompleteGitHubConnect(t.Context(), gh, "code", state, state, testRedirectURL)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	if token != "gho_faketoken" {
+		t.Errorf("token = %q, want the fake server's issued token", token)
+	}
+}
+
+func TestGitHubConnectRejectsAMismatchedState(t *testing.T) {
+	gh := (&fakeGitHub{userID: uniqueGitHubID(), login: "x", email: "x@example.test", verified: true}).client(t)
+
+	var s *service.Service
+	_, err := s.CompleteGitHubConnect(t.Context(), gh,
+		"code", "state-from-the-attacker", "state-we-issued", testRedirectURL)
+	if err == nil {
+		t.Fatal("a connect callback with a mismatched state was accepted")
+	}
+	if !errs.Is(err, errs.AuthStateMismatch) {
+		t.Errorf("code = %v, want AUTH_STATE_MISMATCH", err)
+	}
+}
+
+func TestGitHubConnectRequiresACode(t *testing.T) {
+	gh := (&fakeGitHub{userID: uniqueGitHubID(), login: "x", email: "x@example.test", verified: true}).client(t)
+
+	var s *service.Service
+	const state = "s"
+	if _, err := s.CompleteGitHubConnect(t.Context(), gh, "", state, state, testRedirectURL); err == nil {
+		t.Fatal("a connect callback with no authorization code was accepted")
+	}
+}
+
+// GitHub answers a bad code with HTTP 200 and an error body — the connect
+// flow shares exchangeCode with login, so it inherits this handling rather
+// than needing its own.
+func TestGitHubConnectTokenErrorBodyIsDetectedDespiteStatus200(t *testing.T) {
+	gh := (&fakeGitHub{
+		userID: uniqueGitHubID(), login: "x", email: "x@example.test", verified: true,
+		tokenError: "bad_verification_code",
+	}).client(t)
+
+	var s *service.Service
+	const state = "s"
+	_, err := s.CompleteGitHubConnect(t.Context(), gh, "code", state, state, testRedirectURL)
+	if err == nil {
+		t.Fatal("a rejected authorization code was treated as a successful connect")
+	}
+	if !errs.Is(err, errs.AuthProviderError) {
+		t.Errorf("code = %v, want AUTH_PROVIDER_ERROR", err)
 	}
 }

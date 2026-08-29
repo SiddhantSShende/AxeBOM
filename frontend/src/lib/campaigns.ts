@@ -168,7 +168,7 @@ export function browserTimezone(): string {
 export function useCampaigns() {
   return useQuery({
     queryKey: ['campaigns'],
-    queryFn: () => request<{ campaigns: Campaign[] }>('/v1/campaigns'),
+    queryFn: ({ signal }) => request<{ campaigns: Campaign[] }>('/v1/campaigns', { signal }),
     select: (d) => d.campaigns,
   });
 }
@@ -176,7 +176,7 @@ export function useCampaigns() {
 export function useCampaign(id: string) {
   return useQuery({
     queryKey: ['campaigns', id],
-    queryFn: () => request<Campaign>(`/v1/campaigns/${id}`),
+    queryFn: ({ signal }) => request<Campaign>(`/v1/campaigns/${id}`, { signal }),
     enabled: id !== '',
   });
 }
@@ -184,7 +184,7 @@ export function useCampaign(id: string) {
 export function useCampaignRuns(id: string) {
   return useQuery({
     queryKey: ['campaigns', id, 'runs'],
-    queryFn: () => request<{ runs: CampaignRun[] }>(`/v1/campaigns/${id}/runs`),
+    queryFn: ({ signal }) => request<{ runs: CampaignRun[] }>(`/v1/campaigns/${id}/runs`, { signal }),
     select: (d) => d.runs,
     enabled: id !== '',
   });

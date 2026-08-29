@@ -53,29 +53,6 @@ def test_the_cyclonedx_golden_fixture_validates_against_the_official_schema():
     assert result is None, f"CycloneDX 1.6 schema violations:\n{result}"
 
 
-# ⚠ THIS IS EXPECTED TO FAIL, ON PURPOSE, UNTIL THE EXPORTER IS FIXED.
-#
-# services/report/internal/export builds every protobom Node's Id straight
-# from the canonical component_key (export.go's toNode, fed by
-# render.Component.Key) — which is deliberately shaped like `purl:pkg:...`
-# for the NORMALIZER's own dedup purposes, not for SPDX's identifier syntax.
-# The SPDX 2.3 spec allows an SPDXID at most ONE colon, reserved for the
-# `DocumentRef-X:SPDXRef-Y` external-reference form; ours carries two or more,
-# because a PURL itself contains colons. CycloneDX's `bom-ref` has no such
-# restriction, which is exactly why the test above passes on the SAME
-# underlying key and this one does not — the bug is SPDX-specific.
-#
-# xfail, not skip: a silent pass here the day someone fixes toNode's id
-# generation is a signal worth seeing (XPASS), not something to miss because
-# the test was never running.
-@pytest.mark.xfail(
-    reason="export.go's toNode() feeds the raw component_key (colon-bearing, "
-    "e.g. 'purl:pkg:maven/...') straight into the protobom Node.Id used for "
-    "every SPDX PackageSPDXIdentifier/relationship reference. SPDX 2.3 permits "
-    "at most one colon in an SPDXID. Found by this conformance check; not yet "
-    "fixed — see docs/STATE.md.",
-    strict=True,
-)
 def test_the_spdx_golden_fixture_validates_against_the_official_spec():
     document = spdx_parser.parse_file(str(GOLDEN_DIR / "fixture.spdx.json"))
     errors = spdx_validator.validate_full_spdx_document(document)

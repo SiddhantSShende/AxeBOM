@@ -71,6 +71,12 @@ var exemptions = []exemption{
 		reason: "SPDX reference data, identical for everyone. Tenant-specific " +
 			"unrecognized license text lives in normalize.license_refs, which IS scoped.",
 	},
+	{
+		table: "normalize.alias_snapshot",
+		reason: "a provenance marker for the GLOBAL alias graph (same reasoning as " +
+			"vuln_clusters above), not tenant data — which normalize.bom_documents " +
+			"(tenant-scoped) points at, not the other way around.",
+	},
 }
 
 func exemptionFor(table string) (exemption, bool) {

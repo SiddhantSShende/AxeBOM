@@ -139,6 +139,52 @@ func TestCreateScanFansOutOneJobPerEngine(t *testing.T) {
 	}
 }
 
+// ⚠ THE CONTRACT-VS-DISCOVERY BOUNDARY, NOW CLOSED.
+//
+// Milestone 4 pinned this test to SCAN_NO_ENGINES_AVAILABLE — no SBOM engine
+// was registered with SourceKinds: [events.SourceURL] until services/webrecon
+// existed, and the test's own comment said to update it, not "fix" it, once
+// that changed. It has: webrecon-fingerprint is now registered
+// (ConsumesNativeSBOM, SourceKinds: [url]), so a url-sourced scan is created
+// successfully and resolves that one engine. See
+// TestFullPipelineCreateWebreconFanOutResultStatus (pipeline_test.go) for the
+// end-to-end proof that a webrecon job — not a fetch job — is what actually
+// gets published and consumed.
+func TestSourceKindURLResolvesTheWebreconFingerprintEngine(t *testing.T) {
+	f := newFixture(t)
+
+	scan, err := f.orch.CreateScan(t.Context(), tenantA, orchestr.CreateScanInput{
+		ProjectID: projectA, SourceKind: events.SourceURL,
+		Families: []events.Family{events.FamilySBOM}, RequestedBy: userA,
+	})
+	if err != nil {
+		t.Fatalf("create scan: %v", err)
+	}
+	cleanupScan(t, f, tenantA, scan.ID)
+
+	if len(scan.EnginesRequested) != 1 || scan.EnginesRequested[0] != "webrecon-fingerprint" {
+		t.Errorf("engines_requested = %v, want exactly [webrecon-fingerprint]", scan.EnginesRequested)
+	}
+}
+
+// A source_kind that is not one of the four real values must still be
+// refused at the shape check — url's addition must not have loosened this
+// into accepting arbitrary strings.
+func TestUnknownSourceKindIsStillRejected(t *testing.T) {
+	f := newFixture(t)
+
+	_, err := f.orch.CreateScan(t.Context(), tenantA, orchestr.CreateScanInput{
+		ProjectID: projectA, SourceKind: events.SourceKind("ftp"),
+		Families: []events.Family{events.FamilySBOM},
+	})
+	if err == nil {
+		t.Fatal("an unknown source_kind was accepted")
+	}
+	if !errs.Is(err, errs.ValidationFieldInvalid) {
+		t.Errorf("code = %v, want VALIDATION_FIELD_INVALID", err)
+	}
+}
+
 // ⚠ THE 422 REQUIREMENT: EVERY offending pair, not the first.
 //
 // A user who fixes the one error they were shown, resubmits, and hits the next
@@ -560,13 +606,24 @@ func TestEcosystemsWithNoEngineAreRecorded(t *testing.T) {
 	if err := f.store.RecordEcosystem(t.Context(), tenantA, scan.ID, "npm", "syft", true); err != nil {
 		t.Fatalf("record: %v", err)
 	}
+	// ⚠ REGRESSION GUARD. On a real git-source scan, trivy-image (registered
+	// for npm among other OS-package ecosystems, skipped for this source
+	// kind) writes engine_available=false for npm in the SAME scan where
+	// syft/trivy-fs write engine_available=true after actually succeeding —
+	// one row per reporting engine, per RecordEcosystem's own doc comment.
+	// npm must not show up as a gap just because one of several engines that
+	// covers it happened to be skipped; it does not want for coverage
+	// when it has any successful engine at all.
+	if err := f.store.RecordEcosystem(t.Context(), tenantA, scan.ID, "npm", "trivy-image", false); err != nil {
+		t.Fatalf("record: %v", err)
+	}
 
 	gaps, err := f.store.CoverageGaps(t.Context(), tenantA, scan.ID)
 	if err != nil {
 		t.Fatalf("gaps: %v", err)
 	}
 	if len(gaps) != 1 || gaps[0] != "cocoapods" {
-		t.Errorf("gaps = %v, want [cocoapods]", gaps)
+		t.Errorf("gaps = %v, want [cocoapods] (npm has a successful engine and must not appear)", gaps)
 	}
 }
 

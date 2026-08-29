@@ -465,14 +465,14 @@ func (s *Store) UpdateScanStatus(ctx context.Context, tenantID, scanID string, s
 // Engine runs
 // ---------------------------------------------------------------------------
 
-// UpsertEngineRun records a result for one engine.
+// UpsertEngineRun records a result for one engine, returning the row's id.
 //
 // ⚠ IDEMPOTENT ON job_id, which is what makes redelivery safe.
 //
 // `ON CONFLICT (job_id)` means the same result arriving twice — from a
 // redelivery, a duplicate publish, or a worker that acked late — converges to
 // the same row rather than creating a second one or failing.
-func (s *Store) UpsertEngineRun(ctx context.Context, r EngineRun) error {
+func (s *Store) UpsertEngineRun(ctx context.Context, r EngineRun) (string, error) {
 	diagnostics, err := json.Marshal(r.Diagnostics)
 	if err != nil {
 		diagnostics = []byte("[]")
@@ -494,8 +494,9 @@ func (s *Store) UpsertEngineRun(ctx context.Context, r EngineRun) error {
 		argv = []string{}
 	}
 
-	return s.pool.WithTenant(ctx, r.TenantID, func(ctx context.Context, tx db.Tx) error {
-		_, err := tx.Exec(ctx, `
+	var id string
+	err = s.pool.WithTenant(ctx, r.TenantID, func(ctx context.Context, tx db.Tx) error {
+		row := tx.QueryRow(ctx, `
 			INSERT INTO scan.engine_runs
 				(scan_id, tenant_id, job_id, engine_id, attempt, status,
 				 weight, ecosystems_covered, engine_version, engine_db_version,
@@ -515,18 +516,20 @@ func (s *Store) UpsertEngineRun(ctx context.Context, r EngineRun) error {
 				argv_redacted      = EXCLUDED.argv_redacted,
 				exit_code          = EXCLUDED.exit_code,
 				duration_ms        = EXCLUDED.duration_ms,
-				summary            = EXCLUDED.summary`,
+				summary            = EXCLUDED.summary
+			RETURNING id`,
 			r.ScanID, r.TenantID, r.JobID, r.EngineID, r.Attempt,
 			string(r.Status), r.Weight, ecosystems,
 			nullIfEmpty(r.EngineVersion), nullIfEmpty(r.EngineDBVersion),
 			r.StartedAt, r.FinishedAt,
 			nullIfEmpty(r.ErrorCode), nullIfEmpty(r.ErrorMessage), diagnostics,
 			argv, r.ExitCode, r.DurationMS, summary)
-		if err != nil {
+		if err := row.Scan(&id); err != nil {
 			return fmt.Errorf("upsert engine run: %w", err)
 		}
 		return nil
 	})
+	return id, err
 }
 
 // MarkRunRunning records that a worker picked a job up.
@@ -616,13 +619,30 @@ func (s *Store) RecordEcosystem(ctx context.Context, tenantID, scanID, ecosystem
 	})
 }
 
-// CoverageGaps returns ecosystems detected with no available engine.
+// CoverageGaps returns ecosystems with NO available engine.
+//
+// ⚠ AN ECOSYSTEM CAN HAVE BOTH A false ROW AND A true ROW FOR THE SAME SCAN.
+// RecordEcosystem's conflict key is (scan_id, ecosystem, detected_by), one
+// row per REPORTING ENGINE — so on a git-source scan, trivy-image (skipped
+// for source kind, registered for npm/pypi/deb/rpm/apk/golang) writes
+// engine_available=false for npm in the very same scan where syft and
+// trivy-fs each wrote engine_available=true for npm after actually
+// succeeding. A plain `WHERE engine_available = false` returns npm as a gap
+// regardless — reporting a fully-scanned ecosystem as unseen, the exact
+// inverse of what this table exists to prevent. The gap is real only when
+// EVERY row recorded for that ecosystem in this scan is false.
 func (s *Store) CoverageGaps(ctx context.Context, tenantID, scanID string) ([]string, error) {
 	var out []string
 	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.Tx) error {
 		rows, err := tx.Query(ctx, `
-			SELECT DISTINCT ecosystem FROM scan.ecosystems_detected
+			SELECT DISTINCT ecosystem FROM scan.ecosystems_detected e1
 			 WHERE scan_id = $1 AND engine_available = false
+			   AND NOT EXISTS (
+			       SELECT 1 FROM scan.ecosystems_detected e2
+			        WHERE e2.scan_id = e1.scan_id
+			          AND e2.ecosystem = e1.ecosystem
+			          AND e2.engine_available = true
+			   )
 			 ORDER BY ecosystem`, scanID)
 		if err != nil {
 			return err
@@ -638,6 +658,214 @@ func (s *Store) CoverageGaps(ctx context.Context, tenantID, scanID string) ([]st
 		return rows.Err()
 	})
 	return out, err
+}
+
+// ---------------------------------------------------------------------------
+// Raw artifacts
+// ---------------------------------------------------------------------------
+
+// RecordRawArtifacts persists one engine result's raw artifacts.
+//
+// ⚠ THE WRITE PATH FOR A DISPATCHED ENGINE. scan.raw_artifacts is IMMUTABLE
+// BY GRANT — UPDATE and DELETE are revoked from axebom_app in
+// migrations/scan/0001_init.sql — so this is an append, never a repoint.
+// Called once per engine result from HandleResult; a redelivered result
+// calls it again, which is harmless duplication of evidence rather than a
+// correctness problem (there is no unique constraint to violate, and
+// re-recording the same artifact rows a second time changes nothing a
+// reader depends on). See RecordProducerArtifacts for the sibling path used
+// by fetch and webrecon results, which have no engine_runs row at all.
+func (s *Store) RecordRawArtifacts(
+	ctx context.Context, tenantID, scanID, engineRunID string, artifacts []events.Artifact,
+) error {
+	if len(artifacts) == 0 {
+		return nil
+	}
+	return s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.Tx) error {
+		for _, a := range artifacts {
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO scan.raw_artifacts
+					(tenant_id, scan_id, engine_run_id, role, storage_ref, media_type, sha256, size_bytes)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+				tenantID, scanID, nullIfEmpty(engineRunID), a.Role, a.URI,
+				nullIfEmpty(a.MediaType), a.SHA256, a.SizeBytes,
+			); err != nil {
+				return fmt.Errorf("record raw artifact (role=%s): %w", a.Role, err)
+			}
+		}
+		return nil
+	})
+}
+
+// RecordProducerArtifacts persists artifacts from a component that is NOT a
+// dispatched engine — today, the fetcher's own result (a source archive,
+// plus an optional native_output) and services/webrecon's result (a
+// native_output discovery + fingerprint document).
+//
+// ⚠ WHY THIS EXISTS SEPARATELY FROM RecordRawArtifacts. Neither the fetcher
+// nor webrecon ever gets a scan.engine_runs row — CreateScan only creates
+// one per resolution.Engines entry, and neither is a policy.Engine — so
+// there is no engine_run_id to hang their artifacts off. This was a real,
+// previously-unnoticed gap: handleFetchResult never called
+// RecordRawArtifacts at all, and even if it had, that method's
+// engine_run_id-keyed INSERT plus LoadRawArtifactsForEngines's INNER JOIN to
+// engine_runs could never have resolved a NULL engine_run_id back to
+// "fetcher" — meaning github-dependency-graph-sbom's NativeSBOMRef (Milestone
+// 3) has never actually been wired end to end in a real deployment, despite
+// passing every unit test (those exercise the adapter and the client in
+// isolation, never this path). Found and fixed while building the identical
+// mechanism for webrecon (Milestone 5); see migrations/scan/0009.
+func (s *Store) RecordProducerArtifacts(
+	ctx context.Context, tenantID, scanID, producer string, artifacts []events.Artifact,
+) error {
+	if len(artifacts) == 0 {
+		return nil
+	}
+	return s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.Tx) error {
+		for _, a := range artifacts {
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO scan.raw_artifacts
+					(tenant_id, scan_id, producer, role, storage_ref, media_type, sha256, size_bytes)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+				tenantID, scanID, producer, a.Role, a.URI,
+				nullIfEmpty(a.MediaType), a.SHA256, a.SizeBytes,
+			); err != nil {
+				return fmt.Errorf("record producer artifact (producer=%s, role=%s): %w", producer, a.Role, err)
+			}
+		}
+		return nil
+	})
+}
+
+// LoadRawArtifactsForEngines returns a scan's raw artifacts, keyed by engine
+// or producer id, restricted to the given ids.
+//
+// ⚠ SAME SCHEMA, NOT A CROSS-SCHEMA JOIN — scan.raw_artifacts and
+// scan.engine_runs are both in the scan schema (CLAUDE.md invariant 11 only
+// forbids crossing a SCHEMA boundary in SQL).
+//
+// ⚠ TWO SOURCES, UNIONED. A dispatched engine's artifacts are keyed by
+// engine_runs.engine_id via the join, same as always. A producer's (fetcher,
+// webrecon) are keyed by their own literal `producer` column instead — they
+// have no engine_runs row to join to. Callers pass both engine ids and
+// producer ids in the same slice; the caller does not need to know which is
+// which, matching how policy.Engine.ConsumesNativeSBOM only cares whether
+// SOMETHING was staged, not by which kind of component.
+//
+// Used to assemble a NormalizeTriggerV1's envelope (so the normalize
+// consumer never needs to query scan.* itself — docs/02-CONTRACTS.md §6a)
+// and by FanOut's nativeSBOMRefFor.
+func (s *Store) LoadRawArtifactsForEngines(
+	ctx context.Context, tenantID, scanID string, engineIDs []string,
+) (map[string][]events.Artifact, error) {
+	out := map[string][]events.Artifact{}
+	if len(engineIDs) == 0 {
+		return out, nil
+	}
+	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.Tx) error {
+		rows, err := tx.Query(ctx, `
+			SELECT resolved_id, role, storage_ref, media_type, sha256, size_bytes FROM (
+				SELECT er.engine_id AS resolved_id, ra.role, ra.storage_ref,
+				       COALESCE(ra.media_type,'') AS media_type, ra.sha256, ra.size_bytes,
+				       ra.created_at
+				  FROM scan.raw_artifacts ra
+				  JOIN scan.engine_runs er ON er.id = ra.engine_run_id
+				 WHERE ra.scan_id = $1 AND er.engine_id = ANY($2)
+				UNION ALL
+				SELECT ra.producer AS resolved_id, ra.role, ra.storage_ref,
+				       COALESCE(ra.media_type,'') AS media_type, ra.sha256, ra.size_bytes,
+				       ra.created_at
+				  FROM scan.raw_artifacts ra
+				 WHERE ra.scan_id = $1 AND ra.producer = ANY($2)
+			) x
+			 ORDER BY resolved_id, created_at`, scanID, engineIDs)
+		if err != nil {
+			return fmt.Errorf("load raw artifacts: %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var engineID string
+			var a events.Artifact
+			if err := rows.Scan(&engineID, &a.Role, &a.URI, &a.MediaType, &a.SHA256, &a.SizeBytes); err != nil {
+				return err
+			}
+			out[engineID] = append(out[engineID], a)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ---------------------------------------------------------------------------
+// Normalize trigger
+// ---------------------------------------------------------------------------
+
+// MarkNormalizeTriggered records that this (scan, family) pair's normalize
+// trigger has fired, and reports whether THIS CALL is the one that fired it.
+//
+// ⚠ WRITE-ONCE, mirroring SetSourceOnce's idiom: `ON CONFLICT DO NOTHING`
+// rather than a status column, so a redelivered ScanResultV1 that reaches
+// this after normalization has already been triggered writes nothing and
+// gets fired=false back — the caller treats that as "already handled", not
+// a conflict.
+func (s *Store) MarkNormalizeTriggered(
+	ctx context.Context, tenantID, scanID string, family events.Family, triggerID string,
+) (persistedID string, fired bool, err error) {
+	err = s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.Tx) error {
+		insertErr := tx.QueryRow(ctx, `
+			INSERT INTO scan.normalize_triggers (scan_id, tenant_id, family, trigger_id)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (scan_id, family) DO NOTHING
+			RETURNING trigger_id`,
+			scanID, tenantID, string(family), triggerID).Scan(&persistedID)
+		if errors.Is(insertErr, pgx.ErrNoRows) {
+			// Already triggered by a prior call — read back the existing id so
+			// the caller still has a stable identity, even though it did not
+			// fire this time. It may differ from the triggerID this call
+			// offered: whichever call won the race published under its OWN
+			// id first, and that is the id this scan/family is permanently
+			// associated with — see maybeTriggerNormalize's doc comment.
+			return tx.QueryRow(ctx, `
+				SELECT trigger_id FROM scan.normalize_triggers
+				 WHERE scan_id = $1 AND family = $2`,
+				scanID, string(family)).Scan(&persistedID)
+		}
+		if insertErr != nil {
+			return fmt.Errorf("mark normalize triggered: %w", insertErr)
+		}
+		fired = true
+		return nil
+	})
+	return persistedID, fired, err
+}
+
+// NormalizeTriggerID reports whether (scan, family) has already fired a
+// normalize trigger, without claiming it.
+//
+// ⚠ READ-ONLY, UNLIKE MarkNormalizeTriggered. That method's whole point is
+// to atomically claim the write-once slot — calling it as a "just checking"
+// probe has the side effect of claiming it on the first call, which makes
+// it unsuitable for anything that wants to observe state without changing
+// it (an operator checking why a scan never normalized; a test asserting
+// nothing fired yet). Returns "" with no error when no trigger exists.
+func (s *Store) NormalizeTriggerID(
+	ctx context.Context, tenantID, scanID string, family events.Family,
+) (triggerID string, err error) {
+	err = s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.Tx) error {
+		scanErr := tx.QueryRow(ctx, `
+			SELECT trigger_id FROM scan.normalize_triggers
+			 WHERE scan_id = $1 AND family = $2`,
+			scanID, string(family)).Scan(&triggerID)
+		if errors.Is(scanErr, pgx.ErrNoRows) {
+			return nil
+		}
+		return scanErr
+	})
+	return triggerID, err
 }
 
 func nullIfEmpty(s string) any {

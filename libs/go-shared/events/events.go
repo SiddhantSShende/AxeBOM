@@ -49,11 +49,20 @@ const (
 	FamilyQBOM  Family = "qbom"
 	FamilyAIBOM Family = "aibom"
 	FamilyHBOM  Family = "hbom"
+
+	// FamilyWebrecon is FamilyFetch's sibling for a url-sourced scan
+	// (SourceURL): subdomain discovery plus JS-library fingerprinting, run by
+	// services/webrecon rather than the fetcher (05-SECURITY-MODEL.md — a
+	// different risk shape, auto-discovering hosts the tenant never named,
+	// not just a clone of the one remote they connected). Like fetch, it
+	// PRODUCES the input the sbom family consumes rather than requiring one,
+	// so it gets its own stream subject, consumer and retry budget.
+	FamilyWebrecon Family = "webrecon"
 )
 
 // AllFamilies returns every family, in pipeline order.
 func AllFamilies() []Family {
-	return []Family{FamilyFetch, FamilySBOM, FamilyCBOM, FamilyQBOM, FamilyAIBOM, FamilyHBOM}
+	return []Family{FamilyFetch, FamilyWebrecon, FamilySBOM, FamilyCBOM, FamilyQBOM, FamilyAIBOM, FamilyHBOM}
 }
 
 // Valid reports whether f is a known family.
@@ -75,6 +84,12 @@ const (
 	SourceGit    SourceKind = "git"
 	SourceUpload SourceKind = "upload"
 	SourceImage  SourceKind = "image"
+	// SourceURL is a project registered from a live link rather than a
+	// repository connection, an upload, or an image reference — its source
+	// lives in project.web_sources. Introduced in Milestone 4 of the project-
+	// registration plan; Milestone 5's services/webrecon is what actually
+	// discovers and fingerprints anything beyond the one submitted page.
+	SourceURL SourceKind = "url"
 )
 
 // ---------------------------------------------------------------------------
@@ -129,6 +144,18 @@ type Workspace struct {
 	SHA256      string `json:"sha256"`
 	SizeBytes   int64  `json:"size_bytes"`
 	RootSubpath string `json:"root_subpath,omitempty"`
+
+	// NativeSBOMRef points at a native document a producer (fetch or webrecon)
+	// staged instead of — or alongside — the source archive: a GitHub
+	// repository's own CI-published Dependency Graph SBOM (role
+	// "native_output", engine_id "fetcher"), or a url source's discovery +
+	// JS-fingerprint result (role "native_output", engine_id "webrecon"). Set
+	// by the orchestrator's FanOut only on the one job that consumes it
+	// (policy.Engine.ConsumesNativeSBOM); empty on every other engine's job,
+	// including every other SBOM engine's. For a git/upload-sourced scan,
+	// ArtifactURI still carries the real source archive alongside this. For a
+	// url-sourced scan there is no source archive at all — see Validate.
+	NativeSBOMRef string `json:"native_sbom_ref,omitempty"`
 }
 
 // SourceMeta describes what was materialized.
@@ -214,10 +241,16 @@ func (j ScanJobV1) Validate() error {
 		// attempt's artifacts and the evidence of what happened is gone.
 		problems = append(problems, "output.prefix must contain job_id, or a retry overwrites prior artifacts")
 	}
-	// The fetch job is what PRODUCES the workspace, so it is the one job that
-	// legitimately has none.
-	if j.Family != FamilyFetch && j.Workspace.ArtifactURI == "" {
-		problems = append(problems, "workspace.artifact_uri is empty for a non-fetch job")
+	// Fetch and webrecon are what PRODUCE a scan's input, so they are the two
+	// jobs that legitimately start with neither a source archive nor a native
+	// document. Every other job must have been handed SOMETHING to read —
+	// but which field depends on the source: a git/upload-sourced job gets
+	// ArtifactURI; a url-sourced job (no source archive exists) gets
+	// NativeSBOMRef instead. See Workspace.NativeSBOMRef.
+	if j.Family != FamilyFetch && j.Family != FamilyWebrecon &&
+		j.Workspace.ArtifactURI == "" && j.Workspace.NativeSBOMRef == "" {
+		problems = append(problems,
+			"workspace has neither artifact_uri nor native_sbom_ref, for a job that is not a producer family")
 	}
 	if err := j.assertNoCredential(); err != nil {
 		problems = append(problems, err.Error())

@@ -242,7 +242,7 @@ func TestUnknownHashAlgorithmsAreDroppedNotGuessed(t *testing.T) {
 
 func TestRootsAreDeclaredExplicitly(t *testing.T) {
 	doc := fixture()
-	bom, err := toProtobom(doc)
+	bom, err := toProtobom(doc, CycloneDX16JSON)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +260,7 @@ func TestAMonorepoKeepsAllItsRoots(t *testing.T) {
 		"purl:pkg:pypi/worker@1.0.0",
 		"purl:pkg:golang/shared@v1.0.0",
 	}
-	bom, err := toProtobom(doc)
+	bom, err := toProtobom(doc, CycloneDX16JSON)
 	if err != nil {
 		t.Fatal(err)
 	}

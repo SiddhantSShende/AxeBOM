@@ -329,6 +329,25 @@ var PracticeFields = []ProfileField{
 	{ID: FieldCertinSbomPpAccommodationOfMistakes, Ordinal: 0, Name: "Accommodation of Mistakes", CanonicalPath: "", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 3, Required: false, Scored: true, SourcePage: 0, Status: "verified"},
 }
 
+// VEXFields are CERT-In §6's per-statement fields (p.35) — scored over
+// findings that have an effective VEX statement, not over every finding.
+var VEXFields = []ProfileField{
+	{ID: FieldCertinVexRemediation, Ordinal: 0, Name: "Remediation", CanonicalPath: "vex_statement.remediation", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 3, Required: false, Scored: true, SourcePage: 35, Status: "verified"},
+	{ID: FieldCertinVexWorkarounds, Ordinal: 0, Name: "Workarounds", CanonicalPath: "vex_statement.workarounds", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 1, Required: false, Scored: true, SourcePage: 35, Status: "verified"},
+	{ID: FieldCertinVexDowntime, Ordinal: 0, Name: "Restart/Downtime Required", CanonicalPath: "vex_statement.downtime", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 1, Required: false, Scored: true, SourcePage: 35, Status: "verified"},
+	{ID: FieldCertinVexJustification, Ordinal: 0, Name: "Justification", CanonicalPath: "vex_statement.justification", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 3, Required: false, Scored: true, SourcePage: 35, Status: "verified"},
+}
+
+// CSAFFields are CERT-In §6's per-advisory required content (p.35) —
+// scored over findings whose winning VEX statement has a generated CSAF
+// advisory.
+var CSAFFields = []ProfileField{
+	{ID: FieldCertinCsafDescription, Ordinal: 0, Name: "Description", CanonicalPath: "csaf_advisory.description", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 3, Required: false, Scored: true, SourcePage: 35, Status: "verified"},
+	{ID: FieldCertinCsafAffectedVersions, Ordinal: 0, Name: "Affected Product Versions", CanonicalPath: "csaf_advisory.affected_versions[]", CycloneDXPath: "", SPDXPath: "", Type: "ref_list", Weight: 3, Required: false, Scored: true, SourcePage: 35, Status: "verified"},
+	{ID: FieldCertinCsafSeverity, Ordinal: 0, Name: "Severity Assessment", CanonicalPath: "csaf_advisory.severity", CycloneDXPath: "", SPDXPath: "", Type: "string", Weight: 3, Required: false, Scored: true, SourcePage: 35, Status: "verified"},
+	{ID: FieldCertinCsafMitigation, Ordinal: 0, Name: "Recommended Mitigation Steps", CanonicalPath: "csaf_advisory.mitigation_steps", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 3, Required: false, Scored: true, SourcePage: 35, Status: "verified"},
+}
+
 // BOMLevels are BOM depth levels (CERT-In §3.1).
 var BOMLevels = []string{
 	"top_level",

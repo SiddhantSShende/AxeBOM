@@ -15,11 +15,14 @@ import (
 	appV2 "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/application/v2"
 	authorizationV2 "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/authorization/v2"
 	filterV2 "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/filter/v2"
+	instanceV2 "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/instance/v2"
 	objectV2 "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/object/v2"
 	orgV2 "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/org/v2"
 	projectV2 "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/project/v2"
 	settingsV2 "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/settings/v2"
 	userV2 "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/user/v2"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -69,6 +72,22 @@ type Spec struct {
 	// DevMode permits http:// redirect URIs. Localhost development only —
 	// ZITADEL rejects non-TLS redirects otherwise, and for good reason.
 	DevMode bool
+
+	// TrustedDomain is the bare hostname (NO port, NO scheme — ZITADEL's
+	// validation rejects a colon with Errors.Instance.Domain.InvalidCharacter)
+	// the browser actually uses, e.g. "192.168.30.202". ZITADEL resolves which
+	// VIRTUAL INSTANCE a
+	// request belongs to from the Host header, but validates the caller's
+	// PUBLIC host — the one it actually redirects the browser to — against a
+	// separate trusted-domain list; a public host that differs from the
+	// instance's own configured domain (ZITADEL_EXTERNALDOMAIN, set once at
+	// setup time) and isn't in that list is refused as "Instance.NotFound",
+	// which reads like a routing bug rather than the untrusted-origin check
+	// it is. Registering an ADDITIONAL trusted domain — this — is how a
+	// second, later access path (a LAN IP, a different port-forward) starts
+	// working without re-running ZITADEL's one-shot setup, which is
+	// documented as NOT a config edit. Empty skips the step.
+	TrustedDomain string
 
 	APIName string
 
@@ -211,6 +230,11 @@ func (c *Client) Bootstrap(ctx context.Context, spec Spec) (*Result, error) {
 	if res.SPAClientID, err = c.ensureSPA(ctx, res.ProjectID, spec); err != nil {
 		return nil, err
 	}
+	if spec.TrustedDomain != "" {
+		if err := c.ensureTrustedDomain(ctx, spec.TrustedDomain); err != nil {
+			return nil, err
+		}
+	}
 	if res.APIClientID, err = c.ensureAPI(ctx, res.ProjectID, spec.APIName); err != nil {
 		return nil, err
 	}
@@ -314,6 +338,25 @@ func (c *Client) Bootstrap(ctx context.Context, spec Spec) (*Result, error) {
 // password login (AllowUsernamePassword), clear the MFA lifetime windows and
 // the second/multi-factor lists, etc. So the current policy is read first and
 // every field but AllowRegister is carried across unchanged.
+// ensureTrustedDomain registers domain (host:port) as an additional public
+// host ZITADEL will accept, alongside whatever ZITADEL_EXTERNALDOMAIN was set
+// to at setup time. Adding one never removes another — see the Spec.TrustedDomain
+// doc comment for why this exists.
+func (c *Client) ensureTrustedDomain(ctx context.Context, domain string) error {
+	cctx, cancel := callCtx(ctx)
+	defer cancel()
+
+	// The v1 AdminService has an equivalent RPC but it is deprecated in favor
+	// of this one (instance service v2).
+	_, err := c.api.InstanceServiceV2().AddTrustedDomain(cctx, &instanceV2.AddTrustedDomainRequest{
+		TrustedDomain: domain,
+	})
+	if err != nil && !isAlreadyExists(err) {
+		return fmt.Errorf("iam: trust domain %q: %w", domain, err)
+	}
+	return nil
+}
+
 func (c *Client) ensureLoginPolicy(ctx context.Context) error {
 	cctx, cancel := callCtx(ctx)
 	current, err := c.api.AdminService().GetLoginPolicy(cctx, &admin.GetLoginPolicyRequest{})
@@ -675,14 +718,28 @@ func (c *Client) findApplication(ctx context.Context, projectID, name string) (s
 }
 
 func (c *Client) ensureSPA(ctx context.Context, projectID string, spec Spec) (string, error) {
-	if id, err := c.clientIDForApp(ctx, projectID, spec.SPAName); err != nil || id != "" {
-		return id, err
+	appID, err := c.findApplication(ctx, projectID, spec.SPAName)
+	if err != nil {
+		return "", err
+	}
+	if appID != "" {
+		// ⚠ RECONCILED, NOT RETURNED UNTOUCHED. iamVerify's own doc comment
+		// claims re-running bootstrap "repairs" whatever is missing — that was
+		// only true for orgs/users/roles. An application found by name used to
+		// come back exactly as first created, so changing --public-url (a new
+		// access origin) never reached ZITADEL's registered redirect URIs
+		// short of deleting the application by hand and letting this recreate
+		// it. Reconciling here is what makes the documented promise true.
+		if err := c.reconcileSPA(ctx, projectID, appID, spec); err != nil {
+			return "", err
+		}
+		return c.clientIDForApp(ctx, projectID, spec.SPAName)
 	}
 
 	cctx, cancel := callCtx(ctx)
 	defer cancel()
 
-	_, err := c.api.ApplicationServiceV2().CreateApplication(cctx, &appV2.CreateApplicationRequest{
+	_, err = c.api.ApplicationServiceV2().CreateApplication(cctx, &appV2.CreateApplicationRequest{
 		ProjectId: projectID,
 		Name:      spec.SPAName,
 		ApplicationType: &appV2.CreateApplicationRequest_OidcConfiguration{
@@ -724,6 +781,50 @@ func (c *Client) ensureSPA(ctx context.Context, projectID string, spec Spec) (st
 		return "", fmt.Errorf("iam: create SPA application %q: %w", spec.SPAName, err)
 	}
 	return c.clientIDForApp(ctx, projectID, spec.SPAName)
+}
+
+// reconcileSPA brings an EXISTING application's redirect/logout URIs and
+// additional origins in line with spec. Only these three fields are set —
+// UpdateOIDCApplicationConfigurationRequest's own contract is "if not set,
+// unchanged", so everything ensureSPA's CreateApplication call established
+// once (grant types, token type, role assertion, ...) is left alone here.
+func (c *Client) reconcileSPA(ctx context.Context, projectID, appID string, spec Spec) error {
+	cctx, cancel := callCtx(ctx)
+	defer cancel()
+
+	_, err := c.api.ApplicationServiceV2().UpdateApplication(cctx, &appV2.UpdateApplicationRequest{
+		ApplicationId: appID,
+		ProjectId:     projectID,
+		ApplicationType: &appV2.UpdateApplicationRequest_OidcConfiguration{
+			OidcConfiguration: &appV2.UpdateOIDCApplicationConfigurationRequest{
+				RedirectUris:           spec.SPARedirectURIs,
+				PostLogoutRedirectUris: spec.SPAPostLogoutURIs,
+				AdditionalOrigins:      spec.SPAAdditionalHosts,
+			},
+		},
+	})
+	// A prior run already reconciled it to this exact spec: ZITADEL answers
+	// "No changes" with FailedPrecondition rather than a silent no-op success,
+	// which is the expected happy path here, not a failure.
+	if err != nil && !isNoChanges(err) {
+		return fmt.Errorf("iam: reconcile SPA application %q redirect URIs: %w", spec.SPAName, err)
+	}
+	return nil
+}
+
+// isNoChanges recognizes ZITADEL's FailedPrecondition("No changes") response
+// to an update request that would leave the resource exactly as it already
+// is — the expected result of calling a reconcile step twice with the same
+// desired state, not an error.
+func isNoChanges(err error) bool {
+	if err == nil {
+		return false
+	}
+	st, ok := status.FromError(err)
+	if !ok || st.Code() != codes.FailedPrecondition {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "no changes")
 }
 
 func (c *Client) ensureAPI(ctx context.Context, projectID, name string) (string, error) {

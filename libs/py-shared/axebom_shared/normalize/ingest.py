@@ -19,6 +19,7 @@ See `docs/04-OSINT-INTEGRATION.md` §4 for the output→canonical mapping.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -149,6 +150,12 @@ def _ingest_cyclonedx(
     # from a flat inventory.
     for edge in _cyclonedx_dependencies(payload, out.ref_to_key, engine, trusted):
         out.edges.append(edge)
+
+    findings, finding_diagnostics = _cyclonedx_vulnerabilities(
+        payload, out.ref_to_key, engine=engine, engine_version=engine_version
+    )
+    out.findings.extend(findings)
+    out.diagnostics.extend(finding_diagnostics)
 
     metadata = payload.get("metadata")
     if isinstance(metadata, dict):
@@ -291,6 +298,140 @@ def _cyclonedx_dependencies(
                 )
             )
     return out
+
+
+def _cyclonedx_vulnerabilities(
+    payload: dict[str, Any],
+    ref_to_key: dict[str, str],
+    *,
+    engine: str,
+    engine_version: str,
+) -> tuple[list[RawFinding], list[dict[str, Any]]]:
+    """Read CycloneDX 1.6's top-level `vulnerabilities` array.
+
+    syft never sets this; trivy-fs and trivy-image do (`--scanners vuln,...`),
+    and until this existed their real findings were parsed for components only
+    and silently dropped — not marked unavailable, just gone.
+
+    ⚠ NO `fixed_versions` HERE. `affects[].versions[].status` has no clean
+    "fixed" event the way OSV's `ranges[].events[].fixed` does — only
+    `affected`/`unaffected`/`unknown` against a version list. Guessing a
+    minimum fix from that would be exactly the fabrication `findings.py`
+    forbids; `fixed_versions` stays empty and `resolve_fix_version` reports
+    `unknown` honestly instead.
+    """
+    findings: list[RawFinding] = []
+    diagnostics: list[dict[str, Any]] = []
+
+    vulnerabilities = payload.get("vulnerabilities")
+    if not isinstance(vulnerabilities, list):
+        return findings, diagnostics
+
+    for entry in vulnerabilities:
+        if not isinstance(entry, dict):
+            continue
+        vuln_id = str(entry.get("id", "")).strip()
+        if not vuln_id:
+            continue
+
+        affects = entry.get("affects")
+        if not isinstance(affects, list) or not affects:
+            continue
+
+        cvss = _cyclonedx_cvss(entry)
+        description = str(entry.get("description", ""))[:2000]
+        severity = _cyclonedx_vendor_severity(entry)
+
+        for affected in affects:
+            if not isinstance(affected, dict):
+                continue
+            ref = str(affected.get("ref", ""))
+            component_key = ref_to_key.get(ref)
+            if not component_key:
+                # A dangling `affects.ref` is evidence of an ingest bug (a ref
+                # this parser's own component walk should have seen) rather
+                # than a normal case — surfaced, not silently skipped.
+                diagnostics.append(
+                    {
+                        "severity": "warn",
+                        "code": "ENGINE_FIELD_MISSING",
+                        "message": (
+                            f"{engine} vulnerability {vuln_id!r} affects ref "
+                            f"{ref!r}, which does not match any reported component"
+                        ),
+                        "hint": "the finding was dropped; the output shape may have changed",
+                    }
+                )
+                continue
+
+            findings.append(
+                RawFinding(
+                    vuln_id=vuln_id,
+                    component_key=component_key,
+                    engine=engine,
+                    engine_version=engine_version,
+                    severity=severity,
+                    cvss=cvss,
+                    fixed_versions=[],
+                    ecosystem=_ecosystem_of_key(component_key),
+                    native_id=vuln_id,
+                    description=description,
+                )
+            )
+
+    return findings, diagnostics
+
+
+#: CycloneDX `ratings[].method` -> the CVSS version string the rest of the
+#: normalizer expects (matching what the grype/osv parsers already produce).
+_CVSS_METHOD_VERSION = {
+    "cvssv2": "2.0",
+    "cvssv3": "3.0",
+    "cvssv31": "3.1",
+    "cvssv4": "4.0",
+}
+
+
+def _cyclonedx_cvss(entry: dict[str, Any]) -> list[CvssVector]:
+    out: list[CvssVector] = []
+    for rating in entry.get("ratings", []) or []:
+        if not isinstance(rating, dict):
+            continue
+        method = str(rating.get("method", "")).strip().lower()
+        version = _CVSS_METHOD_VERSION.get(method, "")
+        if not version:
+            # A rating with no recognised CVSS method (e.g. a bare vendor
+            # severity word with no `method`) carries no numeric vector worth
+            # keeping here — it is picked up by `_cyclonedx_vendor_severity`
+            # instead rather than invented a version for.
+            continue
+        score = rating.get("score")
+        source = rating.get("source")
+        source_name = str(source.get("name", "")) if isinstance(source, dict) else ""
+        out.append(
+            CvssVector(
+                version=version,
+                vector=str(rating.get("vector", "")),
+                score=float(score) if isinstance(score, (int, float)) else None,
+                severity=str(rating.get("severity", "")),
+                source=source_name,
+            )
+        )
+    return out
+
+
+def _cyclonedx_vendor_severity(entry: dict[str, Any]) -> str:
+    """The first rating's severity word, as a vendor-string fallback.
+
+    Mirrors `_grype_cvss`'s discipline: the severity WORD is read from the
+    engine's own assertion, never derived by mapping a score to a band here.
+    """
+    for rating in entry.get("ratings", []) or []:
+        if isinstance(rating, dict):
+            severity = str(rating.get("severity", "")).strip()
+            if severity:
+                return severity
+    return ""
 
 
 # -- SPDX (syft-spdx) -----------------------------------------------------
@@ -733,6 +874,303 @@ def _osv_fixed_versions(vuln: dict[str, Any]) -> list[str]:
     return sorted(set(out))
 
 
+# -- webrecon-fingerprint (services/webrecon) ------------------------------
+
+
+def _ingest_webrecon_fingerprint(
+    payload: dict[str, Any],
+    *,
+    engine: str,
+    scan_id: str,
+    engine_version: str,
+    trusted: frozenset[str],
+) -> Ingested:
+    """Parse services/webrecon's own JSON shape — never a CycloneDX or SPDX
+    document, because there is no "native" format for a retire.js-style
+    fingerprint result. See docs/04-OSINT-INTEGRATION.md §4's webrecon
+    subsection for the field-by-field mapping this mirrors.
+
+    Version-range evaluation (does this library's version fall inside a
+    known-vulnerable range) already happened in Go
+    (services/webrecon/internal/fingerprint/retire.go's vulnerableAt) before
+    this JSON was ever written — every entry in a library's
+    `vulnerabilities[]` here is already applicable to the detected version,
+    not re-evaluated.
+    """
+    out = Ingested()
+
+    hosts = payload.get("hosts")
+    if not isinstance(hosts, list):
+        out.diagnostics.append(
+            {
+                "severity": "warn",
+                "code": "ENGINE_FIELD_MISSING",
+                "message": f"{engine} output has no `hosts` array",
+            }
+        )
+        return out
+
+    for host_entry in hosts:
+        if not isinstance(host_entry, dict):
+            continue
+        host = str(host_entry.get("host", ""))
+        fetched_url = str(host_entry.get("fetched_url", ""))
+        location_path = fetched_url or host
+
+        for lib in host_entry.get("libraries", []) or []:
+            if not isinstance(lib, dict):
+                continue
+            name = str(lib.get("name", ""))
+            version = str(lib.get("version", ""))
+            if not name:
+                continue
+
+            record = {
+                "name": name,
+                "version": version,
+                "ecosystem": "npm",
+            }
+            purl = str(lib.get("npm_purl") or "")
+            if purl:
+                record["purl"] = purl
+
+            identity = resolve_identity(record, scan_id=scan_id, engine=engine)
+
+            out.contributions.append(
+                Contribution(
+                    identity=identity,
+                    observation=Observation(
+                        engine=engine,
+                        engine_version=engine_version,
+                        native_id=f"{name}@{version}",
+                        confidence=identity.confidence,
+                    ),
+                    locations=[Location(path=location_path)] if location_path else [],
+                )
+            )
+
+            for vuln in lib.get("vulnerabilities", []) or []:
+                if not isinstance(vuln, dict):
+                    continue
+                cve_list = [str(c) for c in (vuln.get("cve") or []) if c]
+                ghsa = str(vuln.get("ghsa") or "")
+                # A CVE is preferred as the primary id — the same precedence
+                # every other ingest path in this file gives it — falling
+                # back to the GHSA advisory id when retire.js recorded no
+                # CVE for this entry.
+                vuln_id = cve_list[0] if cve_list else ghsa
+                if not vuln_id:
+                    continue
+
+                out.findings.append(
+                    RawFinding(
+                        vuln_id=vuln_id,
+                        component_key=identity.key,
+                        engine=engine,
+                        engine_version=engine_version,
+                        severity=str(vuln.get("severity", "")),
+                        ecosystem="npm",
+                        native_id=vuln_id,
+                        description=str(vuln.get("summary", ""))[:2000],
+                    )
+                )
+
+    return out
+
+
+# -- dependency-check -------------------------------------------------------
+
+
+def _ingest_dependency_check(
+    payload: dict[str, Any],
+    *,
+    engine: str,
+    scan_id: str,
+    engine_version: str,
+    trusted: frozenset[str],
+) -> Ingested:
+    """Parse OWASP Dependency-Check's JSON report.
+
+    ⚠ THIS FILE'S SCHEMA HAS SHIFTED BETWEEN MAJOR VERSIONS (the adapter's own
+    `highest_confidence()` says so). Every accessor here is defensive for the
+    same reason the rest of this module is: an unrecognised shape degrades to
+    a diagnostic, never a crash.
+
+    Identity: `packages[].id` is fed to the normal `resolve_identity` chain
+    when it looks like a real PURL (rule 1, high confidence) — dependency-check
+    does emit these when a manifest match was possible. Otherwise the
+    dependency's own `vulnerabilityIds[]` (the CPEs it matched against to find
+    vulnerabilities) is offered as `cpe`, which resolves via rule 2 (medium
+    confidence, a DIFFERENT key namespace from any `purl:` key — so it
+    structurally cannot merge into a PURL-identified component, which is the
+    whole point of this engine's confidence story).
+    """
+    out = Ingested()
+
+    dependencies = payload.get("dependencies")
+    if not isinstance(dependencies, list):
+        out.diagnostics.append(
+            {
+                "severity": "warn",
+                "code": "ENGINE_FIELD_MISSING",
+                "message": f"{engine} output has no `dependencies` array",
+                "hint": "treated as zero components; the output shape may have changed",
+            }
+        )
+        dependencies = []
+
+    for dep in dependencies:
+        if not isinstance(dep, dict):
+            continue
+
+        record = _dependency_check_identity_record(dep)
+        if record is None:
+            # Neither a usable PURL nor a CPE — this dependency contributed no
+            # identifying evidence at all (dependency-check reports one entry
+            # per file it opened, including ones it could not identify).
+            continue
+
+        identity = resolve_identity(record, scan_id=scan_id, engine=engine)
+        if identity.is_opaque:
+            out.diagnostics.append(opaque_diagnostic(identity, engine))
+
+        out.contributions.append(
+            Contribution(
+                identity=identity,
+                observation=Observation(
+                    engine=engine,
+                    engine_version=engine_version,
+                    native_id=str(dep.get("sha256") or dep.get("fileName") or ""),
+                    confidence=identity.confidence,
+                ),
+                locations=(
+                    [Location(path=str(dep["filePath"]))]
+                    if isinstance(dep.get("filePath"), str) and dep["filePath"].strip()
+                    else []
+                ),
+                hashes=_dependency_check_hashes(dep),
+            )
+        )
+
+        vulns = dep.get("vulnerabilities")
+        if not isinstance(vulns, list):
+            continue
+        for vuln in vulns:
+            if not isinstance(vuln, dict):
+                continue
+            vuln_id = str(vuln.get("name", "")).strip()
+            if not vuln_id:
+                continue
+            out.findings.append(
+                RawFinding(
+                    vuln_id=vuln_id,
+                    component_key=identity.key,
+                    engine=engine,
+                    engine_version=engine_version,
+                    severity=str(vuln.get("severity", "")),
+                    cvss=_dependency_check_cvss(vuln),
+                    # No structured "fixed version" concept exists in this
+                    # engine's output — left empty rather than guessed.
+                    fixed_versions=[],
+                    ecosystem=identity.ecosystem or _ecosystem_of_key(identity.key),
+                    native_id=vuln_id,
+                    description=str(vuln.get("description", ""))[:2000],
+                )
+            )
+
+    return out
+
+
+def _dependency_check_identity_record(dep: dict[str, Any]) -> dict[str, Any] | None:
+    packages = dep.get("packages")
+    if isinstance(packages, list):
+        for pkg in packages:
+            if not isinstance(pkg, dict):
+                continue
+            pkg_id = str(pkg.get("id", "")).strip()
+            if pkg_id.startswith("pkg:"):
+                return {"purl": pkg_id}
+
+    for vuln_ref in dep.get("vulnerabilityIds", []) or []:
+        if not isinstance(vuln_ref, dict):
+            continue
+        cpe = str(vuln_ref.get("id", "")).strip()
+        if cpe:
+            return {"cpe": cpe, "name": str(dep.get("fileName", ""))}
+
+    return None
+
+
+def _dependency_check_hashes(dep: dict[str, Any]) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    sha256 = dep.get("sha256")
+    if isinstance(sha256, str) and sha256.strip():
+        out.append({"alg": "sha256", "value": sha256.strip()})
+    return out
+
+
+def _dependency_check_cvss(vuln: dict[str, Any]) -> list[CvssVector]:
+    out: list[CvssVector] = []
+
+    v3 = vuln.get("cvssv3")
+    if isinstance(v3, dict):
+        # Newer report versions nest the score fields under `cvssData`; older
+        # ones put them directly on `cvssv3`. Both are tried rather than
+        # picking one and silently losing the other.
+        data = v3.get("cvssData") if isinstance(v3.get("cvssData"), dict) else v3
+        score = data.get("baseScore")
+        severity = data.get("baseSeverity") or v3.get("baseSeverity")
+        vector = data.get("vectorString") or v3.get("vectorString")
+        if score is not None or severity or vector:
+            out.append(
+                CvssVector(
+                    version=_cvss_v3_version(data, v3, vector),
+                    vector=str(vector or ""),
+                    score=float(score) if isinstance(score, (int, float)) else None,
+                    severity=str(severity or ""),
+                    source="nvd",
+                )
+            )
+
+    v2 = vuln.get("cvssv2")
+    if isinstance(v2, dict):
+        score = v2.get("score")
+        severity = v2.get("severity")
+        vector = v2.get("vectorString") or v2.get("accessVector")
+        if score is not None or severity:
+            out.append(
+                CvssVector(
+                    version="2.0",
+                    vector=str(vector or ""),
+                    score=float(score) if isinstance(score, (int, float)) else None,
+                    severity=str(severity or ""),
+                    source="nvd",
+                )
+            )
+
+    return out
+
+
+def _cvss_v3_version(data: dict[str, Any], v3: dict[str, Any], vector: Any) -> str:
+    """The CVSS v3 point release, read from whatever the report actually
+    asserts — 3.0 and 3.1 are structurally identical in Dependency-Check's
+    `cvssv3` block, so this must never assume one.
+
+    A `CVSS:3.x/...` vector-string prefix is the most direct signal a report
+    can give — it is the source data itself, not a side field that could go
+    stale. The newer `cvssData.version` field (report versions that mirror
+    NVD's own schema) is the fallback. Left empty, never defaulted to "3.1",
+    when neither is present: a version we did not observe is not a version we
+    get to assert (CLAUDE.md — never fabricate a value the source lacks).
+    """
+    if isinstance(vector, str):
+        match = re.match(r"CVSS:(3\.[01])/", vector)
+        if match:
+            return match.group(1)
+    explicit = data.get("version") or v3.get("version")
+    return str(explicit) if explicit else ""
+
+
 # -- shared ---------------------------------------------------------------
 
 
@@ -746,6 +1184,14 @@ def _ecosystem_of_key(key: str) -> str:
         return ""
 
 
+#: Engines whose parsers contribute `RawFinding`s (as opposed to components
+#: only). Shared with `cluster_store.py`'s pre-pass so the two modules cannot
+#: independently drift on which engines' output is worth re-ingesting for
+#: alias-graph seeding.
+FINDING_ENGINES = frozenset(
+    {"trivy-fs", "trivy-image", "grype", "osv-scanner", "dependency-check", "webrecon-fingerprint"}
+)
+
 _PARSERS = {
     "syft": _ingest_cyclonedx,
     "trivy-fs": _ingest_cyclonedx,
@@ -753,6 +1199,15 @@ _PARSERS = {
     "syft-spdx": _ingest_spdx,
     "grype": _ingest_grype,
     "osv-scanner": _ingest_osv,
+    "dependency-check": _ingest_dependency_check,
+    # The fetcher unwraps GitHub's `{"sbom": {...}}` envelope before ever
+    # storing this artifact (services/fetcher/internal/work/work.go), so what
+    # reaches this dispatch is a genuine, standalone SPDX 2.3 document —
+    # exactly the shape _ingest_spdx already handles for syft-spdx. No new
+    # parser needed, and none written: a bespoke one would be unverified
+    # against any real captured GitHub fixture.
+    "github-dependency-graph-sbom": _ingest_spdx,
+    "webrecon-fingerprint": _ingest_webrecon_fingerprint,
 }
 
 

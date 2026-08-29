@@ -77,6 +77,35 @@ def pg_conn():
     conn.close()
 
 
+#: A real, fixed cluster id — canonical_model()'s findings carry this as
+#: their vuln_cluster_id, and ensure_test_cluster below guarantees a
+#: matching normalize.vuln_clusters row exists before any test writes a
+#: finding referencing it. Fixed rather than minted per-test because
+#: vuln_clusters is GLOBAL reference data (no tenant_id, no RLS, migration
+#: 0002's own precedent) — one shared row, inserted idempotently, is the
+#: correct shape here, not one-row-per-test cleanup.
+_TEST_CLUSTER_ID = "01900000-0000-7000-8000-0000000000c1"
+
+
+@pytest.fixture
+def ensure_test_cluster(pg_conn):
+    """Guarantees normalize.vuln_clusters has a row for _TEST_CLUSTER_ID.
+
+    ⚠ REQUIRED SINCE findings_cluster_id_fkey (migration
+    normalize/0007_findings_cluster_fk.sql). Before that FK existed, a
+    finding could reference any cluster_id at all; now Postgres enforces
+    that the row is real, which is the whole point of the FK — but it means
+    this fixture, not bulk.py, is what makes canonical_model()'s fixture
+    data representative of a real write path.
+    """
+    cur = pg_conn.cursor()
+    cur.execute(
+        "INSERT INTO normalize.vuln_clusters (id, display_id) VALUES (%s, %s) "
+        "ON CONFLICT (id) DO NOTHING",
+        (_TEST_CLUSTER_ID, "CVE-2024-0001"),
+    )
+
+
 @pytest.fixture
 def written(pg_conn):
     """Tracks (tenant_id, bom_document_id) pairs a test wrote, and deletes
@@ -107,7 +136,10 @@ def canonical_model(tenant_suffix: str = "") -> dict:
             ],
             findings=[
                 {
-                    "vuln_cluster_id": "cve-2024-0001",
+                    # A real uuid — see _TEST_CLUSTER_ID and
+                    # ensure_test_cluster, the fixture that gives it a
+                    # matching normalize.vuln_clusters row.
+                    "vuln_cluster_id": _TEST_CLUSTER_ID,
                     "component_key": f"purl:pkg:npm/left{tenant_suffix}@1",
                     "display_id": "CVE-2024-0001",
                     "severity_effective": "critical",
@@ -165,7 +197,7 @@ def canonical_model(tenant_suffix: str = "") -> dict:
 # --------------------------------------------------------------------------
 
 
-def test_every_planned_column_exists_in_the_live_schema(pg_conn, written) -> None:
+def test_every_planned_column_exists_in_the_live_schema(pg_conn, written, ensure_test_cluster) -> None:
     """For every table bulk.plan() writes to, every column it declares must
     be a real column in the live database. This is a MECHANICAL check
     against information_schema, not a human re-reading two files and hoping
@@ -239,7 +271,7 @@ def test_every_planned_column_exists_in_the_live_schema(pg_conn, written) -> Non
 # --------------------------------------------------------------------------
 
 
-def test_a_live_write_round_trips(pg_conn, written) -> None:
+def test_a_live_write_round_trips(pg_conn, written, ensure_test_cluster) -> None:
     tenant_id = str(uuid.uuid4())
     canonical = canonical_model()
 
@@ -335,7 +367,7 @@ def test_a_refused_plan_writes_nothing(pg_conn, written) -> None:
     assert cur.fetchone()[0] == 0
 
 
-def test_the_write_is_tenant_scoped(pg_conn, written) -> None:
+def test_the_write_is_tenant_scoped(pg_conn, written, ensure_test_cluster) -> None:
     """RLS, not a WHERE clause this code could forget to write — the same
     property orchestrator_test.go's TestScansAreInvisibleAcrossTenants
     proves on the Go side, proven here for the write path instead of a read."""

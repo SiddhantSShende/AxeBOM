@@ -11,9 +11,9 @@ import (
 	"github.com/axebom/axebom/libs/go-shared/platform/blob"
 	"github.com/axebom/axebom/libs/go-shared/platform/config"
 	"github.com/axebom/axebom/libs/go-shared/platform/httpx"
+	"github.com/axebom/axebom/libs/go-shared/projectsource"
 	"github.com/axebom/axebom/libs/go-shared/sandbox"
 	"github.com/axebom/axebom/libs/go-shared/vault"
-	"github.com/axebom/axebom/services/fetcher/internal/source"
 	"github.com/axebom/axebom/services/fetcher/internal/work"
 )
 
@@ -36,7 +36,7 @@ type deps struct {
 	runner   *sandbox.DockerRunner
 	store    *blob.Store
 	vault    *vault.Client
-	resolver *source.Client
+	resolver *projectsource.Client
 	worker   *work.Worker
 }
 
@@ -99,7 +99,7 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 		return nil, fmt.Errorf("service credential: %w", err)
 	}
 
-	resolver, err := source.New(source.Options{
+	resolver, err := projectsource.New(projectsource.Options{
 		BaseURL: cfg.Services.Project,
 		Token:   tokens.Token,
 	})

@@ -194,6 +194,25 @@ func toFindingsSummaryDTO(s orchestr.FindingsSummary, gaps []string) findingsSum
 // Scans
 // ---------------------------------------------------------------------------
 
+// triggerFields classifies ctxkey.UserID's subject into the (triggered_by,
+// trigger_ref) pair scan.scans actually stores. trigger_ref is a UUID
+// column holding "the user or campaign id behind the scan" (store.go) — it
+// has no column that could hold oidcauth's "apikey:<id>"/"service:<name>"
+// subject strings, so a non-human principal must leave it empty rather than
+// feed that string to the uuid cast, which fails the insert outright. This
+// is the CI/scripting path `axebom apikey mint` exists for (and the service
+// principal path internal callers use), so both must actually work, not
+// only interactive sign-in.
+func triggerFields(subject string) (triggeredBy, requestedBy string) {
+	switch {
+	case strings.HasPrefix(subject, oidcauth.APIKeySubjectPrefix),
+		strings.HasPrefix(subject, oidcauth.ServiceSubjectPrefix):
+		return "api", ""
+	default:
+		return "user", subject
+	}
+}
+
 // Create handles POST /v1/scans.
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := auth.RequireTenant(r.Context())
@@ -226,14 +245,16 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	triggeredBy, requestedBy := triggerFields(ctxkey.UserID(r.Context()))
+
 	scan, err := h.orch.CreateScan(r.Context(), tenantID, orchestr.CreateScanInput{
 		ProjectID:        req.ProjectID,
 		SourceKind:       events.SourceKind(req.SourceKind),
 		Families:         families,
 		EngineOverrides:  overrides,
 		RequestedEngines: req.Engines,
-		RequestedBy:      ctxkey.UserID(r.Context()),
-		TriggeredBy:      "user",
+		RequestedBy:      requestedBy,
+		TriggeredBy:      triggeredBy,
 	})
 	if err != nil {
 		// The 422 with every offending pair travels through unchanged — the

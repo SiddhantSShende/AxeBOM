@@ -34,12 +34,6 @@ import {
  */
 const ORG_KEY = 'axebom.org';
 
-/**
- * Consumed by SignIn (routes/auth/AuthRoutes.tsx) — see the comment on
- * signOut below for why this exists and why it is read-once.
- */
-export const POST_SIGNOUT_KEY = 'axebom.postSignOut';
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [manager, setManager] = useState<UserManager | null>(null);
@@ -169,17 +163,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(ORG_KEY);
     setAccessToken(null);
     setApiOrg(null);
-    // ⚠ A ONE-SHOT MARKER, NOT A STANDING PREFERENCE. SignIn reads this to
-    // skip straight back to the identity provider after a DELIBERATE sign-out
-    // — someone who just clicked "Sign out" does not need to see "you are
-    // signed out, click here" a second later. It is consumed (read once, then
-    // removed) by SignIn itself, so an unrelated later visit — a session that
-    // simply expired, a bookmark opened signed-out, a broken client id — still
-    // lands on the button screen. That screen exists specifically so a
-    // misconfigured client id fails visibly instead of bouncing forever
-    // between this app and ZITADEL with nothing on screen to read; skipping it
-    // unconditionally here would put that failure mode back.
-    sessionStorage.setItem(POST_SIGNOUT_KEY, '1');
+    // Lands back on SignIn (routes/auth/AuthRoutes.tsx) via
+    // post_logout_redirect_uri — no special-casing needed here since that
+    // screen shows the same two choices to every signed-out visitor.
     void initAuth()
       .then((mgr) => mgr.signoutRedirect())
       .catch((e: Error) => setError(e.message));

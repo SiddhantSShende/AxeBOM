@@ -16,19 +16,53 @@
  * later, in a document they were about to send to a regulator.
  */
 
-import { useState } from 'react';
+import { useState, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router';
+import { AnimatePresence } from 'motion/react';
 import { ApiError } from '../../lib/api';
 import { BOM_TYPES } from '../../design/theme';
 import {
   humanizeEnum,
+  useConnectRepo,
   useCreateProject,
+  useCreateWebSource,
+  useGitHubConnect,
   useProjectOptions,
   useSetPractices,
+  useUploadFile,
   type CreateProjectInput,
   type Owner,
   type PracticesInput,
+  type Repo,
 } from '../../lib/projects';
+import { GitHubRepoPicker } from './GitHubRepoPicker';
+
+// UPLOAD_KINDS mirrors project.uploads' CHECK constraint minus the two kinds
+// no wizard should ever offer here: `image_tarball` belongs to the `image`
+// source type, not `upload`, and `hbom_csv` has its own dedicated import flow
+// (routes/hbom/HardwareImport.tsx) — offering it here would produce an HBOM
+// upload attached to a project that was never classified for one.
+const UPLOAD_KINDS = ['source_archive', 'manifest', 'lockfile', 'sbom'] as const;
+
+interface UploadDraftFile {
+  file: File;
+  kind: (typeof UPLOAD_KINDS)[number];
+}
+
+// StagedRepo is what a picked repository plus its connect token look like
+// while they wait in Draft for submit() to attach them to the project the
+// create call is about to produce.
+interface StagedRepo {
+  fullName: string;
+  externalId: string;
+  defaultBranch: string;
+  cloneUrl: string;
+  // The repo-scoped token useGitHubConnect resolved. Held only in this
+  // in-memory Draft, never persisted client-side — useConnectRepo sends it
+  // once, to Vault, and it is gone from here the moment the component
+  // unmounts.
+  token: string;
+}
 
 type Step = 1 | 2 | 3;
 
@@ -57,9 +91,9 @@ interface Draft {
   sourceType: string;
   name: string;
   description: string;
-  repoFullName: string;
-  repoExternalId: string;
-  defaultBranch: string;
+  githubRepo: StagedRepo | null;
+  uploadFiles: UploadDraftFile[];
+  webSourceUrl: string;
   owner: Owner;
   validityStart: string;
   validityEnd: string;
@@ -72,9 +106,9 @@ const emptyDraft: Draft = {
   sourceType: 'github',
   name: '',
   description: '',
-  repoFullName: '',
-  repoExternalId: '',
-  defaultBranch: '',
+  githubRepo: null,
+  uploadFiles: [],
+  webSourceUrl: '',
   owner: {},
   validityStart: '',
   validityEnd: '',
@@ -93,6 +127,9 @@ export function ProjectWizard() {
   const createProject = useCreateProject();
   const [createdId, setCreatedId] = useState<string | null>(null);
   const setPractices = useSetPractices(createdId ?? '');
+  const uploadFile = useUploadFile(createdId ?? '');
+  const connectRepo = useConnectRepo(createdId ?? '');
+  const createWebSource = useCreateWebSource(createdId ?? '');
 
   const patch = (p: Partial<Draft>) => setDraft((d) => ({ ...d, ...p }));
 
@@ -120,6 +157,32 @@ export function ProjectWizard() {
         await setPractices.mutateAsync(draft.practices);
       }
 
+      // Uploaded one at a time, not in parallel: a project with three staged
+      // files that fails on the second should say which one, not leave the
+      // caller guessing which of three concurrent requests it was.
+      for (const { file, kind } of draft.uploadFiles) {
+        await uploadFile.mutateAsync({ file, kind });
+      }
+
+      // Connecting the repository is a second call for the same reason
+      // uploads and practices are: the project id it attaches to does not
+      // exist until the create call above returns.
+      if (draft.sourceType === 'github' && draft.githubRepo) {
+        await connectRepo.mutateAsync({
+          provider: 'github',
+          repo_full_name: draft.githubRepo.fullName,
+          repo_external_id: draft.githubRepo.externalId,
+          default_branch: draft.githubRepo.defaultBranch,
+          token: draft.githubRepo.token,
+        });
+      }
+
+      // Same pattern as the repo connection above: the project id this
+      // attaches to does not exist until the create call returns.
+      if (draft.sourceType === 'url' && draft.webSourceUrl) {
+        await createWebSource.mutateAsync({ root_url: draft.webSourceUrl });
+      }
+
       void navigate(`/projects/${project.id}`);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not create the project');
@@ -129,7 +192,9 @@ export function ProjectWizard() {
   const canAdvance =
     step === 1
       ? draft.name.trim() !== '' &&
-        (draft.sourceType !== 'github' || draft.repoExternalId.trim() !== '')
+        (draft.sourceType !== 'github' || draft.githubRepo !== null) &&
+        (draft.sourceType !== 'upload' || draft.uploadFiles.length > 0) &&
+        (draft.sourceType !== 'url' || isHttpsURL(draft.webSourceUrl))
       : true;
 
   return (
@@ -208,7 +273,7 @@ function SourceStep({
   patch: (p: Partial<Draft>) => void;
   options: { source_types: string[] } | undefined;
 }) {
-  const sources = options?.source_types ?? ['github', 'upload', 'manual'];
+  const sources = options?.source_types ?? ['github', 'upload', 'url', 'manual'];
 
   return (
     <section aria-labelledby="source-heading">
@@ -249,41 +314,11 @@ function SourceStep({
         />
       </label>
 
-      {draft.sourceType === 'github' && (
-        <>
-          <label className="field">
-            <span>Repository (owner/name)</span>
-            <input
-              value={draft.repoFullName}
-              onChange={(e) => patch({ repoFullName: e.target.value })}
-              placeholder="acme/payments-api"
-            />
-          </label>
-          <label className="field">
-            <span>Repository ID</span>
-            <input
-              value={draft.repoExternalId}
-              onChange={(e) => patch({ repoExternalId: e.target.value })}
-              placeholder="1296269"
-              inputMode="numeric"
-            />
-            {/* Not a nicety: repository NAMES change, and a connection keyed on
-                a name silently detaches when somebody renames the repo. */}
-            <small>
-              GitHub&apos;s numeric id. Repository names change; this does not, so it is what the
-              connection is keyed on.
-            </small>
-          </label>
-          <label className="field">
-            <span>Default branch</span>
-            <input
-              value={draft.defaultBranch}
-              onChange={(e) => patch({ defaultBranch: e.target.value })}
-              placeholder="main"
-            />
-          </label>
-        </>
-      )}
+      {draft.sourceType === 'github' && <GitHubSource draft={draft} patch={patch} />}
+
+      {draft.sourceType === 'upload' && <UploadFiles draft={draft} patch={patch} />}
+
+      {draft.sourceType === 'url' && <UrlSource draft={draft} patch={patch} />}
 
       {draft.sourceType === 'manual' && (
         <p className="note">
@@ -293,6 +328,236 @@ function SourceStep({
         </p>
       )}
     </section>
+  );
+}
+
+// GitHubSource connects a repo-scoped GitHub token and stages a picked
+// repository — nothing is sent to POST /v1/projects/{id}/connections until
+// submit(), which needs the project id this wizard has not created yet.
+function GitHubSource({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>) => void }) {
+  const connect = useGitHubConnect();
+  const [token, setToken] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  async function handleConnect() {
+    try {
+      const t = await connect.mutateAsync();
+      setToken(t);
+      setPickerOpen(true);
+    } catch {
+      // Surfaced below via connect.error; nothing further to do here.
+    }
+  }
+
+  return (
+    <div className="field">
+      <span>Repository</span>
+
+      {draft.githubRepo ? (
+        <div className="row-actions">
+          <strong>{draft.githubRepo.fullName}</strong>
+          <button
+            type="button"
+            className="btn btn-sm btn-quiet"
+            onClick={() => patch({ githubRepo: null })}
+          >
+            Change
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="btn"
+          onClick={() => void handleConnect()}
+          disabled={connect.isPending}
+        >
+          {connect.isPending ? 'Connecting…' : 'Connect GitHub'}
+        </button>
+      )}
+
+      {connect.error && (
+        <p className="status status-down" role="alert">
+          {connect.error instanceof Error ? connect.error.message : 'Could not connect to GitHub.'}
+        </p>
+      )}
+
+      <small>
+        Opens a GitHub window asking to read your repositories. The token this grants is used to
+        list them and, once you pick one, to attach it to the project — it is never AxeBOM&apos;s
+        password and nothing here is stored until you connect a repository.
+      </small>
+
+      <AnimatePresence>
+        {pickerOpen && token && (
+          <GitHubRepoPicker
+            token={token}
+            onClose={() => setPickerOpen(false)}
+            onSelect={(repo: Repo) =>
+              patch({
+                githubRepo: {
+                  fullName: repo.full_name,
+                  externalId: repo.external_id,
+                  defaultBranch: repo.default_branch,
+                  cloneUrl: repo.clone_url,
+                  token,
+                },
+              })
+            }
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// UploadFiles stages files for the project this wizard is about to create.
+//
+// The files themselves aren't sent until submit() — there is no project id to
+// attach them to until the create call above returns. What lives here is only
+// the client-side staging: a File plus the `kind` classification the upload
+// endpoint requires, matching project.uploads' CHECK constraint.
+function UploadFiles({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>) => void }) {
+  function addFiles(event: ChangeEvent<HTMLInputElement>) {
+    const chosen = Array.from(event.target.files ?? []);
+    if (chosen.length === 0) return;
+    patch({
+      uploadFiles: [
+        ...draft.uploadFiles,
+        ...chosen.map((file) => ({ file, kind: guessKind(file.name) })),
+      ],
+    });
+    // Clear the input so choosing the same file again (after removing it
+    // below) still fires a change event.
+    event.target.value = '';
+  }
+
+  function removeAt(index: number) {
+    patch({ uploadFiles: draft.uploadFiles.filter((_, i) => i !== index) });
+  }
+
+  function setKindAt(index: number, kind: string) {
+    patch({
+      uploadFiles: draft.uploadFiles.map((f, i) =>
+        i === index ? { ...f, kind: kind as UploadDraftFile['kind'] } : f,
+      ),
+    });
+  }
+
+  return (
+    <div className="field">
+      <label className="field">
+        <span>Files</span>
+        <input type="file" multiple onChange={addFiles} />
+      </label>
+      <small>
+        A source archive (.zip, .tar, .tar.gz or .tar.zst) is scanned like a repository. A manifest,
+        lockfile or native SBOM document is read as-is — nothing is extracted from it.
+      </small>
+
+      {draft.uploadFiles.length === 0 && draft.sourceType === 'upload' && (
+        <p className="status status-down" role="alert">
+          Add at least one file. A project registered for upload with nothing staged has no source
+          to scan.
+        </p>
+      )}
+
+      {draft.uploadFiles.length > 0 && (
+        <ul className="chips">
+          {draft.uploadFiles.map((f, i) => (
+            <li key={`${f.file.name}-${i}`} className="row-actions">
+              <span>{f.file.name}</span>
+              <select value={f.kind} onChange={(e) => setKindAt(i, e.target.value)}>
+                {UPLOAD_KINDS.map((k) => (
+                  <option key={k} value={k}>
+                    {k === 'sbom' ? 'SBOM (native document)' : humanizeEnum(k)}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="btn btn-sm btn-quiet" onClick={() => removeAt(i)}>
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// guessKind offers a sensible default kind from a filename's extension, so a
+// user staging a single .zip doesn't have to touch the dropdown at all — it
+// stays changeable for the cases the guess gets wrong.
+function guessKind(filename: string): UploadDraftFile['kind'] {
+  const lower = filename.toLowerCase();
+  if (
+    lower.endsWith('.zip') ||
+    lower.endsWith('.tar') ||
+    lower.endsWith('.tar.gz') ||
+    lower.endsWith('.tgz') ||
+    lower.endsWith('.tar.zst')
+  ) {
+    return 'source_archive';
+  }
+  if (/lock(file)?\.(json|yaml|yml)$|\.lock$/.test(lower)) {
+    return 'lockfile';
+  }
+  if (
+    lower.endsWith('spdx.json') ||
+    lower.endsWith('cyclonedx.json') ||
+    lower.endsWith('.bom.json')
+  ) {
+    return 'sbom';
+  }
+  return 'manifest';
+}
+
+// isHttpsURL mirrors the backend's own shape check (ValidateWebSourceURL) —
+// https-only, a real host, no embedded credentials. NOT an SSRF defence:
+// exactly like the backend's own version of this check, it exists only so a
+// user sees an error immediately rather than after a round trip. The real
+// defence is connection-time IP blocking, in the fetcher.
+function isHttpsURL(raw: string): boolean {
+  const value = raw.trim();
+  if (!value) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+  return parsed.protocol === 'https:' && parsed.hostname !== '' && !parsed.username;
+}
+
+// UrlSource stages the single URL the project's fetch will start from. What
+// Milestone 5 adds — subdomain discovery, JS-library fingerprinting — is not
+// exposed here yet; the wizard only ever submits root_url, and the API
+// defaults discovery_enabled/max_hosts sensibly (true / 25) until there is a
+// reason to surface either as an advanced option.
+function UrlSource({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>) => void }) {
+  const touched = draft.webSourceUrl.trim() !== '';
+  const invalid = touched && !isHttpsURL(draft.webSourceUrl);
+
+  return (
+    <label className="field">
+      <span>URL</span>
+      <input
+        type="url"
+        value={draft.webSourceUrl}
+        onChange={(e) => patch({ webSourceUrl: e.target.value })}
+        placeholder="https://example.com"
+        aria-invalid={invalid}
+      />
+      {invalid && (
+        <p className="status status-down" role="alert">
+          Enter a full https:// URL with no embedded credentials.
+        </p>
+      )}
+      <small>
+        The page is fetched once to prove this source works. Discovering and scanning the rest of
+        the site is not part of this pass yet — a scan against a URL-registered project has no
+        engine that can read it until that lands.
+      </small>
+    </label>
   );
 }
 

@@ -51,7 +51,23 @@ const (
 	// NotificationRetry re-drives failed webhook deliveries.
 	NotificationRetry ID = 3
 
-	// Next subsystem takes 4. Add it here, not in your own package.
+	// NormalizeClusterGraph serializes writes to the global vulnerability
+	// alias-cluster graph (normalize.vuln_clusters / vuln_ids /
+	// vuln_alias_edges) across concurrent scans that might touch overlapping
+	// CVEs at once — see libs/py-shared/axebom_shared/normalize/cluster_store.py.
+	//
+	// ⚠ NOT TAKEN THROUGH THIS PACKAGE'S Lock TYPE. The caller is Python
+	// (workers/sbom/normalize_consumer.py), which takes it directly via
+	// `SELECT pg_advisory_xact_lock($1)` — a TRANSACTION-scoped lock,
+	// auto-released at COMMIT/ROLLBACK, unlike the session-scoped
+	// pg_try_advisory_lock/pg_advisory_unlock pair this package wraps. It is
+	// registered here anyway because Postgres advisory locks are one global
+	// integer namespace for the whole database — see the warning on ID above
+	// — and this is the one place that namespace is tracked, regardless of
+	// which language calls it.
+	NormalizeClusterGraph ID = 4
+
+	// Next subsystem takes 5. Add it here, not in your own package.
 )
 
 // String names the holder, for logs.

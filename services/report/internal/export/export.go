@@ -24,12 +24,16 @@ package export
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/protobom/protobom/pkg/formats"
+	"github.com/protobom/protobom/pkg/mod"
+	"github.com/protobom/protobom/pkg/native"
 	"github.com/protobom/protobom/pkg/sbom"
 	"github.com/protobom/protobom/pkg/writer"
 )
@@ -134,14 +138,33 @@ func Serialize(doc Document, format Format) ([]byte, error) {
 		return nil, err
 	}
 
-	bom, err := toProtobom(doc)
+	bom, err := toProtobom(doc, format)
 	if err != nil {
 		return nil, fmt.Errorf("building the node graph: %w", err)
 	}
 
+	// ⚠ MULTIROOT_HEADLESS IS NOT A WORKAROUND, IT IS THE HONEST DOCUMENT.
+	//
+	// A component-only scan with no resolved dependency graph (no lockfile —
+	// see the Roots doc comment on render.BOM) has no single subject to put in
+	// CycloneDX's metadata.component: every component is independently a root.
+	// Without this mod, protobom's CDX writer refuses a document with more
+	// than one root outright. With it, protobom drops metadata.component and
+	// emits every root as its own top-level component — a standard, valid
+	// "headless" CycloneDX BOM, not an invented hierarchy. It is a documented
+	// no-op whenever there is exactly one root (the ordinary case, and SPDX's
+	// serializer ignores it entirely), so enabling it unconditionally changes
+	// nothing for the common path.
+	serializeOpts := &native.SerializeOptions{
+		Mods: map[mod.Mod]struct{}{mod.CYCLONEDX_MULTIROOT_HEADLESS: {}},
+	}
+
 	var buf bytes.Buffer
 	w := writer.New()
-	if err := w.WriteStreamWithOptions(bom, &buf, &writer.Options{Format: pbFormat}); err != nil {
+	if err := w.WriteStreamWithOptions(bom, &buf, &writer.Options{
+		Format:           pbFormat,
+		SerializeOptions: serializeOpts,
+	}); err != nil {
 		return nil, fmt.Errorf("serializing to %s: %w", format, err)
 	}
 
@@ -256,7 +279,7 @@ func canonicalKey(value any) string {
 // sorted key order, so the same canonical model produces byte-identical output
 // on every run and on every OS. Without that the golden tests flap, and a
 // flapping test is one that gets ignored.
-func toProtobom(doc Document) (*sbom.Document, error) {
+func toProtobom(doc Document, format Format) (*sbom.Document, error) {
 	components := make([]Component, len(doc.Components))
 	copy(components, doc.Components)
 	sort.Slice(components, func(i, j int) bool { return components[i].Key < components[j].Key })
@@ -275,7 +298,7 @@ func toProtobom(doc Document) (*sbom.Document, error) {
 	}
 
 	for _, c := range components {
-		node, err := toNode(c)
+		node, err := toNode(c, idFor(format, c.Key))
 		if err != nil {
 			return nil, err
 		}
@@ -285,11 +308,18 @@ func toProtobom(doc Document) (*sbom.Document, error) {
 	// ⚠ Roots are declared explicitly, not inferred. A monorepo has N of them,
 	// and letting the serializer guess would make every workspace package look
 	// like a dependency of one imaginary parent.
-	roots := append([]string(nil), doc.Roots...)
+	roots := make([]string, len(doc.Roots))
+	for i, r := range doc.Roots {
+		roots[i] = idFor(format, r)
+	}
 	sort.Strings(roots)
 	bom.NodeList.RootElements = roots
 
 	edges := append([]Dependency(nil), doc.Dependencies...)
+	for i := range edges {
+		edges[i].From = idFor(format, edges[i].From)
+		edges[i].To = idFor(format, edges[i].To)
+	}
 	sort.Slice(edges, func(i, j int) bool {
 		if edges[i].From != edges[j].From {
 			return edges[i].From < edges[j].From
@@ -316,13 +346,64 @@ func toProtobom(doc Document) (*sbom.Document, error) {
 	return bom, nil
 }
 
-func toNode(c Component) (*sbom.Node, error) {
+// idFor derives the node/edge-reference identifier for a component key in
+// the given format.
+//
+// ⚠ SPDXID GRAMMAR IS NOT PURL GRAMMAR.
+//
+// CycloneDX's bom-ref has no character restriction, so it keeps using the
+// component key unchanged — that already validates. SPDX 2.3 permits only
+// letters, digits, '.' and '-' in an SPDXID (spdx/tools-golang's ElementID
+// does zero sanitization — it just prefixes "SPDXRef-" onto whatever string
+// it is given), and a PURL-shaped component key (colons, slashes, '@', '?')
+// violates that on every real component. SPDX gets a derived identifier
+// instead; the PURL itself is untouched and keeps living correctly in
+// node.Identifiers[PURL] regardless of format.
+func idFor(format Format, key string) string {
+	if format == SPDX23JSON {
+		return spdxSafeID(key)
+	}
+	return key
+}
+
+// spdxSafeID derives an SPDX-2.3-grammar-legal identifier from a component
+// key: a sanitized slug for readability, plus a short hash suffix of the
+// full original key for collision-safety (two components that sanitize to
+// the same slug must not collide). Deterministic — never a random UUID — so
+// the same canonical model always serializes to the same SPDXID (ADR-0003
+// replayability).
+func spdxSafeID(key string) string {
+	var b strings.Builder
+	dash := false
+	for _, r := range key {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '-':
+			b.WriteRune(r)
+			dash = false
+		case !dash:
+			b.WriteByte('-')
+			dash = true
+		}
+	}
+	slug := strings.Trim(b.String(), "-")
+	if len(slug) > 96 {
+		slug = strings.Trim(slug[:96], "-")
+	}
+	sum := sha256.Sum256([]byte(key))
+	suffix := hex.EncodeToString(sum[:6])
+	if slug == "" {
+		return suffix
+	}
+	return slug + "-" + suffix
+}
+
+func toNode(c Component, nodeID string) (*sbom.Node, error) {
 	if c.Key == "" {
 		return nil, fmt.Errorf("component %q has no key", c.Name)
 	}
 
 	node := &sbom.Node{
-		Id:          c.Key,
+		Id:          nodeID,
 		Type:        sbom.Node_PACKAGE,
 		Name:        c.Name,
 		Version:     c.VersionRaw,

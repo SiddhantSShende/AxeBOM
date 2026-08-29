@@ -14,11 +14,19 @@ What makes AxeBOM unusual is that **executing hostile input is the core function
 |---|---|---|
 | **Malicious repository** | Full control of file contents, filenames, git config, submodules, clone URL | RCE in a scanner, SSRF, exfiltration of secrets and other tenants' data |
 | **Malicious tenant user** | Valid credentials, can register any project | Cross-tenant read, resource exhaustion, using us as an SSRF proxy |
+| **Tenant registering a `url` source** | Names any public root URL, no credential involved | **Confused-deputy recon abuse**: `services/webrecon`'s subdomain discovery (Milestone 5) fetches from hosts the tenant never individually named — a different risk shape from SSRF against our own infra, closer to "AxeBOM as a scanning proxy against a target the tenant doesn't own" |
 | **Compromised upstream scanner** | Ships a backdoored release | Supply-chain — Trivy's channel was compromised twice in March 2026 |
 | **Report recipient** | Opens a shared XLSX/PDF | Formula injection, malicious content in component names |
 | **Network attacker** | Observes or intercepts | BOM content is confidential under CERT-In §5.3 |
 
 Two assets are worth more than the rest: **other tenants' BOM data** (a competitor's full dependency inventory including unpatched vulnerabilities) and **the git credentials** that would grant access to customer source.
+
+**URL-registered projects (`project.web_sources`) are a distinct risk from a git clone or an upload, both of which the tenant already possesses.** A tenant can name *any* public root URL, and once discovery lands (Milestone 5, `services/webrecon`) that root URL fans out to hosts the tenant never named. Mitigations, all already present or already scoped:
+- `max_hosts` (per-source, `1–100`, default `25`) hard-caps how many discovered hosts a single scan may touch, regardless of how many `subfinder` returns.
+- `discovery_enabled` lets a tenant opt a source out of fan-out entirely, scanning only the one root URL they registered.
+- Scheme is `https`-only at registration (`ValidateWebSourceURL`) and every fetch — root page and any discovered host — reuses the same connection-time private-IP blocking (`fetcher.SafeHTTPClient`/`SafeDialer`) the git-clone path already depends on; see "URL validation" and "Clone hardening" below.
+- Rate limiting at the gateway bounds how fast a tenant can register sources or trigger re-scans, capping abuse throughput independent of `max_hosts`.
+None of this makes AxeBOM a general-purpose scanning proxy safe to point at infrastructure the tenant doesn't control — it bounds the blast radius, it doesn't eliminate the risk class.
 
 ---
 
@@ -95,6 +103,10 @@ All of these execute arbitrary code from the repository — npm lifecycle script
 
 `ALLOW_PACKAGE_MANAGER_RESOLUTION` exists for the cases where a customer accepts the trade-off for better transitive resolution. It is **off by default**, is **per-project not global**, and is surfaced in the UI as an explicit risk acknowledgement — never a checkbox in an admin panel someone flips once and forgets.
 
+### subfinder's sandbox (services/webrecon)
+
+`subfinder` (subdomain discovery for a url-registered project, project-registration plan Milestone 5) runs in the **same table above, with exactly one exception**: `Network` is `NetworkEgress`, not `--network=none` — the same, deliberately named exception the fetcher's git clone already gets (`fetcher.FetcherPolicy()`; subfinder's own policy is `services/webrecon/internal/discover.Policy()`, a sibling function, not that same one — see its doc comment for why it isn't literally shared). Read-only rootfs, dropped capabilities, non-root, seccomp, and every quota are unchanged. `-silent` with no active-probing flags: subfinder queries passive sources only (crt.sh, certificate-transparency logs, DNS aggregators) — it never port-scans or brute-forces.
+
 ---
 
 ## 4. Fetching untrusted sources
@@ -138,6 +150,20 @@ Extraction rejects absolute paths, any `..` segment (**zip-slip**), symlinks poi
 ### Path sanitization
 
 Filenames may contain newlines, NUL bytes, 4-byte emoji, RTL overrides and 8 KB paths. Sanitize and truncate **before** database insert — a NUL silently truncates a Postgres text value, so what you store is not what you scanned.
+
+### services/webrecon's fetch surface — a sharper SSRF variant
+
+Every page/script fetch `services/webrecon` makes reuses the SAME `fetcher.SafeHTTPClient` — connection-time private-IP blocking, redirect re-validation, identical to the git-clone path above. Two controls exist on top of that, specific to the confused-deputy/recon-abuse risk a url-registered project introduces (`01. Threat model`):
+
+| Control | Detail |
+|---|---|
+| Script-fetch scope | The page's own **origin** (host **and port** — a same-hostname-different-port check was caught and fixed in review before this shipped, see `services/webrecon/internal/fingerprint/fetch_test.go`'s same-origin tests) plus a short, explicit CDN allowlist (`cdnjs.cloudflare.com`, `unpkg.com`, `cdn.jsdelivr.net`, `ajax.googleapis.com`, `code.jquery.com`). Anything else is **recorded as skipped, never fetched** — never a silent drop. |
+| `max_hosts` | Hard cap (`project.web_sources.max_hosts`, 1–100, default 25) on how many subfinder-discovered hosts a single scan may touch, enforced in `services/webrecon`'s own host-resolution step — checked BEFORE subfinder ever runs, not truncated after. |
+| `discovery_enabled` | Per-source opt-out. A tenant can register a url source that fingerprints only the one page they explicitly gave — no fan-out at all. |
+| Per-request timeout | 15s per page/script fetch (`perRequestTimeout`). Unlike the fetcher's clone — sandboxed, with a container-enforced wall clock — these are plain Go HTTP calls in the worker's own process; without an explicit bound, one unresponsive host would hang the whole job. |
+| Credentials | **None, ever.** A url source is never authenticated (`project.web_sources` has no `credential_ref` column), so `services/webrecon` holds nothing to leak — a materially smaller blast radius than the fetcher, which is the one component permitted to hold a git token. |
+
+None of this makes AxeBOM a general-purpose scanning proxy safe to point at infrastructure the tenant does not control — it bounds the blast radius, it does not eliminate the risk class. See `01. Threat model`'s own paragraph on this for the full reasoning.
 
 ---
 
@@ -216,6 +242,10 @@ Maps to CERT-In §5.3.1 (p.32): define RBAC, identify stakeholders, assign read-
 | DB / S3 credentials | Vault or platform-injected env | never in an image |
 
 Rules: nothing secret in an image, a log, an event payload, or `argv` (it is world-readable in `/proc`). `argv_redacted` in `ScanResultV1` strips known secret-bearing flags. Structured logs pass through a redaction filter keyed on field name **and** value shape.
+
+**The GitHub "connect" token is a partial exception to "never in the SPA," and it is a deliberate, bounded one.** `docs/02-CONTRACTS.md`'s connect flow hands a `repo`-scoped token to the wizard tab so it can call `GET /github/repos` and, on selection, `POST /projects/:id/connections`. It lives in React state only (never `localStorage`/`sessionStorage`), for the lifetime of one wizard session, and is gone the moment the tab navigates away or the connection call completes — at which point Vault, not the browser, is the only place it persists.
+
+**Known residual risk, tracked as a fast-follow, not fixed here:** the token is scoped to `repo`, which is *every* repository the authorizing GitHub account can read — not just the one the wizard ultimately connects. A classic OAuth App cannot narrow this further; only a GitHub App with per-repository installation permissions can. Migrating to a GitHub App (fine-grained installation tokens, no standing `repo` grant) is the correct long-term fix and is intentionally out of scope for the flow described here.
 
 ---
 

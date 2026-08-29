@@ -114,10 +114,10 @@ func (o *Orchestrator) CreateScan(ctx context.Context, tenantID string, in Creat
 			"select at least one BOM family; a scan with none produces nothing")
 	}
 	switch in.SourceKind {
-	case events.SourceGit, events.SourceUpload, events.SourceImage:
+	case events.SourceGit, events.SourceUpload, events.SourceImage, events.SourceURL:
 	default:
 		return Scan{}, errs.Newf(errs.ValidationFieldInvalid,
-			"source_kind must be git, upload or image (got %q)", in.SourceKind)
+			"source_kind must be git, upload, image or url (got %q)", in.SourceKind)
 	}
 
 	// An explicit engine list is validated in full — every offending pair, so
@@ -200,12 +200,23 @@ func (o *Orchestrator) CreateScan(ctx context.Context, tenantID string, in Creat
 		}
 	}
 
-	if err := o.publishFetchJob(ctx, scan); err != nil {
+	// ⚠ WHICH PRODUCER RUNS FIRST DEPENDS ON THE SOURCE, NOT THE FAMILIES
+	// REQUESTED. A url source has no repository to clone and no upload to
+	// extract — services/webrecon is what materializes ITS input (subdomain
+	// discovery + JS fingerprinting), publishing scan.job.webrecon instead of
+	// scan.job.fetch. Every other source kind is unchanged.
+	publishProducer := o.publishFetchJob
+	producerName := "fetch"
+	if scan.SourceKind == events.SourceURL {
+		publishProducer = o.publishWebreconJob
+		producerName = "webrecon"
+	}
+	if err := publishProducer(ctx, scan); err != nil {
 		// The scan row exists and is queued. Failing here leaves it for the
 		// reaper rather than losing it: a scan recorded but not dispatched is
 		// visible and times out, whereas rolling back would lose the record of
 		// what the user asked for.
-		o.log.Error("scan created but the fetch job could not be published",
+		o.log.Error("scan created but the "+producerName+" job could not be published",
 			"scan_id", scan.ID, "cause", err.Error())
 		return scan, errs.Wrap(err, errs.InternalDependency,
 			"the scan was created but could not be queued; it will time out and can be retried")
@@ -377,6 +388,33 @@ func (o *Orchestrator) publishFetchJob(ctx context.Context, scan Scan) error {
 	return o.publishJob(ctx, job)
 }
 
+// publishWebreconJob queues the single webrecon job that discovers and
+// fingerprints a url source. publishFetchJob's sibling, invoked instead of
+// it when scan.SourceKind == events.SourceURL — see CreateScan.
+func (o *Orchestrator) publishWebreconJob(ctx context.Context, scan Scan) error {
+	jobID := uuid.NewString()
+	job := events.ScanJobV1{
+		SchemaVersion: events.SchemaScanJobV1,
+		JobID:         jobID,
+		ScanID:        scan.ID,
+		TenantID:      scan.TenantID,
+		ProjectID:     scan.ProjectID,
+		Family:        events.FamilyWebrecon,
+		Engine:        "webrecon",
+		Attempt:       1,
+		IssuedAt:      o.now().UTC(),
+		DeadlineAt:    o.now().Add(defaultJobDeadline).UTC(),
+		SourceMeta:    events.SourceMeta{Kind: scan.SourceKind},
+		Limits:        defaultJobLimits(),
+		Output:        events.OutputRef{Prefix: o.outputPrefix(scan.ID, "webrecon", jobID)},
+	}
+
+	if err := job.Validate(); err != nil {
+		return err
+	}
+	return o.publishJob(ctx, job)
+}
+
 // FanOut queues one job per engine, all pointing at the same archive.
 //
 // ⚠ EVERY ENGINE READS THE SAME BYTES (ADR-0008).
@@ -389,8 +427,25 @@ func (o *Orchestrator) FanOut(ctx context.Context, tenantID, scanID string) (int
 	if err != nil {
 		return 0, err
 	}
-	if scan.ArchiveRef == "" {
-		return 0, fmt.Errorf("cannot fan out scan %s: no source archive recorded", scanID)
+
+	// Loaded once per FanOut call, used only by engines that consume it
+	// (github-dependency-graph-sbom, webrecon-fingerprint) — see
+	// policy.Engine.ConsumesNativeSBOM. A no-op query for every scan that
+	// never staged one: LoadRawArtifactsForEngines returns an empty slice,
+	// not an error, when neither producer recorded anything under role
+	// "native_output".
+	nativeSBOMRef := o.nativeSBOMRefFor(ctx, tenantID, scanID)
+
+	// ⚠ TWO WAYS A SCAN CAN HAVE SOMETHING TO FAN OUT WITH, NOT ONE.
+	//
+	// A git/upload-sourced scan has a real content-addressed source archive
+	// (ArchiveRef). A url-sourced scan never does — services/webrecon
+	// produces a native discovery document instead, never a source archive —
+	// so ArchiveRef being empty is the EXPECTED, honest state for it, not a
+	// missing-data bug. Refusing to fan out only when BOTH are empty is what
+	// makes this guard correct for both source shapes.
+	if scan.ArchiveRef == "" && nativeSBOMRef == "" {
+		return 0, fmt.Errorf("cannot fan out scan %s: no source archive or native document recorded", scanID)
 	}
 
 	var published int
@@ -449,6 +504,10 @@ func (o *Orchestrator) FanOut(ctx context.Context, tenantID, scanID string) (int
 			Output: events.OutputRef{Prefix: o.outputPrefix(scan.ID, run.EngineID, run.JobID)},
 		}
 
+		if e, ok := o.registry.Get(run.EngineID); ok && e.ConsumesNativeSBOM {
+			job.Workspace.NativeSBOMRef = nativeSBOMRef
+		}
+
 		if err := job.Validate(); err != nil {
 			// A skipped job leaves its engine run queued forever, so this is an
 			// ERROR with the cause attached — not a debug line. The scan will
@@ -470,6 +529,38 @@ func (o *Orchestrator) FanOut(ctx context.Context, tenantID, scanID string) (int
 	}
 
 	return published, nil
+}
+
+// nativeSBOMProducers are the components that can stage a native document —
+// never a policy.Engine, never given a scan.engine_runs row, so their
+// artifacts are looked up by producer id rather than engine id. See
+// RecordProducerArtifacts and migrations/scan/0009.
+var nativeSBOMProducers = []string{"fetcher", "webrecon"}
+
+// nativeSBOMRefFor looks up a staged native document, if one of
+// nativeSBOMProducers staged one — see fetchDependencyGraphSBOM in
+// services/fetcher/internal/work/work.go, services/webrecon's worker, and
+// Workspace.NativeSBOMRef's own doc comment.
+//
+// Errors are logged and swallowed, not returned: a lookup failure here must
+// never block the rest of FanOut, and every engine that cares
+// (github-dependency-graph-sbom, webrecon-fingerprint) already treats an
+// empty ref as an honest ENGINE_INPUT_MISSING rather than a hard failure.
+func (o *Orchestrator) nativeSBOMRefFor(ctx context.Context, tenantID, scanID string) string {
+	artifacts, err := o.store.LoadRawArtifactsForEngines(ctx, tenantID, scanID, nativeSBOMProducers)
+	if err != nil {
+		o.log.Warn("could not check for a staged native document; proceeding without one",
+			"scan_id", scanID, "cause", err.Error())
+		return ""
+	}
+	for _, producer := range nativeSBOMProducers {
+		for _, a := range artifacts[producer] {
+			if a.Role == "native_output" {
+				return a.URI
+			}
+		}
+	}
+	return ""
 }
 
 // publishJob marshals and publishes, keyed for deduplication.
@@ -552,8 +643,21 @@ func (o *Orchestrator) HandleResult(ctx context.Context, result events.ScanResul
 		}
 	}
 
-	if err := o.store.UpsertEngineRun(ctx, run); err != nil {
+	engineRunID, err := o.store.UpsertEngineRun(ctx, run)
+	if err != nil {
 		return fmt.Errorf("%w: recording engine run: %w", bus.ErrRetry, err)
+	}
+
+	// ⚠ THE ONE WRITE PATH FOR scan.raw_artifacts. Before this, an engine's
+	// artifact URIs/checksums were read off ScanResultV1 and then discarded
+	// the moment this function returned — nothing durable ever recorded
+	// where a raw result lives. This is what makes both the normalize
+	// trigger's envelope (below) and future re-normalization possible.
+	// Best-effort: a failure here must not fail engine-run bookkeeping, which
+	// has already committed above.
+	if err := o.store.RecordRawArtifacts(ctx, result.TenantID, result.ScanID, engineRunID, result.Artifacts); err != nil {
+		o.log.Error("could not record raw artifacts", "scan_id", result.ScanID,
+			"engine", result.Engine, "cause", err.Error())
 	}
 
 	// Every ecosystem the engine covered is recorded as covered. The gaps were
@@ -573,7 +677,18 @@ func (o *Orchestrator) HandleResult(ctx context.Context, result events.ScanResul
 		return err
 	}
 
-	return o.RecomputeScanStatus(ctx, result.TenantID, result.ScanID)
+	if err := o.RecomputeScanStatus(ctx, result.TenantID, result.ScanID); err != nil {
+		return err
+	}
+
+	// ⚠ AFTER RecomputeScanStatus, same reasoning as releaseDependents runs
+	// BEFORE it: this reads the scan's engine runs fresh, so it must see
+	// this result's row (already written above) and any dependent job
+	// releaseDependents just queued or skipped. Best-effort, matching
+	// publishScanCompleted's discipline: a failed trigger-publish must not
+	// turn a correctly-derived scan status into a retried one.
+	o.maybeTriggerNormalize(ctx, result)
+	return nil
 }
 
 // RecomputeScanStatus derives and writes the scan's status.

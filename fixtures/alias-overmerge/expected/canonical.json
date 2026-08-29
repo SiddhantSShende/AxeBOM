@@ -1,0 +1,693 @@
+{
+  "component_count": 2,
+  "components": [
+    {
+      "candidate_identities": [],
+      "component_key": "purl:pkg:npm/alias-overmerge@1.0.0",
+      "ecosystem": "npm",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": false,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [
+        {
+          "layer": "",
+          "path": "package-lock.json",
+          "sha256": ""
+        }
+      ],
+      "name": "alias-overmerge",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:npm/alias-overmerge@1.0.0?package-id=1e2f3a4b5c6d7e8f"
+        }
+      ],
+      "purl": "pkg:npm/alias-overmerge@1.0.0",
+      "scope": "required",
+      "version_raw": "1.0.0"
+    },
+    {
+      "candidate_identities": [],
+      "component_key": "purl:pkg:npm/batch-pkg@1.0.0",
+      "ecosystem": "npm",
+      "hashes": [],
+      "identity_confidence": "high",
+      "identity_rule": "purl",
+      "is_direct": true,
+      "license_ambiguous": false,
+      "license_effective": "",
+      "license_rule": "none",
+      "locations": [
+        {
+          "layer": "",
+          "path": "package-lock.json",
+          "sha256": ""
+        },
+        {
+          "layer": "",
+          "path": "src/package-lock.json",
+          "sha256": ""
+        }
+      ],
+      "name": "batch-pkg",
+      "observed_by": [
+        {
+          "confidence": "high",
+          "engine": "grype",
+          "engine_version": "0.117.0",
+          "native_id": "pkg:npm/batch-pkg@1.0.0?package-id=2f3a4b5c6d7e8f90"
+        },
+        {
+          "confidence": "high",
+          "engine": "osv-scanner",
+          "engine_version": "",
+          "native_id": "batch-pkg@1.0.0"
+        },
+        {
+          "confidence": "high",
+          "engine": "syft",
+          "engine_version": "1.51.0",
+          "native_id": "pkg:npm/batch-pkg@1.0.0?package-id=2f3a4b5c6d7e8f90"
+        }
+      ],
+      "purl": "pkg:npm/batch-pkg@1.0.0",
+      "scope": "required",
+      "version_raw": "1.0.0"
+    }
+  ],
+  "coverage": {
+    "completeness_numerator": 12,
+    "completeness_pct": 12.77,
+    "declaration_numerator": 12,
+    "declaration_pct": 12.77,
+    "denominator": 94,
+    "field_count": 21,
+    "fields": [
+      {
+        "completeness_pct": 100.0,
+        "declaration_pct": 100.0,
+        "declared": 2,
+        "field_id": "certin.sbom.01.component_name",
+        "name": "Component Name",
+        "present": 2,
+        "total": 2,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 100.0,
+        "declaration_pct": 100.0,
+        "declared": 2,
+        "field_id": "certin.sbom.02.component_version",
+        "name": "Component Version",
+        "present": 2,
+        "total": 2,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.03.component_description",
+        "name": "Component Description",
+        "present": 0,
+        "total": 2,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.04.component_supplier",
+        "name": "Component Supplier",
+        "present": 0,
+        "total": 2,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.05.component_license",
+        "name": "Component License",
+        "present": 0,
+        "total": 2,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.06.component_origin",
+        "name": "Component Origin",
+        "present": 0,
+        "total": 2,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.07.component_dependencies",
+        "name": "Component Dependencies",
+        "present": 0,
+        "total": 2,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.08.vulnerabilities",
+        "name": "Vulnerabilities",
+        "present": 0,
+        "total": 2,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.09.patch_status",
+        "name": "Patch Status",
+        "present": 0,
+        "total": 2,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.10.release_date",
+        "name": "Release Date",
+        "present": 0,
+        "total": 2,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.11.eol_date",
+        "name": "End-of-Life (EOL) Date",
+        "present": 0,
+        "total": 2,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.12.criticality",
+        "name": "Criticality",
+        "present": 0,
+        "total": 2,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.13.usage_restrictions",
+        "name": "Usage Restrictions",
+        "present": 0,
+        "total": 2,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.14.checksums",
+        "name": "Checksums or Hashes",
+        "present": 0,
+        "total": 2,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.15.comments",
+        "name": "Comments or Notes",
+        "present": 0,
+        "total": 2,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.16.author_of_sbom_data",
+        "name": "Author of SBOM Data",
+        "present": 0,
+        "total": 2,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.17.timestamp",
+        "name": "Timestamp",
+        "present": 0,
+        "total": 2,
+        "weight": 3
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.18.executable_property",
+        "name": "Executable Property",
+        "present": 0,
+        "total": 2,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.19.archive_property",
+        "name": "Archive Property",
+        "present": 0,
+        "total": 2,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.20.structured_property",
+        "name": "Structured Property",
+        "present": 0,
+        "total": 2,
+        "weight": 1
+      },
+      {
+        "completeness_pct": 0.0,
+        "declaration_pct": 0.0,
+        "declared": 0,
+        "field_id": "certin.sbom.21.unique_identifier",
+        "name": "Unique Identifier",
+        "present": 0,
+        "total": 2,
+        "weight": 3
+      }
+    ],
+    "formula": "pct = 100 \u00d7 \u03a3_c \u03a3_f (w_f \u00d7 present(c,f)) / \u03a3_c \u03a3_f w_f",
+    "scored_entities": 2,
+    "unidentified_count": 0
+  },
+  "diagnostics": [
+    {
+      "code": "ENGINE_FIELD_MISSING",
+      "hint": "treated as zero components; the output shape may have changed",
+      "message": "dependency-check output has no `dependencies` array",
+      "severity": "warn"
+    },
+    {
+      "code": "ENGINE_FIELD_MISSING",
+      "message": "syft-spdx output has no `packages` array",
+      "severity": "warn"
+    },
+    {
+      "code": "ENGINE_FIELD_MISSING",
+      "hint": "treated as zero components; the output shape may have changed",
+      "message": "trivy-fs output has no `components` array",
+      "severity": "warn"
+    },
+    {
+      "code": "NORMALIZE_ALIAS_EDGE_REFUSED",
+      "hint": "CVE\u2194CVE edges require an authoritative source; a scanner assertion is not sufficient; merging would produce a 13-member cluster, above the 12 ceiling; flagged for review instead of merged",
+      "message": "3 alias edge(s) were refused",
+      "severity": "info"
+    },
+    {
+      "code": "NORMALIZE_CLUSTER_FLAGGED",
+      "hint": "flagged for review rather than merged further; likely an over-merge",
+      "message": "3 vulnerability cluster(s) exceeded the size ceiling",
+      "severity": "warn"
+    }
+  ],
+  "engine_coverage": [
+    {
+      "artifact_sha256": "",
+      "ecosystems_covered": [],
+      "engine_db_version": "",
+      "engine_id": "dependency-check",
+      "image_digest": "",
+      "status": "unavailable",
+      "version": ""
+    },
+    {
+      "artifact_sha256": "8918782b240a981741c7f17a0fdc4815a96991fd548c5a8418d661fe9e08be3a",
+      "ecosystems_covered": [
+        "npm"
+      ],
+      "engine_db_version": "",
+      "engine_id": "grype",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": "0.117.0"
+    },
+    {
+      "artifact_sha256": "f6db85778cdd2a8249573e11d61486f3b1d9e084df4913718decb94f0058a779",
+      "ecosystems_covered": [
+        "npm"
+      ],
+      "engine_db_version": "",
+      "engine_id": "osv-scanner",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": ""
+    },
+    {
+      "artifact_sha256": "9babd76ae1f1411a293e1e9e8711ffdd789b8cded411ae17f2f3366939bb53f4",
+      "ecosystems_covered": [
+        "npm"
+      ],
+      "engine_db_version": "",
+      "engine_id": "syft",
+      "image_digest": "",
+      "status": "succeeded",
+      "version": "1.51.0"
+    },
+    {
+      "artifact_sha256": "",
+      "ecosystems_covered": [],
+      "engine_db_version": "",
+      "engine_id": "syft-spdx",
+      "image_digest": "",
+      "status": "unavailable",
+      "version": ""
+    },
+    {
+      "artifact_sha256": "",
+      "ecosystems_covered": [],
+      "engine_db_version": "",
+      "engine_id": "trivy-fs",
+      "image_digest": "",
+      "status": "unavailable",
+      "version": ""
+    }
+  ],
+  "finding_count": 2,
+  "findings": [
+    {
+      "component_key": "purl:pkg:npm/batch-pkg@1.0.0",
+      "cvss_vectors": [
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        }
+      ],
+      "detected_by": [
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2024-99999",
+      "ecosystem": "npm",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "1.0.2",
+      "fixed_versions": [
+        "1.0.2"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "high",
+      "severity_rule": "vendor-string",
+      "vuln_cluster_id": "fixture-alias-overmerge-cluster-0002"
+    },
+    {
+      "component_key": "purl:pkg:npm/batch-pkg@1.0.0",
+      "cvss_vectors": [
+        {
+          "score": 9.8,
+          "severity": "Critical",
+          "source": "Primary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "version": "3.1"
+        },
+        {
+          "score": null,
+          "severity": "",
+          "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "version": "3.1"
+        }
+      ],
+      "detected_by": [
+        "grype",
+        "osv-scanner"
+      ],
+      "display_id": "CVE-2024-90001",
+      "ecosystem": "npm",
+      "fix_version_ordering": "comparator",
+      "fixed_in_min": "1.0.1",
+      "fixed_versions": [
+        "1.0.1"
+      ],
+      "severity_conflict": false,
+      "severity_effective": "critical",
+      "severity_rule": "advisory-cvss-v3.1",
+      "vuln_cluster_id": "fixture-alias-overmerge-cluster-0003"
+    }
+  ],
+  "graph": {
+    "depth": {
+      "purl:pkg:npm/alias-overmerge@1.0.0": 0,
+      "purl:pkg:npm/batch-pkg@1.0.0": 1
+    },
+    "direct": [
+      "purl:pkg:npm/batch-pkg@1.0.0"
+    ],
+    "edges": [
+      {
+        "confidence": "low",
+        "ecosystem": "npm",
+        "from": "purl:pkg:npm/alias-overmerge@1.0.0",
+        "owning_engine": "syft",
+        "relationship": "depends_on",
+        "scope": "required",
+        "to": "purl:pkg:npm/batch-pkg@1.0.0"
+      }
+    ],
+    "orphans": [],
+    "owning_engine": {
+      "npm": "syft"
+    },
+    "roots": [
+      "purl:pkg:npm/alias-overmerge@1.0.0"
+    ]
+  },
+  "known_unknowns": "Engines that did not complete: dependency-check (unavailable), syft-spdx (unavailable), trivy-fs (unavailable).",
+  "provenance": {
+    "alias_snapshot_id": "fixture-alias-overmerge-aliases",
+    "ecosystems_without_engine": [],
+    "engines": [
+      {
+        "artifact_sha256": "",
+        "ecosystems_covered": [],
+        "engine_db_version": "",
+        "engine_id": "dependency-check",
+        "image_digest": "",
+        "status": "unavailable",
+        "version": ""
+      },
+      {
+        "artifact_sha256": "8918782b240a981741c7f17a0fdc4815a96991fd548c5a8418d661fe9e08be3a",
+        "ecosystems_covered": [
+          "npm"
+        ],
+        "engine_db_version": "",
+        "engine_id": "grype",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": "0.117.0"
+      },
+      {
+        "artifact_sha256": "f6db85778cdd2a8249573e11d61486f3b1d9e084df4913718decb94f0058a779",
+        "ecosystems_covered": [
+          "npm"
+        ],
+        "engine_db_version": "",
+        "engine_id": "osv-scanner",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": ""
+      },
+      {
+        "artifact_sha256": "9babd76ae1f1411a293e1e9e8711ffdd789b8cded411ae17f2f3366939bb53f4",
+        "ecosystems_covered": [
+          "npm"
+        ],
+        "engine_db_version": "",
+        "engine_id": "syft",
+        "image_digest": "",
+        "status": "succeeded",
+        "version": "1.51.0"
+      },
+      {
+        "artifact_sha256": "",
+        "ecosystems_covered": [],
+        "engine_db_version": "",
+        "engine_id": "syft-spdx",
+        "image_digest": "",
+        "status": "unavailable",
+        "version": ""
+      },
+      {
+        "artifact_sha256": "",
+        "ecosystems_covered": [],
+        "engine_db_version": "",
+        "engine_id": "trivy-fs",
+        "image_digest": "",
+        "status": "unavailable",
+        "version": ""
+      }
+    ],
+    "normalization_version": 1,
+    "ruleset_version": "2026.08.1",
+    "scan_id": "fixture-alias-overmerge",
+    "source_commit_sha": "",
+    "spdx_license_list_version": "3.25",
+    "workspace_archive_sha256": ""
+  },
+  "ruleset_version": "2026.08.1",
+  "spdx_license_list_version": "3.25",
+  "unidentified_count": 0,
+  "vuln_clusters": [
+    {
+      "cluster_id": "fixture-alias-overmerge-cluster-0000",
+      "display_id_at_render": "CVE-2024-90012",
+      "flagged_for_review": true,
+      "members": [
+        "CVE-2024-90012"
+      ],
+      "merges": []
+    },
+    {
+      "cluster_id": "fixture-alias-overmerge-cluster-0001",
+      "display_id_at_render": "CVE-2024-90013",
+      "flagged_for_review": true,
+      "members": [
+        "CVE-2024-90013"
+      ],
+      "merges": []
+    },
+    {
+      "cluster_id": "fixture-alias-overmerge-cluster-0002",
+      "display_id_at_render": "CVE-2024-99999",
+      "flagged_for_review": false,
+      "members": [
+        "CVE-2024-99999"
+      ],
+      "merges": []
+    },
+    {
+      "cluster_id": "fixture-alias-overmerge-cluster-0003",
+      "display_id_at_render": "CVE-2024-90001",
+      "flagged_for_review": true,
+      "members": [
+        "CVE-2024-90001",
+        "CVE-2024-90002",
+        "CVE-2024-90003",
+        "CVE-2024-90004",
+        "CVE-2024-90005",
+        "CVE-2024-90006",
+        "CVE-2024-90007",
+        "CVE-2024-90008",
+        "CVE-2024-90009",
+        "CVE-2024-90010",
+        "CVE-2024-90011",
+        "GHSA-OVMG-TEST-0001"
+      ],
+      "merges": [
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-OVMG-TEST-0001",
+          "id_b": "CVE-2024-90001",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-OVMG-TEST-0001",
+          "id_b": "CVE-2024-90002",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-OVMG-TEST-0001",
+          "id_b": "CVE-2024-90003",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-OVMG-TEST-0001",
+          "id_b": "CVE-2024-90004",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-OVMG-TEST-0001",
+          "id_b": "CVE-2024-90005",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-OVMG-TEST-0001",
+          "id_b": "CVE-2024-90006",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-OVMG-TEST-0001",
+          "id_b": "CVE-2024-90007",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-OVMG-TEST-0001",
+          "id_b": "CVE-2024-90008",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-OVMG-TEST-0001",
+          "id_b": "CVE-2024-90009",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-OVMG-TEST-0001",
+          "id_b": "CVE-2024-90010",
+          "source": "osv.dev/aliases"
+        },
+        {
+          "authoritative": true,
+          "evidence_edge_id": "",
+          "id_a": "GHSA-OVMG-TEST-0001",
+          "id_b": "CVE-2024-90011",
+          "source": "osv.dev/aliases"
+        }
+      ]
+    }
+  ]
+}

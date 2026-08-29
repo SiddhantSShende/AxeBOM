@@ -113,7 +113,7 @@ Store only the **hash** of the refresh token. Access tokens are stateless JWTs a
 | `tenant_id` | UUID NOT NULL | RLS |
 | `name` | TEXT NOT NULL | `UNIQUE (tenant_id, name)` |
 | `description` | TEXT | |
-| `source_type` | TEXT NOT NULL | CHECK in (`github`,`gitlab`,`bitbucket`,`upload`,`image`,`manual`) |
+| `source_type` | TEXT NOT NULL | CHECK in (`github`,`gitlab`,`bitbucket`,`upload`,`image`,`manual`,`url`) |
 | `sdlc_stage` | TEXT NOT NULL | CHECK in (`design`,`source`,`build`,`analyzed`,`deployed`,`runtime`) — CERT-In §3.2, p.12–13 |
 | `validity_start` | DATE NULL | |
 | `validity_end` | DATE NULL | CHECK `validity_end >= validity_start` |
@@ -153,6 +153,11 @@ This is the commonly-missed minimum-element category. **Not a report section —
 `(id, tenant_id, project_id, kind, storage_ref, sha256, size_bytes, original_filename, uploaded_by, created_at)`
 `kind` CHECK in (`source_archive`,`manifest`,`lockfile`,`sbom`,`hbom_csv`,`image_tarball`).
 
+### `project.web_sources`
+`(id, tenant_id, project_id, root_url, discovery_enabled, max_hosts, last_scanned_at, created_at)`
+
+A project registered by URL rather than a repository connection or an upload. No `credential_ref` — nothing here is ever authenticated. `discovery_enabled` (default `true`) and `max_hosts` (default `25`, CHECK `BETWEEN 1 AND 100`) are the abuse-guard knobs `services/webrecon`'s subdomain-discovery pass reads (`05-SECURITY-MODEL.md` §1); they exist ahead of that service so its landing is a pure application change, not a schema change. A project may have more than one row here — nothing caps it to one, and `ListWebSources` returns a slice.
+
 ---
 
 ## 3. Scans — schema `scan`
@@ -165,7 +170,7 @@ This is the commonly-missed minimum-element category. **Not a report section —
 | `triggered_by` | TEXT NOT NULL | CHECK in (`user`,`campaign`,`api`,`webhook`) |
 | `trigger_ref` | UUID NULL | user id or campaign id |
 | `status` | TEXT NOT NULL | CHECK in (`queued`,`fetching`,`running`,`normalizing`,`completed`,`completed_with_errors`,`failed`,`cancelled`) |
-| `source_kind` | TEXT NOT NULL | CHECK in (`git`,`upload`,`image`); denormalized from the project at create time — cross-schema JOINs are forbidden, and a project changing `source_type` later must not retroactively change what an old scan claims to have scanned |
+| `source_kind` | TEXT NOT NULL | CHECK in (`git`,`upload`,`image`,`url`); denormalized from the project at create time — cross-schema JOINs are forbidden, and a project changing `source_type` later must not retroactively change what an old scan claims to have scanned |
 | `bom_types` | TEXT[] NOT NULL | requested families — never `hbom` or `qbom`; both are rejected at scan-create time (`SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE`, `02-CONTRACTS.md` §7/§9) because neither has a worker (HBOM is a CSV/form import, QBOM is derived from CBOM) |
 | `report_levels` | TEXT[] NOT NULL | |
 | `standards` | TEXT[] NOT NULL | `SPDX`, `CycloneDX` |
@@ -209,8 +214,10 @@ One row per (scan, engine). This is where partial failure lives.
 `partial` is a **first-class status, not an error** — e.g. Grype covered 11 of 12 ecosystems because one lockfile was malformed.
 
 ### `scan.raw_artifacts`
-`(id, tenant_id, scan_id, engine_run_id, role, storage_ref, media_type, sha256, size_bytes, created_at)`
+`(id, tenant_id, scan_id, engine_run_id, producer, role, storage_ref, media_type, sha256, size_bytes, created_at)`
 `role` CHECK in (`native_output`,`log`,`stderr`,`sarif`,`source_archive`).
+
+`engine_run_id` and `producer` are **mutually exclusive** (CHECK `(engine_run_id IS NULL) <> (producer IS NULL)`): an artifact belongs either to a dispatched engine's run, or to a named producer component that never gets an `engine_runs` row — today `fetcher` (a source archive, plus an optional `native_output` like a GitHub Dependency Graph SBOM) and `webrecon` (a url source's discovery + JS-fingerprint result, `native_output`). `LoadRawArtifactsForEngines` resolves both kinds by the same id.
 
 **Immutable. Never updated, never deleted.** This is what makes normalization replayable: a dedup bug is fixed by re-normalizing these, not by re-running scanners. Retention is a compliance decision, not a storage one.
 
@@ -218,6 +225,11 @@ One row per (scan, engine). This is where partial failure lives.
 `(scan_id, ecosystem, detected_by, engine_available BOOLEAN)`
 
 Feeds the **Engine Coverage** report section and auto-seeds `project.practices.known_unknowns`. `engine_available = false` is the honest denominator most tools hide.
+
+### `scan.normalize_triggers`
+`(scan_id, tenant_id, family, trigger_id UUID DEFAULT app.uuid_v7(), triggered_at)` — `PRIMARY KEY (scan_id, family)`.
+
+**The write-once guard** for "this scan's engines are done, normalize it": `scan-orchestrator` inserts a row (`ON CONFLICT DO NOTHING`, mirroring `SetSourceOnce`'s idiom) the moment every engine dispatched for one `(scan, family)` reaches a terminal state, and publishes exactly one `NormalizeTriggerV1` (`docs/02-CONTRACTS.md` §6a) when the insert actually fires. `trigger_id` doubles as the NATS dedup key. **Immutable by grant** — `UPDATE`/`DELETE` revoked from `axebom_app`, same as `scan.raw_artifacts`. Currently wired for `sbom` only; the per-family design lets `cbom`/`aibom` gain their own trigger later with no schema change.
 
 ---
 
@@ -231,7 +243,7 @@ Feeds the **Engine Coverage** report section and auto-seeds `project.practices.k
 | `bom_type` | TEXT NOT NULL | CHECK in (`SBOM`,`CBOM`,`QBOM`,`AIBOM`,`HBOM`) |
 | `normalization_version` | INT NOT NULL DEFAULT 1 | **bumped on re-normalization; old rows retained** |
 | `ruleset_version` | TEXT NOT NULL | e.g. `2026.08.1` |
-| `alias_snapshot_id` | UUID NOT NULL | which alias graph produced this |
+| `alias_snapshot_id` | UUID NOT NULL | which alias graph produced this — FK-shaped reference to `normalize.alias_snapshot.id` (see below). ⚠ NOT an actual FK yet: `qbom.go`/`hbom.go` write `app.uuid_v7()` inline with no backing row, since QBOM/HBOM never run the SBOM alias-closure pipeline this column was designed for. Adding a real FK requires deciding what QBOM/HBOM should reference first (a shared sentinel row? a nullable column, SBOM-only?) — out of scope for a change that must stay additive to non-SBOM BOM types. |
 | `spdx_license_list_version` | TEXT NOT NULL | ids get deprecated; a report must say which list it validated against |
 | `completeness_pct` | NUMERIC(5,2) | substantive values only — **the honest signal** |
 | `declaration_pct` | NUMERIC(5,2) | includes explicit `not-provided` — a representation check |
@@ -242,6 +254,9 @@ Feeds the **Engine Coverage** report section and auto-seeds `project.practices.k
 `UNIQUE (scan_id, bom_type, normalization_version)`.
 
 > Two coverage numbers, always both. `not-provided`, `NOASSERTION`, `unknown`, `""` and `[]` score present = 0 for `completeness_pct`. Publishing only `declaration_pct` and calling it "coverage" is how tools ship misleading 100% scores.
+
+### `normalize.alias_snapshot`
+`(id, edge_count, source, ruleset_version, created_at)` — **global**, not tenant-scoped, same reasoning as `vuln_clusters` below: a provenance marker for the vulnerability alias graph state a normalization run consulted. `source` is honest about what it actually is today — `'scan-local'`, meaning the edges came from that one run's own grype/osv-scanner artifacts, not a read of an independently-versioned, persisted global edge snapshot. A future snapshot mechanism that pins a point-in-time copy of `vuln_alias_edges` would use a different `source` value; the column exists now so that distinction never needs a schema change.
 
 ### `normalize.components`  ← CERT-In Table 5 §4.2 data fields
 
@@ -323,11 +338,13 @@ Every normalized fact records which engine saw it, which artifact it came from, 
 
 > **The trap this design avoids:** deriving the cluster id from a hash of its members means the id mutates the moment a new alias is discovered — breaking every foreign key and invalidating every previously issued report. Merges write a forwarding row instead.
 
+> **Written by `libs/py-shared/axebom_shared/normalize/cluster_store.py`**, under a Postgres advisory lock (`pg_advisory_xact_lock`, key registered in `libs/go-shared/platform/leader/leader.go`'s `NormalizeClusterGraph`) so concurrent scans touching overlapping CVEs cannot race. Enforces the cross-scan member-count cap (>12 refuses the merge and flags for review, per the `flagged_for_review` column above) by reading the TRUE persisted membership via `resolve_cluster()` — a check the in-memory union-find alone cannot make, since it only ever sees one scan's local group. `workers/sbom/normalize_consumer.py` is the one caller in production, using the `axebom_normalize_writer` role (SELECT/INSERT on `normalize` schema, plus one column-scoped `UPDATE (member_count, flagged_for_review, display_id, updated_at)` grant on this table specifically — `migrations/normalize/0006_alias_snapshot.sql`).
+
 ### `normalize.vuln_cluster_merges`
 `(from_cluster_id, into_cluster_id, evidence_edge_id, merged_at)` — a view resolves old ids forward. **Every merge is logged with its evidence.** A compliance product must be able to explain why two findings became one.
 
 ### `normalize.vuln_ids`
-`(id, cluster_id, namespace, value)` — `namespace` CHECK in (`CVE`,`GHSA`,`OSV`,`SNYK`,`RHSA`,`DSA`,`USN`,`ALAS`,`ELSA`,`DLA`,`NPM`). `UNIQUE (namespace, value)`.
+`(id, cluster_id, namespace, value)` — `namespace` CHECK in (`CVE`,`GHSA`,`OSV`,`GO`,`PYSEC`,`RUSTSEC`,`GSD`,`MAL`,`SNYK`,`RHSA`,`DSA`,`USN`,`ALAS`,`ELSA`,`DLA`,`NPM`) — matches `aliases.py`'s `_NAMESPACE_RANK` vocabulary exactly (widened in `migrations/normalize/0008_vuln_ids_namespace_widen.sql`; `GO`/`PYSEC`/`RUSTSEC` are osv-scanner's own ecosystem-native id prefixes and are routinely a finding's PRIMARY id, not just an alias). `UNIQUE (namespace, value)`.
 
 ### `normalize.vuln_alias_edges`
 `(id, id_a, id_b, source, authoritative BOOLEAN, first_seen, last_seen)`
@@ -338,7 +355,7 @@ Every normalized fact records which engine saw it, which artifact it came from, 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | UUID PK | |
-| `tenant_id`, `bom_document_id`, `component_id`, `cluster_id` | UUID NOT NULL | |
+| `tenant_id`, `bom_document_id`, `component_id`, `cluster_id` | UUID NOT NULL | `cluster_id` REFERENCES `normalize.vuln_clusters(id)` (`migrations/normalize/0007_findings_cluster_fk.sql`) — a finding referencing a cluster that was never persisted fails loudly at insert time |
 | `display_id_at_render` | TEXT NOT NULL | **pinned** — reports must stay stable as clusters evolve |
 | `severity_effective` | TEXT | CHECK in (`critical`,`high`,`medium`,`low`,`none`,`unknown`) |
 | `severity_source` | TEXT | which rule won |
@@ -347,7 +364,7 @@ Every normalized fact records which engine saw it, which artifact it came from, 
 | `cvss_primary_score` | NUMERIC(3,1) NULL | from the highest available v3.1+ vector |
 | `fixed_versions` | TEXT[] | |
 | `fixed_in_min` | TEXT NULL | ecosystem-correct comparator |
-| `fix_version_ordering` | TEXT | CHECK in (`known`,`unknown`) — **`unknown` when no comparator exists. Never guess** |
+| `fix_version_ordering` | TEXT | CHECK in (`comparator`,`unknown`,`none`) — `comparator` when a fix version was reported and an ecosystem-correct comparator exists; **`unknown` when a fix version was reported but no comparator exists — never guess with a lexical sort**; `none` when no fix version was reported at all |
 | `detected_by` | TEXT[] NOT NULL | every engine that saw it |
 | `references` | JSONB | |
 | `first_seen_at`, `last_seen_at` | TIMESTAMPTZ | |

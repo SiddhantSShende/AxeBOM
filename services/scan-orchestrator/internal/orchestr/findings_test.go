@@ -49,8 +49,42 @@ func insertBOMDocument(t *testing.T, f *fixture, tenantID, scanID string, versio
 
 // insertFinding writes one normalize.findings row with the given severity.
 // severity == "" writes SQL NULL — the NotProvided bucket.
+//
+// ⚠ INSERTS A MATCHING normalize.vuln_clusters ROW FIRST. Since
+// migrations/normalize/0007_findings_cluster_fk.sql, findings.cluster_id is
+// a real FK — a fabricated uuid with no backing row now fails loudly at
+// insert time (the whole point of the FK: ADR-0005). vuln_clusters is
+// GLOBAL, not tenant-scoped (migration 0002), so this goes through the raw
+// pool rather than WithTenant.
 func insertFinding(t *testing.T, f *fixture, tenantID, docID, severity string) {
 	t.Helper()
+
+	clusterID := uuid.New()
+	if _, err := f.pool.Raw().Exec(context.Background(), `
+		INSERT INTO normalize.vuln_clusters (id, display_id)
+		VALUES ($1, $2)`,
+		clusterID, "CVE-TEST-"+clusterID.String()[:8]); err != nil {
+		t.Fatalf("insert vuln cluster: %v", err)
+	}
+	// vuln_clusters is GLOBAL reference data with no cascade back to
+	// anything scan/tenant-scoped cleanupScan reaches — clean it up
+	// explicitly or every run of this test leaks a row into it.
+	//
+	// ⚠ ALSO DELETES THE REFERENCING findings ROW FIRST, IN THE SAME
+	// CLEANUP — t.Cleanup runs LIFO, and insertBOMDocument's own cleanup
+	// (which deletes normalize.findings by bom_document_id) was registered
+	// BEFORE this one, so it would otherwise run AFTER this one and this
+	// DELETE would hit the findings_cluster_id_fkey constraint while a
+	// finding still points at this cluster.
+	t.Cleanup(func() {
+		_ = f.pool.WithTenant(context.Background(), tenantID, func(ctx context.Context, tx db.Tx) error {
+			_, err := tx.Exec(ctx, `DELETE FROM normalize.findings WHERE cluster_id = $1`, clusterID)
+			return err
+		})
+		_, _ = f.pool.Raw().Exec(context.Background(),
+			`DELETE FROM normalize.vuln_clusters WHERE id = $1`, clusterID)
+	})
+
 	err := f.pool.WithTenant(context.Background(), tenantID, func(ctx context.Context, tx db.Tx) error {
 		var sev any
 		if severity != "" {
@@ -61,7 +95,7 @@ func insertFinding(t *testing.T, f *fixture, tenantID, docID, severity string) {
 				(tenant_id, bom_document_id, component_id, cluster_id,
 				 display_id_at_render, severity_effective)
 			VALUES ($1, $2, $3, $4, $5, $6)`,
-			tenantID, docID, uuid.New(), uuid.New(), "CVE-TEST-"+uuid.NewString()[:8], sev)
+			tenantID, docID, uuid.New(), clusterID, "CVE-TEST-"+uuid.NewString()[:8], sev)
 		return err
 	})
 	if err != nil {

@@ -649,6 +649,12 @@
   },
   "diagnostics": [
     {
+      "code": "ENGINE_FIELD_MISSING",
+      "hint": "treated as zero components; the output shape may have changed",
+      "message": "dependency-check output has no `dependencies` array",
+      "severity": "warn"
+    },
+    {
       "code": "NORMALIZE_CANDIDATE_IDENTITY",
       "component_key": "purl:pkg:golang/github.com/BurntSushi/toml@v1.3.2",
       "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
@@ -690,6 +696,15 @@
     }
   ],
   "engine_coverage": [
+    {
+      "artifact_sha256": "",
+      "ecosystems_covered": [],
+      "engine_db_version": "",
+      "engine_id": "dependency-check",
+      "image_digest": "",
+      "status": "unavailable",
+      "version": ""
+    },
     {
       "artifact_sha256": "839e52dcac4db4d8b19fca761f27c5c38d4c13005d4a74bd88a0073f76920955",
       "ecosystems_covered": [
@@ -760,16 +775,38 @@
           "version": "3.1"
         },
         {
+          "score": 3.3,
+          "severity": "low",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:U/C:L/I:L/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 5.2,
+          "severity": "medium",
+          "source": "nvd",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:L/I:L/A:N",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:U/C:L/I:L/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 3.3,
+          "severity": "low",
+          "source": "redhat",
           "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:U/C:L/I:L/A:N",
           "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2025-54410",
       "ecosystem": "golang",
@@ -781,8 +818,8 @@
         "28.0.0"
       ],
       "severity_conflict": false,
-      "severity_effective": "low",
-      "severity_rule": "advisory-cvss-v3.1",
+      "severity_effective": "medium",
+      "severity_rule": "nvd-cvss-v3.1",
       "vuln_cluster_id": "fixture-golang-incompatible-cluster-0000"
     },
     {
@@ -790,7 +827,8 @@
       "cvss_vectors": [],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "GHSA-JQ35-85CJ-FJ4P",
       "ecosystem": "golang",
@@ -817,16 +855,38 @@
           "version": "3.1"
         },
         {
+          "score": 6.8,
+          "severity": "medium",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 8.1,
+          "severity": "high",
+          "source": "nvd",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:N",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
           "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:N",
           "version": "3.1"
+        },
+        {
+          "score": 8.4,
+          "severity": "high",
+          "source": "redhat",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:H/UI:R/S:C/C:H/I:H/A:H",
+          "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2026-33997",
       "ecosystem": "golang",
@@ -836,8 +896,8 @@
         "2.0.0-beta.8"
       ],
       "severity_conflict": false,
-      "severity_effective": "medium",
-      "severity_rule": "advisory-cvss-v3.1",
+      "severity_effective": "high",
+      "severity_rule": "nvd-cvss-v3.1",
       "vuln_cluster_id": "fixture-golang-incompatible-cluster-0002"
     },
     {
@@ -851,16 +911,38 @@
           "version": "3.1"
         },
         {
+          "score": 7.2,
+          "severity": "high",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:N/I:H/A:H",
+          "version": "3.1"
+        },
+        {
+          "score": 7.2,
+          "severity": "high",
+          "source": "nvd",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:N/I:H/A:H",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:N/I:H/A:H",
+          "version": "3.1"
+        },
+        {
+          "score": 7.2,
+          "severity": "high",
+          "source": "redhat",
           "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:N/I:H/A:H",
           "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2026-42306",
       "ecosystem": "golang",
@@ -871,7 +953,7 @@
       ],
       "severity_conflict": false,
       "severity_effective": "high",
-      "severity_rule": "advisory-cvss-v3.1",
+      "severity_rule": "nvd-cvss-v3.1",
       "vuln_cluster_id": "fixture-golang-incompatible-cluster-0003"
     },
     {
@@ -885,6 +967,13 @@
           "version": "3.1"
         },
         {
+          "score": 10.0,
+          "severity": "critical",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
@@ -892,9 +981,23 @@
           "version": "3.1"
         },
         {
+          "score": 9.9,
+          "severity": "critical",
+          "source": "redhat",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+          "version": "3.1"
+        },
+        {
           "score": 9.4,
           "severity": "Critical",
           "source": "Secondary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:H/SC:H/SI:H/SA:H",
+          "version": "4.0"
+        },
+        {
+          "score": 9.4,
+          "severity": "critical",
+          "source": "ghsa",
           "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:H/SC:H/SI:H/SA:H",
           "version": "4.0"
         },
@@ -908,7 +1011,8 @@
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2024-41110",
       "ecosystem": "golang",
@@ -923,7 +1027,7 @@
         "27.1.1",
         "27.1.1+incompatible"
       ],
-      "severity_conflict": false,
+      "severity_conflict": true,
       "severity_effective": "critical",
       "severity_rule": "cvss-v4",
       "vuln_cluster_id": "fixture-golang-incompatible-cluster-0004"
@@ -939,16 +1043,31 @@
           "version": "3.1"
         },
         {
+          "score": 6.0,
+          "severity": "medium",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:N/I:L/A:H",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
           "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:N/I:L/A:H",
           "version": "3.1"
+        },
+        {
+          "score": 3.9,
+          "severity": "low",
+          "source": "redhat",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:N/I:L/A:L",
+          "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2026-41568",
       "ecosystem": "golang",
@@ -973,16 +1092,38 @@
           "version": "3.1"
         },
         {
+          "score": 8.8,
+          "severity": "high",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+          "version": "3.1"
+        },
+        {
+          "score": 7.8,
+          "severity": "high",
+          "source": "nvd",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
           "vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
           "version": "3.1"
+        },
+        {
+          "score": 8.4,
+          "severity": "medium",
+          "source": "redhat",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:N",
+          "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2026-34040",
       "ecosystem": "golang",
@@ -994,7 +1135,7 @@
       ],
       "severity_conflict": false,
       "severity_effective": "high",
-      "severity_rule": "advisory-cvss-v3.1",
+      "severity_rule": "nvd-cvss-v3.1",
       "vuln_cluster_id": "fixture-golang-incompatible-cluster-0006"
     },
     {
@@ -1008,16 +1149,31 @@
           "version": "3.1"
         },
         {
+          "score": 7.2,
+          "severity": "high",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:H/I:H/A:N",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
           "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:H/I:H/A:N",
           "version": "3.1"
+        },
+        {
+          "score": 7.5,
+          "severity": "high",
+          "source": "redhat",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:C/C:H/I:H/A:H",
+          "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2026-41567",
       "ecosystem": "golang",
@@ -1042,16 +1198,38 @@
           "version": "3.1"
         },
         {
+          "score": 6.9,
+          "severity": "medium",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:R/S:C/C:L/I:H/A:L",
+          "version": "3.1"
+        },
+        {
+          "score": 7.8,
+          "severity": "high",
+          "source": "nvd",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:R/S:C/C:L/I:H/A:L",
+          "version": "3.1"
+        },
+        {
+          "score": 6.9,
+          "severity": "medium",
+          "source": "redhat",
           "vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:R/S:C/C:L/I:H/A:L",
           "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2024-24557",
       "ecosystem": "golang",
@@ -1063,9 +1241,9 @@
         "25.0.2",
         "25.0.2+incompatible"
       ],
-      "severity_conflict": false,
-      "severity_effective": "medium",
-      "severity_rule": "advisory-cvss-v3.1",
+      "severity_conflict": true,
+      "severity_effective": "high",
+      "severity_rule": "nvd-cvss-v3.1",
       "vuln_cluster_id": "fixture-golang-incompatible-cluster-0008"
     }
   ],
@@ -1142,11 +1320,20 @@
       "purl:pkg:golang/github.com/Masterminds/semver/v3@v3.2.1"
     ]
   },
-  "known_unknowns": "All configured engines completed and every detected ecosystem had an engine.",
+  "known_unknowns": "Engines that did not complete: dependency-check (unavailable).",
   "provenance": {
     "alias_snapshot_id": "fixture-golang-incompatible-aliases",
     "ecosystems_without_engine": [],
     "engines": [
+      {
+        "artifact_sha256": "",
+        "ecosystems_covered": [],
+        "engine_db_version": "",
+        "engine_id": "dependency-check",
+        "image_digest": "",
+        "status": "unavailable",
+        "version": ""
+      },
       {
         "artifact_sha256": "839e52dcac4db4d8b19fca761f27c5c38d4c13005d4a74bd88a0073f76920955",
         "ecosystems_covered": [

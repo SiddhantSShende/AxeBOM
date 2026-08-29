@@ -18,6 +18,17 @@
 
 version: '3'
 
+# ⚠ WITHOUT THIS, .env ONLY EVER REACHED docker compose (which reads it from
+# the working directory on its own) — every host-run `go run ./cmd/axebom ...`
+# command (db migrate/seed, iam bootstrap/verify) saw none of it and silently
+# fell back to each flag's hardcoded default. Those defaults happen to match
+# .env.example's own defaults, which is exactly what made the gap invisible:
+# it only misbehaves once someone changes a value in .env, which is the entire
+# point of the file existing. go-task fills in only variables not already set
+# in the shell, so an explicit `export FOO=...` still wins over .env, same as
+# every other dotenv tool.
+dotenv: ['.env']
+
 vars:
   # The full system: infrastructure plus the application tier. The two files
   # are layered rather than merged so `dev:infra` can still bring up only the
@@ -29,6 +40,10 @@ vars:
   # along — and `iam:reset` must be able to destroy it without touching
   # AxeBOM's own database.
   COMPOSE_IAM: docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.iam.yml
+  # Same as COMPOSE_IAM — a second name because `dev` reaches for "infra plus
+  # IAM, nothing else yet" specifically to wait out ZITADEL's health chain
+  # before the app tier (which needs ZITADEL_PROJECT_ID) is ever created.
+  COMPOSE_INFRA_IAM: docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.iam.yml
   COMPOSE_HEAVY: docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.iam.yml -f deploy/compose/docker-compose.app.yml -f deploy/compose/docker-compose.heavy.yml
   # Python lives in a venv on Windows (Scripts/) and Linux (bin/).
   PY: '{{if eq OS "windows"}}.venv/Scripts/python.exe{{else}}.venv/bin/python{{end}}'
@@ -234,10 +249,86 @@ tasks:
   # ================================================================= local dev
   dev:
     desc: Bring up the whole system — infra + 8 services + workers + frontend
+    # STAGED, not one `up -d --build`. Three real bugs lived in the single-shot
+    # version, all traced back to the same root cause — nothing waited for
+    # anything to be truly READY, only STARTED:
+    #   1. App services raced NATS/Redis/Vault/the MinIO bucket instead of
+    #      waiting for them (fixed properly in docker-compose.app.yml's
+    #      depends_on now, but ZITADEL's own ~2-minute init->setup->api->login
+    #      chain has no such dependency to lean on from outside its own file).
+    #   2. ZITADEL_PROJECT_ID/ZITADEL_SPA_CLIENT_ID start empty, so 6 of 8 app
+    #      services refuse to start; they only ever got created once someone
+    #      ran `iam:bootstrap` BY HAND and re-ran `up -d` — see docs/STATE.md's
+    #      2026-08-24 (g) entry, which also found bootstrap's own linking step
+    #      needs migrations AND seed rows to already exist, i.e. the correct
+    #      order is migrate -> seed -> bootstrap, not bootstrap first.
+    #   3. `task dev` returned as soon as containers were CREATED, not once
+    #      /readyz agreed — so "done" and "actually usable" were different
+    #      moments and nothing told you which one you were looking at.
     deps: [preflight]
     cmds:
+      # Stage 1: infra + identity, and WAIT for real health — this is what
+      # actually waits out ZITADEL's slow chain instead of racing it.
+      #
+      # ⚠ NAMED SERVICES, NOT THE WHOLE FILE SET. `--wait` fails outright if
+      # ANY container in scope exits — including a one-shot job that is
+      # SUPPOSED to (restart: "no"), unless something in the SAME invocation
+      # depends on it via service_completed_successfully. minio-init exits 0
+      # by design, but its only consumers (project/report/fetcher) live in
+      # docker-compose.app.yml, not loaded yet at this stage — so naming it
+      # here makes `--wait` treat its correct exit as a failure. Deferring it
+      # to stage 3, where its real dependents are, is what already makes
+      # ordinary depends_on (no --wait needed) resolve it correctly — the
+      # same mechanism `migrate` has always relied on.
+      - '{{.COMPOSE_INFRA_IAM}} up -d --build --wait postgres nats redis minio vault mailpit zitadel-api zitadel-login'
+      # Stage 2: migrate, seed, then bootstrap identity — in that order, and
+      # BEFORE the app tier exists, so ZITADEL_PROJECT_ID lands in .env before
+      # any service that needs it is ever created. All three are safe to run
+      # every time: migrations apply only what's pending, seed rows use
+      # ON CONFLICT DO NOTHING/UPDATE, and bootstrap is find-or-create.
+      - go run ./cmd/axebom db migrate
+      - go run ./cmd/axebom db seed
+      - go run ./cmd/axebom iam bootstrap --write-env
+      # ⚠ `cmd: task dev:build`, DELIBERATELY NOT INLINED, AND NOT CALLED VIA
+      # Task's OWN `task:` DEPENDENCY SYNTAX EITHER.
+      #
+      # `dotenv:` (top of this file) loads .env into THIS PROCESS's environment
+      # exactly ONCE, when `task dev` itself starts — before the bootstrap step
+      # above has written anything. `docker compose`, when a variable exists in
+      # BOTH the shell environment and its own auto-read .env file, uses the
+      # SHELL value — so a compose build step run via `task:` (which stays in
+      # this same process, inheriting its now-stale exported
+      # ZITADEL_PROJECT_ID/ZITADEL_SPA_CLIENT_ID/ZITADEL_ISSUER) would bake the
+      # ids from BEFORE this run's bootstrap into the frontend image, not the
+      # fresh ones it just wrote to the FILE. Confirmed live: the deployed
+      # frontend authenticated against a project one whole bootstrap cycle out
+      # of date, reproducing on every run, not just after a fresh `iam:reset`.
+      #
+      # `cmd: task dev:build` spawns a genuinely NEW `task` process, which
+      # re-reads .env from disk at ITS OWN startup — this is what actually
+      # gets the just-written ids into the build.
+      - cmd: task dev:build
+
+  dev:build:
+    desc: "Internal: the second half of `task dev`, run as its own process — see dev's own comment"
+    # NOT `internal: true` — that blocks exactly the `cmd: task dev:build`
+    # subprocess invocation `dev` depends on (go-task refuses to run an
+    # internal task except via its own `task:` dependency syntax, confirmed
+    # live: "Task dev:build is internal"). Normally run through `task dev`,
+    # not directly — see the ⚠ comment on `dev` above for why this is a
+    # separate task instead of being inlined there.
+    cmds:
+      # Stage 3: the full stack. App services are created fresh here, after
+      # .env is correct, so there is no second `up -d` needed to pick up the
+      # ids bootstrap just wrote.
       - '{{.COMPOSE}} up -d --build'
       - '{{.COMPOSE}} ps'
+      # Stage 4: block until every service reports /readyz `up`, not just
+      # "container started" — this is the actual fix for "taking forever":
+      # `task dev` now only reports success once the stack really is one.
+      - '{{.COMPOSE}} run --rm --no-deps -T migrate health --in-cluster --wait 90s'
+      # Only reached on success — records this build as the rollback target.
+      - go run ./cmd/axebom dev snapshot
       - cmd: echo ""
         silent: true
       - cmd: echo "  frontend  http://localhost:5173"
@@ -260,6 +351,17 @@ tasks:
       # comment line instead of inside the quotes.
       - cmd: echo "  task health   (per-service readiness)"
         silent: true
+
+  dev:rollback:
+    desc: Revert the local stack to the last build that passed `task dev`'s health check
+    # No registry, CI or production deploy pipeline exists yet (see
+    # docs/LIMITATIONS.md) — this is a purely local safety net for when a
+    # rebuild breaks the dev stack: retag last-known-good images back to
+    # `:dev` and recreate containers from them WITHOUT rebuilding.
+    cmds:
+      - go run ./cmd/axebom dev rollback
+      - '{{.COMPOSE}} up -d --no-build'
+      - '{{.COMPOSE}} run --rm --no-deps -T migrate health --in-cluster --wait 90s'
 
   dev:infra:
     desc: Bring up ONLY the backing stores (run services from your IDE)
@@ -295,6 +397,52 @@ tasks:
   logs:
     desc: "Tail logs. Usage: task logs -- gateway"
     cmds: ['{{.COMPOSE}} logs -f {{.CLI_ARGS}}']
+
+  # ==================================================================== TLS
+  tls:gen:
+    desc: Generate a self-signed cert for ZITADEL_DOMAIN (needed when that's a LAN IP, not localhost)
+    # ⚠ WHY THIS EXISTS AT ALL. Browsers only expose crypto.subtle — which the
+    # OIDC login flow needs for PKCE — in a SECURE CONTEXT: https://, or the
+    # single special-cased exception, http://localhost. Reaching this stack
+    # at its LAN IP over plain http fails sign-in with "Crypto.subtle is
+    # available only in secure contexts", not because of anything wrong with
+    # ZITADEL or the app — the browser refuses to expose the API at all.
+    # A self-signed cert the browser is told to trust once is what makes
+    # https:// (and therefore a real secure context) available at an IP that
+    # will never get a publicly-trusted certificate.
+    cmds:
+      - cmd: mkdir -p deploy/compose/.data/tls
+        platforms: [linux, darwin]
+      - cmd: powershell -Command "New-Item -ItemType Directory -Force -Path deploy/compose/.data/tls | Out-Null"
+        platforms: [windows]
+      # Docker may already have auto-created this directory as ROOT — e.g. by
+      # bind-mounting it into a container (docker-compose.app.yml's frontend
+      # service does) before this task ever ran. The exact same trap as
+      # zitadel-bootstrap/, see iam:reset's own comment; reclaimed the same way.
+      - cmd: >-
+          docker run --rm -v {{.ROOT_DIR}}/deploy/compose/.data:/d alpine:3
+          sh -c "chown -R $(id -u):${HOST_GID:-1000} /d/tls"
+        platforms: [linux, darwin]
+      - >-
+        openssl req -x509 -newkey rsa:2048 -nodes -days 825
+        -keyout deploy/compose/.data/tls/frontend.key
+        -out deploy/compose/.data/tls/frontend.crt
+        -subj "/CN=${ZITADEL_DOMAIN:-localhost}"
+        -addext "subjectAltName=IP:${ZITADEL_DOMAIN:-127.0.0.1}"
+      # openssl writes the key 0600 (host user only) by default. nginx reads
+      # it as the base image's own `nginx` uid inside the container, not the
+      # host user, so a bind-mounted 0600 key fails "Permission denied" the
+      # instant nginx tries to load it — confirmed live. Relaxed on purpose:
+      # this key protects nothing but crypto.subtle's secure-context check for
+      # a local dev stack, not a real secret worth the stricter host ACL.
+      - cmd: chmod 644 deploy/compose/.data/tls/frontend.key
+        platforms: [linux, darwin]
+      - cmd: echo ""
+        silent: true
+      - cmd: 'echo "  wrote deploy/compose/.data/tls/frontend.{crt,key} for ZITADEL_DOMAIN=${ZITADEL_DOMAIN:-localhost}"'
+        silent: true
+      - cmd: 'echo "  next -> task iam:reset (ZITADEL_EXTERNALSECURE changes at setup time, same as ZITADEL_DOMAIN), then task dev"'
+        silent: true
 
   # ================================================================ identity
   # ZITADEL runs as a pinned, UNMODIFIED container and is reached over OIDC.
@@ -354,7 +502,30 @@ tasks:
         {{.COMPOSE_INFRA}} exec -T postgres
         psql -U ${POSTGRES_USER:-axebom} -d ${POSTGRES_DB:-axebom}
         -c "DROP DATABASE IF EXISTS ${ZITADEL_POSTGRES_DB:-zitadel} WITH (FORCE);"
+      # Every existing zitadel_org_id/zitadel_user_id in AxeBOM's own database
+      # is now provably stale — the ZITADEL org/user it pointed at no longer
+      # exists. linkIdentities (libs/go-shared/iam/provision.go) only
+      # overwrites a NULL or already-matching value, as a safety guard against
+      # silently reassigning a tenant in the ordinary case — which is exactly
+      # wrong immediately after this reset. Clearing them here is what lets a
+      # subsequent `iam bootstrap` relink cleanly instead of logging
+      # "no seeded tenant to link" for orgs it should have relinked.
+      - >-
+        {{.COMPOSE_INFRA}} exec -T postgres
+        psql -U ${POSTGRES_USER:-axebom} -d ${POSTGRES_DB:-axebom}
+        -c "UPDATE auth.tenants SET zitadel_org_id = NULL WHERE zitadel_org_id IS NOT NULL;
+            UPDATE auth.users SET zitadel_user_id = NULL WHERE zitadel_user_id IS NOT NULL;"
       - task: iam:up
+      # zitadel-setup recreates deploy/compose/.data/zitadel-bootstrap/ as
+      # whatever user it runs as inside its container — root, in practice —
+      # so the HOST-run `axebom iam bootstrap` (task iam:bootstrap, or the
+      # bootstrap step inside `task dev`) then cannot create service-keys/
+      # under it: "permission denied". Reclaiming ownership through a
+      # root-running container mirrors the rm -rf step above for the same
+      # reason — the host user cannot chown files it does not own either.
+      - >-
+        docker run --rm -v {{.ROOT_DIR}}/deploy/compose/.data:/d alpine:3
+        sh -c "chown -R $(id -u):${HOST_GID:-1000} /d/zitadel-bootstrap"
 
   # ================================================================ database
   db:migrate:

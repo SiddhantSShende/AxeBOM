@@ -59,10 +59,11 @@ export interface CreateVEXStatementInput {
 export function useVEXHistory(projectId: string, clusterId: string, componentKey: string) {
   return useQuery({
     queryKey: ['vex-history', projectId, clusterId, componentKey],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       request<{ statements: VEXStatement[] }>(
         `/v1/vex/${projectId}/statements?cluster_id=${encodeURIComponent(clusterId)}` +
           `&component_key=${encodeURIComponent(componentKey)}`,
+        { signal },
       ),
     enabled: Boolean(projectId && clusterId),
   });

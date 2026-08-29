@@ -35,12 +35,14 @@ import (
 // Adding to this list is a security decision. Keep the reason with the entry so
 // the next reader does not have to reconstruct it.
 var publicRoutes = map[string]string{
-	"POST /v1/auth/register":           "creating the first account cannot require an account",
-	"POST /v1/auth/login":              "the endpoint that issues tokens cannot demand one",
-	"POST /v1/auth/refresh":            "authenticates with the refresh cookie, not a bearer token",
-	"GET /v1/auth/github/authorize":    "starts sign-in; no identity exists yet",
-	"GET /v1/auth/github/callback":     "authenticated by the OAuth state cookie + code",
-	"POST /v1/auth/invitations/accept": "the invitee has no account yet; the invite token is the credential",
+	"POST /v1/auth/register":                "creating the first account cannot require an account",
+	"POST /v1/auth/login":                   "the endpoint that issues tokens cannot demand one",
+	"POST /v1/auth/refresh":                 "authenticates with the refresh cookie, not a bearer token",
+	"GET /v1/auth/github/authorize":         "starts sign-in; no identity exists yet",
+	"GET /v1/auth/github/callback":          "authenticated by the OAuth state cookie + code",
+	"GET /v1/auth/github/connect/authorize": "a browser redirect cannot carry a bearer token; the OAuth state cookie is this flow's CSRF defense, same as login, and it mints no AxeBOM session",
+	"GET /v1/auth/github/connect/callback":  "same reason as connect/authorize — the redirect back from github.com carries no bearer token either",
+	"POST /v1/auth/invitations/accept":      "the invitee has no account yet; the invite token is the credential",
 }
 
 func registerRoutes(mux *http.ServeMux, d *deps) {
@@ -53,6 +55,8 @@ func registerRoutes(mux *http.ServeMux, d *deps) {
 	mux.HandleFunc("POST /v1/auth/refresh", h.Refresh)
 	mux.HandleFunc("GET /v1/auth/github/authorize", h.GitHubAuthorize)
 	mux.HandleFunc("GET /v1/auth/github/callback", h.GitHubCallback)
+	mux.HandleFunc("GET /v1/auth/github/connect/authorize", h.GitHubConnectAuthorize)
+	mux.HandleFunc("GET /v1/auth/github/connect/callback", h.GitHubConnectCallback)
 	mux.HandleFunc("POST /v1/auth/invitations/accept", h.AcceptInvite)
 
 	// --- Authenticated ------------------------------------------------------

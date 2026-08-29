@@ -1,0 +1,55 @@
+{
+  "matches": [
+    {
+      "vulnerability": {
+        "id": "CVE-2024-90001",
+        "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2024-90001",
+        "namespace": "nvd:cpe",
+        "severity": "Critical",
+        "urls": ["https://nvd.nist.gov/vuln/detail/CVE-2024-90001"],
+        "description": "SYNTHETIC fixture id — first member of the batched GHSA-ovmg-test-0001 advisory.",
+        "cvss": [
+          {
+            "type": "Primary",
+            "version": "3.1",
+            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+            "metrics": { "baseScore": 9.8, "exploitabilityScore": 3.9, "impactScore": 5.9 },
+            "vendorMetadata": {}
+          }
+        ],
+        "fix": { "versions": ["1.0.1"], "state": "fixed" }
+      },
+      "relatedVulnerabilities": [
+        {
+          "id": "CVE-2024-99999",
+          "namespace": "nvd:cpe",
+          "description": "SYNTHETIC fixture id — grype's own (non-authoritative) assertion that this is related to CVE-2024-90001. It is a scanner guess, not an authoritative alias, and the normalizer's Guard 1 must refuse to merge two CVE ids on this basis alone.",
+          "severity": "High"
+        }
+      ],
+      "artifact": {
+        "id": "pkg:npm/batch-pkg@1.0.0?package-id=2f3a4b5c6d7e8f90",
+        "name": "batch-pkg",
+        "version": "1.0.0",
+        "type": "npm",
+        "locations": [{ "path": "/package-lock.json", "accessPath": "" }],
+        "language": "javascript",
+        "licenses": [],
+        "cpes": [],
+        "purl": "pkg:npm/batch-pkg@1.0.0",
+        "upstreams": [],
+        "metadataType": "JavascriptNpmPackageLockEntry",
+        "metadata": {}
+      }
+    }
+  ],
+  "source": {
+    "type": "directory",
+    "target": "/src"
+  },
+  "distro": {},
+  "descriptor": {
+    "name": "grype",
+    "version": "0.117.0"
+  }
+}

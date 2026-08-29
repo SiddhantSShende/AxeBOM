@@ -59,6 +59,13 @@ FROM nginxinc/nginx-unprivileged:alpine AS runtime
 COPY --chown=nginx:nginx deploy/docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html
 
+# Toggles TLS on at container start if deploy/compose/.data/tls is mounted —
+# see nginx.conf's own comment on the `listen` directive and this script's
+# header for why the choice can't live inside nginx.conf itself. This base
+# image runs every executable *.sh under /docker-entrypoint.d/ automatically
+# before nginx starts; nothing else has to invoke it.
+COPY --chown=nginx:nginx --chmod=755 deploy/docker/frontend-entrypoint.d/50-tls.sh /docker-entrypoint.d/50-tls.sh
+
 USER nginx
 
 EXPOSE 8085

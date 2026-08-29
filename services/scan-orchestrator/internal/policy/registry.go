@@ -91,6 +91,24 @@ type Engine struct {
 	// routinely ran BEFORE syft, reporting `skipped` on every real scan for an
 	// input that was still being produced.
 	ConsumesOutputOf string `json:"consumes_output_of,omitempty"`
+
+	// ConsumesNativeSBOM marks an engine whose job needs
+	// ScanJobV1.Workspace.NativeSBOMRef populated — a native document a
+	// PRODUCER (the fetcher or services/webrecon) staged, not another
+	// engine's job output, so this is orthogonal to ConsumesOutputOf and
+	// needs no ordering wait: the producer phase is always complete before
+	// FanOut runs at all.
+	//
+	// Two engines set this today: github-dependency-graph-sbom (fed by the
+	// fetcher) and webrecon-fingerprint (fed by services/webrecon). A second
+	// bool rather than overloading RequiresImport, because the two answer
+	// different questions — RequiresImport is the honest-label claim "there
+	// is no scanner here, this is an import" (true for hbom-csv too, which is
+	// never dispatched at all, and for github-dependency-graph-sbom; NOT true
+	// for webrecon-fingerprint, which performs real discovery, just not
+	// inside a sandboxed container job of its own); this is the dispatch-time
+	// instruction "wire this specific artifact into this specific job."
+	ConsumesNativeSBOM bool `json:"consumes_native_sbom,omitempty"`
 }
 
 // Supports reports whether this engine can read a source kind.
@@ -204,6 +222,51 @@ func DefaultRegistry() *Registry {
 			// Lower weight despite being slow: its identification is CPE-based
 			// and lower confidence, so it contributes less to a merged result.
 			DefaultWeight: 1,
+		},
+		{
+			// HONEST LABEL: not discovery. A GitHub repository's own
+			// CI-published Dependency Graph SBOM, imported and cross-checked
+			// against every other engine's independent inventory — never
+			// authoritative on its own. See docs/04-OSINT-INTEGRATION.md.
+			//
+			// Mode "internal" like hbom-csv/qbom-derive, but UNLIKE them this
+			// engine is genuinely dispatched: its family (sbom) has other,
+			// real scanners, so ValidateCombination never rejects it as
+			// SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE, and its job runs the normal
+			// FanOut path — workers/sbom/adapters/github_dependency_graph.py
+			// does local artifact I/O only, no sandbox, no network of its own.
+			ID:                 "github-dependency-graph-sbom",
+			Mode:               "internal",
+			Families:           []events.Family{events.FamilySBOM},
+			SourceKinds:        []events.SourceKind{events.SourceGit},
+			Ecosystems:         []string{"generic"},
+			Produces:           []string{"components"},
+			NativeFormat:       "spdx-json-2.3",
+			DefaultWeight:      1,
+			RequiresImport:     true,
+			ConsumesNativeSBOM: true,
+		},
+		{
+			// The ONLY sbom engine offered for a url source (see
+			// docs/04-OSINT-INTEGRATION.md's webrecon roster row). Its job
+			// carries no source archive — a url source has none — only
+			// Workspace.NativeSBOMRef, populated from services/webrecon's own
+			// discovery + JS-fingerprint document. Mode "internal": there is no
+			// sandboxed container run of its own; the network-touching work
+			// already happened in services/webrecon, itself sandboxed
+			// (subfinder) or SafeHTTPClient-guarded (the page/script fetches),
+			// and this engine only parses the JSON that produced. Not
+			// RequiresImport — unlike github-dependency-graph-sbom this is real
+			// discovery, not a foreign document AxeBOM never generated.
+			ID:                 "webrecon-fingerprint",
+			Mode:               "internal",
+			Families:           []events.Family{events.FamilySBOM},
+			SourceKinds:        []events.SourceKind{events.SourceURL},
+			Ecosystems:         []string{"npm"},
+			Produces:           []string{"components"},
+			NativeFormat:       "axebom-webrecon-json-1",
+			DefaultWeight:      1,
+			ConsumesNativeSBOM: true,
 		},
 		{
 			ID:            "cbomkit-theia",

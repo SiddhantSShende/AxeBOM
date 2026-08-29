@@ -1224,6 +1224,12 @@
   },
   "diagnostics": [
     {
+      "code": "ENGINE_FIELD_MISSING",
+      "hint": "treated as zero components; the output shape may have changed",
+      "message": "dependency-check output has no `dependencies` array",
+      "severity": "warn"
+    },
+    {
       "code": "NORMALIZE_CANDIDATE_IDENTITY",
       "component_key": "purl:pkg:pypi/flask@2.3.2",
       "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
@@ -1272,6 +1278,15 @@
     }
   ],
   "engine_coverage": [
+    {
+      "artifact_sha256": "",
+      "ecosystems_covered": [],
+      "engine_db_version": "",
+      "engine_id": "dependency-check",
+      "image_digest": "",
+      "status": "unavailable",
+      "version": ""
+    },
     {
       "artifact_sha256": "0ebf76af5d2d26b764e556cf53b5ce7261bcfffbdf063b050f59f2ac2101a337",
       "ecosystems_covered": [
@@ -1335,6 +1350,13 @@
       "component_key": "purl:pkg:pypi/flask@2.3.2",
       "cvss_vectors": [
         {
+          "score": 4.3,
+          "severity": "medium",
+          "source": "nvd",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:N/A:N",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
@@ -1342,9 +1364,23 @@
           "version": "3.1"
         },
         {
+          "score": 4.3,
+          "severity": "medium",
+          "source": "redhat",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:N/A:N",
+          "version": "3.1"
+        },
+        {
           "score": 2.3,
           "severity": "Low",
           "source": "Secondary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N",
+          "version": "4.0"
+        },
+        {
+          "score": 2.3,
+          "severity": "low",
+          "source": "ghsa",
           "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N",
           "version": "4.0"
         },
@@ -1358,7 +1394,8 @@
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2026-27205",
       "ecosystem": "pypi",
@@ -1446,11 +1483,20 @@
       "name:application/requirements.txt@"
     ]
   },
-  "known_unknowns": "All configured engines completed and every detected ecosystem had an engine.",
+  "known_unknowns": "Engines that did not complete: dependency-check (unavailable).",
   "provenance": {
     "alias_snapshot_id": "fixture-pypi-normalization-aliases",
     "ecosystems_without_engine": [],
     "engines": [
+      {
+        "artifact_sha256": "",
+        "ecosystems_covered": [],
+        "engine_db_version": "",
+        "engine_id": "dependency-check",
+        "image_digest": "",
+        "status": "unavailable",
+        "version": ""
+      },
       {
         "artifact_sha256": "0ebf76af5d2d26b764e556cf53b5ce7261bcfffbdf063b050f59f2ac2101a337",
         "ecosystems_covered": [

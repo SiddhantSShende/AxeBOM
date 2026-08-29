@@ -1041,6 +1041,12 @@
   },
   "diagnostics": [
     {
+      "code": "ENGINE_FIELD_MISSING",
+      "hint": "treated as zero components; the output shape may have changed",
+      "message": "dependency-check output has no `dependencies` array",
+      "severity": "warn"
+    },
+    {
       "code": "NORMALIZE_CANDIDATE_IDENTITY",
       "component_key": "purl:pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
       "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
@@ -1082,6 +1088,15 @@
     }
   ],
   "engine_coverage": [
+    {
+      "artifact_sha256": "",
+      "ecosystems_covered": [],
+      "engine_db_version": "",
+      "engine_id": "dependency-check",
+      "image_digest": "",
+      "status": "unavailable",
+      "version": ""
+    },
     {
       "artifact_sha256": "8498c6e8b9925b921c2e54c601e94676e0a39fe01a92ed3c389aaa0d8a3a0bc9",
       "ecosystems_covered": [
@@ -1152,16 +1167,31 @@
           "version": "3.1"
         },
         {
+          "score": 6.5,
+          "severity": "medium",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 6.5,
+          "severity": "medium",
+          "source": "redhat",
           "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N",
           "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2026-59888",
       "ecosystem": "maven",
@@ -1188,16 +1218,31 @@
           "version": "3.1"
         },
         {
+          "score": 5.3,
+          "severity": "medium",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 5.3,
+          "severity": "medium",
+          "source": "redhat",
           "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N",
           "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2026-54515",
       "ecosystem": "maven",
@@ -1209,7 +1254,7 @@
         "2.22.1",
         "3.1.4"
       ],
-      "severity_conflict": false,
+      "severity_conflict": true,
       "severity_effective": "medium",
       "severity_rule": "advisory-cvss-v3.1",
       "vuln_cluster_id": "fixture-maven-case-cluster-0001"
@@ -1225,16 +1270,31 @@
           "version": "3.1"
         },
         {
+          "score": 5.3,
+          "severity": "medium",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 5.3,
+          "severity": "medium",
+          "source": "redhat",
           "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
           "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2026-54514",
       "ecosystem": "maven",
@@ -1245,7 +1305,7 @@
         "2.21.4",
         "3.1.4"
       ],
-      "severity_conflict": false,
+      "severity_conflict": true,
       "severity_effective": "medium",
       "severity_rule": "advisory-cvss-v3.1",
       "vuln_cluster_id": "fixture-maven-case-cluster-0002"
@@ -1261,16 +1321,31 @@
           "version": "3.1"
         },
         {
+          "score": 6.5,
+          "severity": "medium",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
           "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N",
           "version": "3.1"
+        },
+        {
+          "score": 3.7,
+          "severity": "low",
+          "source": "redhat",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L",
+          "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2025-48924",
       "ecosystem": "maven",
@@ -1279,7 +1354,7 @@
       "fixed_versions": [
         "3.18.0"
       ],
-      "severity_conflict": false,
+      "severity_conflict": true,
       "severity_effective": "medium",
       "severity_rule": "advisory-cvss-v3.1",
       "vuln_cluster_id": "fixture-maven-case-cluster-0003"
@@ -1295,16 +1370,31 @@
           "version": "3.1"
         },
         {
+          "score": 8.1,
+          "severity": "high",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "version": "3.1"
+        },
+        {
+          "score": 8.1,
+          "severity": "high",
+          "source": "redhat",
           "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
           "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2026-54512",
       "ecosystem": "maven",
@@ -1331,16 +1421,31 @@
           "version": "3.1"
         },
         {
+          "score": 7.5,
+          "severity": "high",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 7.5,
+          "severity": "high",
+          "source": "redhat",
           "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
           "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2025-41249",
       "ecosystem": "maven",
@@ -1365,16 +1470,31 @@
           "version": "3.1"
         },
         {
+          "score": 8.1,
+          "severity": "high",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "version": "3.1"
+        },
+        {
+          "score": 8.1,
+          "severity": "high",
+          "source": "redhat",
           "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
           "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2026-54513",
       "ecosystem": "maven",
@@ -1450,11 +1570,20 @@
       "name:application/pom.xml@"
     ]
   },
-  "known_unknowns": "All configured engines completed and every detected ecosystem had an engine.",
+  "known_unknowns": "Engines that did not complete: dependency-check (unavailable).",
   "provenance": {
     "alias_snapshot_id": "fixture-maven-case-aliases",
     "ecosystems_without_engine": [],
     "engines": [
+      {
+        "artifact_sha256": "",
+        "ecosystems_covered": [],
+        "engine_db_version": "",
+        "engine_id": "dependency-check",
+        "image_digest": "",
+        "status": "unavailable",
+        "version": ""
+      },
       {
         "artifact_sha256": "8498c6e8b9925b921c2e54c601e94676e0a39fe01a92ed3c389aaa0d8a3a0bc9",
         "ecosystems_covered": [
