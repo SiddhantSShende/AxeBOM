@@ -51,11 +51,11 @@ export function useScans(projectId: string | undefined, limit = 50) {
     queryKey: ['scans', projectId ?? null],
     enabled: Boolean(projectId),
     initialPageParam: '',
-    queryFn: ({ pageParam }) => {
+    queryFn: ({ pageParam, signal }) => {
       const q = new URLSearchParams({ limit: String(limit) });
       if (projectId) q.set('project_id', projectId);
       if (pageParam) q.set('cursor', pageParam);
-      return request<ScanPage>(`/v1/scans?${q.toString()}`);
+      return request<ScanPage>(`/v1/scans?${q.toString()}`, { signal });
     },
     // An empty string and an absent key both mean "no more pages"; returning
     // either as a cursor would make the query fetch the first page forever.

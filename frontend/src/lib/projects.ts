@@ -79,7 +79,7 @@ export interface Repo {
 export function useProjectOptions() {
   return useQuery({
     queryKey: ['project-options'],
-    queryFn: () => request<ProjectOptions>('/v1/projects/options'),
+    queryFn: ({ signal }) => request<ProjectOptions>('/v1/projects/options', { signal }),
     // The profile changes on a release boundary, not during a session.
     staleTime: 60 * 60 * 1000,
   });
@@ -88,14 +88,15 @@ export function useProjectOptions() {
 export function useProjects() {
   return useQuery({
     queryKey: ['projects'],
-    queryFn: () => request<{ projects: Project[]; next_cursor: string }>('/v1/projects'),
+    queryFn: ({ signal }) =>
+      request<{ projects: Project[]; next_cursor: string }>('/v1/projects', { signal }),
   });
 }
 
 export function useProject(id: string | undefined) {
   return useQuery({
     queryKey: ['project', id],
-    queryFn: () => request<Project>(`/v1/projects/${id}`),
+    queryFn: ({ signal }) => request<Project>(`/v1/projects/${id}`, { signal }),
     enabled: Boolean(id),
   });
 }
@@ -103,7 +104,7 @@ export function useProject(id: string | undefined) {
 export function usePractices(projectId: string | undefined) {
   return useQuery({
     queryKey: ['practices', projectId],
-    queryFn: () => request<Practices>(`/v1/projects/${projectId}/practices`),
+    queryFn: ({ signal }) => request<Practices>(`/v1/projects/${projectId}/practices`, { signal }),
     enabled: Boolean(projectId),
   });
 }
@@ -221,10 +222,10 @@ export function useUploadFile(projectId: string) {
 export function useRepoSearch(token: string, query: string, enabled: boolean) {
   return useQuery({
     queryKey: ['github-repos', query],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       request<{ repos: Repo[]; next_page?: number }>(
         `/v1/github/repos?q=${encodeURIComponent(query)}`,
-        { headers: { 'X-GitHub-Token': token } },
+        { headers: { 'X-GitHub-Token': token }, signal },
       ),
     enabled: enabled && token.length > 0,
   });

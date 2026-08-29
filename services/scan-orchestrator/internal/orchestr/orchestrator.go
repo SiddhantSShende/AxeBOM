@@ -552,8 +552,21 @@ func (o *Orchestrator) HandleResult(ctx context.Context, result events.ScanResul
 		}
 	}
 
-	if err := o.store.UpsertEngineRun(ctx, run); err != nil {
+	engineRunID, err := o.store.UpsertEngineRun(ctx, run)
+	if err != nil {
 		return fmt.Errorf("%w: recording engine run: %w", bus.ErrRetry, err)
+	}
+
+	// ⚠ THE ONE WRITE PATH FOR scan.raw_artifacts. Before this, an engine's
+	// artifact URIs/checksums were read off ScanResultV1 and then discarded
+	// the moment this function returned — nothing durable ever recorded
+	// where a raw result lives. This is what makes both the normalize
+	// trigger's envelope (below) and future re-normalization possible.
+	// Best-effort: a failure here must not fail engine-run bookkeeping, which
+	// has already committed above.
+	if err := o.store.RecordRawArtifacts(ctx, result.TenantID, result.ScanID, engineRunID, result.Artifacts); err != nil {
+		o.log.Error("could not record raw artifacts", "scan_id", result.ScanID,
+			"engine", result.Engine, "cause", err.Error())
 	}
 
 	// Every ecosystem the engine covered is recorded as covered. The gaps were
@@ -573,7 +586,18 @@ func (o *Orchestrator) HandleResult(ctx context.Context, result events.ScanResul
 		return err
 	}
 
-	return o.RecomputeScanStatus(ctx, result.TenantID, result.ScanID)
+	if err := o.RecomputeScanStatus(ctx, result.TenantID, result.ScanID); err != nil {
+		return err
+	}
+
+	// ⚠ AFTER RecomputeScanStatus, same reasoning as releaseDependents runs
+	// BEFORE it: this reads the scan's engine runs fresh, so it must see
+	// this result's row (already written above) and any dependent job
+	// releaseDependents just queued or skipped. Best-effort, matching
+	// publishScanCompleted's discipline: a failed trigger-publish must not
+	// turn a correctly-derived scan status into a retried one.
+	o.maybeTriggerNormalize(ctx, result)
+	return nil
 }
 
 // RecomputeScanStatus derives and writes the scan's status.

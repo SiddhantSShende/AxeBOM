@@ -207,6 +207,76 @@ def test_the_same_go_module_is_not_counted_twice() -> None:
 
 
 @pytest.mark.golden
+@pytest.mark.skipif("log4shell-java" not in AVAILABLE, reason="fixture not generated")
+def test_log4shell_ids_close_into_one_cluster() -> None:
+    """⚠ THE ALIAS CLOSURE, END TO END.
+
+    grype asserts GHSA<->CVE (non-authoritative); osv-scanner asserts
+    GHSA<->DSA (authoritative). Neither engine alone connects all three ids —
+    only the transitive closure does. A naive dedup-by-primary-id
+    implementation reports three findings against log4j-core; this asserts
+    exactly one.
+    """
+    result = canonical("log4shell-java")
+
+    clusters = result["vuln_clusters"]
+    assert len(clusters) == 1, f"expected one cluster, got {len(clusters)}: {clusters}"
+
+    cluster = clusters[0]
+    assert set(cluster["members"]) == {"CVE-2021-44228", "GHSA-JFH8-C2JP-5V3Q", "DSA-5022-1"}
+    assert cluster["display_id_at_render"] == "CVE-2021-44228", (
+        "CVE outranks GHSA and DSA for display, and a remediation ticket "
+        "should cite the CVE"
+    )
+    assert len(cluster["merges"]) == 2, "both the grype and osv-scanner edges must be recorded"
+
+    findings = result["findings"]
+    assert len(findings) == 1, f"three ids must collapse to one finding, got {findings}"
+    assert set(findings[0]["detected_by"]) == {"grype", "osv-scanner"}
+
+
+@pytest.mark.golden
+@pytest.mark.skipif("alias-overmerge" not in AVAILABLE, reason="fixture not generated")
+def test_alias_overmerge_guards_both_hold() -> None:
+    """⚠ REGRESSION GUARD for ADR-0005's two over-merge guards.
+
+    A 13-CVE-aliasing GHSA must cap at 12 members and flag the overflow
+    rather than silently absorb everything; a scanner-only CVE<->CVE
+    assertion must never merge on its own.
+    """
+    result = canonical("alias-overmerge")
+    clusters = result["vuln_clusters"]
+
+    for cluster in clusters:
+        assert len(cluster["members"]) <= 12, (
+            f"cluster {cluster['cluster_id']} has {len(cluster['members'])} members, "
+            f"above the MAX_CLUSTER_SIZE ceiling: {cluster['members']}"
+        )
+
+    assert any(c["flagged_for_review"] for c in clusters), (
+        "the cap-refused merge must flag at least one cluster for review"
+    )
+
+    unrelated = next(c for c in clusters if c["members"] == ["CVE-2024-99999"])
+    assert unrelated["flagged_for_review"] is False, (
+        "CVE-2024-99999 was never involved in a cap refusal, only a Guard-1 "
+        "CVE<->CVE refusal — it must not be flagged"
+    )
+
+    batch = next(c for c in clusters if "GHSA-OVMG-TEST-0001" in c["members"])
+    assert "CVE-2024-99999" not in batch["members"], (
+        "grype's non-authoritative CVE<->CVE assertion must never merge "
+        "CVE-2024-99999 into the batch cluster"
+    )
+
+    findings = {f["display_id"]: f for f in result["findings"]}
+    assert "CVE-2024-99999" in findings
+    assert findings["CVE-2024-99999"]["detected_by"] == ["osv-scanner"], (
+        "the refused edge must never make this look corroborated by grype"
+    )
+
+
+@pytest.mark.golden
 @pytest.mark.skipif("monorepo-multiroot" not in AVAILABLE, reason="fixture not generated")
 def test_a_monorepo_yields_multiple_ecosystems() -> None:
     """⚠ A scanner that stops at the first manifest reports a smaller,

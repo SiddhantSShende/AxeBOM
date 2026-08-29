@@ -32,14 +32,10 @@ dev = [
     # the Python worker and the Go orchestrator drifting apart at the envelope,
     # which is otherwise only discovered when a result is silently dropped.
     "jsonschema>=4.23",
-    # normalize.writer executes bulk.plan()'s COPY batches against Postgres —
-    # dev-only, deliberately, and NOT in the main dependency list above.
-    # WORKERS HOLD NO CREDENTIALS (axebom_shared.config's own words): no
-    # deployed worker image imports normalize.writer yet, and it should not
-    # gain a live Postgres credential by accident just because this package
-    # got installed. This exists so writer.py is genuinely testable — a
-    # schema-agreement test that proves every column name it plans to write
-    # actually exists — not so it can run in production. See docs/STATE.md.
+    # normalize.writer/cluster_store/normalize_consumer execute real SQL
+    # against Postgres — needed here so those modules are testable from a
+    # developer's environment. See the `normalize-consumer` extra below for
+    # the one PRODUCTION image that also needs this.
     "psycopg[binary]>=3.2",
 ]
 
@@ -48,6 +44,16 @@ dev = [
 # SSOT — these are the pip-installable subset.
 scanners = [
     "ai-bom>=0.9",          # Trusera: code-level AI discovery (Phase 12)
+]
+
+# workers/sbom/normalize_consumer.py — the ONE deliberate exception to
+# "workers hold no credentials" (axebom_shared.config's docstring). Its own
+# Dockerfile (deploy/docker/Dockerfile.normalize-consumer) installs this
+# extra; no other worker image does, so psycopg stays out of
+# sbom-worker/cbom-worker/aibom-worker even though this package sits on
+# their same dependency tree.
+normalize-consumer = [
+    "psycopg[binary]>=3.2",
 ]
 
 # tools/conformance validates exported SPDX/CycloneDX documents against the

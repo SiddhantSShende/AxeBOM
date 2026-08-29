@@ -560,13 +560,24 @@ func TestEcosystemsWithNoEngineAreRecorded(t *testing.T) {
 	if err := f.store.RecordEcosystem(t.Context(), tenantA, scan.ID, "npm", "syft", true); err != nil {
 		t.Fatalf("record: %v", err)
 	}
+	// ⚠ REGRESSION GUARD. On a real git-source scan, trivy-image (registered
+	// for npm among other OS-package ecosystems, skipped for this source
+	// kind) writes engine_available=false for npm in the SAME scan where
+	// syft/trivy-fs write engine_available=true after actually succeeding —
+	// one row per reporting engine, per RecordEcosystem's own doc comment.
+	// npm must not show up as a gap just because one of several engines that
+	// covers it happened to be skipped; it does not want for coverage
+	// when it has any successful engine at all.
+	if err := f.store.RecordEcosystem(t.Context(), tenantA, scan.ID, "npm", "trivy-image", false); err != nil {
+		t.Fatalf("record: %v", err)
+	}
 
 	gaps, err := f.store.CoverageGaps(t.Context(), tenantA, scan.ID)
 	if err != nil {
 		t.Fatalf("gaps: %v", err)
 	}
 	if len(gaps) != 1 || gaps[0] != "cocoapods" {
-		t.Errorf("gaps = %v, want [cocoapods]", gaps)
+		t.Errorf("gaps = %v, want [cocoapods] (npm has a successful engine and must not appear)", gaps)
 	}
 }
 

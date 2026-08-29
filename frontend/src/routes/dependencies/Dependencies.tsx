@@ -75,7 +75,8 @@ export function Dependencies() {
 
   const query = useQuery({
     queryKey: ['dependencies', id],
-    queryFn: () => api.get<{ components: DependencyRow[] }>(`/v1/projects/${id}/dependencies`),
+    queryFn: ({ signal }) =>
+      api.get<{ components: DependencyRow[] }>(`/v1/projects/${id}/dependencies`, signal),
     staleTime: 30_000,
   });
 
@@ -86,9 +87,10 @@ export function Dependencies() {
 
   const detail = useQuery({
     queryKey: ['component', id, selected],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       api.get<ComponentDetail>(
         `/v1/projects/${id}/dependencies/${encodeURIComponent(selected ?? '')}`,
+        signal,
       ),
     enabled: selected !== null,
     // Component detail is immutable for a given normalization version, so

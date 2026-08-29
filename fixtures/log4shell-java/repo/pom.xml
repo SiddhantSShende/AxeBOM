@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>log4shell-java</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+
+  <!--
+    Minimal reproduction of the Log4Shell dependency shape. The vulnerable
+    version is pinned deliberately — this fixture proves alias-graph closure,
+    not vulnerability detection, so the exact CVE-2021-44228-affected release
+    (2.14.1) is the one value in this file that must not drift.
+  -->
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-core</artifactId>
+      <version>2.14.1</version>
+    </dependency>
+  </dependencies>
+</project>

@@ -1,0 +1,8 @@
+{
+  "name": "alias-overmerge",
+  "version": "1.0.0",
+  "description": "Fixture repo — proves the vuln-cluster over-merge guards (MAX_CLUSTER_SIZE cap, CVE<->CVE authoritative-only rule), not a real dependency tree.",
+  "dependencies": {
+    "batch-pkg": "1.0.0"
+  }
+}

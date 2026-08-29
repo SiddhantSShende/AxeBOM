@@ -34,7 +34,8 @@ export interface GenerateCSAFAdvisoryInput {
 export function useCSAFAdvisories(projectId: string | undefined) {
   return useQuery({
     queryKey: ['csaf-advisories', projectId],
-    queryFn: () => request<{ advisories: CSAFAdvisory[] }>(`/v1/csaf/${projectId}/advisories`),
+    queryFn: ({ signal }) =>
+      request<{ advisories: CSAFAdvisory[] }>(`/v1/csaf/${projectId}/advisories`, { signal }),
     enabled: Boolean(projectId),
   });
 }

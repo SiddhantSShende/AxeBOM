@@ -13,44 +13,31 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { AuthShell } from '../../components/AuthShell';
 import { initAuth } from '../../lib/auth';
-import { POST_SIGNOUT_KEY } from '../../lib/AuthContext';
 import { useAuth } from '../../lib/useAuth';
 
 /**
- * SignIn is what an unauthenticated visitor sees.
+ * SignIn is what an unauthenticated visitor sees: a choice between two real
+ * destinations, not an automatic redirect to either one.
  *
- * ⚠ A BUTTON, NOT AN AUTOMATIC REDIRECT — WITH EXACTLY ONE EXCEPTION.
+ * ⚠ TWO BUTTONS, NOT ONE PLUS A FOOTNOTE — AND NOT AN AUTO-REDIRECT.
  *
- * An app that bounces straight to an identity provider cannot be looked at,
- * cannot show why a previous attempt failed, and turns a misconfigured client
- * id into an endless loop between two origins with nothing on screen to read.
- * That risk is exactly what this screen exists to avoid, and it stays the
- * DEFAULT for every ordinary way of landing here signed out: a session that
- * simply expired, a bookmark opened cold, a client id that stopped matching
- * what ZITADEL has registered.
- *
- * The one exception is immediately after this SAME browser explicitly clicked
- * "Sign out" — POST_SIGNOUT_KEY is a one-shot marker `signOut` sets right
- * before it redirects to ZITADEL's own logout. Finding it here means the
- * ZITADEL round trip that just finished was already visible and already
- * intentional, so there is nothing this screen would tell the visitor that
- * clicking "Sign out" didn't already say. It is consumed — read once, then
- * removed — specifically so it cannot mask a REAL failure on some later,
- * unrelated visit.
+ * A visitor here is either RETURNING (wants Sign in) or NEW (wants Create
+ * your organisation), and there is no single destination to auto-navigate to
+ * that serves both — auto-redirecting straight to ZITADEL, tried briefly,
+ * meant the sign-up path was unreachable: the browser had already left this
+ * screen before anyone could click it. Showing both choices here also keeps
+ * the property that mattered about the auto-redirect attempt in the first
+ * place: a misconfigured client id or an unreachable gateway fails visibly,
+ * via `error` below, on a click — never as a silent bounce between origins
+ * with nothing on screen to read.
  */
 export function SignIn() {
   const { signIn, error, loading } = useAuth();
 
-  useEffect(() => {
-    if (sessionStorage.getItem(POST_SIGNOUT_KEY) !== '1') return;
-    sessionStorage.removeItem(POST_SIGNOUT_KEY);
-    signIn();
-  }, [signIn]);
-
   return (
     <AuthShell>
       <div className="auth-card-body">
-        <h3 className="state-title">Sign in to AxeBOM</h3>
+        <h3 className="state-title">Log in to AxeBOM</h3>
         <p className="state-message">
           {error ?? 'You are signed out. AxeBOM uses your organisation identity provider.'}
         </p>
@@ -58,13 +45,13 @@ export function SignIn() {
           {/* Not `onClick={signIn}` — the DOM click event would flow into
               signIn's optional `returnTo` parameter as if it were a string. */}
           <button className="btn btn-primary" onClick={() => signIn()} disabled={loading}>
-            Sign in
+            Log in
           </button>
+          <Link className="btn" to="/signup">
+            Create your account
+          </Link>
         </div>
       </div>
-      <p className="auth-card-foot">
-        New here? <Link to="/signup">Create your organisation</Link>
-      </p>
     </AuthShell>
   );
 }

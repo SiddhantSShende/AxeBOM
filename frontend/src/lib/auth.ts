@@ -123,7 +123,15 @@ let starting: Promise<UserManager> | null = null;
  * several managers with several state stores.
  */
 export function initAuth(): Promise<UserManager> {
-  starting ??= start();
+  // ⚠ CLEARED ON FAILURE, NOT LEFT POISONED. Without this, one failed attempt
+  // (the gateway not answering yet, a mid-bootstrap stack) would leave
+  // `starting` permanently rejected — every later caller in the tab,
+  // including the SignIn screen's own Retry button, would just replay the
+  // same stale rejection forever instead of trying again.
+  starting ??= start().catch((err: unknown) => {
+    starting = null;
+    throw err;
+  });
   return starting;
 }
 
@@ -134,7 +142,23 @@ async function start(): Promise<UserManager> {
 }
 
 async function fetchConfig(): Promise<AuthConfig> {
-  const res = await fetch('/api/v1/auth/config', { credentials: 'same-origin' });
+  // ⚠ TIMED OUT, NOT LEFT OPEN-ENDED. A gateway that has accepted the TCP
+  // connection but not yet answered — the exact window while the compose
+  // stack is still starting — otherwise leaves this fetch neither resolved
+  // nor rejected, so AuthProvider's `loading` never flips and RequireAuth
+  // shows its skeleton forever instead of the sign-in screen's error+retry.
+  let res: Response;
+  try {
+    res = await fetch('/api/v1/auth/config', {
+      credentials: 'same-origin',
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      throw new Error('identity configuration request timed out — is the gateway container running?');
+    }
+    throw err;
+  }
   if (!res.ok) {
     // Surface the server's own message: when identity is unprovisioned it names
     // the command that fixes it, which is more use than "request failed".

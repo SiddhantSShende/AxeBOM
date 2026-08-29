@@ -1,0 +1,56 @@
+# AxeBOM normalize consumer — turns a NormalizeTriggerV1 into a written
+# normalize.bom_documents row. See workers/sbom/normalize_consumer.py.
+#
+# ---------------------------------------------------------------------------
+# THE ONE DELIBERATE EXCEPTION TO "WORKERS HOLD NO CREDENTIALS"
+#
+# Every other worker image runs third-party scanners over untrusted user
+# code and must never hold a secret. This process is different in kind: it
+# never runs a scanner and never touches a scanned repository's contents —
+# only already-stored, already-validated raw JSON artifacts. Its Postgres
+# credential (axebom_normalize_writer) is scoped to the `normalize` schema,
+# SELECT/INSERT-only plus one narrow column-scoped UPDATE — see
+# docs/02-CONTRACTS.md §6a and migrations/normalize/0006_alias_snapshot.sql.
+#
+# ⚠ A SEPARATE IMAGE FROM Dockerfile.worker, DELIBERATELY. psycopg installs
+# here and nowhere else — sbom-worker/cbom-worker/aibom-worker keep zero DB
+# driver present, defense in depth: even a future mistake that wires a
+# credential into one of THEIR environments has no driver to use it with.
+#
+# NO Docker socket, NO sandbox bridge build, NO OSINT manifest, NO
+# workspace/enginedb mounts — this process never starts a container and
+# never touches an engine. It only needs the artifacts volume (read) and a
+# Postgres/NATS connection.
+# ---------------------------------------------------------------------------
+
+FROM python:3.13-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+# Dependencies first, so a source edit does not re-resolve the environment.
+COPY pyproject.toml ./
+COPY libs/py-shared ./libs/py-shared
+RUN pip install --no-cache-dir -e ".[normalize-consumer]"
+
+# Source. Copied after the install so iterating on consumer code hits the
+# cache. workers/sbom is the whole package (normalize_consumer.py imports
+# sbom_fields from normalize_runner.py, a sibling module in the same
+# package) — copying only the one file would break that import. `workers`
+# itself has no __init__.py (an implicit namespace package, same as
+# Dockerfile.worker's COPY workers ./workers relies on).
+COPY workers/sbom ./workers/sbom
+COPY docs/reference/certin-v2.0.yaml ./docs/reference/certin-v2.0.yaml
+
+# ---------------------------------------------------------------------------
+# Non-root, unlike Dockerfile.worker (which runs root only for the Docker
+# socket this image never touches).
+# ---------------------------------------------------------------------------
+RUN useradd --uid 65532 --create-home --shell /usr/sbin/nologin axebom
+USER 65532
+
+ENTRYPOINT ["python", "-m", "workers.sbom.normalize_consumer"]

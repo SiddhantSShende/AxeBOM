@@ -109,11 +109,12 @@ func buildIAMClient(ctx context.Context, cfg config.OIDC) (*iam.Client, error) {
 	}
 
 	return iam.Connect(ctx, iam.Config{
-		Domain:     internal.Hostname(),
-		Port:       internal.Port(),
-		Insecure:   internal.Scheme == "http",
-		KeyPath:    cfg.ProvisioningKeyPath,
-		PublicHost: public.Host,
+		Domain:       internal.Hostname(),
+		Port:         internal.Port(),
+		Insecure:     internal.Scheme == "http",
+		KeyPath:      cfg.ProvisioningKeyPath,
+		PublicHost:   public.Host,
+		PublicScheme: public.Scheme,
 	})
 }
 

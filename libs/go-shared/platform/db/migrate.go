@@ -199,6 +199,20 @@ func (m *Migrator) Reset(ctx context.Context) error {
 	if _, err := m.db.ExecContext(ctx, "DROP SCHEMA IF EXISTS app CASCADE"); err != nil {
 		return fmt.Errorf("drop app schema: %w", err)
 	}
+
+	// ⚠ bootstrap's OWN goose version table must go too, or Up() below is a
+	// lie: it lives in `public.goose_bootstrap_version` (setVersionTable's
+	// special case for "bootstrap"), which the loop above never touches
+	// because `public` is never dropped. Against a database where bootstrap
+	// had already been applied once, leaving that table behind means goose
+	// sees "current version: 2, nothing to run" and skips re-creating the
+	// `app` schema this function just dropped — every later schema's first
+	// migration then fails with "schema app does not exist", and Reset
+	// leaves the database in a half-torn-down state, not a clean one.
+	if _, err := m.db.ExecContext(ctx, "DROP TABLE IF EXISTS public.goose_bootstrap_version"); err != nil {
+		return fmt.Errorf("drop bootstrap version table: %w", err)
+	}
+
 	return m.Up(ctx)
 }
 

@@ -39,6 +39,14 @@ const (
 	// AckWait — 30 minutes, sized for a container — so a render worker that
 	// died would hold its report hostage for half an hour.
 	StreamReports = "REPORT_JOBS"
+	// StreamNormalize carries normalize-trigger envelopes.
+	//
+	// ⚠ SAME REASONING AS StreamReports, a separate stream from SCAN_JOBS.
+	// Normalizing a scan's stored artifacts is in-process work finishing in
+	// seconds to a few minutes, not a sandboxed container run — sharing
+	// SCAN_JOBS's 30-minute AckWait would hold a stuck normalization message
+	// hostage far longer than the work ever legitimately takes.
+	StreamNormalize = "NORMALIZE_JOBS"
 )
 
 // SubjectRender is the render-job subject.
@@ -187,6 +195,20 @@ func (b *Bus) ensureStreams(ctx context.Context) error {
 			// 24 hours. A render job older than that describes a report the
 			// customer has given up on, and re-rendering it surprises them.
 			MaxAge:  24 * time.Hour,
+			Discard: jetstream.DiscardOld,
+		},
+		{
+			Name:     StreamNormalize,
+			Subjects: []string{"scan.normalize.>"},
+			// WorkQueue: exactly one normalize consumer processes a given
+			// scan's trigger — fanning out would race two consumers for the
+			// same normalization_version.
+			Retention: jetstream.WorkQueuePolicy,
+			Storage:   jetstream.FileStorage,
+			// 7 days, matching SCAN_RESULTS: a stuck normalize trigger is
+			// exactly the kind of gap the DLQ path exists to surface, not
+			// something that should silently expire in a day.
+			MaxAge:  7 * 24 * time.Hour,
 			Discard: jetstream.DiscardOld,
 		},
 	}

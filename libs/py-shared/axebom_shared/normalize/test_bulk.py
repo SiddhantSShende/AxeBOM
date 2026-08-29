@@ -77,7 +77,11 @@ def test_a_normal_scan_produces_batches_for_every_table() -> None:
             ],
             findings=[
                 {
-                    "vuln_cluster_id": "c1",
+                    # A real uuid, as pipeline.normalize() actually embeds
+                    # once cluster_store.py is wired — see
+                    # test_findings_with_a_non_durable_cluster_id_still_write
+                    # for the fallback path this fixture used to exercise.
+                    "vuln_cluster_id": "01900000-0000-7000-8000-0000000000c1",
                     "component_key": "purl:pkg:npm/x@1",
                     "display_id": "CVE-1",
                 }
@@ -243,6 +247,55 @@ def test_component_and_cluster_ids_are_deterministic() -> None:
         first.batch("normalize.components").rows[0][0]
         != third.batch("normalize.components").rows[0][0]
     )
+
+
+def test_a_durable_uuid_cluster_id_passes_through_unchanged() -> None:
+    """The normal, production path: pipeline.normalize() has already resolved
+    a real normalize.vuln_clusters uuid via cluster_store.py and embedded it
+    as vuln_cluster_id — bulk.py must use it verbatim, not re-derive a
+    different id from it."""
+    durable = "01900000-0000-7000-8000-0000000000c1"
+    result = plan(
+        model(
+            components=[component("k")],
+            findings=[{"vuln_cluster_id": durable, "component_key": "k", "display_id": "CVE-1"}],
+        ),
+        tenant_id="t1",
+        bom_document_id="b1",
+    )
+    columns = result.batch("normalize.findings").columns
+    row = result.batch("normalize.findings").rows[0]
+    assert row[columns.index("cluster_id")] == durable
+    assert not any(d["code"] == "NORMALIZE_CLUSTER_ID_NOT_DURABLE" for d in result.diagnostics)
+
+
+def test_a_non_durable_cluster_id_falls_back_with_a_loud_diagnostic() -> None:
+    """The fallback path — a fixture/test placeholder string, never a real
+    scan — must still write a real, deterministic uuid (so the write does
+    not fail the CHECK on the uuid column) AND must say so loudly, per
+    CLAUDE.md's "never silently drop": a real scan taking this branch is a
+    wiring regression, not a normal case."""
+    result = plan(
+        model(
+            components=[component("k")],
+            findings=[
+                {"vuln_cluster_id": "fixture-cluster-0001", "component_key": "k", "display_id": "CVE-1"}
+            ],
+        ),
+        tenant_id="t1",
+        bom_document_id="b1",
+    )
+    columns = result.batch("normalize.findings").columns
+    row = result.batch("normalize.findings").rows[0]
+    cluster_id = row[columns.index("cluster_id")]
+
+    import uuid as uuid_module
+
+    uuid_module.UUID(cluster_id)  # does not raise: a real uuid was written
+
+    diagnostics = [d for d in result.diagnostics if d["code"] == "NORMALIZE_CLUSTER_ID_NOT_DURABLE"]
+    assert len(diagnostics) == 1
+    assert "fixture-cluster-0001" in diagnostics[0]["message"]
 
 
 def test_a_finding_referencing_an_unknown_component_is_dropped_with_a_diagnostic() -> None:

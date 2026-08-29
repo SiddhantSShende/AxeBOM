@@ -1072,6 +1072,12 @@
   },
   "diagnostics": [
     {
+      "code": "ENGINE_FIELD_MISSING",
+      "hint": "treated as zero components; the output shape may have changed",
+      "message": "dependency-check output has no `dependencies` array",
+      "severity": "warn"
+    },
+    {
       "code": "NORMALIZE_CANDIDATE_IDENTITY",
       "component_key": "purl:pkg:maven/com.acme/build-tools@0.1.0",
       "hint": "a low-confidence CPE does not change identity; merging it would inherit its false positives into otherwise-clean data",
@@ -1134,6 +1140,15 @@
     }
   ],
   "engine_coverage": [
+    {
+      "artifact_sha256": "",
+      "ecosystems_covered": [],
+      "engine_db_version": "",
+      "engine_id": "dependency-check",
+      "image_digest": "",
+      "status": "unavailable",
+      "version": ""
+    },
     {
       "artifact_sha256": "e1908d94e3bb0bd59ecaba3e8ebd4f2d1b627078f8ad6db3a6700725390e4b00",
       "ecosystems_covered": [
@@ -1208,9 +1223,30 @@
       "component_key": "purl:pkg:pypi/urllib3@2.0.4",
       "cvss_vectors": [
         {
+          "score": 7.5,
+          "severity": "high",
+          "source": "nvd",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "version": "3.1"
+        },
+        {
+          "score": 7.5,
+          "severity": "high",
+          "source": "redhat",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "version": "3.1"
+        },
+        {
           "score": 8.9,
           "severity": "High",
           "source": "Secondary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H",
+          "version": "4.0"
+        },
+        {
+          "score": 8.9,
+          "severity": "high",
+          "source": "ghsa",
           "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H",
           "version": "4.0"
         },
@@ -1224,7 +1260,8 @@
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2025-66471",
       "ecosystem": "pypi",
@@ -1249,16 +1286,38 @@
           "version": "3.1"
         },
         {
+          "score": 4.4,
+          "severity": "medium",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 6.5,
+          "severity": "medium",
+          "source": "nvd",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 4.4,
+          "severity": "medium",
+          "source": "redhat",
           "vector": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:N/A:N",
           "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2024-37891",
       "ecosystem": "pypi",
@@ -1270,7 +1329,7 @@
       ],
       "severity_conflict": false,
       "severity_effective": "medium",
-      "severity_rule": "advisory-cvss-v3.1",
+      "severity_rule": "nvd-cvss-v3.1",
       "vuln_cluster_id": "fixture-monorepo-multiroot-cluster-0001"
     },
     {
@@ -1284,6 +1343,20 @@
           "version": "3.1"
         },
         {
+          "score": 7.5,
+          "severity": "high",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "version": "3.1"
+        },
+        {
+          "score": 7.5,
+          "severity": "high",
+          "source": "nvd",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
@@ -1291,9 +1364,23 @@
           "version": "3.1"
         },
         {
+          "score": 7.5,
+          "severity": "high",
+          "source": "redhat",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "version": "3.1"
+        },
+        {
           "score": 8.9,
           "severity": "High",
           "source": "Secondary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H",
+          "version": "4.0"
+        },
+        {
+          "score": 8.9,
+          "severity": "high",
+          "source": "ghsa",
           "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H",
           "version": "4.0"
         },
@@ -1307,7 +1394,8 @@
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2026-21441",
       "ecosystem": "pypi",
@@ -1332,16 +1420,31 @@
           "version": "3.1"
         },
         {
+          "score": 5.3,
+          "severity": "medium",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 5.3,
+          "severity": "medium",
+          "source": "redhat",
           "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:N/A:N",
           "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2024-47081",
       "ecosystem": "pypi",
@@ -1366,16 +1469,31 @@
           "version": "3.1"
         },
         {
+          "score": 5.6,
+          "severity": "medium",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:H/I:H/A:N",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:H/I:H/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 5.6,
+          "severity": "medium",
+          "source": "redhat",
           "vector": "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:H/I:H/A:N",
           "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2024-35195",
       "ecosystem": "pypi",
@@ -1400,6 +1518,20 @@
           "version": "3.1"
         },
         {
+          "score": 4.2,
+          "severity": "medium",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:A/AC:H/PR:H/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 4.2,
+          "severity": "medium",
+          "source": "nvd",
+          "vector": "CVSS:3.1/AV:A/AC:H/PR:H/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
@@ -1407,9 +1539,23 @@
           "version": "3.1"
         },
         {
+          "score": 4.2,
+          "severity": "medium",
+          "source": "redhat",
+          "vector": "CVSS:3.1/AV:A/AC:H/PR:H/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        },
+        {
           "score": 5.7,
           "severity": "Medium",
           "source": "Secondary",
+          "vector": "CVSS:4.0/AV:A/AC:L/AT:P/PR:H/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
+          "version": "4.0"
+        },
+        {
+          "score": 5.7,
+          "severity": "medium",
+          "source": "ghsa",
           "vector": "CVSS:4.0/AV:A/AC:L/AT:P/PR:H/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
           "version": "4.0"
         },
@@ -1423,7 +1569,8 @@
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2023-45803",
       "ecosystem": "pypi",
@@ -1450,6 +1597,20 @@
           "version": "3.1"
         },
         {
+          "score": 4.4,
+          "severity": "medium",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:U/C:N/I:H/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 5.5,
+          "severity": "medium",
+          "source": "nvd",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:N",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
@@ -1462,11 +1623,19 @@
           "source": "osv.dev",
           "vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:N",
           "version": "3.1"
+        },
+        {
+          "score": 4.7,
+          "severity": "medium",
+          "source": "redhat",
+          "vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:N/I:H/A:N",
+          "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2026-25645",
       "ecosystem": "pypi",
@@ -1477,16 +1646,37 @@
       ],
       "severity_conflict": false,
       "severity_effective": "medium",
-      "severity_rule": "advisory-cvss-v3.1",
+      "severity_rule": "nvd-cvss-v3.1",
       "vuln_cluster_id": "fixture-monorepo-multiroot-cluster-0006"
     },
     {
       "component_key": "purl:pkg:pypi/urllib3@2.0.4",
       "cvss_vectors": [
         {
+          "score": 7.5,
+          "severity": "high",
+          "source": "nvd",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "version": "3.1"
+        },
+        {
+          "score": 7.5,
+          "severity": "high",
+          "source": "redhat",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "version": "3.1"
+        },
+        {
           "score": 8.9,
           "severity": "High",
           "source": "Secondary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H",
+          "version": "4.0"
+        },
+        {
+          "score": 8.9,
+          "severity": "high",
+          "source": "ghsa",
           "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H",
           "version": "4.0"
         },
@@ -1500,7 +1690,8 @@
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2025-66418",
       "ecosystem": "pypi",
@@ -1525,16 +1716,38 @@
           "version": "3.1"
         },
         {
+          "score": 5.3,
+          "severity": "medium",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 6.1,
+          "severity": "medium",
+          "source": "nvd",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 5.3,
+          "severity": "medium",
+          "source": "redhat",
           "vector": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:N/A:N",
           "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2025-50181",
       "ecosystem": "pypi",
@@ -1545,7 +1758,7 @@
       ],
       "severity_conflict": false,
       "severity_effective": "medium",
-      "severity_rule": "advisory-cvss-v3.1",
+      "severity_rule": "nvd-cvss-v3.1",
       "vuln_cluster_id": "fixture-monorepo-multiroot-cluster-0008"
     },
     {
@@ -1559,6 +1772,20 @@
           "version": "3.1"
         },
         {
+          "score": 5.3,
+          "severity": "high",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 5.3,
+          "severity": "medium",
+          "source": "nvd",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
@@ -1566,9 +1793,23 @@
           "version": "3.1"
         },
         {
+          "score": 5.9,
+          "severity": "medium",
+          "source": "redhat",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N",
+          "version": "3.1"
+        },
+        {
           "score": 8.2,
           "severity": "High",
           "source": "Secondary",
+          "vector": "CVSS:4.0/AV:N/AC:H/AT:P/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
+          "version": "4.0"
+        },
+        {
+          "score": 8.2,
+          "severity": "high",
+          "source": "ghsa",
           "vector": "CVSS:4.0/AV:N/AC:H/AT:P/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
           "version": "4.0"
         },
@@ -1582,7 +1823,8 @@
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2026-44431",
       "ecosystem": "pypi",
@@ -1607,6 +1849,20 @@
           "version": "3.1"
         },
         {
+          "score": 5.0,
+          "severity": "low",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:L",
+          "version": "3.1"
+        },
+        {
+          "score": 4.7,
+          "severity": "medium",
+          "source": "nvd",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:C/C:L/I:L/A:N",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
@@ -1614,9 +1870,23 @@
           "version": "3.1"
         },
         {
+          "score": 5.0,
+          "severity": "medium",
+          "source": "redhat",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:L",
+          "version": "3.1"
+        },
+        {
           "score": 2.3,
           "severity": "Low",
           "source": "Secondary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:N/VI:N/VA:N/SC:L/SI:L/SA:L",
+          "version": "4.0"
+        },
+        {
+          "score": 2.3,
+          "severity": "low",
+          "source": "ghsa",
           "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:N/VI:N/VA:N/SC:L/SI:L/SA:L",
           "version": "4.0"
         },
@@ -1630,7 +1900,8 @@
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2024-43796",
       "ecosystem": "npm",
@@ -1656,16 +1927,31 @@
           "version": "3.1"
         },
         {
+          "score": 6.1,
+          "severity": "medium",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 6.1,
+          "severity": "high",
+          "source": "redhat",
           "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
           "version": "3.1"
         }
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2024-29041",
       "ecosystem": "npm",
@@ -1691,6 +1977,20 @@
           "version": "3.1"
         },
         {
+          "score": 5.9,
+          "severity": "high",
+          "source": "ghsa",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:H/A:N",
+          "version": "3.1"
+        },
+        {
+          "score": 8.1,
+          "severity": "high",
+          "source": "nvd",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N",
+          "version": "3.1"
+        },
+        {
           "score": null,
           "severity": "",
           "source": "osv.dev",
@@ -1705,9 +2005,23 @@
           "version": "3.1"
         },
         {
+          "score": 5.9,
+          "severity": "medium",
+          "source": "redhat",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:H/A:N",
+          "version": "3.1"
+        },
+        {
           "score": 7.4,
           "severity": "High",
           "source": "Secondary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:H/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N",
+          "version": "4.0"
+        },
+        {
+          "score": 7.4,
+          "severity": "high",
+          "source": "ghsa",
           "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:H/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N",
           "version": "4.0"
         },
@@ -1721,7 +2035,8 @@
       ],
       "detected_by": [
         "grype",
-        "osv-scanner"
+        "osv-scanner",
+        "trivy-fs"
       ],
       "display_id": "CVE-2023-43804",
       "ecosystem": "pypi",
@@ -1733,7 +2048,7 @@
         "2.0.6",
         "644124ecd0b6e417c527191f866daa05a5a2056d"
       ],
-      "severity_conflict": false,
+      "severity_conflict": true,
       "severity_effective": "high",
       "severity_rule": "cvss-v4",
       "vuln_cluster_id": "fixture-monorepo-multiroot-cluster-0012"
@@ -1849,11 +2164,20 @@
       "purl:pkg:npm/@acme/api@2.1.0"
     ]
   },
-  "known_unknowns": "All configured engines completed and every detected ecosystem had an engine.",
+  "known_unknowns": "Engines that did not complete: dependency-check (unavailable).",
   "provenance": {
     "alias_snapshot_id": "fixture-monorepo-multiroot-aliases",
     "ecosystems_without_engine": [],
     "engines": [
+      {
+        "artifact_sha256": "",
+        "ecosystems_covered": [],
+        "engine_db_version": "",
+        "engine_id": "dependency-check",
+        "image_digest": "",
+        "status": "unavailable",
+        "version": ""
+      },
       {
         "artifact_sha256": "e1908d94e3bb0bd59ecaba3e8ebd4f2d1b627078f8ad6db3a6700725390e4b00",
         "ecosystems_covered": [

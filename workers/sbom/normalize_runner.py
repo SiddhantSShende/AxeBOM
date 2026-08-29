@@ -41,6 +41,7 @@ ARTIFACTS = {
     "trivy-fs": "trivy-fs.json",
     "grype": "grype.json",
     "osv-scanner": "osv-scanner.json",
+    "dependency-check": "dependency-check.json",
 }
 
 

@@ -38,13 +38,16 @@ func runHealth(ctx context.Context, args []string) error {
 		asJSON  = fs.Bool("json", false, "emit machine-readable output")
 		host    = fs.String("host", "localhost", "host the services are published on")
 		inClus  = fs.Bool("in-cluster", false, "address each service by its own name (run inside the compose network)")
+		wait    = fs.Duration("wait", 0, "poll every 2s until every service reports up, or this elapses (0, the default, probes once)")
 	)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: axebom health [--timeout 5s] [--json] [--host localhost] [--in-cluster]")
+		fmt.Fprintln(os.Stderr, "Usage: axebom health [--timeout 5s] [--json] [--host localhost] [--in-cluster] [--wait 90s]")
 		fmt.Fprintln(os.Stderr, "\nProbes /readyz on every service and reports up | degraded | down.")
 		fmt.Fprintln(os.Stderr, "\nOnly the gateway is published to the host in the compose stack, so from a")
 		fmt.Fprintln(os.Stderr, "shell outside it every other service reads as unreachable. Use --in-cluster")
 		fmt.Fprintln(os.Stderr, "from inside the compose network to address each service by its own name.")
+		fmt.Fprintln(os.Stderr, "\n--wait exists for `task dev`: containers starting is not services being")
+		fmt.Fprintln(os.Stderr, "ready, and without it a caller has to guess how long to sleep.")
 	}
 	if err := fs.Parse(args); err != nil {
 		return exitError{code: 2, err: err}
@@ -57,23 +60,25 @@ func runHealth(ctx context.Context, args []string) error {
 	}
 	sort.Strings(names)
 
-	results := make([]healthResult, len(names))
-	var wg sync.WaitGroup
-	for i, name := range names {
-		wg.Add(1)
-		go func(i int, name string) {
-			defer wg.Done()
-			// Inside the compose network a service answers on its own name at
-			// its real port; from the host only the gateway is published.
-			addr := *host
-			port := targets[name]
-			if *inClus {
-				addr = name
-			}
-			results[i] = probe(ctx, addr, name, port, *timeout)
-		}(i, name)
+	deadline := time.Now().Add(*wait)
+	var results []healthResult
+	for attempt := 1; ; attempt++ {
+		results = probeAll(ctx, names, targets, *host, *inClus, *timeout)
+		if allUp(results) || *wait <= 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		if !*asJSON {
+			fmt.Printf("waiting for readiness (attempt %d): %s\n", attempt, notYetUp(results))
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
 	}
-	wg.Wait()
 
 	if *asJSON {
 		enc := json.NewEncoder(os.Stdout)
@@ -85,6 +90,13 @@ func runHealth(ctx context.Context, args []string) error {
 		printHealth(results)
 	}
 
+	// With --wait, "ready" means every service reports up — a caller staging a
+	// dependent bring-up (or a rollback snapshot) on this needs that stronger
+	// guarantee, not just "nothing is actively down".
+	if *wait > 0 && !allUp(results) {
+		return exitError{code: 1, err: fmt.Errorf("not all services became ready within %s: %s", *wait, notYetUp(results))}
+	}
+
 	// Exit non-zero only on `down`. `degraded` is a real, serviceable state —
 	// failing on it would make the command useless during a rolling restart,
 	// which is exactly when someone runs it.
@@ -94,6 +106,52 @@ func runHealth(ctx context.Context, args []string) error {
 		}
 	}
 	return nil
+}
+
+// probeAll fans out one /readyz probe per service and waits for all of them.
+func probeAll(ctx context.Context, names []string, targets map[string]int, host string, inCluster bool, timeout time.Duration) []healthResult {
+	results := make([]healthResult, len(names))
+	var wg sync.WaitGroup
+	for i, name := range names {
+		wg.Add(1)
+		go func(i int, name string) {
+			defer wg.Done()
+			// Inside the compose network a service answers on its own name at
+			// its real port; from the host only the gateway is published.
+			addr := host
+			port := targets[name]
+			if inCluster {
+				addr = name
+			}
+			results[i] = probe(ctx, addr, name, port, timeout)
+		}(i, name)
+	}
+	wg.Wait()
+	return results
+}
+
+func allUp(results []healthResult) bool {
+	for _, r := range results {
+		if r.Status != "up" {
+			return false
+		}
+	}
+	return true
+}
+
+// notYetUp names the services still short of "up", for a progress line or a
+// timeout error a human can act on without cross-referencing the full table.
+func notYetUp(results []healthResult) string {
+	var names []string
+	for _, r := range results {
+		if r.Status != "up" {
+			names = append(names, fmt.Sprintf("%s(%s)", r.Service, r.Status))
+		}
+	}
+	if len(names) == 0 {
+		return "none"
+	}
+	return strings.Join(names, ", ")
 }
 
 type healthResult struct {

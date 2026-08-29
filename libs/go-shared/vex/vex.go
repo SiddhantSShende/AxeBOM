@@ -154,7 +154,13 @@ type Effective struct {
 	Status        Status
 	StatementID   string
 	Justification string
-	Scope         Scope
+	// Remediation, Workarounds and Downtime are copied from the winning
+	// statement — see Statement's own fields. Carried here so a report render
+	// never has to re-resolve the winner itself to reach them.
+	Remediation string
+	Workarounds string
+	Downtime    string
+	Scope       Scope
 
 	// History is every applicable statement, newest first — including the
 	// superseded ones. The chain IS the evidence.
@@ -307,6 +313,9 @@ func Resolve(statements []Statement, clusterID, componentKey string) *Effective 
 		Status:        winner.Status,
 		StatementID:   winner.ID,
 		Justification: winner.Justification,
+		Remediation:   winner.Remediation,
+		Workarounds:   winner.Workarounds,
+		Downtime:      winner.Downtime,
 		Scope:         winner.Scope,
 		History:       history,
 		Reason:        reason,

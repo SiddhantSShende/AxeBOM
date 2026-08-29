@@ -360,6 +360,96 @@ func TestACBOMHasNoFlatFieldSet(t *testing.T) {
 	}
 }
 
+// TestRemediationFieldsAppearOnTheFindingsSheet proves the four CERT-In §6
+// columns (Remediation, Workarounds, Restart/Downtime Required, CSAF
+// Recommended Mitigation Steps) render with real text when present, and
+// `not-provided` when a triaged finding's statement left them blank.
+func TestRemediationFieldsAppearOnTheFindingsSheet(t *testing.T) {
+	b := sampleBOM()
+	b.Findings = append(b.Findings, Finding{
+		DisplayID:      "CVE-2024-00000",
+		ClusterID:      "0199-cluster-2",
+		ComponentKey:   "purl:pkg:npm/lodash@4.17.20",
+		VEXStatus:      "affected",
+		VEXRemediation: "Upgrade to lodash 4.17.21.",
+		VEXWorkarounds: "Disable the affected code path via feature flag.",
+		VEXDowntime:    "No restart required.",
+		CSAFMitigation: "Apply vendor patch and redeploy.",
+	}, Finding{
+		DisplayID:    "CVE-2024-11111",
+		ClusterID:    "0199-cluster-3",
+		ComponentKey: "purl:pkg:npm/lodash@4.17.20",
+		VEXStatus:    "under_investigation",
+		// Triaged, but nothing recorded yet — must render not-provided, not
+		// blank, for every one of the four columns.
+	})
+
+	sheet := findingSheet(b)
+	rows := collect(t, sheet)
+
+	remediationCol := columnIndex(t, sheet, "Remediation")
+	workaroundsCol := columnIndex(t, sheet, "Workarounds")
+	downtimeCol := columnIndex(t, sheet, "Restart/Downtime Required")
+	mitigationCol := columnIndex(t, sheet, "CSAF recommended mitigation")
+
+	if len(rows) != len(b.Findings) {
+		t.Fatalf("got %d rows, want %d findings", len(rows), len(b.Findings))
+	}
+
+	withText := rows[1]
+	if got := withText[remediationCol]; got != "Upgrade to lodash 4.17.21." {
+		t.Errorf("Remediation = %q", got)
+	}
+	if got := withText[workaroundsCol]; got != "Disable the affected code path via feature flag." {
+		t.Errorf("Workarounds = %q", got)
+	}
+	if got := withText[downtimeCol]; got != "No restart required." {
+		t.Errorf("Downtime = %q", got)
+	}
+	if got := withText[mitigationCol]; got != "Apply vendor patch and redeploy." {
+		t.Errorf("CSAF mitigation = %q", got)
+	}
+
+	untriagedText := rows[2]
+	for _, col := range []int{remediationCol, workaroundsCol, downtimeCol, mitigationCol} {
+		if got := untriagedText[col]; got != model.NotProvided {
+			t.Errorf("column %d = %q, want %q for a triaged-but-blank finding", col, got, model.NotProvided)
+		}
+	}
+}
+
+// TestVEXFieldCoverageExcludesUntriagedFindings proves the denominator is
+// findings with SOME effective VEX statement, not every finding — a finding
+// nobody has looked at yet is "not yet assessed", not "remediation omitted".
+func TestVEXFieldCoverageExcludesUntriagedFindings(t *testing.T) {
+	b := sampleBOM() // b.Findings[0] has no VEXStatus at all — untriaged.
+	b.Findings = append(b.Findings,
+		Finding{VEXStatus: "affected", VEXRemediation: "Upgrade."},
+		Finding{VEXStatus: "affected"}, // triaged, remediation left blank
+	)
+
+	sheet := vexFieldCoverageSheet(b)
+	rows := collect(t, sheet)
+
+	idCol := columnIndex(t, sheet, "Field ID")
+	totalCol := columnIndex(t, sheet, "Triaged findings")
+	presentCol := columnIndex(t, sheet, "Substantive")
+
+	for _, row := range rows {
+		if row[idCol] != model.FieldCertinVexRemediation {
+			continue
+		}
+		if row[totalCol] != "2" {
+			t.Errorf("total = %q, want 2 — the untriaged finding must not count", row[totalCol])
+		}
+		if row[presentCol] != "1" {
+			t.Errorf("present = %q, want 1 — only one of the two triaged findings has remediation text", row[presentCol])
+		}
+		return
+	}
+	t.Fatalf("no %q row in the VEX Field Coverage sheet", model.FieldCertinVexRemediation)
+}
+
 // TestAHostileComponentNameReachesTheWorkbookEscaped is the end-to-end version
 // of the injection test: real BOM, real sheets, real workbook.
 func TestAHostileComponentNameReachesTheWorkbookEscaped(t *testing.T) {
@@ -392,6 +482,42 @@ func TestAHostileComponentNameReachesTheWorkbookEscaped(t *testing.T) {
 	col := columnIndex(t, sheet, nameOf(t, model.FieldCertinSbom01ComponentName))
 	axis := cellAxis(t, col, 4) // header + two sample components + this one
 	if got := readCell(t, buf.Bytes(), "Components", axis); !strings.HasPrefix(got, "'") {
+		t.Fatalf("%s holds %q, unescaped", axis, got)
+	}
+}
+
+// TestAHostileRemediationValueReachesTheWorkbookEscaped proves the new
+// remediation/mitigation columns go through the SAME cell() escaping path as
+// every other column — this codebase has exactly one place a cell value is
+// produced (sheet.go's cell()), and both writers call it; a column added
+// outside that path is a second, unescaped route into the workbook.
+func TestAHostileRemediationValueReachesTheWorkbookEscaped(t *testing.T) {
+	b := sampleBOM()
+	b.Findings = append(b.Findings, Finding{
+		DisplayID:      "CVE-2024-99999",
+		ComponentKey:   "purl:pkg:npm/lodash@4.17.20",
+		VEXStatus:      "affected",
+		VEXRemediation: ddePayload,
+	})
+
+	sheets, err := Sheets(b)
+	if err != nil {
+		t.Fatalf("building sheets: %v", err)
+	}
+
+	var buf bytes.Buffer
+	result, err := WriteXLSX(&buf, sheets)
+	if err != nil {
+		t.Fatalf("writing: %v", err)
+	}
+	if result.Total(func(s SheetResult) int { return s.Escaped }) == 0 {
+		t.Fatal("the workbook reports nothing escaped, but a finding carries a DDE payload as remediation text")
+	}
+
+	sheet := findSheet(t, sheets, "Findings")
+	col := columnIndex(t, sheet, "Remediation")
+	axis := cellAxis(t, col, len(b.Findings)+1) // header + every finding, this one last
+	if got := readCell(t, buf.Bytes(), "Findings", axis); !strings.HasPrefix(got, "'") {
 		t.Fatalf("%s holds %q, unescaped", axis, got)
 	}
 }

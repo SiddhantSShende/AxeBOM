@@ -1,0 +1,76 @@
+{
+  "results": [
+    {
+      "source": { "path": "/src/pom.xml", "type": "lockfile" },
+      "packages": [
+        {
+          "package": {
+            "name": "org.apache.logging.log4j:log4j-core",
+            "version": "2.14.1",
+            "ecosystem": "Maven"
+          },
+          "groups": [
+            { "ids": ["CVE-2021-44228"], "aliases": ["CVE-2021-44228"], "max_severity": "10.0" },
+            {
+              "ids": ["GHSA-jfh8-c2jp-5v3q"],
+              "aliases": ["GHSA-jfh8-c2jp-5v3q", "DSA-5022-1"],
+              "max_severity": "10.0"
+            }
+          ],
+          "vulnerabilities": [
+            {
+              "id": "CVE-2021-44228",
+              "aliases": [],
+              "modified": "2021-12-14T00:00:00Z",
+              "published": "2021-12-10T00:00:00Z",
+              "summary": "Apache Log4j2 JNDI features do not protect against attacker controlled LDAP and other JNDI related endpoints (Log4Shell).",
+              "severity": [
+                { "type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H" }
+              ],
+              "affected": [
+                {
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "org.apache.logging.log4j:log4j-core",
+                    "purl": "pkg:maven/org.apache.logging.log4j/log4j-core"
+                  },
+                  "ranges": [
+                    {
+                      "type": "ECOSYSTEM",
+                      "events": [{ "introduced": "2.0-beta9" }, { "fixed": "2.15.0" }]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "GHSA-jfh8-c2jp-5v3q",
+              "aliases": ["DSA-5022-1"],
+              "modified": "2021-12-14T00:00:00Z",
+              "published": "2021-12-10T00:00:00Z",
+              "summary": "Remote code execution in Log4j (Log4Shell)",
+              "severity": [
+                { "type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H" }
+              ],
+              "affected": [
+                {
+                  "package": {
+                    "ecosystem": "Maven",
+                    "name": "org.apache.logging.log4j:log4j-core",
+                    "purl": "pkg:maven/org.apache.logging.log4j/log4j-core"
+                  },
+                  "ranges": [
+                    {
+                      "type": "ECOSYSTEM",
+                      "events": [{ "introduced": "2.0-beta9" }, { "fixed": "2.15.0" }]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

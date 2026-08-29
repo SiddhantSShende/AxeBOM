@@ -1,0 +1,64 @@
+{
+  "matches": [
+    {
+      "vulnerability": {
+        "id": "GHSA-jfh8-c2jp-5v3q",
+        "dataSource": "https://github.com/advisories/GHSA-jfh8-c2jp-5v3q",
+        "namespace": "github:language:java",
+        "severity": "Critical",
+        "urls": [
+          "https://github.com/advisories/GHSA-jfh8-c2jp-5v3q",
+          "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"
+        ],
+        "description": "Apache Log4j2 JNDI features used in configuration, log messages, and parameters do not protect against attacker controlled LDAP and other JNDI related endpoints.",
+        "cvss": [
+          {
+            "type": "Primary",
+            "version": "3.1",
+            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+            "metrics": { "baseScore": 10.0, "exploitabilityScore": 3.9, "impactScore": 6.0 },
+            "vendorMetadata": {}
+          }
+        ],
+        "fix": { "versions": ["2.15.0"], "state": "fixed" }
+      },
+      "relatedVulnerabilities": [
+        {
+          "id": "CVE-2021-44228",
+          "namespace": "nvd:cpe",
+          "description": "Apache Log4j2 2.0-beta9 through 2.15.0 JNDI features do not protect against attacker controlled LDAP and other JNDI related endpoints.",
+          "severity": "Critical"
+        }
+      ],
+      "artifact": {
+        "id": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1?package-id=9f1c2b3a4d5e6f70",
+        "name": "log4j-core",
+        "version": "2.14.1",
+        "type": "java-archive",
+        "locations": [{ "path": "/pom.xml", "accessPath": "" }],
+        "language": "java",
+        "licenses": [],
+        "cpes": ["cpe:2.3:a:apache:log4j:2.14.1:*:*:*:*:*:*:*"],
+        "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1",
+        "upstreams": [],
+        "metadataType": "JavaMetadata",
+        "metadata": {
+          "virtualPath": "",
+          "pomArtifactID": "log4j-core",
+          "pomGroupID": "org.apache.logging.log4j",
+          "manifestName": "",
+          "archiveDigests": null
+        }
+      }
+    }
+  ],
+  "source": {
+    "type": "directory",
+    "target": "/src"
+  },
+  "distro": {},
+  "descriptor": {
+    "name": "grype",
+    "version": "0.117.0"
+  }
+}

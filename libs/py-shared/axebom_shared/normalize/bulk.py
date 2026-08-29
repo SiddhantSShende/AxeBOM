@@ -464,17 +464,47 @@ def _findings_batch(
         if component_id is None:
             continue
 
-        # cluster_id is a uuid column; the canonical model's vuln_cluster_id is
-        # a string (see pipeline.py's _default_ids / normalize.vuln_clusters).
-        # Deriving it the same way _component_id derives a component's row id
-        # keeps the two consistent and keeps this deterministic — the same
-        # cluster string always mints the same uuid for a given document.
-        cluster_id = str(
-            uuid.uuid5(
-                _SURROGATE_NAMESPACE,
-                f"cluster:{bom_document_id}:{_text(finding.get('vuln_cluster_id'))}",
+        # cluster_id is a uuid column. In production, pipeline.normalize()'s
+        # `vuln_cluster_id` IS ALREADY a real, durable normalize.vuln_clusters
+        # uuid — cluster_store.py resolved/minted it and fed it back in via
+        # normalize()'s existing_clusters/cluster_ids parameters (ADR-0005:
+        # never derived from content, so it survives a re-scan and a report
+        # issued against it keeps resolving). Pass it through unchanged.
+        #
+        # ⚠ THE uuid5 DERIVATION BELOW IS A FALLBACK, NOT THE NORMAL PATH.
+        # It only fires for callers that never wired cluster_store at all —
+        # fixtures and tests via normalize_runner.py's `_default_ids`, which
+        # documents itself as carrying "no cross-scan meaning." A real,
+        # correctly-wired scan should never take this branch; if one does,
+        # that is a wiring regression worth being loud about rather than
+        # silently reproducing the exact non-durable-id trap ADR-0005 exists
+        # to prevent.
+        raw_cluster_id = _text(finding.get("vuln_cluster_id"))
+        if _is_uuid(raw_cluster_id):
+            cluster_id = raw_cluster_id
+        else:
+            diagnostics.append(
+                {
+                    "severity": "warn",
+                    "code": "NORMALIZE_CLUSTER_ID_NOT_DURABLE",
+                    "message": (
+                        f"finding {finding.get('display_id', '')!r} carries a non-durable "
+                        f"cluster id {raw_cluster_id!r}; falling back to a per-document "
+                        "derived id"
+                    ),
+                    "hint": (
+                        "normalize() was called without existing_clusters/cluster_ids wired "
+                        "to normalize.vuln_clusters — expected from a fixture or test, a real "
+                        "bug if this fired from a live scan (see cluster_store.py)"
+                    ),
+                }
             )
-        )
+            cluster_id = str(
+                uuid.uuid5(
+                    _SURROGATE_NAMESPACE,
+                    f"cluster:{bom_document_id}:{raw_cluster_id}",
+                )
+            )
 
         batch.rows.append(
             (
@@ -973,6 +1003,18 @@ def _ai_model_dependencies_batch(
             batch.rows.append((tenant_id, model_id, key))
 
     return batch
+
+
+def _is_uuid(value: str) -> bool:
+    """Whether value already parses as a uuid — used to tell a real, durable
+    cluster id (from cluster_store.py, minted client-side as uuid7, or read
+    back from normalize.vuln_clusters) apart from a fixture/test placeholder
+    string like "fixture-npm-simple-cluster-0000"."""
+    try:
+        uuid.UUID(value)
+        return True
+    except (ValueError, AttributeError, TypeError):
+        return False
 
 
 def _numeric_or_none(value: Any) -> float | None:

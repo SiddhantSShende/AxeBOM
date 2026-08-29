@@ -118,12 +118,17 @@ func seedSBOM(t *testing.T, pool *db.Pool, tenantID, projectID string) sbomFixtu
 		}
 
 		cvssVectors := `[{"version":"3.1","vector":"AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H","score":9.8,"source":"grype"}]`
+		// fix_version_ordering='comparator': findings.py's resolve_fix_version()
+		// (the only real producer of this column) returns 'comparator' when a
+		// fix version was reported AND an ecosystem-correct comparator exists —
+		// never 'known', which the CHECK constraint no longer even permits
+		// (migrations/normalize/0009_fix_version_ordering_values.sql).
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO normalize.findings
 				(tenant_id, bom_document_id, component_id, cluster_id,
 				 display_id_at_render, severity_effective, severity_conflict,
 				 cvss_vectors, cvss_primary_score, fixed_in_min, fix_version_ordering, detected_by)
-			VALUES ($1,$2,$3,$4,$5,'critical', false, $6, 9.8, '2.0.1', 'known',
+			VALUES ($1,$2,$3,$4,$5,'critical', false, $6, 9.8, '2.0.1', 'comparator',
 			        ARRAY['syft','grype'])`,
 			tenantID, f.docID, f.transComponentID, f.clusterID, cve, cvssVectors); err != nil {
 			return err
@@ -305,8 +310,8 @@ func TestListFindingsGroupsByClusterWithAliasesAndVEX(t *testing.T) {
 	if finding.Severity != "critical" {
 		t.Errorf("severity = %q, want critical", finding.Severity)
 	}
-	if finding.FixedInMin != "2.0.1" || finding.FixOrdering != "known" {
-		t.Errorf("fix = %q/%q, want 2.0.1/known", finding.FixedInMin, finding.FixOrdering)
+	if finding.FixedInMin != "2.0.1" || finding.FixOrdering != "comparator" {
+		t.Errorf("fix = %q/%q, want 2.0.1/comparator", finding.FixedInMin, finding.FixOrdering)
 	}
 	if len(finding.Components) != 1 || finding.Components[0].Key != f.transKey {
 		t.Errorf("components = %+v, want just %q", finding.Components, f.transKey)
@@ -346,7 +351,7 @@ func TestListFindingsNeverLetsAClearedComponentHideAStillAffectedOne(t *testing.
 				(tenant_id, bom_document_id, component_id, cluster_id,
 				 display_id_at_render, severity_effective, severity_conflict,
 				 fixed_in_min, fix_version_ordering, detected_by)
-			VALUES ($1,$2,$3,$4,$5,'critical', false, '2.0.1', 'known', ARRAY['syft'])`,
+			VALUES ($1,$2,$3,$4,$5,'critical', false, '2.0.1', 'comparator', ARRAY['syft'])`,
 			tenantA, f.docID, f.directComponent, f.clusterID, f.displayID); err != nil {
 			return err
 		}

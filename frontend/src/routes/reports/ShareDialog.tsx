@@ -58,7 +58,7 @@ export function ShareDialog({
 
   const links = useQuery({
     queryKey: ['shares', reportId],
-    queryFn: () => api.get<{ share_links: ShareLink[] }>(`/v1/reports/${reportId}/shares`),
+    queryFn: ({ signal }) => api.get<{ share_links: ShareLink[] }>(`/v1/reports/${reportId}/shares`, signal),
   });
 
   const create = useMutation({

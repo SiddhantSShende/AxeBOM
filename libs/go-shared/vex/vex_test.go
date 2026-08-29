@@ -19,6 +19,12 @@ func stmt(id string, status Status, scope Scope, day int) Statement {
 		Scope:        scope,
 		Version:      1,
 		CreatedAt:    at(day),
+		// Derived from id, never a shared constant, so a test asserting
+		// Resolve()'s Effective carries THIS statement's text — not some other
+		// applicable statement's — actually proves something.
+		Remediation: "remediation-" + id,
+		Workarounds: "workarounds-" + id,
+		Downtime:    "downtime-" + id,
 	}
 	if scope == ScopeProject {
 		s.ComponentKey = ""
@@ -136,6 +142,18 @@ func TestSpecificityBeatsRecency(t *testing.T) {
 	if !strings.Contains(got.Reason, "specific") {
 		t.Errorf("the reason does not say which rule decided: %q", got.Reason)
 	}
+	// ⚠ THE WINNER'S REMEDIATION FIELDS, NOT THE LOSER'S. A bug that copied
+	// the wrong statement's text here would leak the broader, superseded
+	// statement's guidance into a report describing the narrower decision.
+	if got.Remediation != "remediation-specific" {
+		t.Errorf("remediation = %q, want the winning statement's own", got.Remediation)
+	}
+	if got.Workarounds != "workarounds-specific" {
+		t.Errorf("workarounds = %q, want the winning statement's own", got.Workarounds)
+	}
+	if got.Downtime != "downtime-specific" {
+		t.Errorf("downtime = %q, want the winning statement's own", got.Downtime)
+	}
 }
 
 func TestRecencyBreaksATieWithinAScope(t *testing.T) {
@@ -150,6 +168,10 @@ func TestRecencyBreaksATieWithinAScope(t *testing.T) {
 	if !strings.Contains(got.Reason, "most recent") {
 		t.Errorf("the reason does not say which rule decided: %q", got.Reason)
 	}
+	if got.Remediation != "remediation-new" || got.Workarounds != "workarounds-new" || got.Downtime != "downtime-new" {
+		t.Errorf("remediation/workarounds/downtime = %q/%q/%q, want the newer statement's own",
+			got.Remediation, got.Workarounds, got.Downtime)
+	}
 }
 
 func TestVersionBreaksATieWithinATimestamp(t *testing.T) {
@@ -162,6 +184,9 @@ func TestVersionBreaksATieWithinATimestamp(t *testing.T) {
 	got := Resolve([]Statement{a, b}, "cluster-1", "purl:pkg:npm/lodash@4.17.20")
 	if got.StatementID != "v2" {
 		t.Fatalf("winner = %q, want the higher version", got.StatementID)
+	}
+	if got.Remediation != "remediation-v2" {
+		t.Errorf("remediation = %q, want the higher-version statement's own", got.Remediation)
 	}
 }
 

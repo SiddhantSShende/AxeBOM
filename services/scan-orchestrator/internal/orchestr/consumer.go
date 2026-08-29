@@ -194,7 +194,7 @@ func (o *Orchestrator) failAllRuns(ctx context.Context, result events.ScanResult
 		run.FinishedAt = &now
 		run.ErrorCode = code
 		run.ErrorMessage = message
-		if err := o.store.UpsertEngineRun(ctx, run); err != nil {
+		if _, err := o.store.UpsertEngineRun(ctx, run); err != nil {
 			return err
 		}
 	}

@@ -495,6 +495,11 @@ func toExportDocument(b render.BOM) export.Document {
 			CertInIdentifier: c.Fields[model.FieldCertinSbom21UniqueIdentifier],
 		})
 	}
+
+	doc.Roots = b.Roots
+	for _, d := range b.Dependencies {
+		doc.Dependencies = append(doc.Dependencies, export.Dependency{From: d.From, To: d.To})
+	}
 	return doc
 }
 

@@ -1,0 +1,47 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.7.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.7",
+  "serialNumber": "urn:uuid:1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-08-26T00:00:00Z",
+    "tools": { "components": [{ "type": "application", "author": "anchore", "name": "syft", "version": "1.51.0" }] },
+    "component": { "bom-ref": "d1e2f3a4b5c6d7e8", "type": "file", "name": "/src" }
+  },
+  "components": [
+    {
+      "bom-ref": "pkg:npm/alias-overmerge@1.0.0?package-id=1e2f3a4b5c6d7e8f",
+      "type": "library",
+      "name": "alias-overmerge",
+      "version": "1.0.0",
+      "purl": "pkg:npm/alias-overmerge@1.0.0",
+      "properties": [
+        { "name": "syft:package:foundBy", "value": "javascript-lock-cataloger" },
+        { "name": "syft:package:language", "value": "javascript" },
+        { "name": "syft:package:type", "value": "npm" },
+        { "name": "syft:location:0:path", "value": "/package-lock.json" }
+      ]
+    },
+    {
+      "bom-ref": "pkg:npm/batch-pkg@1.0.0?package-id=2f3a4b5c6d7e8f90",
+      "type": "library",
+      "name": "batch-pkg",
+      "version": "1.0.0",
+      "purl": "pkg:npm/batch-pkg@1.0.0",
+      "properties": [
+        { "name": "syft:package:foundBy", "value": "javascript-lock-cataloger" },
+        { "name": "syft:package:language", "value": "javascript" },
+        { "name": "syft:package:type", "value": "npm" },
+        { "name": "syft:package:metadataType", "value": "javascript-npm-package-lock-entry" },
+        { "name": "syft:location:0:path", "value": "/package-lock.json" }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:npm/alias-overmerge@1.0.0?package-id=1e2f3a4b5c6d7e8f",
+      "dependsOn": ["pkg:npm/batch-pkg@1.0.0?package-id=2f3a4b5c6d7e8f90"]
+    }
+  ]
+}

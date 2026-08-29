@@ -4,8 +4,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/axebom/axebom/libs/go-shared/authz"
@@ -52,8 +54,18 @@ func bindIAMFlags(fs *flag.FlagSet) *iamFlags {
 		"ZITADEL hostname, without a port")
 	fs.StringVar(&f.port, "port", envOr("ZITADEL_API_PORT", "58080"),
 		"port this command connects on — the container's own port, not the public one")
-	fs.BoolVar(&f.insecure, "insecure", envOr("ZITADEL_EXTERNALSECURE", "false") != "true",
-		"connect over plaintext h2c (development)")
+	// ⚠ ALWAYS PLAINTEXT BY DEFAULT, INDEPENDENT OF ZITADEL_EXTERNALSECURE.
+	// This dials ZITADEL's DIRECT port (58080), bypassing nginx entirely —
+	// and ZITADEL_TLS_ENABLED is unconditionally "false" in
+	// docker-compose.iam.yml because ZITADEL never terminates TLS itself; only
+	// nginx does, for the browser-facing path this command doesn't use.
+	// ZITADEL_EXTERNALSECURE describes THAT path's scheme (what the browser
+	// sees), not this one — conflating them here made this command try HTTPS
+	// against a port that only ever speaks plaintext the moment
+	// ZITADEL_EXTERNALSECURE turned on, confirmed live: "http: server gave
+	// HTTP response to HTTPS client".
+	fs.BoolVar(&f.insecure, "insecure", true,
+		"connect over plaintext h2c — true unless ZITADEL's own direct port has a cert of its own, which it does not in this deployment")
 	fs.StringVar(&f.keyPath, "key", envOr("ZITADEL_BOOTSTRAP_KEY", defaultKeyPath),
 		"machine-user JSON key written by the ZITADEL setup one-shot")
 	fs.StringVar(&f.adminOrg, "admin-org", envOr("ZITADEL_ADMIN_ORG", "AxeBOM"),
@@ -72,6 +84,36 @@ func bindIAMFlags(fs *flag.FlagSet) *iamFlags {
 	return f
 }
 
+// hostOf extracts the bare hostname from a URL (no port, no scheme), for
+// registering ZITADEL's trusted-domain list (Spec.TrustedDomain) — confirmed
+// against the live instance: passing host:port fails with
+// "Errors.Instance.Domain.InvalidCharacter" on the colon, so this must be a
+// domain name only. An unparseable input returns "" so callers skip the step
+// rather than trust a malformed value.
+func hostOf(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
+}
+
+// publicOrigin splits a URL into the host:port and scheme
+// iam.Config.PublicHost/PublicScheme need — see PublicScheme's own doc
+// comment for why the CLI has to set both once ZITADEL_EXTERNALSECURE can be
+// true: it dials ZITADEL's direct port in plaintext regardless (that port
+// never has a cert of its own), which no longer matches the public issuer's
+// scheme on its own the way it did when everything was plain http. An
+// unparseable input returns ("", ""), so callers skip the override rather
+// than trust a malformed value, matching hostOf's own failure mode above.
+func publicOrigin(rawURL string) (host, scheme string) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", ""
+	}
+	return u.Host, u.Scheme
+}
+
 func envOr(key, fallback string) string {
 	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 		return v
@@ -88,15 +130,20 @@ func iamBootstrap(ctx context.Context, args []string) error {
 		"create the two development organisations and their users")
 	link := fs.Bool("link", true,
 		"write the org and user ids into auth.tenants / auth.users")
+	writeEnv := fs.Bool("write-env", false,
+		"upsert ZITADEL_PROJECT_ID/ZITADEL_SPA_CLIENT_ID/ZITADEL_ISSUER into .env at the repo root")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
+	pubHost, pubScheme := publicOrigin(f.publicURL)
 	client, err := iam.Connect(ctx, iam.Config{
-		Domain:   f.domain,
-		Port:     f.port,
-		Insecure: f.insecure,
-		KeyPath:  resolveFromRepoRoot(f.keyPath),
+		Domain:       f.domain,
+		Port:         f.port,
+		Insecure:     f.insecure,
+		KeyPath:      resolveFromRepoRoot(f.keyPath),
+		PublicHost:   pubHost,
+		PublicScheme: pubScheme,
 	})
 	if err != nil {
 		return err
@@ -120,7 +167,8 @@ func iamBootstrap(ctx context.Context, args []string) error {
 		SPAAdditionalHosts: []string{f.publicURL},
 		// Development mode permits the http:// redirect URIs above. It must be
 		// off wherever the origin is real.
-		DevMode: strings.HasPrefix(f.publicURL, "http://"),
+		DevMode:       strings.HasPrefix(f.publicURL, "http://"),
+		TrustedDomain: hostOf(f.publicURL),
 		// Alongside the bootstrap key, in a directory that is already
 		// gitignored. Services read their key from here.
 		ServiceKeyDir: resolveFromRepoRoot("deploy/compose/.data/zitadel-bootstrap/service-keys"),
@@ -156,7 +204,70 @@ func iamBootstrap(ctx context.Context, args []string) error {
 	}
 
 	printBootstrap(res, f.publicURL)
+
+	if *writeEnv {
+		// ⚠ WHAT MAKES `task dev` ABLE TO BOOTSTRAP ITSELF. Without this, the
+		// three values above are printed for a human to paste into .env by
+		// hand — the two-step dance that left 6 of 8 app services crash-
+		// looping on a fresh clone until someone did that and re-ran
+		// `docker compose up -d` (see docs/STATE.md's 2026-08-24 (g) entry).
+		envPath := resolveFromRepoRoot(".env")
+		updates := map[string]string{
+			"ZITADEL_PROJECT_ID":    res.ProjectID,
+			"ZITADEL_SPA_CLIENT_ID": res.SPAClientID,
+			"ZITADEL_ISSUER":        f.publicURL,
+		}
+		if err := upsertEnvFile(envPath, updates); err != nil {
+			return fmt.Errorf("iam bootstrap: write .env: %w", err)
+		}
+		fmt.Printf("wrote ZITADEL_PROJECT_ID, ZITADEL_SPA_CLIENT_ID, ZITADEL_ISSUER to %s\n", envPath)
+	}
 	return nil
+}
+
+// upsertEnvFile replaces `KEY=` lines matching updates and appends any key
+// not already present, leaving every other line — comments, ordering,
+// unrelated values — untouched. Missing entirely, it is created; existing
+// file permissions are preserved rather than reset, since .env commonly holds
+// secrets and its access mode is a deliberate choice this command should not
+// override.
+func upsertEnvFile(path string, updates map[string]string) error {
+	mode := os.FileMode(0o644)
+	data, err := os.ReadFile(path) // #nosec G304 -- fixed ".env" path resolved from the repo root, not caller input
+	switch {
+	case err == nil:
+		if fi, statErr := os.Stat(path); statErr == nil {
+			mode = fi.Mode().Perm()
+		}
+	case os.IsNotExist(err):
+		data = nil
+	default:
+		return err
+	}
+
+	lines := strings.Split(string(data), "\n")
+	seen := make(map[string]bool, len(updates))
+	for i, line := range lines {
+		for key, val := range updates {
+			if strings.HasPrefix(line, key+"=") {
+				lines[i] = key + "=" + val
+				seen[key] = true
+			}
+		}
+	}
+
+	var missing []string
+	for key := range updates {
+		if !seen[key] {
+			missing = append(missing, key)
+		}
+	}
+	sort.Strings(missing) // deterministic output, not map iteration order
+	for _, key := range missing {
+		lines = append(lines, key+"="+updates[key])
+	}
+
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), mode) // #nosec G304 G703 -- same fixed ".env" path as above
 }
 
 // devTenants mirrors migrations/seed/0001_dev_tenants.sql.
@@ -326,11 +437,14 @@ func iamVerify(ctx context.Context, args []string) error {
 		return err
 	}
 
+	pubHost, pubScheme := publicOrigin(f.publicURL)
 	client, err := iam.Connect(ctx, iam.Config{
-		Domain:   f.domain,
-		Port:     f.port,
-		Insecure: f.insecure,
-		KeyPath:  resolveFromRepoRoot(f.keyPath),
+		Domain:       f.domain,
+		Port:         f.port,
+		Insecure:     f.insecure,
+		KeyPath:      resolveFromRepoRoot(f.keyPath),
+		PublicHost:   pubHost,
+		PublicScheme: pubScheme,
 	})
 	if err != nil {
 		return err
@@ -354,6 +468,7 @@ func iamVerify(ctx context.Context, args []string) error {
 		SPAPostLogoutURIs:  []string{f.publicURL + "/"},
 		SPAAdditionalHosts: []string{f.publicURL},
 		DevMode:            strings.HasPrefix(f.publicURL, "http://"),
+		TrustedDomain:      hostOf(f.publicURL),
 	})
 	if err != nil {
 		return err

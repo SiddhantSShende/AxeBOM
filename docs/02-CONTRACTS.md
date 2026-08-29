@@ -26,6 +26,7 @@ Every envelope carries `schema_version` as `<name>/v<N>`. Rules:
 | `SCAN_RESULTS` | `scan.result.<family>` | WorkQueue | pull, normalizer | |
 | `SCAN_DLQ` | `scan.dlq.<family>` | Limits, 30 d | manual | poison messages, retained for diagnosis |
 | `NOTIFY` | `notify.<event_type>` | WorkQueue | notification-svc | envelope: `events`' `NotifyEventV1` (§11) |
+| `NORMALIZE_JOBS` | `scan.normalize.<family>` | WorkQueue | pull, the normalize consumer | envelope: `NormalizeTriggerV1` (§6a). **Deliberately a separate stream from `SCAN_JOBS`**: normalization is CPU-bound in-process work finishing in seconds–minutes, not a sandboxed container run — sharing `SCAN_JOBS`'s 30-minute `ack_wait` would hold a stuck normalization message hostage far longer than the work ever legitimately takes |
 
 `<family>` ∈ `fetch`, `sbom`, `cbom`, `qbom`, `aibom`, `hbom`.
 
@@ -58,9 +59,15 @@ POST /scans
    │        every engine reads THE SAME archive
    │        engines hold NO credentials
    │
-   ├─ each engine publishes ScanResultV1 ──► normalizer
+   ├─ each engine publishes ScanResultV1 ──► scan-orchestrator records it,
+   │        derives scan status mechanically
    │
-   └─ derive scan status mechanically, render reports async
+   ├─ once every engine dispatched for one family reaches a terminal state,
+   │  scan-orchestrator publishes ONE NormalizeTriggerV1 ──► normalize consumer
+   │        (§6a; currently wired for the sbom family only)
+   │
+   └─ normalize consumer writes normalize.bom_documents + children; reports
+      render from there async
 ```
 
 Two structural decisions, both load-bearing:
@@ -223,6 +230,51 @@ Scan status derives mechanically, never by hand:
 Every generated report carries a mandatory **Engine Coverage** section: each requested engine, its terminal status, the ecosystems it covered, and ecosystems detected with **no available engine**.
 
 > An SBOM that silently omits an ecosystem is worse than no SBOM: it converts an unknown into a false negative the customer trusts. This section is not optional and may not be suppressed by a report template.
+
+---
+
+## 6a. `NormalizeTriggerV1`
+
+Published by scan-orchestrator once every engine job dispatched for one `(scan, family)` pair has reached a terminal state — a genuinely new envelope, not a `ScanJobV1` disguised as one, because there is no engine to run here, only a normalization pass to trigger.
+
+```jsonc
+{
+  "schema_version": "scan.normalize/v1",
+  "trigger_id": "uuid",           // the scan.normalize_triggers row's id; also the Nats-Msg-Id dedup key
+  "scan_id": "uuid", "tenant_id": "uuid", "project_id": "uuid",
+
+  "family": "sbom",
+  "normalization_version": 1,
+
+  "source_commit_sha": "…",              // from scan.scans, pinned once by the fetcher
+  "workspace_archive_sha256": "…",
+
+  "ecosystems_without_engine": ["cargo"],  // from scan.ecosystems_detected, the honest gap
+
+  "issued_at": "…",
+
+  "engines": [{
+    "engine_id": "syft",
+    "engine_version": "1.51.0",
+    "engine_db_version": "",
+    "status": "succeeded",
+    "artifacts": [{ "role": "native_output", "uri": "…", "media_type": "…", "sha256": "…", "size_bytes": 0 }],
+    "ecosystems_covered": ["npm"]
+  }]
+}
+```
+
+The envelope is deliberately self-contained: it carries every artifact URI and engine status the consumer needs, so the normalize consumer never has to query `scan.*` — it only ever needs a `normalize`-schema-scoped credential (see below).
+
+**Fired exactly once per `(scan_id, family)`.** `scan.normalize_triggers` is the write-once guard: `INSERT ... ON CONFLICT (scan_id, family) DO NOTHING`, mirroring `SetSourceOnce`'s idiom. A redelivered `ScanResultV1` that re-triggers `RecomputeScanStatus` after normalization has already fired writes no second row and publishes nothing.
+
+**Readiness is derived from the same `scan.engine_runs` rows `RecomputeScanStatus` already reads**, filtered to the engines actually dispatched for this family (not a hardcoded engine count — a scan with no container target never dispatches `trivy-image`, and readiness must not wait on an engine that was never queued).
+
+**Currently wired for the `sbom` family only**, via an explicit guard in scan-orchestrator — CBOM/AIBOM triggers are a straightforward extension of the same mechanism, not a redesign.
+
+### The one deliberate credential exception
+
+The normalize consumer is the **only** worker-side process that holds a Postgres credential — everywhere else, "workers hold no credentials" (`axebom_shared.config`'s docstring) is a hard rule, because scan/CBOM/AIBOM workers run third-party scanners over untrusted user code. The normalize consumer never runs a scanner and never touches a scanned repository's contents directly; it only reads already-stored, already-validated raw artifacts and writes canonical rows. Its credential is scoped to the `normalize` Postgres schema only, `SELECT`/`INSERT` (append-only, per CLAUDE.md invariant 10) plus one narrow column-level `UPDATE` on `normalize.vuln_clusters` — see `migrations/normalize/0006_alias_snapshot.sql`.
 
 ---
 

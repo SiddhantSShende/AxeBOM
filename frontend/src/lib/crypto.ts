@@ -64,8 +64,10 @@ export interface CryptoAsset {
 export function useCryptoAssets(projectId: string | undefined) {
   return useQuery({
     queryKey: ['crypto-assets', projectId],
-    queryFn: () =>
-      request<{ crypto_assets: CryptoAsset[] }>(`/v1/projects/${projectId}/crypto-assets`),
+    queryFn: ({ signal }) =>
+      request<{ crypto_assets: CryptoAsset[] }>(`/v1/projects/${projectId}/crypto-assets`, {
+        signal,
+      }),
     enabled: Boolean(projectId),
     staleTime: 30_000,
   });

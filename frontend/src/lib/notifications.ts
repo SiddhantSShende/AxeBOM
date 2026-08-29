@@ -55,7 +55,8 @@ export interface CreateSubscriptionResult {
 export function useSubscriptions() {
   return useQuery({
     queryKey: ['notifications', 'subscriptions'],
-    queryFn: () => request<{ subscriptions: Subscription[] }>('/v1/notifications/subscriptions'),
+    queryFn: ({ signal }) =>
+      request<{ subscriptions: Subscription[] }>('/v1/notifications/subscriptions', { signal }),
     select: (d) => d.subscriptions,
   });
 }
@@ -70,7 +71,7 @@ export function useSubscriptions() {
 export function useNotificationEvents() {
   return useQuery({
     queryKey: ['notifications', 'events'],
-    queryFn: () => request<{ events: string[] }>('/v1/notifications/events'),
+    queryFn: ({ signal }) => request<{ events: string[] }>('/v1/notifications/events', { signal }),
     select: (d) => d.events,
     staleTime: 60 * 60 * 1000,
   });
@@ -79,9 +80,10 @@ export function useNotificationEvents() {
 export function useDeliveries(subscriptionId: string) {
   return useQuery({
     queryKey: ['notifications', 'subscriptions', subscriptionId, 'deliveries'],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       request<{ deliveries: Delivery[] }>(
         `/v1/notifications/subscriptions/${subscriptionId}/deliveries`,
+        { signal },
       ),
     select: (d) => d.deliveries,
     enabled: subscriptionId !== '',

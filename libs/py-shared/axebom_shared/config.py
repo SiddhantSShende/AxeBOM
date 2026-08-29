@@ -8,6 +8,17 @@ secret, and no database password here. Engine containers receive a
 content-addressed source archive and nothing else — see docs/ADR/0008. If a
 future change appears to need a credential in a worker, the design has gone
 wrong; route the work through the fetcher instead.
+
+⚠ ONE DELIBERATE EXCEPTION: `workers/sbom/normalize_consumer.py` holds a
+Postgres credential (`axebom_normalize_writer`, scoped to the `normalize`
+schema, SELECT/INSERT-only plus one narrow column-scoped UPDATE — see
+`docs/02-CONTRACTS.md` §6a). It is not a `WorkerConfig` — it never runs a
+scanner or touches a scanned repository's contents, only already-stored raw
+artifacts, so the "an attacker who escapes the sandbox gets this credential"
+threat this module's blanket rule defends against does not apply to it. It
+loads its own, separate, local configuration
+(`normalize_consumer.ConsumerConfigEnv`) rather than gaining a database
+field here that every other worker's config type would then carry too.
 """
 
 from __future__ import annotations

@@ -88,10 +88,10 @@ const PAGE = 100;
 export function useReports(scanId?: string) {
   return useQuery({
     queryKey: ['reports', scanId ?? null],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const q = new URLSearchParams({ limit: String(PAGE) });
       if (scanId) q.set('scan_id', scanId);
-      const data = await request<{ reports: Report[] }>(`/v1/reports?${q.toString()}`);
+      const data = await request<{ reports: Report[] }>(`/v1/reports?${q.toString()}`, { signal });
       return {
         reports: data.reports,
         // The server cannot tell us there is more, so infer it from a full
@@ -106,7 +106,7 @@ export function useReport(id: string | undefined) {
   return useQuery({
     queryKey: ['report', id],
     enabled: Boolean(id),
-    queryFn: () => request<Report>(`/v1/reports/${id}`),
+    queryFn: ({ signal }) => request<Report>(`/v1/reports/${id}`, { signal }),
     // ⚠ POLL WHILE RENDERING, THEN STOP FOREVER. A finished report is
     // immutable, so refetching one costs a request and can never change an
     // answer; an unfinished one has to be watched or the viewer lies about

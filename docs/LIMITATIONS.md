@@ -117,7 +117,7 @@ it is updated every session and this summary is not.
 | Notifications | Templates and signing exist; no SMTP client, and no worker drains the delivery queue. |
 | Reports | No CycloneDX ML-BOM or HBOM export (§10.4.1.6). |
 | Enterprise | No SAML/OIDC SSO, no SCIM, no API keys, no audit-log export. |
-| Operations | No Helm charts, no load-test baselines, no restore drill, no penetration test. |
+| Operations | **No production deploy pipeline of any kind.** No CI workflow builds or pushes an image to a registry, and nothing runs `helm upgrade`/`kubectl apply` anywhere. A Helm chart exists (`deploy/k8s/`) and is deliberately shaped for tag-based rollback — `values.yaml`'s `image.tag` is empty by default specifically so a moving `latest` tag never makes a rollback impossible to describe — but it is not wired to any pipeline yet, so that design intent is unexercised. `task dev`/`task dev:rollback` give the local Compose stack a real rollback (last build that passed health, retagged and redeployed without a rebuild); nothing equivalent exists past a developer's own machine. Also missing: load-test baselines, a restore drill, a penetration test. Migration rollback in production is a deliberate boundary, not a gap — see `docs/08-OPERATIONS.md` §7: forward-only, additive-first, so an application-code rollback never needs a schema rollback. |
 
 ## What would change our mind
 

@@ -491,8 +491,58 @@ func (r *pdfRender) vexPage() {
 		"live findings view.")
 
 	r.doc.Ln(4)
+	r.remediationSection()
+
+	r.doc.Ln(4)
 	r.heading("CSAF")
 	r.body("No CSAF document has been generated for this report.")
+}
+
+// remediationSection lists remediation/workaround/downtime/mitigation text
+// for every affected or under-investigation finding that has any of it.
+//
+// ⚠ CERT-In §6 (p.35): remediation, workarounds and restart/downtime are
+// named fields, not free-form notes AxeBOM invented. This is HUMAN-AUTHORED
+// text carried through from a VEX statement (and, for mitigation, a
+// generated CSAF advisory) — never generated here. A `fixed`/`not_affected`
+// finding is excluded: those statuses' operative content is "no action
+// needed", not a remediation plan.
+func (r *pdfRender) remediationSection() {
+	r.heading("Remediation, workarounds and mitigation")
+
+	type entry struct {
+		f Finding
+	}
+	var withText []entry
+	for _, f := range r.bom.Findings {
+		// ⚠ LITERAL STATUS STRINGS, MATCHING vexPage() ABOVE — this package
+		// does not import libs/go-shared/vex; render.Finding.VEXStatus is
+		// already a plain string by the time it reaches here.
+		if f.VEXStatus != "affected" && f.VEXStatus != "under_investigation" {
+			continue
+		}
+		if f.VEXRemediation == "" && f.VEXWorkarounds == "" && f.VEXDowntime == "" && f.CSAFMitigation == "" {
+			continue
+		}
+		withText = append(withText, entry{f})
+	}
+
+	if len(withText) == 0 {
+		r.body("No remediation, workaround, downtime or mitigation text has been " +
+			"recorded for this report's affected findings.")
+		return
+	}
+
+	for _, e := range withText {
+		r.doc.Ln(2)
+		r.keyValues([][2]string{
+			{"Finding", e.f.DisplayID + " — " + e.f.ComponentKey},
+			{"Remediation", e.f.VEXRemediation},
+			{"Workarounds", e.f.VEXWorkarounds},
+			{"Restart/downtime required", e.f.VEXDowntime},
+			{"CSAF recommended mitigation", e.f.CSAFMitigation},
+		})
+	}
 }
 
 func (r *pdfRender) methodologyPage() {

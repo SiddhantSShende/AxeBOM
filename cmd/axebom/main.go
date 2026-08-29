@@ -64,6 +64,7 @@ func init() {
 	commands = []command{
 		{"preflight", "Report toolchain status and known environment gaps", 0, runPreflight},
 		{"health", "Probe /readyz on every service and report up|degraded|down", 0, runHealth},
+		{"dev", "Snapshot/rollback the local :dev images built by task dev", 0, runDev},
 		{"version", "Print version and build information", 0, runVersion},
 		{"docs", "Documentation tooling (lint)", 0, runDocs},
 		{"db", "Migrations, reset, seed, RLS verification", 1, runDB},

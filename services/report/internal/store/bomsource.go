@@ -326,32 +326,34 @@ func loadComponents(ctx context.Context, tx db.Tx, docID string, out *render.BOM
 	return loadComponentRelations(ctx, tx, docID, out)
 }
 
-// loadComponentRelations fills the dependency and vulnerability count fields.
+// loadComponentRelations fills the dependency and vulnerability count fields,
+// the structured edge list export formats need, and derives Roots.
 func loadComponentRelations(ctx context.Context, tx db.Tx, docID string, out *render.BOM) error {
 	counts := map[string]int{}
 	rows, err := tx.Query(ctx, `
-		SELECT c.component_key, count(d.to_component_id)
-		  FROM normalize.components c
-		  LEFT JOIN normalize.component_dependencies d
-		         ON d.from_component_id = c.id
-		        AND d.bom_document_id = c.bom_document_id
-		        AND d.relationship = 'depends_on'
-		 WHERE c.bom_document_id = $1
-		 GROUP BY c.component_key`, docID)
+		SELECT fc.component_key, tc.component_key
+		  FROM normalize.component_dependencies d
+		  JOIN normalize.components fc
+		    ON fc.id = d.from_component_id AND fc.bom_document_id = d.bom_document_id
+		  JOIN normalize.components tc
+		    ON tc.id = d.to_component_id AND tc.bom_document_id = d.bom_document_id
+		 WHERE d.bom_document_id = $1
+		   AND d.relationship = 'depends_on'`, docID)
 	if err != nil {
 		// The dependency table may legitimately be empty for a lockfile-only
 		// scan. A missing graph is a gap in the report, not a failed render.
+		deriveRoots(out)
 		return nil //nolint:nilerr // see above
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		var key string
-		var n int
-		if err := rows.Scan(&key, &n); err != nil {
+		var from, to string
+		if err := rows.Scan(&from, &to); err != nil {
 			return err
 		}
-		counts[key] = n
+		out.Dependencies = append(out.Dependencies, render.Dependency{From: from, To: to})
+		counts[from]++
 	}
 	if err := rows.Err(); err != nil {
 		return err
@@ -363,7 +365,19 @@ func loadComponentRelations(ctx context.Context, tx db.Tx, docID string, out *re
 				fmt.Sprintf("%d direct dependencies", n)
 		}
 	}
+	deriveRoots(out)
 	return nil
+}
+
+// deriveRoots computes the export-layer root-element list from the
+// already-loaded per-component Depth/IsOrphan — see the Roots field's doc
+// comment on render.BOM for why this deliberately includes orphans.
+func deriveRoots(out *render.BOM) {
+	for _, c := range out.Components {
+		if c.Depth == nil || *c.Depth == 0 {
+			out.Roots = append(out.Roots, c.Key)
+		}
+	}
 }
 
 // loadCryptoAssets reads a CBOM's crypto inventory, type-discrimination and
@@ -697,6 +711,7 @@ func loadFindings(ctx context.Context, tx db.Tx, docID, scanID string, out *rend
 		return err
 	}
 	vexStatements := loadVEXStatementsForReport(ctx, tx, projectID)
+	csafMitigation := loadCSAFMitigationForReport(ctx, tx, projectID)
 
 	rows, err := tx.Query(ctx, `
 		SELECT f.display_id_at_render, f.cluster_id, c.component_key,
@@ -755,6 +770,14 @@ func loadFindings(ctx context.Context, tx db.Tx, docID, scanID string, out *rend
 		if effective := vex.Resolve(vexStatements, f.ClusterID, f.ComponentKey); effective != nil {
 			f.VEXStatus = string(effective.Status)
 			f.VEXJustification = effective.Justification
+			f.VEXRemediation = effective.Remediation
+			f.VEXWorkarounds = effective.Workarounds
+			f.VEXDowntime = effective.Downtime
+			// ⚠ ONLY WHEN A CSAF ADVISORY WAS ACTUALLY GENERATED for the
+			// WINNING statement. A finding with a VEX statement but no
+			// generated advisory renders `not-provided` here, honestly — see
+			// loadCSAFMitigationForReport.
+			f.CSAFMitigation = csafMitigation[effective.StatementID]
 		}
 
 		byComponent[f.ComponentKey]++
@@ -823,6 +846,39 @@ func loadVEXStatementsForReport(ctx context.Context, tx db.Tx, projectID string)
 		st.Status = vex.Status(status)
 		st.Scope = vex.Scope(scope)
 		out = append(out, st)
+	}
+	if rows.Err() != nil {
+		return nil
+	}
+	return out
+}
+
+// loadCSAFMitigationForReport reads certin.csaf.mitigation, keyed by the
+// vex_statement_id it was generated for.
+//
+// ⚠ MIRRORS store/csaf.go's ListCSAFAdvisories JOIN, NOT A NEW PATTERN — same
+// schema (normalize), same join shape, same project-scoping. Errors are
+// swallowed like loadVEXStatementsForReport above: a project with no CSAF
+// advisories generated is the ordinary case (CSAF is generated per statement,
+// on demand, from the Findings UI), not a reason to fail the whole render.
+func loadCSAFMitigationForReport(ctx context.Context, tx db.Tx, projectID string) map[string]string {
+	rows, err := tx.Query(ctx, `
+		SELECT a.vex_statement_id, COALESCE(a.mitigation_steps,'')
+		  FROM normalize.csaf_advisories a
+		  JOIN normalize.vex_statements v ON v.id = a.vex_statement_id
+		 WHERE v.project_id = $1`, projectID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	out := map[string]string{}
+	for rows.Next() {
+		var statementID, mitigation string
+		if err := rows.Scan(&statementID, &mitigation); err != nil {
+			return nil
+		}
+		out[statementID] = mitigation
 	}
 	if rows.Err() != nil {
 		return nil
@@ -994,6 +1050,41 @@ func applyLevel(out *render.BOM) {
 		}
 	}
 	out.Findings = filtered
+
+	// Roots and edges referencing a component the level dropped must drop
+	// with it — an export root or edge endpoint pointing at a component the
+	// document no longer contains is a dangling reference, not a smaller BOM.
+	rootsFiltered := out.Roots[:0]
+	for _, r := range out.Roots {
+		if keptKeys[r] {
+			rootsFiltered = append(rootsFiltered, r)
+		}
+	}
+	out.Roots = rootsFiltered
+
+	depsFiltered := out.Dependencies[:0]
+	for _, d := range out.Dependencies {
+		if keptKeys[d.From] && keptKeys[d.To] {
+			depsFiltered = append(depsFiltered, d)
+		}
+	}
+	out.Dependencies = depsFiltered
+
+	// A declared root can itself be scope-excluded while a non-root
+	// descendant survives — the projection above correctly drops the root's
+	// key from out.Roots along with the component, but a document with
+	// components and zero roots is unexportable. Rather than guess which
+	// survivor should inherit the missing root's place (Roots does not
+	// recompute from edges here — see its doc comment on why "no incoming
+	// edge" is not a safe stand-in for "is a root" once cycles are in play),
+	// fall back to the same honest answer used when there was never a graph
+	// at all: list every survivor independently.
+	if len(out.Roots) == 0 && len(out.Components) > 0 {
+		out.Roots = make([]string, len(out.Components))
+		for i, c := range out.Components {
+			out.Roots[i] = c.Key
+		}
+	}
 
 	if note := level.OrphanNote(projectable); note != "" && l == level.Complete {
 		out.Notes = append(out.Notes, note)

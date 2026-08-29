@@ -219,6 +219,11 @@ One row per (scan, engine). This is where partial failure lives.
 
 Feeds the **Engine Coverage** report section and auto-seeds `project.practices.known_unknowns`. `engine_available = false` is the honest denominator most tools hide.
 
+### `scan.normalize_triggers`
+`(scan_id, tenant_id, family, trigger_id UUID DEFAULT app.uuid_v7(), triggered_at)` — `PRIMARY KEY (scan_id, family)`.
+
+**The write-once guard** for "this scan's engines are done, normalize it": `scan-orchestrator` inserts a row (`ON CONFLICT DO NOTHING`, mirroring `SetSourceOnce`'s idiom) the moment every engine dispatched for one `(scan, family)` reaches a terminal state, and publishes exactly one `NormalizeTriggerV1` (`docs/02-CONTRACTS.md` §6a) when the insert actually fires. `trigger_id` doubles as the NATS dedup key. **Immutable by grant** — `UPDATE`/`DELETE` revoked from `axebom_app`, same as `scan.raw_artifacts`. Currently wired for `sbom` only; the per-family design lets `cbom`/`aibom` gain their own trigger later with no schema change.
+
 ---
 
 ## 4. Normalized BOM — schema `normalize`
@@ -231,7 +236,7 @@ Feeds the **Engine Coverage** report section and auto-seeds `project.practices.k
 | `bom_type` | TEXT NOT NULL | CHECK in (`SBOM`,`CBOM`,`QBOM`,`AIBOM`,`HBOM`) |
 | `normalization_version` | INT NOT NULL DEFAULT 1 | **bumped on re-normalization; old rows retained** |
 | `ruleset_version` | TEXT NOT NULL | e.g. `2026.08.1` |
-| `alias_snapshot_id` | UUID NOT NULL | which alias graph produced this |
+| `alias_snapshot_id` | UUID NOT NULL | which alias graph produced this — FK-shaped reference to `normalize.alias_snapshot.id` (see below). ⚠ NOT an actual FK yet: `qbom.go`/`hbom.go` write `app.uuid_v7()` inline with no backing row, since QBOM/HBOM never run the SBOM alias-closure pipeline this column was designed for. Adding a real FK requires deciding what QBOM/HBOM should reference first (a shared sentinel row? a nullable column, SBOM-only?) — out of scope for a change that must stay additive to non-SBOM BOM types. |
 | `spdx_license_list_version` | TEXT NOT NULL | ids get deprecated; a report must say which list it validated against |
 | `completeness_pct` | NUMERIC(5,2) | substantive values only — **the honest signal** |
 | `declaration_pct` | NUMERIC(5,2) | includes explicit `not-provided` — a representation check |
@@ -242,6 +247,9 @@ Feeds the **Engine Coverage** report section and auto-seeds `project.practices.k
 `UNIQUE (scan_id, bom_type, normalization_version)`.
 
 > Two coverage numbers, always both. `not-provided`, `NOASSERTION`, `unknown`, `""` and `[]` score present = 0 for `completeness_pct`. Publishing only `declaration_pct` and calling it "coverage" is how tools ship misleading 100% scores.
+
+### `normalize.alias_snapshot`
+`(id, edge_count, source, ruleset_version, created_at)` — **global**, not tenant-scoped, same reasoning as `vuln_clusters` below: a provenance marker for the vulnerability alias graph state a normalization run consulted. `source` is honest about what it actually is today — `'scan-local'`, meaning the edges came from that one run's own grype/osv-scanner artifacts, not a read of an independently-versioned, persisted global edge snapshot. A future snapshot mechanism that pins a point-in-time copy of `vuln_alias_edges` would use a different `source` value; the column exists now so that distinction never needs a schema change.
 
 ### `normalize.components`  ← CERT-In Table 5 §4.2 data fields
 
@@ -323,11 +331,13 @@ Every normalized fact records which engine saw it, which artifact it came from, 
 
 > **The trap this design avoids:** deriving the cluster id from a hash of its members means the id mutates the moment a new alias is discovered — breaking every foreign key and invalidating every previously issued report. Merges write a forwarding row instead.
 
+> **Written by `libs/py-shared/axebom_shared/normalize/cluster_store.py`**, under a Postgres advisory lock (`pg_advisory_xact_lock`, key registered in `libs/go-shared/platform/leader/leader.go`'s `NormalizeClusterGraph`) so concurrent scans touching overlapping CVEs cannot race. Enforces the cross-scan member-count cap (>12 refuses the merge and flags for review, per the `flagged_for_review` column above) by reading the TRUE persisted membership via `resolve_cluster()` — a check the in-memory union-find alone cannot make, since it only ever sees one scan's local group. `workers/sbom/normalize_consumer.py` is the one caller in production, using the `axebom_normalize_writer` role (SELECT/INSERT on `normalize` schema, plus one column-scoped `UPDATE (member_count, flagged_for_review, display_id, updated_at)` grant on this table specifically — `migrations/normalize/0006_alias_snapshot.sql`).
+
 ### `normalize.vuln_cluster_merges`
 `(from_cluster_id, into_cluster_id, evidence_edge_id, merged_at)` — a view resolves old ids forward. **Every merge is logged with its evidence.** A compliance product must be able to explain why two findings became one.
 
 ### `normalize.vuln_ids`
-`(id, cluster_id, namespace, value)` — `namespace` CHECK in (`CVE`,`GHSA`,`OSV`,`SNYK`,`RHSA`,`DSA`,`USN`,`ALAS`,`ELSA`,`DLA`,`NPM`). `UNIQUE (namespace, value)`.
+`(id, cluster_id, namespace, value)` — `namespace` CHECK in (`CVE`,`GHSA`,`OSV`,`GO`,`PYSEC`,`RUSTSEC`,`GSD`,`MAL`,`SNYK`,`RHSA`,`DSA`,`USN`,`ALAS`,`ELSA`,`DLA`,`NPM`) — matches `aliases.py`'s `_NAMESPACE_RANK` vocabulary exactly (widened in `migrations/normalize/0008_vuln_ids_namespace_widen.sql`; `GO`/`PYSEC`/`RUSTSEC` are osv-scanner's own ecosystem-native id prefixes and are routinely a finding's PRIMARY id, not just an alias). `UNIQUE (namespace, value)`.
 
 ### `normalize.vuln_alias_edges`
 `(id, id_a, id_b, source, authoritative BOOLEAN, first_seen, last_seen)`
@@ -338,7 +348,7 @@ Every normalized fact records which engine saw it, which artifact it came from, 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | UUID PK | |
-| `tenant_id`, `bom_document_id`, `component_id`, `cluster_id` | UUID NOT NULL | |
+| `tenant_id`, `bom_document_id`, `component_id`, `cluster_id` | UUID NOT NULL | `cluster_id` REFERENCES `normalize.vuln_clusters(id)` (`migrations/normalize/0007_findings_cluster_fk.sql`) — a finding referencing a cluster that was never persisted fails loudly at insert time |
 | `display_id_at_render` | TEXT NOT NULL | **pinned** — reports must stay stable as clusters evolve |
 | `severity_effective` | TEXT | CHECK in (`critical`,`high`,`medium`,`low`,`none`,`unknown`) |
 | `severity_source` | TEXT | which rule won |
@@ -347,7 +357,7 @@ Every normalized fact records which engine saw it, which artifact it came from, 
 | `cvss_primary_score` | NUMERIC(3,1) NULL | from the highest available v3.1+ vector |
 | `fixed_versions` | TEXT[] | |
 | `fixed_in_min` | TEXT NULL | ecosystem-correct comparator |
-| `fix_version_ordering` | TEXT | CHECK in (`known`,`unknown`) — **`unknown` when no comparator exists. Never guess** |
+| `fix_version_ordering` | TEXT | CHECK in (`comparator`,`unknown`,`none`) — `comparator` when a fix version was reported and an ecosystem-correct comparator exists; **`unknown` when a fix version was reported but no comparator exists — never guess with a lexical sort**; `none` when no fix version was reported at all |
 | `detected_by` | TEXT[] NOT NULL | every engine that saw it |
 | `references` | JSONB | |
 | `first_seen_at`, `last_seen_at` | TIMESTAMPTZ | |
