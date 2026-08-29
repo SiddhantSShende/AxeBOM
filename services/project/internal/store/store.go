@@ -126,6 +126,23 @@ type Upload struct {
 	CreatedAt        time.Time
 }
 
+// WebSource mirrors project.web_sources.
+//
+// Note what is ABSENT, same as RepoConnection's own comment: no credential
+// field. Nothing about a URL source is ever authenticated.
+type WebSource struct {
+	ID       string
+	TenantID string
+
+	ProjectID        string
+	RootURL          string
+	DiscoveryEnabled bool
+	MaxHosts         int
+
+	LastScannedAt *time.Time
+	CreatedAt     time.Time
+}
+
 // ---------------------------------------------------------------------------
 // Projects
 // ---------------------------------------------------------------------------
@@ -528,6 +545,77 @@ func (s *Store) ListConnections(ctx context.Context, tenantID, projectID string)
 				return err
 			}
 			out = append(out, c)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+// ---------------------------------------------------------------------------
+// Web sources
+// ---------------------------------------------------------------------------
+
+// CreateWebSource attaches a URL source to a project.
+//
+// Unlike CreateConnection there is no ON CONFLICT upsert: there is no token
+// to re-supply, so there is no "re-connect" case to collapse into an update.
+// Nothing here caps a project to one web source — the table and this method
+// allow several, same as ListWebSources returning a slice implies. The
+// wizard happens to create only one today; that is a caller choice, not a
+// constraint enforced here.
+func (s *Store) CreateWebSource(ctx context.Context, w WebSource) (WebSource, error) {
+	var out WebSource
+	err := s.pool.WithTenant(ctx, w.TenantID, func(ctx context.Context, tx db.Tx) error {
+		var exists bool
+		if err := tx.QueryRow(ctx,
+			`SELECT true FROM project.projects WHERE id = $1 AND deleted_at IS NULL`,
+			w.ProjectID).Scan(&exists); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrNotFound
+			}
+			return err
+		}
+
+		return tx.QueryRow(ctx, `
+			INSERT INTO project.web_sources
+				(tenant_id, project_id, root_url, discovery_enabled, max_hosts)
+			VALUES ($1,$2,$3,$4,$5)
+			RETURNING id, created_at`,
+			w.TenantID, w.ProjectID, w.RootURL, w.DiscoveryEnabled, w.MaxHosts).
+			Scan(&out.ID, &out.CreatedAt)
+	})
+	if err != nil {
+		return WebSource{}, err
+	}
+	out.TenantID = w.TenantID
+	out.ProjectID = w.ProjectID
+	out.RootURL = w.RootURL
+	out.DiscoveryEnabled = w.DiscoveryEnabled
+	out.MaxHosts = w.MaxHosts
+	return out, nil
+}
+
+// ListWebSources returns a project's URL sources, newest first.
+func (s *Store) ListWebSources(ctx context.Context, tenantID, projectID string) ([]WebSource, error) {
+	var out []WebSource
+	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.Tx) error {
+		rows, err := tx.Query(ctx, `
+			SELECT id, tenant_id, project_id, root_url, discovery_enabled, max_hosts,
+			       last_scanned_at, created_at
+			  FROM project.web_sources
+			 WHERE project_id = $1 ORDER BY id DESC`, projectID)
+		if err != nil {
+			return fmt.Errorf("list web sources: %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var w WebSource
+			if err := rows.Scan(&w.ID, &w.TenantID, &w.ProjectID, &w.RootURL,
+				&w.DiscoveryEnabled, &w.MaxHosts, &w.LastScannedAt, &w.CreatedAt); err != nil {
+				return err
+			}
+			out = append(out, w)
 		}
 		return rows.Err()
 	})

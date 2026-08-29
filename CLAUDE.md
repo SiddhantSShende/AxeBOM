@@ -189,4 +189,5 @@ Probed on the primary dev machine (Windows 11), and the reason for two design ch
 
 - **There is no open-source HBOM scanner.** HBOM is a structured CSV/form import plus a data model. Label it that way in the UI. Never imply discovery.
 - **QBOM is largely a derivation.** Crypto assets come from CBOM discovery with quantum-vulnerability rules applied; only Table 8's *device* metadata is separately captured. There is no quantum-hardware scanner.
+- **A URL-registered project's SBOM is a static fetch, never a running browser.** `services/webrecon` fetches a page's HTML and scripts and matches them against a signature database. It never executes JavaScript, so a library injected purely client-side after paint is invisible. A headless-browser renderer is a named, deferred fast-follow — never imply it runs one.
 - **AxeBOM reports violations against a configured policy.** It never asserts "compliant." That word does not appear in generated output.

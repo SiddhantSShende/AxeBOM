@@ -28,7 +28,9 @@ Every envelope carries `schema_version` as `<name>/v<N>`. Rules:
 | `NOTIFY` | `notify.<event_type>` | WorkQueue | notification-svc | envelope: `events`' `NotifyEventV1` (§11) |
 | `NORMALIZE_JOBS` | `scan.normalize.<family>` | WorkQueue | pull, the normalize consumer | envelope: `NormalizeTriggerV1` (§6a). **Deliberately a separate stream from `SCAN_JOBS`**: normalization is CPU-bound in-process work finishing in seconds–minutes, not a sandboxed container run — sharing `SCAN_JOBS`'s 30-minute `ack_wait` would hold a stuck normalization message hostage far longer than the work ever legitimately takes |
 
-`<family>` ∈ `fetch`, `sbom`, `cbom`, `qbom`, `aibom`, `hbom`.
+`<family>` ∈ `fetch`, `webrecon`, `sbom`, `cbom`, `qbom`, `aibom`, `hbom`.
+
+> **`webrecon` is `fetch`'s sibling, not a variant of it.** `CreateScan` publishes `scan.job.webrecon` INSTEAD of `scan.job.fetch` when `source_kind == url` — services/webrecon (subdomain discovery + JS fingerprinting, project-registration plan Milestone 5) materializes a url source's input the way the fetcher materializes a git/upload source's, but produces a native discovery document instead of a source archive. Both are "producer" families: `ScanJobV1.Validate` exempts only these two from requiring `workspace.artifact_uri`/`workspace.native_sbom_ref` to already be set on THEIR OWN job.
 
 > **`SCAN_EVENTS` is advisory and lossy-tolerant. The database is the source of truth.** If the WebSocket drops or an event is lost, a page refresh reads state from Postgres and is correct. **No event is ever required for correctness** — building progress logic that depends on receiving every event is a bug.
 
@@ -100,10 +102,11 @@ Two structural decisions, both load-bearing:
     "artifact_uri": "s3://axebom/workspaces/<scan_id>/source.tar.zst",
     "sha256":       "…",
     "size_bytes":   0,
-    "root_subpath": ""
+    "root_subpath": "",
+    "native_sbom_ref": null             // set only for github-dependency-graph-sbom; see §7
   },
   "source_meta": {
-    "kind":         "git",           // git | upload | image
+    "kind":         "git",           // git | upload | image | url
     "commit_sha":   "…",             // pinned by the fetcher
     "image_digest": null
   },
@@ -282,7 +285,7 @@ The normalize consumer is the **only** worker-side process that holds a Postgres
 
 Adapters are keyed on a stable `engine_id`. **The unit is (tool, mode), not tool** — `trivy fs` and `trivy image` have different capabilities and different parsers, so they are different engines.
 
-`syft` · `trivy-fs` · `trivy-image` · `grype` · `osv-scanner` · `dependency-check` · `cbomkit-theia` · `cbomkit` · `aibom-generator` · `ai-bom` · `hbom-csv`
+`syft` · `trivy-fs` · `trivy-image` · `grype` · `osv-scanner` · `dependency-check` · `github-dependency-graph-sbom` · `cbomkit-theia` · `cbomkit` · `aibom-generator` · `ai-bom` · `hbom-csv`
 
 Each declares:
 
@@ -308,6 +311,8 @@ Runtime availability: **container → local binary → `unavailable`**. A missin
 **Invalid combinations are rejected at scan-create time with a 422 enumerating every offending pair.** Discovering at worker time that `cbomkit-theia` cannot process an `image` source, twenty minutes in, is a design failure.
 
 **`hbom` and `qbom` cannot be requested as a scan family.** `hbom-csv` (`requires_import`) and `qbom-derive` (`derived`) are the only engines registered for those families, and neither has a worker — `workers/hbom` and `workers/qbom` deliberately have no runner, because HBOM is a CSV/form import and QBOM is derived from CBOM discovery (CLAUDE.md honest labels). `POST /v1/scans` rejects `families: ["hbom"]` or `["qbom"]` — alone or mixed with other, scannable families, naming only the actual offender — and any explicit `engines: [...]` entry naming `hbom-csv` or `qbom-derive` directly, with `SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE` (§9) at create time — never by publishing a job nothing consumes and letting the scan sit unconsumed until the reaper times it out. Import hardware inventory via `/v1/hbom/*` instead; QBOM becomes available automatically once a CBOM report exists for the project.
+
+**`github-dependency-graph-sbom` also sets `requires_import` but is NOT excluded the way `hbom-csv`/`qbom-derive` are.** The exclusion above fires only when *every* engine registered for a family is import-only or derived — `sbom` also has syft, grype, trivy-fs, and so on, so `ValidateCombination` never rejects it, and a normal `scan.job.sbom` is published and consumed by `workers/sbom` exactly like any other SBOM engine's job. It additionally sets `consumes_native_sbom` (a second flag, orthogonal to `requires_import`): FanOut populates `Workspace.NativeSBOMRef` on this one engine's job from whatever the fetcher staged under `scan.raw_artifacts` role `native_output`, engine `fetcher` — empty, and therefore `unavailable`, on every scan where the fetcher found nothing to stage.
 
 ---
 
@@ -339,7 +344,8 @@ GET    /auth/config                                            # unauthenticated
 POST   /auth/signup                                            # unauthenticated, creates an organisation + its Owner in ZITADEL
 
 POST   /auth/register                POST /auth/login          POST /auth/refresh
-GET    /auth/github/authorize        POST /auth/github/callback
+GET    /auth/github/authorize        GET  /auth/github/callback         # sign-in
+GET    /auth/github/connect/authorize   GET /auth/github/connect/callback   # repo-scoped, see below
 POST   /auth/logout                  GET  /auth/me
 
 GET    /projects                     POST /projects
@@ -347,6 +353,7 @@ GET    /projects/:id                 PATCH /projects/:id       DELETE /projects/
 PUT    /projects/:id/practices                                 # CERT-In Table 5 cat. 3
 POST   /projects/:id/connect-repo    GET  /integrations/github/repos
 POST   /projects/:id/uploads
+POST   /projects/:id/web-sources     GET  /projects/:id/web-sources
 
 POST   /projects/:id/scans           GET  /scans/:id           POST /scans/:id/cancel
 GET    /scans/:id/engine-runs        WS   /scans/:id/progress
@@ -367,6 +374,33 @@ GET    /campaigns                    POST /campaigns
 PATCH  /campaigns/:id                POST /campaigns/:id/run-now
 GET    /campaigns/:id/runs
 ```
+
+**The GitHub "connect" flow is not sign-in, and returns a token, not a session.**
+`GET /auth/github/authorize`/`callback` resolves or creates an AxeBOM user and
+sets the refresh cookie — that is account sign-in, scope `read:user
+user:email`. `GET /auth/github/connect/authorize`/`callback` is a second,
+independent OAuth round trip on the *same* GitHub OAuth App (a second
+registered callback URL — GitHub OAuth Apps support more than one), scope
+`repo`, triggered from a popup the project wizard opens. Its callback sets no
+cookie and creates no user; it redirects the popup to
+`{frontend}/projects/github-connect#access_token=…` — the token in the URL
+**fragment**, exactly like the login callback's `#access_token=…`, so it never
+reaches a server log, a proxy log or a `Referer` header. The popup relays it to
+the tab that opened it via `postMessage` (origin-checked both ways) and
+closes. That token is then supplied to `GET /github/repos` and, if the caller
+picks a repository, to `POST /projects/:id/connections` — it is never
+persisted by the SPA and never touches Postgres; only Vault ever stores it,
+via the connections endpoint exactly as any other repository credential does.
+
+**`POST/GET /projects/:id/web-sources`** attaches/lists a project's `url`
+source (`project.web_sources`, `01-DATA-MODEL.md` §2). No credential path —
+unlike the connections and uploads endpoints, there is nothing to store in
+Vault. `source_kind: "url"` is a valid, schema- and orchestrator-accepted
+scan source as of this milestone, but `CreateScan` currently resolves it to
+`SCAN_NO_ENGINES_AVAILABLE`: the fetcher stages the one root page as a raw
+artifact, and no engine yet consumes it. That gap closes with `services/
+webrecon` (subdomain discovery + JS fingerprinting) — until then, a
+url-sourced project can be registered but not scanned, and the wizard says so.
 
 Every scan-creation request (`POST /v1/scans`) carries `project_id`,
 `source_kind` and `families[]`, and optionally `engines[]` — `families` is

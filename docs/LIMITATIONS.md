@@ -55,6 +55,35 @@ is collected from a form.
 The readiness assessment is a *note*, never a score. A number would imply a
 precision the underlying data does not have.
 
+## Web reconnaissance sees a static page, not a running browser
+
+A URL-registered project's SBOM comes from `services/webrecon`: it fetches a
+page's HTML and its `<script>` tags — same-host or from a short CDN allowlist
+— and matches the content against a signature database of known JS
+libraries. **It never runs a browser.** Nothing here executes JavaScript.
+
+Consequence: a library loaded purely by client-side JavaScript after the
+page paints — bundled and injected by a framework's own runtime, fetched
+dynamically, assembled from chunks a static parser cannot follow — is
+invisible. A headless-browser (Playwright) renderer would catch this class
+and is a named, deliberately deferred fast-follow, not built because it is a
+materially larger sandboxed surface (a Chromium binary and its own CVE
+stream) for a gap whose real-world size has not yet been measured.
+
+Detection itself is also necessarily approximate, not exhaustive: it is a
+signature match against ~76 known libraries (`retire.js`'s database), not a
+general-purpose dependency graph the way a lockfile-based SBOM engine
+produces one. Unlike a missing ECOSYSTEM — which the Engine Coverage section
+states explicitly, because a manifest or lockfile names what should have
+been scanned — there is no manifest here to compare against. A library
+outside the signature database, or a version string no signature matches,
+simply contributes nothing, and nothing can name the gap by size. A scan
+that matches nothing across every host it fetched is reported honestly at
+the engine level (the adapter marks the run `partial`, not `succeeded`, in
+that case — never a silent zero), but it cannot say *which* libraries it
+might have missed on any given page, only that it found none of the ~76 it
+knows to look for.
+
 ## Scanners see what scanners see
 
 - **Lockfiles and manifests only.** AxeBOM never runs `npm install`, `mvn`,

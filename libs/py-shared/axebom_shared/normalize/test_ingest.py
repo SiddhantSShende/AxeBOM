@@ -298,3 +298,139 @@ def test_dependency_check_is_registered_for_the_engine_it_names() -> None:
 
     assert "dependency-check" in _PARSERS
     assert "dependency-check" in supported_engines()
+
+
+def test_github_dependency_graph_sbom_reuses_the_spdx_parser() -> None:
+    """The fetcher unwraps GitHub's `{"sbom": {...}}` envelope before ever
+    storing the artifact (services/fetcher/internal/work/work.go), so what
+    reaches this dispatch is genuine SPDX 2.3 JSON — identical in shape to
+    what syft-spdx already produces. No bespoke parser exists for it, and this
+    pins that the registration points at the real, shared one rather than
+    silently resolving to no parser at all."""
+    from .ingest import _PARSERS, _ingest_spdx, supported_engines
+
+    assert _PARSERS["github-dependency-graph-sbom"] is _ingest_spdx
+    assert "github-dependency-graph-sbom" in supported_engines()
+
+    payload = {
+        "packages": [
+            {
+                "SPDXID": "SPDXRef-lodash",
+                "name": "lodash",
+                "versionInfo": "4.17.21",
+                "externalRefs": [
+                    {"referenceType": "purl", "referenceLocator": "pkg:npm/lodash@4.17.21"}
+                ],
+            }
+        ]
+    }
+    out = ingest("github-dependency-graph-sbom", payload, scan_id="s1")
+    assert len(out.contributions) == 1
+    assert out.contributions[0].identity.purl == "pkg:npm/lodash@4.17.21"
+
+
+def test_webrecon_fingerprint_is_registered_for_the_engine_it_names() -> None:
+    from .ingest import _PARSERS, _ingest_webrecon_fingerprint, supported_engines
+
+    assert _PARSERS["webrecon-fingerprint"] is _ingest_webrecon_fingerprint
+    assert "webrecon-fingerprint" in supported_engines()
+
+
+def test_webrecon_fingerprint_produces_a_contribution_per_library() -> None:
+    """AxeBOM's own JSON shape, not CycloneDX/SPDX — services/webrecon has no
+    "native" format to reuse a parser from, unlike github-dependency-graph-
+    sbom."""
+    payload = {
+        "schema_version": "axebom-webrecon-json-1",
+        "root_url": "https://example.com/",
+        "discovery_enabled": True,
+        "hosts": [
+            {
+                "host": "example.com",
+                "fetched_url": "https://example.com/",
+                "status": "succeeded",
+                "libraries": [
+                    {"name": "jquery", "version": "3.5.1", "npm_purl": "pkg:npm/jquery@3.5.1"}
+                ],
+            }
+        ],
+    }
+    out = ingest("webrecon-fingerprint", payload, scan_id="s1")
+    assert len(out.contributions) == 1
+    c = out.contributions[0]
+    assert c.identity.purl == "pkg:npm/jquery@3.5.1"
+    assert c.observation.engine == "webrecon-fingerprint"
+    assert c.locations[0].path == "https://example.com/"
+
+
+def test_webrecon_fingerprint_produces_a_finding_from_a_vulnerability() -> None:
+    """Version-range evaluation already happened in Go
+    (services/webrecon/internal/fingerprint/retire.go's vulnerableAt) before
+    this JSON was written — every vulnerabilities[] entry here is already
+    applicable, not re-evaluated by this parser."""
+    payload = {
+        "hosts": [
+            {
+                "host": "example.com",
+                "fetched_url": "https://example.com/",
+                "status": "succeeded",
+                "libraries": [
+                    {
+                        "name": "jquery",
+                        "version": "1.6.2",
+                        "npm_purl": "pkg:npm/jquery@1.6.2",
+                        "vulnerabilities": [
+                            {
+                                "severity": "medium",
+                                "cve": ["CVE-2011-4969"],
+                                "summary": "XSS with location.hash",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    out = ingest("webrecon-fingerprint", payload, scan_id="s1")
+    assert len(out.findings) == 1
+    finding = out.findings[0]
+    assert finding.vuln_id == "CVE-2011-4969"
+    assert finding.component_key == out.contributions[0].identity.key
+    assert finding.severity == "medium"
+
+
+def test_webrecon_fingerprint_falls_back_to_ghsa_when_no_cve_is_present() -> None:
+    payload = {
+        "hosts": [
+            {
+                "host": "example.com",
+                "fetched_url": "https://example.com/",
+                "status": "succeeded",
+                "libraries": [
+                    {
+                        "name": "jquery",
+                        "version": "1.6.2",
+                        "npm_purl": "pkg:npm/jquery@1.6.2",
+                        "vulnerabilities": [{"severity": "medium", "ghsa": "GHSA-579v-mp3v-rrw5"}],
+                    }
+                ],
+            }
+        ],
+    }
+    out = ingest("webrecon-fingerprint", payload, scan_id="s1")
+    assert len(out.findings) == 1
+    assert out.findings[0].vuln_id == "GHSA-579v-mp3v-rrw5"
+
+
+def test_webrecon_fingerprint_reports_a_gap_when_the_document_has_no_hosts_array() -> None:
+    out = ingest("webrecon-fingerprint", {"schema_version": "axebom-webrecon-json-1"}, scan_id="s1")
+    assert out.contributions == []
+    assert any(d["code"] == "ENGINE_FIELD_MISSING" for d in out.diagnostics)
+
+
+def test_webrecon_fingerprint_is_a_finding_engine() -> None:
+    """Shared with cluster_store.py's pre-pass — see FINDING_ENGINES' own
+    doc comment on why the two modules must not independently drift."""
+    from .ingest import FINDING_ENGINES
+
+    assert "webrecon-fingerprint" in FINDING_ENGINES

@@ -137,6 +137,18 @@ var services = []serviceSpec{
 	// gateway, so that token would sit behind the request path rather than
 	// behind a queue.
 	{"fetcher", "Materializes source exactly once per scan; holds the only git credentials.", 8098, 5},
+	// ⚠ SEPARATE FROM fetcher ON PURPOSE (project-registration plan, Milestone
+	// 5 of ~/.claude/plans/the-project-section-while-rippling-shamir.md).
+	//
+	// A url-registered project's fetch has a different risk shape than a git
+	// clone: the fetcher touches exactly the ONE remote a tenant explicitly
+	// connected, while webrecon AUTO-DISCOVERS and fetches from hosts the
+	// tenant never individually named — a confused-deputy/recon-abuse surface
+	// (bounded by project.web_sources.max_hosts), not just SSRF. Splitting it
+	// out keeps that riskier blast radius in its own deployable rather than
+	// widening the fetcher's. Holds NO credential — unlike the fetcher, a
+	// url source is never authenticated, so there is nothing to hold.
+	{"webrecon", "Subdomain discovery and JS-library fingerprinting for URL-registered projects; holds no credential.", 8099, 17},
 }
 
 // generated files are always rewritten; preserved files are written once.

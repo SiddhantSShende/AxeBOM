@@ -345,6 +345,47 @@ services:
       # another's.
       - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/workspaces:/var/lib/axebom/workspaces
 
+  # webrecon: subdomain discovery + JS fingerprinting for a URL-registered
+  # project. fetcher's sibling, not a variant of it — see
+  # services/webrecon/internal/work/work.go's package doc comment.
+  #
+  # ⚠ NO VAULT, UNLIKE fetcher. A url source is never authenticated, so
+  # this service holds no credential and needs no secret store at all.
+  #
+  # It needs the Docker socket for the same reason fetcher does: subfinder
+  # runs in its own sandboxed container (services/webrecon/internal/discover.
+  # Policy(), the one exception to --network=none, mirroring
+  # fetcher.FetcherPolicy()'s reasoning without sharing that function). It has
+  # no workspace volume — unlike a clone or upload, nothing here materializes
+  # a filesystem tree; the discovery + fingerprint result is assembled in
+  # memory and uploaded straight to object storage as one JSON document.
+  webrecon:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.webrecon
+    image: axebom/webrecon:dev
+    environment:
+      <<: *service-env
+      # webrecon -> project, to resolve a url source's root_url/
+      # discovery_enabled/max_hosts.
+      ZITADEL_SERVICE_KEY_PATH: /var/run/axebom/service-keys/svc-webrecon.json
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      nats:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    # DOCKER_GID for the socket below; HOST_GID to read the service key above.
+    # See fetcher above for the identical reasoning.
+    group_add: ["${DOCKER_GID:-986}", "${HOST_GID:-1000}"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./.data/zitadel-bootstrap/service-keys:/var/run/axebom/service-keys:ro
+
   # ----------------------------------------------------------- scan workers
   # ⚠ THE WORKER MOUNTS THE DOCKER SOCKET. See deploy/docker/Dockerfile.worker
   # for why that is accepted and what bounds it. Short version: engines run as

@@ -122,6 +122,13 @@ class ScanTarget:
     commit_sha: str | None = None
     image_digest: str | None = None
     sbom_path: Path | None = None
+    #: A native SBOM document the FETCHER staged (e.g. a GitHub repository's
+    #: own Dependency Graph SBOM) — distinct from `sbom_path`, which is
+    #: another ENGINE's output shared through the per-scan workspace (see
+    #: runner.py's grype-consumes-syft wiring). This one comes from an
+    #: external source outside the scan pipeline entirely; only an engine
+    #: with `ConsumesNativeSBOM` set in the Go registry ever sees it non-None.
+    native_sbom_path: Path | None = None
     engine_config: dict[str, Any] = field(default_factory=dict)
 
 

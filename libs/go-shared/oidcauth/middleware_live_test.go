@@ -52,8 +52,14 @@ func TestLiveAServiceTokenIsAcceptedByARealService(t *testing.T) {
 				"so look at the SERVICE's ZITADEL_ISSUER / ZITADEL_PROJECT_ID / "+
 				"key-set reachability rather than at the token", code, body)
 		}
-		if got := errorCode(body); got != "NOTFOUND_RESOURCE" {
-			t.Errorf("status %d code %q, want the handler's own NOTFOUND_RESOURCE: %s",
+		// NOTFOUND_PROJECT, not the generic NOTFOUND_RESOURCE: mapStoreError
+		// (services/project/internal/service) maps a missing project to the
+		// taxonomy's own specific code for exactly this case
+		// (docs/02-CONTRACTS.md's NOTFOUND_ example is this code). What this
+		// assertion actually guards is unchanged — an accepted token reaches the
+		// handler's own 404 rather than the middleware's 401/403.
+		if got := errorCode(body); got != "NOTFOUND_PROJECT" {
+			t.Errorf("status %d code %q, want the handler's own NOTFOUND_PROJECT: %s",
 				code, got, body)
 		}
 	})

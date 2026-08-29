@@ -83,12 +83,17 @@ func RoleAtLeast(actor, want Role) bool {
 type Resource string
 
 const (
-	ResourceTenant     Resource = "tenant"
-	ResourceMember     Resource = "member"
-	ResourceProject    Resource = "project"
-	ResourcePractices  Resource = "practices"
-	ResourceRepoConn   Resource = "repo_connection"
-	ResourceUpload     Resource = "upload"
+	ResourceTenant    Resource = "tenant"
+	ResourceMember    Resource = "member"
+	ResourceProject   Resource = "project"
+	ResourcePractices Resource = "practices"
+	ResourceRepoConn  Resource = "repo_connection"
+	ResourceUpload    Resource = "upload"
+	// ResourceWebSource is a project registered by URL (project.web_sources).
+	// Kept distinct from ResourceRepoConn — there is no credential and no
+	// provider — even though the two share the same sensitivity tier today;
+	// see ResourceRepoConn's own cells for the reasoning this mirrors.
+	ResourceWebSource  Resource = "web_source"
 	ResourceScan       Resource = "scan"
 	ResourceDependency Resource = "dependency"
 	ResourceFinding    Resource = "finding"
@@ -234,6 +239,9 @@ var matrix = map[Permission]rule{
 
 	{ResourceUpload, ActionCreate}: {minRole: RoleAnalyst},
 	{ResourceUpload, ActionRead}:   {minRole: RoleViewer},
+
+	{ResourceWebSource, ActionCreate}: {minRole: RoleAnalyst},
+	{ResourceWebSource, ActionRead}:   {minRole: RoleViewer},
 
 	// --- scanning ---
 	{ResourceScan, ActionRead}: {minRole: RoleViewer},

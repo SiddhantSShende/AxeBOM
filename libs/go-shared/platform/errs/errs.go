@@ -127,6 +127,13 @@ const (
 	FetchSymlinkEscape         Code = "FETCH_SYMLINK_ESCAPE"
 	FetchCloneTimeout          Code = "FETCH_CLONE_TIMEOUT"
 	FetchAuthFailed            Code = "FETCH_AUTH_FAILED"
+
+	// FetchUnsupportedArchiveFormat means an uploaded source_archive's filename
+	// extension does not match any format ExtractArchive knows how to open
+	// safely (.zip, .tar, .tar.gz, .tar.zst). Refused rather than guessed at:
+	// sniffing magic bytes to "be helpful" is exactly how a parser ends up
+	// extracting a format it never validated the guards for.
+	FetchUnsupportedArchiveFormat Code = "FETCH_UNSUPPORTED_ARCHIVE_FORMAT"
 )
 
 // Engine — usually a diagnostic attached to a result, not an HTTP response.

@@ -20,6 +20,7 @@ import { AuthCallback, NoAccess, SignIn, SilentCallback } from './routes/auth/Au
 import { SignupPage } from './routes/auth/SignupPage';
 import { ProjectList } from './routes/projects/ProjectList';
 import { ProjectWizard } from './routes/projects/ProjectWizard';
+import { GitHubConnectCallback } from './routes/projects/GitHubConnectCallback';
 import { ProjectDetail } from './routes/projects/ProjectDetail';
 
 const loadMotionFeatures = () => import('./design/motion-features').then((mod) => mod.default);
@@ -121,6 +122,14 @@ export function App() {
                 session yet is exactly who this page is for.
               */}
               <Route path="/signup" element={<SignupPage />} />
+              {/*
+                Outside Shell for a third reason: this one renders in a POPUP,
+                not the wizard's own tab. It reads the GitHub connect token
+                out of the URL fragment, hands it to window.opener, and closes
+                itself — mounting the app shell around it would be visible for
+                a single frame before the window vanishes, for no benefit.
+              */}
+              <Route path="/projects/github-connect" element={<GitHubConnectCallback />} />
               <Route path="*" element={<Shell />} />
             </Routes>
           </AuthProvider>

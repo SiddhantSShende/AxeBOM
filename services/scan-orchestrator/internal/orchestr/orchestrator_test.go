@@ -139,6 +139,52 @@ func TestCreateScanFansOutOneJobPerEngine(t *testing.T) {
 	}
 }
 
+// ⚠ THE CONTRACT-VS-DISCOVERY BOUNDARY, NOW CLOSED.
+//
+// Milestone 4 pinned this test to SCAN_NO_ENGINES_AVAILABLE — no SBOM engine
+// was registered with SourceKinds: [events.SourceURL] until services/webrecon
+// existed, and the test's own comment said to update it, not "fix" it, once
+// that changed. It has: webrecon-fingerprint is now registered
+// (ConsumesNativeSBOM, SourceKinds: [url]), so a url-sourced scan is created
+// successfully and resolves that one engine. See
+// TestFullPipelineCreateWebreconFanOutResultStatus (pipeline_test.go) for the
+// end-to-end proof that a webrecon job — not a fetch job — is what actually
+// gets published and consumed.
+func TestSourceKindURLResolvesTheWebreconFingerprintEngine(t *testing.T) {
+	f := newFixture(t)
+
+	scan, err := f.orch.CreateScan(t.Context(), tenantA, orchestr.CreateScanInput{
+		ProjectID: projectA, SourceKind: events.SourceURL,
+		Families: []events.Family{events.FamilySBOM}, RequestedBy: userA,
+	})
+	if err != nil {
+		t.Fatalf("create scan: %v", err)
+	}
+	cleanupScan(t, f, tenantA, scan.ID)
+
+	if len(scan.EnginesRequested) != 1 || scan.EnginesRequested[0] != "webrecon-fingerprint" {
+		t.Errorf("engines_requested = %v, want exactly [webrecon-fingerprint]", scan.EnginesRequested)
+	}
+}
+
+// A source_kind that is not one of the four real values must still be
+// refused at the shape check — url's addition must not have loosened this
+// into accepting arbitrary strings.
+func TestUnknownSourceKindIsStillRejected(t *testing.T) {
+	f := newFixture(t)
+
+	_, err := f.orch.CreateScan(t.Context(), tenantA, orchestr.CreateScanInput{
+		ProjectID: projectA, SourceKind: events.SourceKind("ftp"),
+		Families: []events.Family{events.FamilySBOM},
+	})
+	if err == nil {
+		t.Fatal("an unknown source_kind was accepted")
+	}
+	if !errs.Is(err, errs.ValidationFieldInvalid) {
+		t.Errorf("code = %v, want VALIDATION_FIELD_INVALID", err)
+	}
+}
+
 // ⚠ THE 422 REQUIREMENT: EVERY offending pair, not the first.
 //
 // A user who fixes the one error they were shown, resubmits, and hits the next

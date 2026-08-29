@@ -666,13 +666,15 @@ func (s *Store) CoverageGaps(ctx context.Context, tenantID, scanID string) ([]st
 
 // RecordRawArtifacts persists one engine result's raw artifacts.
 //
-// ⚠ THE ONLY WRITE PATH. scan.raw_artifacts is IMMUTABLE BY GRANT — UPDATE
-// and DELETE are revoked from axebom_app in migrations/scan/0001_init.sql —
-// so this is an append, never a repoint. Called once per engine result from
-// HandleResult; a redelivered result calls it again, which is harmless
-// duplication of evidence rather than a correctness problem (there is no
-// unique constraint to violate, and re-recording the same artifact rows a
-// second time changes nothing a reader depends on).
+// ⚠ THE WRITE PATH FOR A DISPATCHED ENGINE. scan.raw_artifacts is IMMUTABLE
+// BY GRANT — UPDATE and DELETE are revoked from axebom_app in
+// migrations/scan/0001_init.sql — so this is an append, never a repoint.
+// Called once per engine result from HandleResult; a redelivered result
+// calls it again, which is harmless duplication of evidence rather than a
+// correctness problem (there is no unique constraint to violate, and
+// re-recording the same artifact rows a second time changes nothing a
+// reader depends on). See RecordProducerArtifacts for the sibling path used
+// by fetch and webrecon results, which have no engine_runs row at all.
 func (s *Store) RecordRawArtifacts(
 	ctx context.Context, tenantID, scanID, engineRunID string, artifacts []events.Artifact,
 ) error {
@@ -695,15 +697,64 @@ func (s *Store) RecordRawArtifacts(
 	})
 }
 
+// RecordProducerArtifacts persists artifacts from a component that is NOT a
+// dispatched engine — today, the fetcher's own result (a source archive,
+// plus an optional native_output) and services/webrecon's result (a
+// native_output discovery + fingerprint document).
+//
+// ⚠ WHY THIS EXISTS SEPARATELY FROM RecordRawArtifacts. Neither the fetcher
+// nor webrecon ever gets a scan.engine_runs row — CreateScan only creates
+// one per resolution.Engines entry, and neither is a policy.Engine — so
+// there is no engine_run_id to hang their artifacts off. This was a real,
+// previously-unnoticed gap: handleFetchResult never called
+// RecordRawArtifacts at all, and even if it had, that method's
+// engine_run_id-keyed INSERT plus LoadRawArtifactsForEngines's INNER JOIN to
+// engine_runs could never have resolved a NULL engine_run_id back to
+// "fetcher" — meaning github-dependency-graph-sbom's NativeSBOMRef (Milestone
+// 3) has never actually been wired end to end in a real deployment, despite
+// passing every unit test (those exercise the adapter and the client in
+// isolation, never this path). Found and fixed while building the identical
+// mechanism for webrecon (Milestone 5); see migrations/scan/0009.
+func (s *Store) RecordProducerArtifacts(
+	ctx context.Context, tenantID, scanID, producer string, artifacts []events.Artifact,
+) error {
+	if len(artifacts) == 0 {
+		return nil
+	}
+	return s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.Tx) error {
+		for _, a := range artifacts {
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO scan.raw_artifacts
+					(tenant_id, scan_id, producer, role, storage_ref, media_type, sha256, size_bytes)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+				tenantID, scanID, producer, a.Role, a.URI,
+				nullIfEmpty(a.MediaType), a.SHA256, a.SizeBytes,
+			); err != nil {
+				return fmt.Errorf("record producer artifact (producer=%s, role=%s): %w", producer, a.Role, err)
+			}
+		}
+		return nil
+	})
+}
+
 // LoadRawArtifactsForEngines returns a scan's raw artifacts, keyed by engine
-// id, restricted to the given engine ids.
+// or producer id, restricted to the given ids.
 //
 // ⚠ SAME SCHEMA, NOT A CROSS-SCHEMA JOIN — scan.raw_artifacts and
 // scan.engine_runs are both in the scan schema (CLAUDE.md invariant 11 only
 // forbids crossing a SCHEMA boundary in SQL).
 //
-// Used only to assemble a NormalizeTriggerV1's envelope, so the normalize
-// consumer never needs to query scan.* itself — see docs/02-CONTRACTS.md §6a.
+// ⚠ TWO SOURCES, UNIONED. A dispatched engine's artifacts are keyed by
+// engine_runs.engine_id via the join, same as always. A producer's (fetcher,
+// webrecon) are keyed by their own literal `producer` column instead — they
+// have no engine_runs row to join to. Callers pass both engine ids and
+// producer ids in the same slice; the caller does not need to know which is
+// which, matching how policy.Engine.ConsumesNativeSBOM only cares whether
+// SOMETHING was staged, not by which kind of component.
+//
+// Used to assemble a NormalizeTriggerV1's envelope (so the normalize
+// consumer never needs to query scan.* itself — docs/02-CONTRACTS.md §6a)
+// and by FanOut's nativeSBOMRefFor.
 func (s *Store) LoadRawArtifactsForEngines(
 	ctx context.Context, tenantID, scanID string, engineIDs []string,
 ) (map[string][]events.Artifact, error) {
@@ -713,12 +764,21 @@ func (s *Store) LoadRawArtifactsForEngines(
 	}
 	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.Tx) error {
 		rows, err := tx.Query(ctx, `
-			SELECT er.engine_id, ra.role, ra.storage_ref,
-			       COALESCE(ra.media_type,''), ra.sha256, ra.size_bytes
-			  FROM scan.raw_artifacts ra
-			  JOIN scan.engine_runs er ON er.id = ra.engine_run_id
-			 WHERE ra.scan_id = $1 AND er.engine_id = ANY($2)
-			 ORDER BY er.engine_id, ra.created_at`, scanID, engineIDs)
+			SELECT resolved_id, role, storage_ref, media_type, sha256, size_bytes FROM (
+				SELECT er.engine_id AS resolved_id, ra.role, ra.storage_ref,
+				       COALESCE(ra.media_type,'') AS media_type, ra.sha256, ra.size_bytes,
+				       ra.created_at
+				  FROM scan.raw_artifacts ra
+				  JOIN scan.engine_runs er ON er.id = ra.engine_run_id
+				 WHERE ra.scan_id = $1 AND er.engine_id = ANY($2)
+				UNION ALL
+				SELECT ra.producer AS resolved_id, ra.role, ra.storage_ref,
+				       COALESCE(ra.media_type,'') AS media_type, ra.sha256, ra.size_bytes,
+				       ra.created_at
+				  FROM scan.raw_artifacts ra
+				 WHERE ra.scan_id = $1 AND ra.producer = ANY($2)
+			) x
+			 ORDER BY resolved_id, created_at`, scanID, engineIDs)
 		if err != nil {
 			return fmt.Errorf("load raw artifacts: %w", err)
 		}

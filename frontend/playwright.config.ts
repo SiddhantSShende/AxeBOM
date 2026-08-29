@@ -18,5 +18,11 @@ export default defineConfig({
   use: {
     baseURL: process.env['E2E_BASE_URL'] ?? 'http://localhost:5173',
     trace: 'retain-on-failure',
+    // A no-op against a plain http baseURL. Matters only when E2E_BASE_URL
+    // points at https (task tls:gen's self-signed cert, needed whenever
+    // ZITADEL_DOMAIN is a LAN IP rather than localhost) — without it every
+    // request in that mode fails at the TLS handshake before the app is ever
+    // reached, for a certificate this project's own tooling generated.
+    ignoreHTTPSErrors: true,
   },
 });

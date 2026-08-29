@@ -32,10 +32,15 @@ import (
 //     controls. It is the CSRF defence for the whole flow.
 
 // GitHubConfig configures the OAuth client.
+//
+// ⚠ NO RedirectURL FIELD, DELIBERATELY. This one client now backs two flows
+// with two different registered callback URLs (login vs. connect), so a
+// single fixed redirect on the client would be a lie for whichever flow
+// didn't set it. Each caller passes its own to AuthorizeEndpoint/exchangeCode
+// instead — see handler.Config's GitHubRedirectURL/GitHubConnectRedirectURL.
 type GitHubConfig struct {
 	ClientID     string
 	ClientSecret string
-	RedirectURL  string
 
 	// APIBase and AuthBase are overridable so tests can point at a local
 	// server, and so GitHub Enterprise is supported.
@@ -74,15 +79,19 @@ func (g *GitHubClient) Enabled() bool {
 
 // AuthorizeEndpoint is the URL a browser should be sent to.
 //
-// Scope is `read:user user:email` — enough to identify the user, and nothing
-// more. Repository access is requested LATER, per project, by the source
-// connector: an account-linking flow should not ask for the right to read
-// every repository the user can see.
-func (g *GitHubClient) AuthorizeEndpoint(state string) string {
+// redirectURL and scope are supplied by the caller rather than fixed on the
+// client, because this one App now backs two flows that must never be
+// confused: BeginGitHubLogin asks for `read:user user:email` — enough to
+// identify the user, and nothing more — while BeginGitHubConnect asks for
+// `repo`, to read a project's repositories, and lands on a different callback
+// path. GitHub OAuth Apps support multiple registered callback URLs, so both
+// live under the same ClientID/ClientSecret without a second app
+// registration.
+func (g *GitHubClient) AuthorizeEndpoint(state, redirectURL, scope string) string {
 	q := url.Values{
 		"client_id":    {g.cfg.ClientID},
-		"redirect_uri": {g.cfg.RedirectURL},
-		"scope":        {"read:user user:email"},
+		"redirect_uri": {redirectURL},
+		"scope":        {scope},
 		"state":        {state},
 	}
 	return g.cfg.AuthBase + "/login/oauth/authorize?" + q.Encode()
@@ -97,12 +106,17 @@ type githubUser struct {
 }
 
 // exchangeCode swaps an authorization code for an access token.
-func (g *GitHubClient) exchangeCode(ctx context.Context, code string) (string, error) {
+//
+// redirectURL must be EXACTLY what was sent to AuthorizeEndpoint for this
+// flow — GitHub rejects a mismatch — so it travels through the same way
+// AuthorizeEndpoint's did rather than being re-read from g.cfg, which now
+// serves two different callback paths.
+func (g *GitHubClient) exchangeCode(ctx context.Context, code, redirectURL string) (string, error) {
 	form := url.Values{
 		"client_id":     {g.cfg.ClientID},
 		"client_secret": {g.cfg.ClientSecret},
 		"code":          {code},
-		"redirect_uri":  {g.cfg.RedirectURL},
+		"redirect_uri":  {redirectURL},
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
@@ -206,7 +220,7 @@ func (g *GitHubClient) get(ctx context.Context, token, path string, into any) er
 // ---------------------------------------------------------------------------
 
 // BeginGitHubLogin mints the CSRF state the caller must store and echo back.
-func (s *Service) BeginGitHubLogin(gh *GitHubClient) (redirectURL, state string, err error) {
+func (s *Service) BeginGitHubLogin(gh *GitHubClient, redirectURL string) (authorizeURL, state string, err error) {
 	if !gh.Enabled() {
 		return "", "", errs.New(errs.AuthProviderError, "GitHub sign-in is not configured")
 	}
@@ -214,7 +228,7 @@ func (s *Service) BeginGitHubLogin(gh *GitHubClient) (redirectURL, state string,
 	if err != nil {
 		return "", "", err
 	}
-	return gh.AuthorizeEndpoint(state), state, nil
+	return gh.AuthorizeEndpoint(state, redirectURL, "read:user user:email"), state, nil
 }
 
 // CompleteGitHubLogin finishes the flow.
@@ -222,7 +236,7 @@ func (s *Service) BeginGitHubLogin(gh *GitHubClient) (redirectURL, state string,
 // wantState comes from the cookie set at authorize time; gotState from the
 // query string. They MUST match — see rule 2 at the top of this file.
 func (s *Service) CompleteGitHubLogin(ctx context.Context, gh *GitHubClient,
-	code, gotState, wantState string, meta RequestMeta,
+	code, gotState, wantState, redirectURL string, meta RequestMeta,
 ) (TokenPair, error) {
 	if err := auth.VerifyOAuthState(gotState, wantState); err != nil {
 		s.audit(ctx, store.AuthEvent{
@@ -236,7 +250,7 @@ func (s *Service) CompleteGitHubLogin(ctx context.Context, gh *GitHubClient,
 		return TokenPair{}, errs.New(errs.ValidationFieldRequired, "missing authorization code")
 	}
 
-	accessToken, err := gh.exchangeCode(ctx, code)
+	accessToken, err := gh.exchangeCode(ctx, code, redirectURL)
 	if err != nil {
 		return TokenPair{}, err
 	}
@@ -266,6 +280,52 @@ func (s *Service) CompleteGitHubLogin(ctx context.Context, gh *GitHubClient,
 	})
 
 	return s.issueFor(ctx, user.ID, membership.TenantID, membership.TenantName, membership.Role, meta)
+}
+
+// ---------------------------------------------------------------------------
+// GitHub "connect" — a repo-scoped flow that is NOT sign-in
+// ---------------------------------------------------------------------------
+//
+// BeginGitHubConnect/CompleteGitHubConnect exist because CompleteGitHubLogin's
+// `repo` access was deliberately never requested (see AuthorizeEndpoint's
+// comment) — a project's "Connect GitHub" button needs a token scoped to read
+// repositories, which is a different consent than "let AxeBOM know who you
+// are". The two must stay separable: this pair mints no AxeBOM session,
+// resolves no local user, and writes nothing to the database. It hands back
+// the raw GitHub token and nothing else — the caller (an authenticated
+// project-registration request) is what decides what to do with it.
+
+// BeginGitHubConnect mints the CSRF state for the connect flow.
+func (s *Service) BeginGitHubConnect(gh *GitHubClient, redirectURL string) (authorizeURL, state string, err error) {
+	if !gh.Enabled() {
+		return "", "", errs.New(errs.AuthProviderError, "GitHub is not configured")
+	}
+	state, err = auth.NewOAuthState()
+	if err != nil {
+		return "", "", err
+	}
+	return gh.AuthorizeEndpoint(state, redirectURL, "repo"), state, nil
+}
+
+// CompleteGitHubConnect exchanges the code for a repo-scoped access token.
+//
+// ⚠ NO SESSION. NO USER LOOKUP. NO DATABASE WRITE.
+//
+// Everything CompleteGitHubLogin does past this point — resolveGitHubUser,
+// selectMembership, issueFor — is what a LOGIN needs and a source connection
+// must not touch: this token is not an AxeBOM identity, and treating it as
+// one would let a repo-scoped consent silently establish (or worse, hijack) a
+// signed-in session.
+func (s *Service) CompleteGitHubConnect(ctx context.Context, gh *GitHubClient,
+	code, gotState, wantState, redirectURL string,
+) (string, error) {
+	if err := auth.VerifyOAuthState(gotState, wantState); err != nil {
+		return "", err
+	}
+	if code == "" {
+		return "", errs.New(errs.ValidationFieldRequired, "missing authorization code")
+	}
+	return gh.exchangeCode(ctx, code, redirectURL)
 }
 
 // resolveGitHubUser finds or links the local account.

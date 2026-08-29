@@ -272,6 +272,68 @@ func TestFailedFetchFailsTheScanImmediately(t *testing.T) {
 	}
 }
 
+// The url-sourced pipeline: create -> WEBRECON (not fetch) -> fan out ->
+// engine consumes -> result -> status derived mechanically.
+//
+// Same shape as TestFullPipelineCreateFetchFanOutResultStatus, proving the
+// OTHER producer path Milestone 5 added: CreateScan publishes scan.job.
+// webrecon for a url source, handleWebreconResult (not handleFetchResult)
+// pins nothing but records the native document and fans out, and
+// webrecon-fingerprint's job carries Workspace.NativeSBOMRef with no
+// ArtifactURI at all — proving events.ScanJobV1.Validate's producer carve-out
+// and FanOut's "archive OR native document" guard both actually work
+// end to end, not just in isolation.
+func TestFullPipelineCreateWebreconFanOutResultStatus(t *testing.T) {
+	f := newFixture(t)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
+	defer cancel()
+
+	requireExclusiveResults(ctx, t, f.bus, "webrecon")
+	go func() { _ = f.orch.ConsumeResults(ctx) }()
+
+	requireExclusiveSbomSubject(ctx, t, f.bus, "pipeline-test-worker-webrecon")
+
+	worker := &fakeWorker{bus: f.bus, t: t, status: events.StatusSucceeded}
+	go worker.run(ctx, "pipeline-test-worker-webrecon")
+	t.Cleanup(func() {
+		_ = f.bus.DeleteConsumer(context.Background(), bus.StreamJobs, "pipeline-test-worker-webrecon")
+	})
+
+	scan, err := f.orch.CreateScan(t.Context(), tenantA, orchestr.CreateScanInput{
+		ProjectID: projectA, SourceKind: events.SourceURL,
+		Families: []events.Family{events.FamilySBOM}, RequestedBy: userA,
+	})
+	if err != nil {
+		t.Fatalf("create scan: %v", err)
+	}
+	cleanupScan(t, f, tenantA, scan.ID)
+
+	// The webrecon job completes: this is what stages the native document and
+	// triggers fan-out — there is no commit to pin and no source archive.
+	if err := f.orch.PublishWebreconResult(ctx, scan.ID, tenantA,
+		"s3://axebom/scans/test/raw/webrecon/job/webrecon.json", "sha-webrecon"); err != nil {
+		t.Fatalf("publish webrecon result: %v", err)
+	}
+
+	final := waitForTerminal(t, f, tenantA, scan.ID, 60*time.Second)
+
+	if final.Status != events.ScanCompleted {
+		t.Errorf("scan status = %q, want completed", final.Status)
+	}
+	// ⚠ NO COMMIT, AND THAT IS CORRECT — not a missing-data bug. A url source
+	// has no commit to pin.
+	if final.CommitSHA != "" {
+		t.Errorf("commit_sha = %q, want empty (a url source has no commit)", final.CommitSHA)
+	}
+	if final.ArchiveRef != "" {
+		t.Errorf("archive_ref = %q, want empty (a url source has no traditional source archive)", final.ArchiveRef)
+	}
+	if worker.consumed.Load() < 1 {
+		t.Error("webrecon-fingerprint never received a job; fan-out did not happen")
+	}
+}
+
 // waitForTerminal polls until the scan finishes or the timeout expires.
 //
 // POLLS THE DATABASE, not the event stream — the database is the source of

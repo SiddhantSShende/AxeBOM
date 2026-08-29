@@ -118,6 +118,21 @@ type connectionResponse struct {
 	CreatedAt     string `json:"created_at"`
 }
 
+type webSourceRequest struct {
+	RootURL           string `json:"root_url"`
+	MaxHosts          int    `json:"max_hosts,omitempty"`
+	DiscoveryDisabled bool   `json:"discovery_disabled,omitempty"`
+}
+
+type webSourceResponse struct {
+	ID               string  `json:"id"`
+	RootURL          string  `json:"root_url"`
+	DiscoveryEnabled bool    `json:"discovery_enabled"`
+	MaxHosts         int     `json:"max_hosts"`
+	LastScannedAt    *string `json:"last_scanned_at,omitempty"`
+	CreatedAt        string  `json:"created_at"`
+}
+
 type uploadResponse struct {
 	ID               string `json:"id"`
 	Kind             string `json:"kind"`
@@ -388,6 +403,53 @@ func (h *Handler) ListConnections(w http.ResponseWriter, r *http.Request) {
 	errs.WriteJSON(w, http.StatusOK, map[string]any{"connections": items})
 }
 
+// ---------------------------------------------------------------------------
+// Web sources
+// ---------------------------------------------------------------------------
+
+// CreateWebSource handles POST /v1/projects/{id}/web-sources.
+func (h *Handler) CreateWebSource(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := auth.RequireTenant(r.Context())
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+
+	var req webSourceRequest
+	if err := decode(r, &req); err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+
+	ws, err := h.svc.CreateWebSource(r.Context(), tenantID, r.PathValue("id"), service.WebSourceInput{
+		RootURL: req.RootURL, MaxHosts: req.MaxHosts, DiscoveryDisabled: req.DiscoveryDisabled,
+	})
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	errs.WriteJSON(w, http.StatusCreated, toWebSourceResponse(ws))
+}
+
+// ListWebSources handles GET /v1/projects/{id}/web-sources.
+func (h *Handler) ListWebSources(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := auth.RequireTenant(r.Context())
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	sources, err := h.svc.ListWebSources(r.Context(), tenantID, r.PathValue("id"))
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	items := make([]webSourceResponse, 0, len(sources))
+	for _, ws := range sources {
+		items = append(items, toWebSourceResponse(ws))
+	}
+	errs.WriteJSON(w, http.StatusOK, map[string]any{"web_sources": items})
+}
+
 // Source handles GET /v1/projects/{id}/source.
 //
 // ⚠ SERVICE PRINCIPALS ONLY, AND THAT IS THE POINT OF THE ENDPOINT.
@@ -401,6 +463,14 @@ func (h *Handler) ListConnections(w http.ResponseWriter, r *http.Request) {
 //
 // The only caller is the fetcher, which is the one component permitted to hold
 // a git credential (ADR-0008).
+//
+// ⚠ THE RESPONSE SHAPE IS DISCRIMINATED BY "kind", KEYED OFF source_type.
+//
+// A github/gitlab/bitbucket project answers with its repository connection;
+// an upload project answers with its stored upload; a url project answers
+// with its web source — never more than one shape, and never a credential
+// for the latter two, since nothing about an upload or a URL source is ever
+// authenticated.
 func (h *Handler) Source(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := auth.RequireTenant(r.Context())
 	if err != nil {
@@ -408,7 +478,67 @@ func (h *Handler) Source(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conns, err := h.svc.ListConnections(r.Context(), tenantID, r.PathValue("id"))
+	p, err := h.svc.Get(r.Context(), tenantID, r.PathValue("id"))
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+
+	switch p.SourceType {
+	case "upload":
+		uploads, err := h.svc.ListUploads(r.Context(), tenantID, p.ID)
+		if err != nil {
+			errs.Write(w, r, err)
+			return
+		}
+		if len(uploads) == 0 {
+			// Not an internal error: a project registered for upload but never
+			// actually uploaded anything is a legitimate, if incomplete, state.
+			// The fetcher turns this into a stated reason on the scan rather than
+			// a crash.
+			errs.Write(w, r, errs.New(errs.NotFoundResource,
+				"the project has no uploaded source to fetch from"))
+			return
+		}
+		// The MOST RECENT upload. ListUploads already orders newest-first (id
+		// DESC, and ids are UUIDv7) — the same "pick one, document it" convention
+		// the connection branch below uses for multiple repository connections.
+		u := uploads[0]
+		errs.WriteJSON(w, http.StatusOK, map[string]any{
+			"kind":              "upload",
+			"upload_id":         u.ID,
+			"upload_kind":       u.Kind,
+			"storage_ref":       u.StorageRef,
+			"original_filename": u.OriginalFilename,
+		})
+		return
+
+	case "url":
+		sources, err := h.svc.ListWebSources(r.Context(), tenantID, p.ID)
+		if err != nil {
+			errs.Write(w, r, err)
+			return
+		}
+		if len(sources) == 0 {
+			// A project registered for url but never given one — the wizard
+			// requires this field, so reaching this state means a client bypassed
+			// it, or an in-progress registration was abandoned mid-flow.
+			errs.Write(w, r, errs.New(errs.NotFoundResource,
+				"the project has no URL source to fetch from"))
+			return
+		}
+		wsrc := sources[0]
+		errs.WriteJSON(w, http.StatusOK, map[string]any{
+			"kind":              "url",
+			"web_source_id":     wsrc.ID,
+			"root_url":          wsrc.RootURL,
+			"discovery_enabled": wsrc.DiscoveryEnabled,
+			"max_hosts":         wsrc.MaxHosts,
+		})
+		return
+	}
+
+	conns, err := h.svc.ListConnections(r.Context(), tenantID, p.ID)
 	if err != nil {
 		errs.Write(w, r, err)
 		return
@@ -428,6 +558,7 @@ func (h *Handler) Source(w http.ResponseWriter, r *http.Request) {
 	// pretending otherwise would be worse than the explicit limitation.
 	c := conns[0]
 	errs.WriteJSON(w, http.StatusOK, map[string]any{
+		"kind":           "git",
 		"connection_id":  c.ID,
 		"provider":       c.Provider,
 		"repo_url":       c.RepoURL,
@@ -582,7 +713,7 @@ func (h *Handler) Options(w http.ResponseWriter, r *http.Request) {
 		"bom_types":    bomTypes,
 		"sdlc_stages":  model.SDLCClassifications,
 		"bom_depths":   model.BOMLevels,
-		"source_types": []string{"github", "gitlab", "bitbucket", "upload", "image", "manual"},
+		"source_types": []string{"github", "gitlab", "bitbucket", "upload", "image", "manual", "url"},
 		"practices":    practices,
 	})
 }
@@ -643,6 +774,20 @@ func toConnectionResponse(c store.RepoConnection) connectionResponse {
 		RepoExternalID: c.RepoExternalID, DefaultBranch: c.DefaultBranch,
 		HasCredential: c.CredentialRef != "",
 		CreatedAt:     c.CreatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func toWebSourceResponse(ws store.WebSource) webSourceResponse {
+	var lastScanned *string
+	if ws.LastScannedAt != nil {
+		s := ws.LastScannedAt.UTC().Format(time.RFC3339)
+		lastScanned = &s
+	}
+	return webSourceResponse{
+		ID: ws.ID, RootURL: ws.RootURL,
+		DiscoveryEnabled: ws.DiscoveryEnabled, MaxHosts: ws.MaxHosts,
+		LastScannedAt: lastScanned,
+		CreatedAt:     ws.CreatedAt.UTC().Format(time.RFC3339),
 	}
 }
 

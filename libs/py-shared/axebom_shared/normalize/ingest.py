@@ -874,6 +874,110 @@ def _osv_fixed_versions(vuln: dict[str, Any]) -> list[str]:
     return sorted(set(out))
 
 
+# -- webrecon-fingerprint (services/webrecon) ------------------------------
+
+
+def _ingest_webrecon_fingerprint(
+    payload: dict[str, Any],
+    *,
+    engine: str,
+    scan_id: str,
+    engine_version: str,
+    trusted: frozenset[str],
+) -> Ingested:
+    """Parse services/webrecon's own JSON shape — never a CycloneDX or SPDX
+    document, because there is no "native" format for a retire.js-style
+    fingerprint result. See docs/04-OSINT-INTEGRATION.md §4's webrecon
+    subsection for the field-by-field mapping this mirrors.
+
+    Version-range evaluation (does this library's version fall inside a
+    known-vulnerable range) already happened in Go
+    (services/webrecon/internal/fingerprint/retire.go's vulnerableAt) before
+    this JSON was ever written — every entry in a library's
+    `vulnerabilities[]` here is already applicable to the detected version,
+    not re-evaluated.
+    """
+    out = Ingested()
+
+    hosts = payload.get("hosts")
+    if not isinstance(hosts, list):
+        out.diagnostics.append(
+            {
+                "severity": "warn",
+                "code": "ENGINE_FIELD_MISSING",
+                "message": f"{engine} output has no `hosts` array",
+            }
+        )
+        return out
+
+    for host_entry in hosts:
+        if not isinstance(host_entry, dict):
+            continue
+        host = str(host_entry.get("host", ""))
+        fetched_url = str(host_entry.get("fetched_url", ""))
+        location_path = fetched_url or host
+
+        for lib in host_entry.get("libraries", []) or []:
+            if not isinstance(lib, dict):
+                continue
+            name = str(lib.get("name", ""))
+            version = str(lib.get("version", ""))
+            if not name:
+                continue
+
+            record = {
+                "name": name,
+                "version": version,
+                "ecosystem": "npm",
+            }
+            purl = str(lib.get("npm_purl") or "")
+            if purl:
+                record["purl"] = purl
+
+            identity = resolve_identity(record, scan_id=scan_id, engine=engine)
+
+            out.contributions.append(
+                Contribution(
+                    identity=identity,
+                    observation=Observation(
+                        engine=engine,
+                        engine_version=engine_version,
+                        native_id=f"{name}@{version}",
+                        confidence=identity.confidence,
+                    ),
+                    locations=[Location(path=location_path)] if location_path else [],
+                )
+            )
+
+            for vuln in lib.get("vulnerabilities", []) or []:
+                if not isinstance(vuln, dict):
+                    continue
+                cve_list = [str(c) for c in (vuln.get("cve") or []) if c]
+                ghsa = str(vuln.get("ghsa") or "")
+                # A CVE is preferred as the primary id — the same precedence
+                # every other ingest path in this file gives it — falling
+                # back to the GHSA advisory id when retire.js recorded no
+                # CVE for this entry.
+                vuln_id = cve_list[0] if cve_list else ghsa
+                if not vuln_id:
+                    continue
+
+                out.findings.append(
+                    RawFinding(
+                        vuln_id=vuln_id,
+                        component_key=identity.key,
+                        engine=engine,
+                        engine_version=engine_version,
+                        severity=str(vuln.get("severity", "")),
+                        ecosystem="npm",
+                        native_id=vuln_id,
+                        description=str(vuln.get("summary", ""))[:2000],
+                    )
+                )
+
+    return out
+
+
 # -- dependency-check -------------------------------------------------------
 
 
@@ -1084,7 +1188,9 @@ def _ecosystem_of_key(key: str) -> str:
 #: only). Shared with `cluster_store.py`'s pre-pass so the two modules cannot
 #: independently drift on which engines' output is worth re-ingesting for
 #: alias-graph seeding.
-FINDING_ENGINES = frozenset({"trivy-fs", "trivy-image", "grype", "osv-scanner", "dependency-check"})
+FINDING_ENGINES = frozenset(
+    {"trivy-fs", "trivy-image", "grype", "osv-scanner", "dependency-check", "webrecon-fingerprint"}
+)
 
 _PARSERS = {
     "syft": _ingest_cyclonedx,
@@ -1094,6 +1200,14 @@ _PARSERS = {
     "grype": _ingest_grype,
     "osv-scanner": _ingest_osv,
     "dependency-check": _ingest_dependency_check,
+    # The fetcher unwraps GitHub's `{"sbom": {...}}` envelope before ever
+    # storing this artifact (services/fetcher/internal/work/work.go), so what
+    # reaches this dispatch is a genuine, standalone SPDX 2.3 document —
+    # exactly the shape _ingest_spdx already handles for syft-spdx. No new
+    # parser needed, and none written: a bespoke one would be unverified
+    # against any real captured GitHub fixture.
+    "github-dependency-graph-sbom": _ingest_spdx,
+    "webrecon-fingerprint": _ingest_webrecon_fingerprint,
 }
 
 

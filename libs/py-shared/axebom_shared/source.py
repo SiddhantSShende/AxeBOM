@@ -140,3 +140,69 @@ def materialize(
         },
     )
     return True
+
+
+def native_sbom_ref(job: dict[str, Any]) -> str:
+    """Pull the optional native-SBOM reference out of a ScanJobV1's workspace.
+
+    Populated by the orchestrator's FanOut only for the one engine that
+    consumes it today (github-dependency-graph-sbom) — see
+    Workspace.NativeSBOMRef in libs/go-shared/events/events.go. Empty for
+    every other job, which is the overwhelmingly common case.
+    """
+    ws = job.get("workspace") or {}
+    return str(ws.get("native_sbom_ref") or "")
+
+
+def materialize_native_sbom(
+    job: dict[str, Any],
+    dest: Path,
+    *,
+    timeout_sec: int = DEFAULT_TIMEOUT_SEC,
+) -> Path | None:
+    """Fetch a native SBOM document the fetcher staged, if this job carries one.
+
+    Returns the local path once fetched, or None — for a job with no
+    reference at all (nearly every job), or one whose fetch failed for any
+    reason.
+
+    ⚠ UNLIKE `materialize`, THIS NEVER RAISES.
+
+    The source archive is required: an engine cannot run without it, so a
+    materialization failure has to stop the job. A native SBOM reference is a
+    reconciliation input for exactly one engine — its own adapter (`available`
+    /`generate`) is what decides what an absent document means, reporting
+    `unavailable` with the real reason. Raising here would turn "GitHub
+    Dependency Graph happens to be disabled on this repo" into a retried,
+    ultimately-failed job for an engine whose whole job WAS this document.
+    """
+    engine = str(job.get("engine") or "unknown")
+    uri = native_sbom_ref(job)
+    if not uri:
+        return None
+
+    argv = [_binary(), "source", "fetch-artifact", "--uri", uri, "--dest", str(dest)]
+    try:
+        proc = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        log.warning(
+            "could not fetch the native SBOM artifact; the engine will report it missing",
+            extra={"job_id": job.get("job_id"), "engine": engine, "cause": str(exc)},
+        )
+        return None
+
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip()[-600:]
+        log.warning(
+            "could not fetch the native SBOM artifact; the engine will report it missing",
+            extra={"job_id": job.get("job_id"), "engine": engine, "detail": detail},
+        )
+        return None
+
+    return dest

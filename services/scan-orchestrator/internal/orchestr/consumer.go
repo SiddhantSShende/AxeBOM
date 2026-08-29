@@ -66,6 +66,9 @@ func (o *Orchestrator) handleResultMessage(ctx context.Context, msg jetstream.Ms
 	if result.Engine == "fetcher" {
 		return o.handleFetchResult(ctx, result)
 	}
+	if result.Engine == "webrecon" {
+		return o.handleWebreconResult(ctx, result)
+	}
 	return o.HandleResult(ctx, result)
 }
 
@@ -128,6 +131,80 @@ func (o *Orchestrator) handleFetchResult(ctx context.Context, result events.Scan
 	if !wrote {
 		o.log.Info("fetch result redelivered; source already pinned",
 			"scan_id", result.ScanID)
+	}
+
+	// Records EVERY artifact the fetcher staged — the source archive again
+	// (redundant with source_archive_ref on the scan row, but raw_artifacts is
+	// meant to be the complete evidence ledger) and, when present, the
+	// GitHub Dependency Graph native_output document nativeSBOMRefFor reads
+	// back. See RecordProducerArtifacts's own doc comment for why this call
+	// was MISSING until now, despite Milestone 3 believing it worked.
+	if err := o.store.RecordProducerArtifacts(ctx, result.TenantID, result.ScanID,
+		"fetcher", result.Artifacts); err != nil {
+		return fmt.Errorf("%w: recording fetcher artifacts: %w", bus.ErrRetry, err)
+	}
+
+	published, err := o.FanOut(ctx, result.TenantID, result.ScanID)
+	if err != nil {
+		return fmt.Errorf("%w: fanning out: %w", bus.ErrRetry, err)
+	}
+	o.log.Info("fanned out engine jobs", "scan_id", result.ScanID, "jobs", published)
+	return nil
+}
+
+// handleWebreconResult records a url source's discovery + fingerprint
+// document and fans out.
+//
+// publishFetchJob's counterpart for a url-sourced scan — handleFetchResult's
+// sibling. The two differ in exactly what a producer PRODUCES: fetch pins a
+// commit and a source archive every SBOM engine reads identically; webrecon
+// has neither (there is no commit, and no traditional source archive — see
+// events.ScanJobV1.Validate) and instead stages one native_output document
+// that only webrecon-fingerprint (policy.Engine.ConsumesNativeSBOM) consumes.
+func (o *Orchestrator) handleWebreconResult(ctx context.Context, result events.ScanResultV1) error {
+	// Same reasoning as handleFetchResult's identical check: a result naming a
+	// scan that no longer exists for this tenant will never become
+	// processable, so this is permanent, not a retry candidate.
+	if _, _, err := o.store.GetScan(ctx, result.TenantID, result.ScanID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			o.log.Warn("webrecon result for an unknown scan; discarding",
+				"scan_id", result.ScanID, "job_id", result.JobID)
+			return fmt.Errorf("no such scan %s for this tenant", result.ScanID)
+		}
+		return fmt.Errorf("%w: loading scan: %w", bus.ErrRetry, err)
+	}
+
+	if result.Status == events.StatusFailed || result.Status == events.StatusTimeout {
+		o.log.Error("webrecon failed; the scan cannot proceed",
+			"scan_id", result.ScanID, "status", result.Status)
+		if err := o.failAllRuns(ctx, result); err != nil {
+			return fmt.Errorf("%w: failing runs after a failed webrecon: %w", bus.ErrRetry, err)
+		}
+		return o.RecomputeScanStatus(ctx, result.TenantID, result.ScanID)
+	}
+
+	// ⚠ EMPTY COMMIT, EMPTY ARCHIVE — DELIBERATELY, NOT A GAP.
+	//
+	// A url source has no commit to pin and no traditional source archive;
+	// SetSourceOnce is still called, for its OTHER two effects: the
+	// write-once idempotency guard (WHERE source_commit_sha IS NULL, so a
+	// redelivered result is a harmless no-op) and flipping the scan to
+	// `running`. Recording empty strings for a source with nothing to name is
+	// the SAME choice an upload-sourced scan already makes for commit_sha —
+	// see CommitSHA's own `omitempty` doc comment in fetch.go — not a new
+	// pattern invented here.
+	wrote, err := o.store.SetSourceOnce(ctx, result.TenantID, result.ScanID, "", "", "")
+	if err != nil {
+		return fmt.Errorf("%w: marking the scan running: %w", bus.ErrRetry, err)
+	}
+	if !wrote {
+		o.log.Info("webrecon result redelivered; scan already marked running",
+			"scan_id", result.ScanID)
+	}
+
+	if err := o.store.RecordProducerArtifacts(ctx, result.TenantID, result.ScanID,
+		"webrecon", result.Artifacts); err != nil {
+		return fmt.Errorf("%w: recording webrecon artifacts: %w", bus.ErrRetry, err)
 	}
 
 	published, err := o.FanOut(ctx, result.TenantID, result.ScanID)
@@ -238,4 +315,34 @@ func (o *Orchestrator) PublishFetchResult(ctx context.Context, scanID, tenantID,
 		return err
 	}
 	return o.bus.Publish(ctx, "scan.result.fetch", result.JobID, payload)
+}
+
+// PublishWebreconResult publishes a webrecon result. PublishFetchResult's
+// sibling for a url-sourced scan, and used the same way — to exercise
+// orchestration without a real services/webrecon instance, never as a second
+// production code path.
+func (o *Orchestrator) PublishWebreconResult(ctx context.Context, scanID, tenantID,
+	artifactURI, artifactSHA string,
+) error {
+	result := events.ScanResultV1{
+		SchemaVersion: events.SchemaScanResultV1,
+		JobID:         "webrecon-" + scanID,
+		ScanID:        scanID, TenantID: tenantID,
+		Engine: "webrecon", EngineVersion: "internal",
+		Status: events.StatusSucceeded,
+		Artifacts: []events.Artifact{{
+			Role: "native_output", URI: artifactURI,
+			MediaType: "application/json", SHA256: artifactSHA,
+		}},
+		Invocation: events.Invocation{
+			ArgvRedacted: []string{"webrecon"},
+			StartedAt:    time.Now().UTC(), FinishedAt: time.Now().UTC(),
+		},
+	}
+
+	payload, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	return o.bus.Publish(ctx, "scan.result.webrecon", result.JobID, payload)
 }

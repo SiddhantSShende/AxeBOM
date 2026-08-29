@@ -57,6 +57,17 @@ The unit is **(tool, mode)**, not tool — see `02-CONTRACTS.md §7`.
 | `trivy-image` | `aquasecurity/trivy` | image | Container image scan — different capability, different parser |
 | `osv-scanner` | `google/osv-scanner` | binary / image | OSV database cross-check |
 | `dependency-check` | `dependency-check/DependencyCheck` | **container only** | NVD/CPE matching. Enterprise-recognized |
+| `github-dependency-graph-sbom` | GitHub's own `dependency-graph/sbom` API | **internal** | **Reconciliation source, not discovery.** Imports a connected GitHub repository's own CI-published SPDX 2.3 document; cross-checked against every other engine's output, never authoritative on its own |
+| `subfinder` | `projectdiscovery/subfinder` | **container**, network egress | Passive subdomain enumeration for a **url-registered project only**. Never a directly-scannable engine — feeds `webrecon-fingerprint` below, never ingested on its own |
+| `webrecon-fingerprint` | AxeBOM's own — `services/webrecon` | **internal** | **The only SBOM engine offered for a url source.** Parses the JSON document `services/webrecon` produced: discovered hosts, fetched pages, `<script>` content, retire.js signature matches |
+
+> **`github-dependency-graph-sbom` is an OSSF sbom-everywhere-style integration.** The fetcher calls GitHub's Dependency Graph SBOM export API once per scan — using the same repo-scoped token already in hand for the clone — and stages the response (with GitHub's `{"sbom": {...}}` envelope unwrapped) as a second raw artifact alongside the source archive (`services/fetcher/internal/work/work.go`). It runs no sandbox and no container: `workers/sbom/adapters/github_dependency_graph.py` subclasses `ToolAdapterBase` directly and does local file I/O only, reading the artifact the fetcher already staged. Failure is always soft — a non-GitHub remote, Dependency Graph disabled, or an API error all report `unavailable` with a stated reason, never a scan failure. Because the fetcher's own unwrapping leaves a genuine, standalone SPDX 2.3 document, normalization reuses `_ingest_spdx` verbatim — the same parser `syft-spdx` already exercises — rather than a bespoke, unverified parser for a format this repo has no captured fixture for.
+
+> **`subfinder` / `webrecon-fingerprint` are a two-step discovery pipeline, but NEITHER is dispatched the way syft→grype are.** `libs/go-shared/sandbox/policy.go` states flatly that no ENGINE may have network egress — CLAUDE.md invariant 7 — so subdomain discovery and live-page fetching cannot be a normal sandboxed `scan.job.sbom` job the way trivy or grype are. Instead: `services/webrecon` (a new service, mirroring `services/fetcher`'s shape — NATS-only, no HTTP surface, holds no credential because a url source is never authenticated) consumes its own producer family, `scan.job.webrecon`, published INSTEAD of `scan.job.fetch` for a url-sourced scan. It runs `subfinder` inside its own `sandbox.Runner` container (network-egress policy, the same posture the fetcher's git clone gets), capped by `project.web_sources.max_hosts`; fetches the root page plus every discovered host (`SafeHTTPClient`, connection-time IP blocking, same as the fetcher); extracts `<script>` tags via `golang.org/x/net/html`, restricting external script fetches to the same host plus a short, explicit CDN allowlist (cdnjs, unpkg, jsdelivr, googleapis, the jQuery CDN); and matches every script's content against the retire.js signature database with a Go-native regex engine — **not** retire.js's own Node CLI, which would mean embedding a Node runtime inside a network-enabled sandboxed container, roughly doubling that container's attack surface for no benefit. The result — one JSON document, never subfinder's or retire.js's raw output directly — is staged as a `native_output` raw artifact (`producer: webrecon`, `scan.raw_artifacts`, see `01-DATA-MODEL.md` §3) and wired into `webrecon-fingerprint`'s job via `Workspace.NativeSBOMRef`, exactly the mechanism `github-dependency-graph-sbom` already uses (`policy.Engine.ConsumesNativeSBOM`). `webrecon-fingerprint`'s own adapter (`workers/sbom/adapters/webrecon_fingerprint.py`) then does the ONLY parsing step that runs in Python, mirroring `github_dependency_graph.py`'s no-sandbox, local-I/O-only shape.
+>
+> **Go's `regexp` (RE2) cannot execute every retire.js signature regex verbatim** — spiked against the real signature database (76 libraries, 76 `uri` + 208 `filecontent` = 284 patterns loaded; `filecontentreplace` and `hashes` are deliberately not loaded at all) before committing to this design, not assumed. Two constructs are genuinely unsupported: a backreference (`\1`/`\2`/`\3` inside a pattern — 1 of the 284) and a lookbehind (`(?<=...)` — 1 of the 284); both are skipped, counted at load. A third issue is fixable rather than fundamental: RE2's hardcoded 1000-repeat-count cap rejects 7 patterns using bounds like `{0,8000}` (Vue ×2, Next.js ×2, lodash, tinyMCE, underscore.js, select2) — these are capped at 1000 rather than dropped, a real but honestly-documented precision loss (a real gap between two anchors in a minified bundle can exceed 1000 characters), and every affected library still has other, unaffected filecontent signatures. Full counts and per-pattern reasoning: `services/webrecon/internal/fingerprint/signatures/PROVENANCE.md`; the regression guard is `services/webrecon/internal/fingerprint/retire_test.go`.
+>
+> **`max_hosts` and the CDN allowlist are abuse guards, not incidental config.** A url-registered project auto-discovers and fetches from hosts the tenant never individually named — a confused-deputy/recon-abuse surface distinct from SSRF against AxeBOM's own infrastructure, not just a variant of it. See `05-SECURITY-MODEL.md` §1 and §3/§4 for the full threat-model treatment.
 
 ### CBOM / QBOM
 
@@ -175,6 +186,16 @@ cbomkit-theia image <image@digest>
 # rendered report straight to stdout, which is the one channel that exists.
 ai-bom scan <path> --format cyclonedx --quiet
 python -m src.cli <hf-model-id> --output model.cdx.json
+
+# --- WEB RECON --------------------------------------------------------------
+# subfinder runs INSIDE services/webrecon's own sandboxed container
+# (network-egress policy) — passive sources only, never active probing.
+subfinder -d example.com -silent -json -max-time 60
+
+# The JS-fingerprint step is services/webrecon's own Go code, not a CLI —
+# SafeHTTPClient GET of each discovered host's root page, <script> extraction,
+# then match against the vendored retire.js signature database
+# (services/webrecon/internal/fingerprint/signatures/retire-js-jsrepository.json).
 ```
 
 Two notes that matter:
@@ -205,6 +226,8 @@ Where a tool emits CycloneDX or SPDX natively, **parse the standard document**. 
 | `executable` / `archive` / `structured` | heuristics + CycloneDX component `type` |
 | `author_of_sbom_data` / timestamp | scan provenance |
 | everything else | explicit `not-provided` — **never silently omitted** |
+
+**`webrecon-fingerprint` is the one exception to "parse the standard document"** — `services/webrecon` produces AxeBOM's own JSON shape (`{root_url, hosts: [{host, fetched_url, status, libraries: [{name, version, npm_purl, vulnerabilities}]}]}`), not a CycloneDX or SPDX document, because there is no such thing as a "native" format for a retire.js-style fingerprint result. `workers/sbom/adapters/webrecon_fingerprint.py` does the real parsing this one time — a matched library becomes a component (`purl` synthesized as `pkg:npm/<name>@<version>`, honest because virtually every JS library retire.js signatures cover is npm-published, though this is inference, not a certainty the tool asserts), `Location.path` records the host + script URL it was found at, and a retire.js `vulnerabilities[]` entry whose version range matches becomes a `RawFinding` with the CVE/GHSA identifiers retire.js itself carries.
 
 ### Crypto assets (CERT-In Table 9)
 

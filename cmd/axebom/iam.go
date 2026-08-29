@@ -173,10 +173,14 @@ func iamBootstrap(ctx context.Context, args []string) error {
 		// gitignored. Services read their key from here.
 		ServiceKeyDir: resolveFromRepoRoot("deploy/compose/.data/zitadel-bootstrap/service-keys"),
 		ServiceAccounts: []string{
-			// The two components that call another service on a tenant's
-			// behalf today: campaign -> scan-orchestrator, fetcher -> project.
+			// The components that call another service on a tenant's
+			// behalf today: campaign -> scan-orchestrator, fetcher ->
+			// project, webrecon -> project (the same source resolver
+			// call the fetcher makes, reading a url source's config
+			// instead of a repository connection).
 			"svc-campaign",
 			"svc-fetcher",
+			"svc-webrecon",
 		},
 	}
 	if *seed {

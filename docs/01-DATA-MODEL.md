@@ -113,7 +113,7 @@ Store only the **hash** of the refresh token. Access tokens are stateless JWTs a
 | `tenant_id` | UUID NOT NULL | RLS |
 | `name` | TEXT NOT NULL | `UNIQUE (tenant_id, name)` |
 | `description` | TEXT | |
-| `source_type` | TEXT NOT NULL | CHECK in (`github`,`gitlab`,`bitbucket`,`upload`,`image`,`manual`) |
+| `source_type` | TEXT NOT NULL | CHECK in (`github`,`gitlab`,`bitbucket`,`upload`,`image`,`manual`,`url`) |
 | `sdlc_stage` | TEXT NOT NULL | CHECK in (`design`,`source`,`build`,`analyzed`,`deployed`,`runtime`) — CERT-In §3.2, p.12–13 |
 | `validity_start` | DATE NULL | |
 | `validity_end` | DATE NULL | CHECK `validity_end >= validity_start` |
@@ -153,6 +153,11 @@ This is the commonly-missed minimum-element category. **Not a report section —
 `(id, tenant_id, project_id, kind, storage_ref, sha256, size_bytes, original_filename, uploaded_by, created_at)`
 `kind` CHECK in (`source_archive`,`manifest`,`lockfile`,`sbom`,`hbom_csv`,`image_tarball`).
 
+### `project.web_sources`
+`(id, tenant_id, project_id, root_url, discovery_enabled, max_hosts, last_scanned_at, created_at)`
+
+A project registered by URL rather than a repository connection or an upload. No `credential_ref` — nothing here is ever authenticated. `discovery_enabled` (default `true`) and `max_hosts` (default `25`, CHECK `BETWEEN 1 AND 100`) are the abuse-guard knobs `services/webrecon`'s subdomain-discovery pass reads (`05-SECURITY-MODEL.md` §1); they exist ahead of that service so its landing is a pure application change, not a schema change. A project may have more than one row here — nothing caps it to one, and `ListWebSources` returns a slice.
+
 ---
 
 ## 3. Scans — schema `scan`
@@ -165,7 +170,7 @@ This is the commonly-missed minimum-element category. **Not a report section —
 | `triggered_by` | TEXT NOT NULL | CHECK in (`user`,`campaign`,`api`,`webhook`) |
 | `trigger_ref` | UUID NULL | user id or campaign id |
 | `status` | TEXT NOT NULL | CHECK in (`queued`,`fetching`,`running`,`normalizing`,`completed`,`completed_with_errors`,`failed`,`cancelled`) |
-| `source_kind` | TEXT NOT NULL | CHECK in (`git`,`upload`,`image`); denormalized from the project at create time — cross-schema JOINs are forbidden, and a project changing `source_type` later must not retroactively change what an old scan claims to have scanned |
+| `source_kind` | TEXT NOT NULL | CHECK in (`git`,`upload`,`image`,`url`); denormalized from the project at create time — cross-schema JOINs are forbidden, and a project changing `source_type` later must not retroactively change what an old scan claims to have scanned |
 | `bom_types` | TEXT[] NOT NULL | requested families — never `hbom` or `qbom`; both are rejected at scan-create time (`SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE`, `02-CONTRACTS.md` §7/§9) because neither has a worker (HBOM is a CSV/form import, QBOM is derived from CBOM) |
 | `report_levels` | TEXT[] NOT NULL | |
 | `standards` | TEXT[] NOT NULL | `SPDX`, `CycloneDX` |
@@ -209,8 +214,10 @@ One row per (scan, engine). This is where partial failure lives.
 `partial` is a **first-class status, not an error** — e.g. Grype covered 11 of 12 ecosystems because one lockfile was malformed.
 
 ### `scan.raw_artifacts`
-`(id, tenant_id, scan_id, engine_run_id, role, storage_ref, media_type, sha256, size_bytes, created_at)`
+`(id, tenant_id, scan_id, engine_run_id, producer, role, storage_ref, media_type, sha256, size_bytes, created_at)`
 `role` CHECK in (`native_output`,`log`,`stderr`,`sarif`,`source_archive`).
+
+`engine_run_id` and `producer` are **mutually exclusive** (CHECK `(engine_run_id IS NULL) <> (producer IS NULL)`): an artifact belongs either to a dispatched engine's run, or to a named producer component that never gets an `engine_runs` row — today `fetcher` (a source archive, plus an optional `native_output` like a GitHub Dependency Graph SBOM) and `webrecon` (a url source's discovery + JS-fingerprint result, `native_output`). `LoadRawArtifactsForEngines` resolves both kinds by the same id.
 
 **Immutable. Never updated, never deleted.** This is what makes normalization replayable: a dedup bug is fixed by re-normalizing these, not by re-running scanners. Retention is a compliance decision, not a storage one.
 

@@ -198,6 +198,23 @@ export function useConnectRepo(projectId: string) {
   });
 }
 
+export interface WebSourceInput {
+  root_url: string;
+  max_hosts?: number | undefined;
+  discovery_disabled?: boolean | undefined;
+}
+
+export function useCreateWebSource(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: WebSourceInput) =>
+      request(`/v1/projects/${projectId}/web-sources`, { method: 'POST', body: input }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['web-sources', projectId] });
+    },
+  });
+}
+
 export function useUploadFile(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -210,6 +227,73 @@ export function useUploadFile(projectId: string) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['uploads', projectId] });
     },
+  });
+}
+
+/**
+ * useGitHubConnect opens the repo-scoped "connect" popup and resolves with
+ * the token GitHubConnectCallback relays back via postMessage.
+ *
+ * A popup, not a full-page redirect: the wizard's Draft lives only in
+ * component state with no persistence, and a full-page OAuth round trip
+ * would discard whatever the user had already filled in on the way there.
+ *
+ * The token this resolves with is handed straight to useRepoSearch and,
+ * eventually, useConnectRepo — never stored here, never read back out of
+ * this hook after the popup closes.
+ */
+export function useGitHubConnect() {
+  return useMutation({
+    mutationFn: () =>
+      new Promise<string>((resolve, reject) => {
+        const popup = window.open(
+          '/api/v1/auth/github/connect/authorize',
+          'axebom-github-connect',
+          'width=600,height=700',
+        );
+        if (!popup) {
+          reject(
+            new Error(
+              'The GitHub connect window was blocked. Allow popups for this site and try again.',
+            ),
+          );
+          return;
+        }
+
+        let settled = false;
+        function cleanup() {
+          window.removeEventListener('message', onMessage);
+          window.clearInterval(closedCheck);
+        }
+
+        function onMessage(event: MessageEvent) {
+          // Both directions of the origin check matter: GitHubConnectCallback
+          // posts only to this origin, and this listener accepts only from
+          // it — an embedded frame on an unrelated page must not be able to
+          // hand this tab a token it never asked for.
+          if (event.origin !== window.location.origin) return;
+          const data = event.data as { type?: unknown; token?: unknown } | null;
+          if (data?.type !== 'axebom-github-connect') return;
+
+          settled = true;
+          cleanup();
+          if (typeof data.token === 'string' && data.token) {
+            resolve(data.token);
+          } else {
+            reject(new Error('GitHub did not return a usable token.'));
+          }
+        }
+        window.addEventListener('message', onMessage);
+
+        // The popup can be closed by hand before it ever calls back — without
+        // this the mutation hangs forever with no way to retry.
+        const closedCheck = window.setInterval(() => {
+          if (popup.closed && !settled) {
+            cleanup();
+            reject(new Error('The GitHub connect window was closed before finishing.'));
+          }
+        }, 500);
+      }),
   });
 }
 
