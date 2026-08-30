@@ -1202,9 +1202,117 @@ fieldset legend {
   overflow: hidden;
 }
 .progress-fill {
+  /* Width itself is driven by motion's own spring (ScanProgress.tsx's
+   * OverallBar) — no CSS transition here, or the two would fight over the
+   * same property on every frame. */
+  position: relative;
   height: 100%;
   background: var(--sbom);
-  transition: width 0.3s ease;
+  overflow: hidden;
+}
+/* The shimmer plays only while the scan has not reached a terminal status
+ * (data-live) — a finished scan's bar sits still, which is itself part of
+ * the "this is done" signal. Capped by app.css's global
+ * prefers-reduced-motion rule like every other animation here. */
+.progress-fill[data-live]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgb(255 255 255 / 0.35) 50%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  animation: progress-shimmer 1.6s ease-in-out infinite;
+}
+@keyframes progress-shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+/* --- Activity feed --------------------------------------------------------
+ * The "what is it doing right now" ticker above the engine table — real
+ * scan.event.* messages (or, for a scan already finished by the time this
+ * page connects, real history derived from the same snapshot the table
+ * itself renders). See ScanProgress.tsx's ActivityFeed/deriveActivity. */
+.activity-feed {
+  margin: var(--space-4) 0;
+}
+.activity-feed-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: 0 0 var(--space-2);
+}
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.activity-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+}
+.activity-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--info);
+}
+.activity-item[data-phase='done'] .activity-dot {
+  background: var(--ok);
+}
+.activity-item[data-phase='failed'] .activity-dot {
+  background: var(--warn);
+}
+.activity-item[data-phase='running'] .activity-dot {
+  animation: activity-pulse 1.4s ease-in-out infinite;
+}
+@keyframes activity-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.3);
+  }
+}
+.activity-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.88rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.activity-text strong {
+  font-weight: 600;
+  margin-right: var(--space-2);
+}
+.activity-time {
+  flex: none;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* --- Dependencies -------------------------------------------------------- */

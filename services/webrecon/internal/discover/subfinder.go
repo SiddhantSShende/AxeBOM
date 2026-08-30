@@ -11,6 +11,7 @@ package discover
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/axebom/axebom/libs/go-shared/sandbox"
@@ -91,16 +92,38 @@ func Discover(ctx context.Context, runner sandbox.Runner, domain string, maxHost
 // format, which stays plain text unless `-oJ` is passed (deliberately not
 // passed here: one hostname per line is all this caller needs, and a smaller
 // output format is a smaller thing to parse defensively).
+//
+// ⚠ EVERY LINE IS VALIDATED, NOT TRUSTED. `-silent` does not suppress every
+// diagnostic: Policy()'s read-only rootfs means subfinder cannot write its
+// default config on first run, and the resulting error —
+// "open /.config/subfinder/config.yaml: no such file or directory" — was
+// observed live going to stdout rather than stderr, indistinguishable by
+// position from a real result. Before this guard it was silently accepted as
+// a "discovered host" and handed straight to fingerprintAll, which then
+// issued a real HTTPS request for it. Caught by the new per-host activity
+// events (ScanEventV1 messages) added this session making individual host
+// names visible for the first time — nothing before this surfaced them.
 func parseHosts(stdout, domain string) []string {
 	seen := map[string]bool{domain: true} // never re-discover the root itself
 	var out []string
 	for _, line := range strings.Split(stdout, "\n") {
 		host := strings.ToLower(strings.TrimSpace(line))
-		if host == "" || seen[host] {
+		if host == "" || seen[host] || !looksLikeHostname(host) {
 			continue
 		}
 		seen[host] = true
 		out = append(out, host)
 	}
 	return out
+}
+
+// hostnamePattern is deliberately permissive about what a real hostname CAN
+// be (labels of letters/digits/hyphens, dot-separated) and nothing about what
+// subfinder happened to output for this one domain — it exists to reject
+// text that could never be a hostname (whitespace, slashes, colons), not to
+// second-guess a real discovery result.
+var hostnamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$`)
+
+func looksLikeHostname(s string) bool {
+	return len(s) <= 253 && hostnamePattern.MatchString(s)
 }

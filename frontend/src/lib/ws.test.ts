@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  type ActivityItem,
   type ConnectionState,
   type ScanProgress,
   WS_BEARER_PREFIX,
@@ -47,6 +48,7 @@ interface Harness {
   sockets: FakeSocket[];
   states: ConnectionState[];
   frames: ScanProgress[];
+  activity: ActivityItem[];
   /** Runs the pending reconnect timer. */
   runTimer: () => void;
   dispose: () => void;
@@ -56,12 +58,14 @@ function harness(): Harness {
   const sockets: FakeSocket[] = [];
   const states: ConnectionState[] = [];
   const frames: ScanProgress[] = [];
+  const activity: ActivityItem[] = [];
   let pending: (() => void) | null = null;
 
   const dispose = connectProgress({
     url: 'wss://example/scan',
     handlers: {
       onProgress: (p) => frames.push(p),
+      onActivity: (a) => activity.push(a),
       onConnection: (s) => states.push(s),
     },
     factory: () => {
@@ -83,6 +87,7 @@ function harness(): Harness {
     sockets,
     states,
     frames,
+    activity,
     runTimer: () => {
       const fn = pending;
       pending = null;
@@ -92,15 +97,38 @@ function harness(): Harness {
   };
 }
 
+// The real wire shape — handler.go's wsMessage{type, snapshot: scanDTO} —
+// not a flattened guess. scanDTO nests engine_runs (engineRunDTO), which
+// names its engine field "engine", not "engine_id".
 const snapshot = JSON.stringify({
-  scan_id: 's1',
-  status: 'running',
-  percent: 40,
-  engines: [
-    { engine_id: 'syft', status: 'succeeded', percent: 100, ecosystems: ['npm'] },
-    { engine_id: 'grype', status: 'running', percent: 20, ecosystems: [] },
-  ],
+  type: 'snapshot',
+  snapshot: {
+    id: 's1',
+    status: 'running',
+    progress_pct: 40,
+    engine_runs: [
+      { engine: 'syft', status: 'succeeded', ecosystems_covered: ['npm'] },
+      { engine: 'grype', status: 'running', ecosystems_covered: [] },
+    ],
+  },
 });
+
+function eventFrame(over: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    type: 'event',
+    event: {
+      scan_id: 's1',
+      job_id: 'j1',
+      engine: 'grype',
+      seq: 1,
+      ts: '2026-08-30T19:00:00Z',
+      phase: 'running',
+      pct: 0,
+      message: 'running grype',
+      ...over,
+    },
+  });
+}
 
 describe('the snapshot is what makes reconnection correct', () => {
   // ⚠ THE TEST THE DESIGN EXISTS FOR. A client that accumulated state from
@@ -120,14 +148,17 @@ describe('the snapshot is what makes reconnection correct', () => {
     h.sockets[1]!.open();
     h.sockets[1]!.send(
       JSON.stringify({
-        scan_id: 's1',
-        status: 'completed_with_errors',
-        percent: 100,
-        engines: [
-          { engine_id: 'syft', status: 'succeeded', percent: 100, ecosystems: ['npm'] },
-          { engine_id: 'grype', status: 'partial', percent: 100, ecosystems: ['npm'] },
-          { engine_id: 'trivy-fs', status: 'unavailable', percent: 0, ecosystems: [] },
-        ],
+        type: 'snapshot',
+        snapshot: {
+          id: 's1',
+          status: 'completed_with_errors',
+          progress_pct: 100,
+          engine_runs: [
+            { engine: 'syft', status: 'succeeded', ecosystems_covered: ['npm'] },
+            { engine: 'grype', status: 'partial', ecosystems_covered: ['npm'] },
+            { engine: 'trivy-fs', status: 'unavailable', ecosystems_covered: [] },
+          ],
+        },
       }),
     );
 
@@ -226,19 +257,39 @@ describe('backoff', () => {
 });
 
 describe('frame parsing', () => {
-  it('reads a snapshot and an event frame identically', () => {
-    // The snapshot is not a special case handled elsewhere — that is what stops
-    // the reconnect path diverging from the steady-state one.
-    const parsed = parseFrame(snapshot)!;
-    expect(parsed.scanId).toBe('s1');
-    expect(parsed.engines[0]!.engineId).toBe('syft');
+  // ⚠ THE REGRESSION THIS GUARDS. parseFrame previously read flat top-level
+  // fields (scan_id, percent, engines[].engine_id) that handler.go's
+  // wsMessage has never actually sent — the real shape nests everything
+  // under "snapshot" (a scanDTO, keyed "id"/"progress_pct"/"engine_runs") or
+  // "event" (an events.ScanEventV1). Every real frame the server ever sent
+  // was silently dropped by the old parser; onProgress never fired once in
+  // production. This fixture matches the real Go structs, not a convenient
+  // guess.
+  it('reads a real snapshot frame', () => {
+    const parsed = parseFrame(snapshot);
+    expect(parsed?.kind).toBe('snapshot');
+    if (parsed?.kind !== 'snapshot') throw new Error('expected a snapshot');
+    expect(parsed.progress.scanId).toBe('s1');
+    expect(parsed.progress.engines[0]!.engineId).toBe('syft');
   });
 
-  it('drops an unparseable frame instead of tearing down the socket', () => {
+  it('reads a real event frame', () => {
+    const parsed = parseFrame(eventFrame({ message: 'running grype', pct: 42 }));
+    expect(parsed?.kind).toBe('event');
+    if (parsed?.kind !== 'event') throw new Error('expected an event');
+    expect(parsed.activity.engine).toBe('grype');
+    expect(parsed.activity.phase).toBe('running');
+    expect(parsed.activity.message).toBe('running grype');
+    expect(parsed.pct).toBe(42);
+  });
+
+  it('drops an unparseable or unrecognized frame instead of tearing down the socket', () => {
     expect(parseFrame('not json')).toBeNull();
     expect(parseFrame('{}')).toBeNull();
     expect(parseFrame('[]')).toBeNull();
     expect(parseFrame(JSON.stringify({ status: 'running' }))).toBeNull();
+    expect(parseFrame(JSON.stringify({ type: 'snapshot' }))).toBeNull();
+    expect(parseFrame(JSON.stringify({ type: 'unknown', snapshot: {} }))).toBeNull();
   });
 
   it('survives a malformed frame without losing the socket', () => {
@@ -255,23 +306,68 @@ describe('frame parsing', () => {
   });
 
   it('clamps a nonsense percentage', () => {
-    const parsed = parseFrame(JSON.stringify({ scan_id: 's1', percent: 140, engines: [] }))!;
+    const parsed = parseFrame(
+      JSON.stringify({ type: 'snapshot', snapshot: { id: 's1', progress_pct: 140 } }),
+    );
+    if (parsed?.kind !== 'snapshot') throw new Error('expected a snapshot');
     // A 140% bar renders past its own track, which reads as a broken page
     // rather than a broken number.
-    expect(parsed.percent).toBe(100);
+    expect(parsed.progress.percent).toBe(100);
 
-    const nan = parseFrame(JSON.stringify({ scan_id: 's1', percent: 'x', engines: [] }))!;
-    expect(nan.percent).toBe(0);
+    const nan = parseFrame(
+      JSON.stringify({ type: 'snapshot', snapshot: { id: 's1', progress_pct: 'x' } }),
+    );
+    if (nan?.kind !== 'snapshot') throw new Error('expected a snapshot');
+    expect(nan.progress.percent).toBe(0);
   });
 
-  it('drops an engine entry with no id rather than rendering a blank row', () => {
+  it('drops an engine_runs entry with no engine name rather than rendering a blank row', () => {
     const parsed = parseFrame(
       JSON.stringify({
-        scan_id: 's1',
-        engines: [{ status: 'running' }, { engine_id: 'syft', status: 'running' }],
+        type: 'snapshot',
+        snapshot: {
+          id: 's1',
+          engine_runs: [{ status: 'running' }, { engine: 'syft', status: 'running' }],
+        },
       }),
-    )!;
-    expect(parsed.engines).toHaveLength(1);
+    );
+    if (parsed?.kind !== 'snapshot') throw new Error('expected a snapshot');
+    expect(parsed.progress.engines).toHaveLength(1);
+  });
+});
+
+describe('live events', () => {
+  it('delivers each event to onActivity, not onProgress', () => {
+    const h = harness();
+    h.sockets[0]!.open();
+    h.sockets[0]!.send(snapshot);
+    h.sockets[0]!.send(eventFrame());
+
+    expect(h.activity).toHaveLength(1);
+    expect(h.activity[0]!.engine).toBe('grype');
+    // The snapshot's own progress frame is the only one so far — an event's
+    // Message is advisory text, not a structured state replace.
+    expect(h.frames).toHaveLength(1);
+    h.dispose();
+  });
+
+  it("nudges the bar from a real event pct, but never regresses it to a webrecon sub-event's unset zero", () => {
+    const h = harness();
+    h.sockets[0]!.open();
+    h.sockets[0]!.send(snapshot);
+    expect(h.frames.at(-1)?.percent).toBe(40);
+
+    h.sockets[0]!.send(eventFrame({ pct: 75 }));
+    expect(h.frames.at(-1)?.percent).toBe(75);
+
+    // services/webrecon's per-host events leave pct at 0 deliberately
+    // (events.PublishScanEvent's own doc comment) — that must not read as
+    // "the scan just regressed to 0%".
+    h.sockets[0]!.send(eventFrame({ pct: 0, message: 'fingerprinting host 2 of 3' }));
+    expect(h.frames.at(-1)?.percent).toBe(75);
+    expect(h.activity.at(-1)?.message).toBe('fingerprinting host 2 of 3');
+
+    h.dispose();
   });
 });
 
@@ -282,7 +378,7 @@ describe('the platform default', () => {
     const spy = vi.fn();
     const dispose = connectProgress({
       url: 'wss://example/scan',
-      handlers: { onProgress: () => {}, onConnection: spy },
+      handlers: { onProgress: () => {}, onActivity: () => {}, onConnection: spy },
       factory: () => new FakeSocket(),
       setTimeoutFn: () => 1,
       clearTimeoutFn: () => {},
@@ -320,7 +416,7 @@ describe('the handshake credential', () => {
 
     const dispose = connectProgress({
       url: 'wss://example/scan',
-      handlers: { onProgress: () => {}, onConnection: () => {} },
+      handlers: { onProgress: () => {}, onActivity: () => {}, onConnection: () => {} },
       protocols: () => bearerProtocols(token),
       factory: (_url, p) => {
         offered.push(p);

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/axebom/axebom/libs/go-shared/bus"
+	"github.com/axebom/axebom/libs/go-shared/events"
 	"github.com/axebom/axebom/libs/go-shared/platform/blob"
 	"github.com/axebom/axebom/libs/go-shared/platform/config"
 	"github.com/axebom/axebom/libs/go-shared/projectsource"
@@ -190,7 +191,8 @@ func TestFingerprintAllDetectsALibraryOnTheRootPage(t *testing.T) {
 	w := testWorker(t, refusingRunner{t: t})
 	src := projectsource.Source{RootURL: srv.URL, DiscoveryEnabled: false}
 
-	doc := w.fingerprintAll(src, []string{fingerprint.HostOf(srv.URL)})
+	job := events.ScanJobV1{ScanID: "scan-1", TenantID: "tenant-1", JobID: "job-1"}
+	doc := w.fingerprintAll(t.Context(), job, src, []string{fingerprint.HostOf(srv.URL)})
 	if len(doc.Hosts) != 1 {
 		t.Fatalf("hosts = %d, want 1", len(doc.Hosts))
 	}
@@ -220,7 +222,8 @@ func TestFingerprintAllRecordsAnUnreachableHostWithoutFailingTheOthers(t *testin
 	// perRequestTimeout and make this test slow for no extra coverage
 	// (that path is exercised directly, with a controlled client timeout, by
 	// fingerprint.TestFetchAndFingerprintReportsUnreachableStatus).
-	doc := w.fingerprintAll(src, []string{fingerprint.HostOf(srv.URL), "127.0.0.1:1"})
+	job := events.ScanJobV1{ScanID: "scan-1", TenantID: "tenant-1", JobID: "job-1"}
+	doc := w.fingerprintAll(t.Context(), job, src, []string{fingerprint.HostOf(srv.URL), "127.0.0.1:1"})
 	if len(doc.Hosts) != 2 {
 		t.Fatalf("hosts = %d, want 2", len(doc.Hosts))
 	}

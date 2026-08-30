@@ -526,6 +526,21 @@ func (o *Orchestrator) FanOut(ctx context.Context, tenantID, scanID string) (int
 			continue
 		}
 		published++
+
+		// ⚠ THE REAL "WHAT IS IT DOING NOW" SIGNAL — PublishEvent existed,
+		// fully built (seq/ts/sanitize/validate), since Phase 6, with zero
+		// callers anywhere in the codebase: streamEvents subscribed a real
+		// browser to scan.event.<id> and nothing had ever published to it.
+		// This is the actual moment an engine job leaves this process for a
+		// worker, which is the only "started" signal the orchestrator
+		// genuinely has — it gets no separate ack when a worker picks a job
+		// up, only a later result.
+		o.PublishEvent(ctx, events.ScanEventV1{
+			ScanID: scanID, TenantID: tenantID, JobID: run.JobID,
+			Engine: run.EngineID, Phase: events.PhaseRunning,
+			Pct:     Progress(runs),
+			Message: fmt.Sprintf("running %s", run.EngineID),
+		})
 	}
 
 	return published, nil
@@ -681,6 +696,24 @@ func (o *Orchestrator) HandleResult(ctx context.Context, result events.ScanResul
 		return err
 	}
 
+	// This engine's own real, terminal outcome — the "then next what it is
+	// scanning" signal's other half, paired with FanOut's "running" event.
+	// Same reasoning as maybeTriggerNormalize below: reads runs fresh so the
+	// percentage reflects this result's row, best-effort so a publish
+	// failure never turns a correctly-recorded result into a retried one.
+	if _, runs, err := o.store.GetScan(ctx, result.TenantID, result.ScanID); err == nil {
+		phase := events.PhaseDone
+		if result.Status == events.StatusFailed || result.Status == events.StatusTimeout {
+			phase = events.PhaseFailed
+		}
+		o.PublishEvent(ctx, events.ScanEventV1{
+			ScanID: result.ScanID, TenantID: result.TenantID, JobID: result.JobID,
+			Engine: result.Engine, Phase: phase,
+			Pct:     Progress(runs),
+			Message: fmt.Sprintf("%s %s", result.Engine, result.Status),
+		})
+	}
+
 	// ⚠ AFTER RecomputeScanStatus, same reasoning as releaseDependents runs
 	// BEFORE it: this reads the scan's engine runs fresh, so it must see
 	// this result's row (already written above) and any dependent job
@@ -782,31 +815,14 @@ func (o *Orchestrator) publishScanCompleted(ctx context.Context, tenantID, scanI
 // Errors are logged, not returned: an event is advisory, and failing a scan
 // because a progress message could not be published would invert the priority.
 func (o *Orchestrator) PublishEvent(ctx context.Context, e events.ScanEventV1) {
-	e.SchemaVersion = events.SchemaScanEventV1
-	if e.EventID == "" {
-		e.EventID = uuid.NewString()
-	}
+	// TS set here, before the shared helper, so this respects o.now — the
+	// injectable clock every test in this package already relies on. The
+	// helper only fills a zero TS with a real time.Now(), so pre-setting it
+	// wins.
 	if e.TS.IsZero() {
 		e.TS = o.now().UTC()
 	}
-	if e.Seq == 0 {
-		e.Seq = o.seq.Add(1)
-	}
-	e.Sanitize()
-
-	if err := e.Validate(); err != nil {
-		o.log.Warn("refusing to publish an invalid event", "cause", err.Error())
-		return
-	}
-
-	payload, err := json.Marshal(e)
-	if err != nil {
-		return
-	}
-	if err := o.bus.PublishAdvisory(ctx, e.Subject(), payload); err != nil {
-		o.log.Debug("advisory event not published; the database remains authoritative",
-			"scan_id", e.ScanID, "cause", err.Error())
-	}
+	events.PublishScanEvent(ctx, o.bus, &o.seq, o.log, e)
 }
 
 // Progress computes a scan's completion percentage.

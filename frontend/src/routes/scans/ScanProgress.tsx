@@ -13,6 +13,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useParams } from 'react-router';
+import { AnimatePresence, m } from 'motion/react';
 import { StatusPill } from '../../components/Chips';
 import { SkeletonRows } from '../../components/States';
 import { getAccessToken } from '../../lib/api';
@@ -20,9 +21,14 @@ import { isTerminal } from '../../lib/scans';
 import {
   bearerProtocols,
   connectProgress,
+  type ActivityItem,
   type ConnectionState,
+  type EngineProgress,
   type ScanProgress as Progress,
 } from '../../lib/ws';
+
+/** The rolling window's own width — see ActivityFeed's doc comment. */
+const ACTIVITY_LIMIT = 3;
 
 export function ScanProgressRoute() {
   const { id = '' } = useParams();
@@ -34,7 +40,9 @@ export function ScanProgressRoute() {
   // specific queueing attempt, not a property of the scan itself.
   const reportWarning = (useLocation().state as { reportWarning?: string } | null)?.reportWarning;
   const [progress, setProgress] = useState<Progress | null>(null);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [connection, setConnection] = useState<ConnectionState>({ kind: 'connecting' });
+  const seeded = useRef(false);
 
   useEffect(() => {
     if (!id) return;
@@ -58,7 +66,22 @@ export function ScanProgressRoute() {
       handlers: {
         onProgress: (p) => {
           setProgress(p);
+          // ⚠ SEEDED ONCE, FROM REAL HISTORY, NOT SYNTHESIZED. A scan that
+          // is already terminal by the time this page connects (the common
+          // case for a fast webrecon scan — see ActivityFeed's own doc
+          // comment) will never produce a single live event: the server
+          // sends the snapshot and closes immediately. Without this, the
+          // feed would sit permanently empty for exactly the scans a user
+          // is most likely to be looking at. Every entry here still traces
+          // to a real, already-recorded engine_runs row — never invented.
+          if (!seeded.current) {
+            seeded.current = true;
+            setActivity((prev) => (prev.length > 0 ? prev : deriveActivity(p.engines)));
+          }
           if (isTerminal(p.status)) dispose?.();
+        },
+        onActivity: (a) => {
+          setActivity((prev) => [a, ...prev].slice(0, ACTIVITY_LIMIT));
         },
         onConnection: setConnection,
       },
@@ -88,6 +111,7 @@ export function ScanProgressRoute() {
       ) : (
         <>
           <OverallBar progress={progress} />
+          <ActivityFeed items={activity} />
           <EngineTable engines={progress.engines} />
           <Announcer progress={progress} />
         </>
@@ -127,12 +151,33 @@ function ConnectionNotice({ state }: { state: ConnectionState }) {
   }
 }
 
+/**
+ * OverallBar is animated, not just CSS-transitioned on width — `m.div`
+ * spring-eases toward each real percentage the server reports (never a
+ * client-side guess: see ws.ts's own note on why an event's pct only ever
+ * nudges this, and only when it is actually informative), and a subtle
+ * shimmer plays across the fill while the scan has not yet reached a
+ * terminal status — purely decorative, gated on `data-live` so a finished
+ * scan's bar sits still. Motion respects prefers-reduced-motion globally
+ * (App.tsx's `<MotionConfig reducedMotion="user">`; the CSS shimmer keyframe
+ * is capped the same way every other animation in this app is, in app.css's
+ * global `@media (prefers-reduced-motion: reduce)` rule).
+ */
 function OverallBar({ progress }: { progress: Progress }) {
+  const live = !isTerminal(progress.status);
   return (
     <section className="progress-overall">
       <div className="progress-head">
         <StatusPill status={progress.status} />
-        <span className="progress-percent">{Math.round(progress.percent)}%</span>
+        <m.span
+          className="progress-percent"
+          key={Math.round(progress.percent)}
+          initial={{ opacity: 0.4 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.2 }}
+        >
+          {Math.round(progress.percent)}%
+        </m.span>
       </div>
       <div
         className="progress-track"
@@ -142,7 +187,13 @@ function OverallBar({ progress }: { progress: Progress }) {
         aria-valuemax={100}
         aria-label="Overall scan progress"
       >
-        <div className="progress-fill" style={{ width: `${progress.percent}%` }} />
+        <m.div
+          className="progress-fill"
+          data-live={live ? 'true' : undefined}
+          initial={false}
+          animate={{ width: `${progress.percent}%` }}
+          transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+        />
       </div>
       <p className="progress-note">
         Weighted by engine, not a simple average — a fast lockfile parser and a slow vulnerability
@@ -150,6 +201,96 @@ function OverallBar({ progress }: { progress: Progress }) {
       </p>
     </section>
   );
+}
+
+/**
+ * ActivityFeed shows the most recent real activity — what an engine just
+ * started, or just finished, in the engine's or the server's own words
+ * (events.ScanEventV1.Message) — and nothing else.
+ *
+ * ⚠ ONLY THE LAST THREE. A scrolling transcript of every engine transition
+ * competes with the structured table below it, which is the actual source of
+ * truth for "what happened." This is a glance, not a log — capped so the
+ * newest, most relevant items are what a user's eye lands on, with older ones
+ * animating out rather than piling up.
+ */
+function ActivityFeed({ items }: { items: ActivityItem[] }) {
+  if (items.length === 0) return null;
+
+  return (
+    <section className="activity-feed" aria-label="Recent scan activity">
+      <h2 className="activity-feed-title">Right now</h2>
+      <ul className="activity-list">
+        <AnimatePresence initial={false}>
+          {items.map((item) => (
+            <m.li
+              key={item.id}
+              className="activity-item"
+              data-phase={item.phase}
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <span className="activity-dot" aria-hidden="true" />
+              <span className="activity-text">
+                {item.engine && <strong>{item.engine}</strong>}
+                {item.message ?? item.phase}
+              </span>
+              <span className="activity-time">{relativeTime(item.ts)}</span>
+            </m.li>
+          ))}
+        </AnimatePresence>
+      </ul>
+    </section>
+  );
+}
+
+/**
+ * deriveActivity turns a snapshot's own engine_runs into up to
+ * ACTIVITY_LIMIT activity entries — see the seeding comment in
+ * ScanProgressRoute for why this exists. Every field traces to a real,
+ * already-recorded value (started_at/finished_at/status/message); nothing
+ * here is invented, only re-presented in the feed's shape.
+ */
+function deriveActivity(engines: EngineProgress[]): ActivityItem[] {
+  const items: ActivityItem[] = [];
+  for (const e of engines) {
+    if (e.startedAt) {
+      items.push({
+        id: `${e.engineId}-started`,
+        engine: e.engineId,
+        phase: 'running',
+        message: `running ${e.engineId}`,
+        ts: e.startedAt,
+      });
+    }
+    if (e.finishedAt) {
+      items.push({
+        id: `${e.engineId}-finished`,
+        engine: e.engineId,
+        phase: e.status === 'failed' || e.status === 'timeout' ? 'failed' : 'done',
+        message: e.message ?? `${e.engineId} ${e.status}`,
+        ts: e.finishedAt,
+      });
+    }
+  }
+  items.sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts));
+  return items.slice(0, ACTIVITY_LIMIT);
+}
+
+/** relativeTime renders a coarse "how long ago", not a live-ticking clock —
+ *  a re-render every second for a page whose real updates arrive over a
+ *  WebSocket would be motion with no information in it. */
+function relativeTime(iso: string): string {
+  const ms = Date.now() - Date.parse(iso);
+  if (!Number.isFinite(ms) || ms < 0) return 'just now';
+  const s = Math.round(ms / 1000);
+  if (s < 5) return 'just now';
+  if (s < 60) return `${s}s ago`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m ago`;
+  return `${Math.round(m / 60)}h ago`;
 }
 
 function EngineTable({ engines }: { engines: Progress['engines'] }) {

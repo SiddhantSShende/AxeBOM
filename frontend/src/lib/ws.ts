@@ -13,8 +13,16 @@
  * shows a frozen percentage or, worse, a confident wrong one built from a
  * partial event stream.
  *
- * So: NOTHING here derives progress incrementally. Every frame replaces state
- * for the engine it names, and a snapshot replaces all of it.
+ * So: the structured state (percent, per-engine status/ecosystems/duration) is
+ * ALWAYS a full replace from a snapshot, never accumulated from events — a
+ * snapshot replaces all of it. Events are advisory in the other sense too:
+ * they are human-readable ("what is running right now"), sourced from
+ * services/scan-orchestrator's Orchestrator.PublishEvent and
+ * services/webrecon's own per-host publishes
+ * (libs/go-shared/events.PublishScanEvent, the shared construction path both
+ * use) — and are surfaced separately, as an activity feed, not folded into the
+ * structured engine table events.ScanEventV1.Message was never meant to be
+ * machine-parsed into.
  *
  * docs/07-FRONTEND-SPEC.md §5, docs/02-CONTRACTS.md §10.
  */
@@ -26,6 +34,10 @@ export interface EngineProgress {
   durationMs: number | null;
   ecosystems: string[];
   message: string | null;
+  /** ISO timestamps, when the server has them — used to seed the activity
+   *  feed with real history on connect, not to drive anything derived. */
+  startedAt: string | null;
+  finishedAt: string | null;
 }
 
 export interface ScanProgress {
@@ -34,6 +46,22 @@ export interface ScanProgress {
   /** Weighted across engines by the server, not averaged here. */
   percent: number;
   engines: EngineProgress[];
+}
+
+/**
+ * ActivityItem is one real, human-readable "what is happening" message —
+ * either a live scan.event.* frame, or (see ScanProgress.tsx) derived from a
+ * snapshot's own engine_runs history. Never fabricated: every field traces to
+ * a real value the server actually sent.
+ */
+export interface ActivityItem {
+  /** Stable across renders for AnimatePresence's exit animation. */
+  id: string;
+  engine: string | null;
+  phase: string;
+  message: string | null;
+  /** ISO timestamp. */
+  ts: string;
 }
 
 export type ConnectionState =
@@ -47,6 +75,10 @@ export type ConnectionState =
 
 export interface ProgressHandlers {
   onProgress: (progress: ScanProgress) => void;
+  /** Fires once per live scan.event.* frame. Never called for a snapshot —
+   *  seeding a feed from snapshot history, if wanted, is the caller's own
+   *  derivation (ScanProgress.tsx), not this module's. */
+  onActivity: (activity: ActivityItem) => void;
   onConnection: (state: ConnectionState) => void;
 }
 
@@ -149,6 +181,10 @@ export function connectProgress(opts: ConnectOptions): () => void {
   let attempt = 0;
   let timer: number | null = null;
   let disposed = false;
+  // The last known structured state, so a live event's real pct (a genuine
+  // server-computed number, unlike its Message) can nudge the bar between
+  // snapshots without ever inventing the rest of the shape.
+  let current: ScanProgress | null = null;
 
   const open = () => {
     if (disposed) return;
@@ -177,8 +213,25 @@ export function connectProgress(opts: ConnectOptions): () => void {
 
     ws.onmessage = (ev) => {
       if (disposed) return;
-      const progress = parseFrame(ev.data);
-      if (progress) handlers.onProgress(progress);
+      const frame = parseFrame(ev.data);
+      if (!frame) return;
+
+      if (frame.kind === 'snapshot') {
+        current = frame.progress;
+        handlers.onProgress(current);
+        return;
+      }
+
+      // event: only a real, structured field (pct) ever touches `current`.
+      // A 0 is indistinguishable on the wire from "not computed for this
+      // event" (services/webrecon's own per-host events leave it at zero
+      // deliberately), so it nudges the bar only when it is actually
+      // informative.
+      if (current && frame.pct > 0 && frame.pct !== current.percent) {
+        current = { ...current, percent: frame.pct };
+        handlers.onProgress(current);
+      }
+      handlers.onActivity(frame.activity);
     };
 
     ws.onerror = () => {
@@ -223,19 +276,24 @@ export function connectProgress(opts: ConnectOptions): () => void {
   };
 }
 
+type ParsedFrame =
+  | { kind: 'snapshot'; progress: ScanProgress }
+  | { kind: 'event'; activity: ActivityItem; pct: number };
+
 /**
- * parseFrame reads a snapshot or an event frame.
+ * parseFrame reads one wsMessage — {"type":"snapshot","snapshot":{...}} or
+ * {"type":"event","event":{...}} — matching handler.go's wsMessage exactly
+ * (services/scan-orchestrator/internal/handler/handler.go). The two carry
+ * genuinely different shapes (a full scanDTO vs. one events.ScanEventV1), so
+ * they are read by two different functions rather than one that pretends
+ * they are the same — see readSnapshot/readEvent.
  *
- * ⚠ BOTH SHAPES PRODUCE A COMPLETE ScanProgress. The snapshot is not a special
- * case handled elsewhere — it is the same type, which is what stops a
- * reconnect path from diverging from the steady-state one and only failing in
- * production.
- *
- * An unparseable frame is DROPPED, not fatal. The next snapshot corrects
- * everything, and tearing down a working socket over one malformed message
- * would turn a server-side hiccup into a visibly broken page.
+ * An unparseable or unrecognized frame is DROPPED, not fatal. The next
+ * snapshot corrects everything, and tearing down a working socket over one
+ * malformed message would turn a server-side hiccup into a visibly broken
+ * page.
  */
-export function parseFrame(raw: string): ScanProgress | null {
+export function parseFrame(raw: string): ParsedFrame | null {
   let frame: unknown;
   try {
     frame = JSON.parse(raw);
@@ -243,35 +301,98 @@ export function parseFrame(raw: string): ScanProgress | null {
     return null;
   }
   if (typeof frame !== 'object' || frame === null) return null;
-
   const f = frame as Record<string, unknown>;
-  const scanId = typeof f.scan_id === 'string' ? f.scan_id : null;
+
+  if (f.type === 'snapshot') {
+    const progress = isRecord(f.snapshot) ? readSnapshot(f.snapshot) : null;
+    return progress ? { kind: 'snapshot', progress } : null;
+  }
+  if (f.type === 'event') {
+    const parsed = isRecord(f.event) ? readEvent(f.event) : null;
+    return parsed;
+  }
+  return null;
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null;
+}
+
+/** readSnapshot maps handler.go's scanDTO. */
+function readSnapshot(s: Record<string, unknown>): ScanProgress | null {
+  const scanId = typeof s.id === 'string' ? s.id : null;
   if (!scanId) return null;
 
-  const engines = Array.isArray(f.engines)
-    ? (f.engines as Record<string, unknown>[])
-        .map(readEngine)
-        .filter((e): e is EngineProgress => e !== null)
-    : [];
+  const runs = Array.isArray(s.engine_runs) ? (s.engine_runs as Record<string, unknown>[]) : [];
+  const engines = runs.map(readEngineRun).filter((e): e is EngineProgress => e !== null);
 
   return {
     scanId,
-    status: typeof f.status === 'string' ? f.status : 'running',
-    percent: clampPercent(f.percent),
+    status: typeof s.status === 'string' ? s.status : 'running',
+    percent: clampPercent(s.progress_pct),
     engines,
   };
 }
 
-function readEngine(raw: Record<string, unknown>): EngineProgress | null {
-  const engineId = typeof raw.engine_id === 'string' ? raw.engine_id : null;
+/** readEngineRun maps handler.go's engineRunDTO. */
+function readEngineRun(raw: Record<string, unknown>): EngineProgress | null {
+  const engineId = typeof raw.engine === 'string' ? raw.engine : null;
   if (!engineId) return null;
+
+  const startedAt = typeof raw.started_at === 'string' ? raw.started_at : null;
+  const finishedAt = typeof raw.finished_at === 'string' ? raw.finished_at : null;
+
+  const diagnostics = Array.isArray(raw.diagnostics)
+    ? (raw.diagnostics as Record<string, unknown>[])
+    : [];
+  const message =
+    (typeof raw.error_message === 'string' && raw.error_message) ||
+    (typeof diagnostics[0]?.message === 'string' ? diagnostics[0].message : null) ||
+    null;
+
   return {
     engineId,
     status: typeof raw.status === 'string' ? raw.status : 'queued',
-    percent: clampPercent(raw.percent),
-    durationMs: typeof raw.duration_ms === 'number' ? raw.duration_ms : null,
-    ecosystems: Array.isArray(raw.ecosystems) ? (raw.ecosystems as string[]) : [],
-    message: typeof raw.message === 'string' ? raw.message : null,
+    // engineRunDTO carries no per-engine percentage — 100 once terminal, 0
+    // while still running is the honest two-state answer this table already
+    // conveys through `status` itself; see EngineTable, which reads status,
+    // not this field, for the actual per-row picture.
+    percent: raw.status && raw.status !== 'queued' && raw.status !== 'running' ? 100 : 0,
+    durationMs: durationMs(startedAt, finishedAt),
+    ecosystems: Array.isArray(raw.ecosystems_covered) ? (raw.ecosystems_covered as string[]) : [],
+    message,
+    startedAt,
+    finishedAt,
+  };
+}
+
+function durationMs(startedAt: string | null, finishedAt: string | null): number | null {
+  if (!startedAt || !finishedAt) return null;
+  const start = Date.parse(startedAt);
+  const end = Date.parse(finishedAt);
+  if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  return Math.max(0, end - start);
+}
+
+/** readEvent maps events.ScanEventV1 (libs/go-shared/events/events.go). */
+function readEvent(raw: Record<string, unknown>): ParsedFrame | null {
+  const phase = typeof raw.phase === 'string' ? raw.phase : null;
+  if (!phase) return null;
+
+  const id =
+    (typeof raw.event_id === 'string' && raw.event_id) ||
+    `${String(raw.ts)}-${String(raw.engine)}-${String(raw.seq)}`;
+
+  return {
+    kind: 'event',
+    pct: clampPercent(raw.pct),
+    activity: {
+      id,
+      engine: typeof raw.engine === 'string' ? raw.engine : null,
+      phase,
+      message: typeof raw.message === 'string' ? raw.message : null,
+      ts: typeof raw.ts === 'string' ? raw.ts : new Date().toISOString(),
+    },
   };
 }
 

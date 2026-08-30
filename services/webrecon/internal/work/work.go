@@ -28,6 +28,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
@@ -51,6 +52,11 @@ type Resolver interface {
 
 // Worker consumes webrecon jobs.
 type Worker struct {
+	// seq numbers this worker's own scan.event.* frames. Monotonic across
+	// every job this process handles, same shape as
+	// scan-orchestrator's Orchestrator.seq — see events.PublishScanEvent's
+	// own doc comment for why that is sufficient.
+	seq      atomic.Int64
 	bus      *bus.Bus
 	runner   sandbox.Runner
 	store    *blob.Store
@@ -188,8 +194,10 @@ func (w *Worker) handle(ctx context.Context, data []byte) error {
 		log.Warn("could not resolve hosts to fingerprint; will retry", "cause", err.Error())
 		return fmt.Errorf("%w: resolving hosts: %w", bus.ErrRetry, err)
 	}
+	w.publishEvent(ctx, job, events.PhaseRunning,
+		fmt.Sprintf("discovered %d host(s) to fingerprint", len(hosts)))
 
-	doc := w.fingerprintAll(src, hosts)
+	doc := w.fingerprintAll(ctx, job, src, hosts)
 
 	payload, err := json.Marshal(doc)
 	if err != nil {
@@ -253,23 +261,46 @@ func (w *Worker) resolveHosts(ctx context.Context, src projectsource.Source, log
 // error: a per-host failure (unreachable, HTTP error) is recorded in that
 // host's own entry, exactly the "declared, not omitted" doctrine
 // ecosystems_detected already applies to engine coverage.
-func (w *Worker) fingerprintAll(src projectsource.Source, hosts []string) webreconDoc {
+//
+// ⚠ ONE EVENT PER HOST, LIVE, AS IT HAPPENS — the actual "what is it
+// reaching right now" signal a connected browser sees, not derived or
+// guessed at afterward. hosts is typically 1 (discovery off or failed) up
+// to max_hosts (25 by default), so for a project with real subdomains this
+// is the one place in the whole product where a scan's progress view has
+// more than two states (dispatched, done) to show while it runs.
+func (w *Worker) fingerprintAll(
+	ctx context.Context, job events.ScanJobV1, src projectsource.Source, hosts []string,
+) webreconDoc {
 	doc := webreconDoc{
 		SchemaVersion:    "axebom-webrecon-json-1",
 		RootURL:          src.RootURL,
 		DiscoveryEnabled: src.DiscoveryEnabled,
 	}
 
-	for _, host := range hosts {
+	for i, host := range hosts {
 		pageURL := src.RootURL
 		if host != fingerprint.HostOf(src.RootURL) {
 			pageURL = "https://" + host + "/"
 		}
 
+		w.publishEvent(ctx, job, events.PhaseRunning,
+			fmt.Sprintf("fingerprinting %s (%d of %d)", host, i+1, len(hosts)))
+
 		result := fingerprint.FetchAndFingerprint(w.httpClient, w.matcher, pageURL)
 		doc.Hosts = append(doc.Hosts, toHostDoc(result))
 	}
 	return doc
+}
+
+// publishEvent emits an advisory scan.event.* frame. Best-effort, like every
+// other advisory publish in this product (events.PublishScanEvent's own doc
+// comment) — a message the browser missed is never a reason to fail or slow
+// the actual scan.
+func (w *Worker) publishEvent(ctx context.Context, job events.ScanJobV1, phase events.Phase, message string) {
+	events.PublishScanEvent(ctx, w.bus, &w.seq, w.log, events.ScanEventV1{
+		ScanID: job.ScanID, TenantID: job.TenantID, JobID: job.JobID,
+		Engine: "webrecon-fingerprint", Phase: phase, Message: message,
+	})
 }
 
 func (w *Worker) publish(ctx context.Context, result events.ScanResultV1) error {
