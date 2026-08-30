@@ -1315,6 +1315,53 @@ fieldset legend {
   font-variant-numeric: tabular-nums;
 }
 
+/* --- Reports (on the scan progress page) -----------------------------------
+ * Same card shape as .activity-item, deliberately — this is the other half
+ * of "what this scan produced", directly below "what it is doing". */
+.reports-section {
+  margin: var(--space-4) 0;
+}
+.report-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.report-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+}
+.report-meta {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.report-action {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.report-failed {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.82rem;
+}
+.report-detail-link {
+  flex: none;
+  font-size: 0.82rem;
+}
+
 /* --- Dependencies -------------------------------------------------------- */
 .filters {
   display: flex;

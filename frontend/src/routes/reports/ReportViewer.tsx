@@ -19,7 +19,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { useReport, type Report } from '../../lib/reports';
+import { levelLabel, useReport, type Report } from '../../lib/reports';
 import { BomTypeChip, StatusPill, Value } from '../../components/Chips';
 import { CommentRail } from '../../components/CommentRail';
 import { CopyableCode, ErrorState, SkeletonRows } from '../../components/States';
@@ -376,8 +376,4 @@ function DownloadMenu({ report }: { report: Report }) {
       )}
     </div>
   );
-}
-
-function levelLabel(level: string): string {
-  return level === 'top_level' ? 'Top-Level' : level === 'complete' ? 'Complete' : level;
 }

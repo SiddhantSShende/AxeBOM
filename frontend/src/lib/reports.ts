@@ -99,6 +99,19 @@ export function useReports(scanId?: string) {
         truncated: data.reports.length >= PAGE,
       };
     },
+    // ⚠ SAME REASONING AS useReport's OWN INTERVAL, APPLIED TO A LIST. A
+    // report queued right after its scan can finish rendering seconds later
+    // (worker.go resolves the normalized BOM at render time, not scan time) —
+    // a caller watching a scan's reports for a download link to appear needs
+    // this to actually refetch, not just be correct on first load. Stops the
+    // moment every report in the page is terminal, so a finished list never
+    // polls forever.
+    refetchInterval: (q) => {
+      const reports = q.state.data?.reports;
+      if (!reports) return 3000;
+      const stillWorking = reports.some((r) => r.status === 'queued' || r.status === 'rendering');
+      return stillWorking ? 3000 : false;
+    },
   });
 }
 
@@ -173,4 +186,9 @@ export function formatBytes(n: number | undefined): string | null {
     i++;
   }
   return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
+}
+
+/** levelLabel is the human label for a report's `level` column. */
+export function levelLabel(level: string): string {
+  return level === 'top_level' ? 'Top-Level' : level === 'complete' ? 'Complete' : level;
 }

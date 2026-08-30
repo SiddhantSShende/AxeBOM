@@ -12,11 +12,12 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { useLocation, useParams } from 'react-router';
+import { Link, useLocation, useParams } from 'react-router';
 import { AnimatePresence, m } from 'motion/react';
-import { StatusPill } from '../../components/Chips';
-import { SkeletonRows } from '../../components/States';
+import { BomTypeChip, StatusPill } from '../../components/Chips';
+import { ErrorState, SkeletonRows } from '../../components/States';
 import { getAccessToken } from '../../lib/api';
+import { formatBytes, levelLabel, useReports, type Report } from '../../lib/reports';
 import { isTerminal } from '../../lib/scans';
 import {
   bearerProtocols,
@@ -43,6 +44,10 @@ export function ScanProgressRoute() {
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [connection, setConnection] = useState<ConnectionState>({ kind: 'connecting' });
   const seeded = useRef(false);
+  // ⚠ QUERIED HERE, NOT INSIDE ReportsSection, so OverallBar can see it too —
+  // see displayPercent's own doc comment for why "100%" has to wait on this,
+  // not only on the scan's own engines.
+  const reports = useReports(id);
 
   useEffect(() => {
     if (!id) return;
@@ -110,8 +115,9 @@ export function ScanProgressRoute() {
         <SkeletonRows rows={4} columns={4} />
       ) : (
         <>
-          <OverallBar progress={progress} />
+          <OverallBar progress={progress} reports={reports.data?.reports} />
           <ActivityFeed items={activity} />
+          <ReportsSection query={reports} />
           <EngineTable engines={progress.engines} />
           <Announcer progress={progress} />
         </>
@@ -152,37 +158,78 @@ function ConnectionNotice({ state }: { state: ConnectionState }) {
 }
 
 /**
+ * reportsPending reports whether any report requested for this scan has not
+ * yet reached a terminal status. `undefined` (the query has not resolved
+ * yet) counts as pending — the honest default while we do not yet know, not
+ * an assumption that nothing was requested.
+ */
+function reportsPending(reports: Report[] | undefined): boolean {
+  if (!reports) return true;
+  return reports.some((r) => r.status === 'queued' || r.status === 'rendering');
+}
+
+/**
+ * displayPercent is what the bar actually shows.
+ *
+ * ⚠ THE SCAN'S OWN WEIGHTED PERCENT HITS 100 THE MOMENT EVERY ENGINE IS
+ * TERMINAL — but a report is rendered from that scan AFTER it finishes
+ * (services/report/internal/worker/worker.go's loadNormalizedBOM resolves
+ * the normalized BOM at RENDER time, not scan time), so "100%" on the scan
+ * alone can be seconds ahead of the actual deliverable existing. Capped at
+ * 99 until every report this scan has (if any) is also ready or failed —
+ * never invented math blending scan and report progress into one number
+ * (docs/02-CONTRACTS.md §5's own rule: the server computes weighted
+ * progress, not the client), just an honest "not quite yet" while the part
+ * this page cannot see into is still working.
+ */
+function displayPercent(progress: Progress, reports: Report[] | undefined): number {
+  if (isTerminal(progress.status) && reportsPending(reports)) {
+    return Math.min(progress.percent, 99);
+  }
+  return progress.percent;
+}
+
+/**
  * OverallBar is animated, not just CSS-transitioned on width — `m.div`
  * spring-eases toward each real percentage the server reports (never a
  * client-side guess: see ws.ts's own note on why an event's pct only ever
  * nudges this, and only when it is actually informative), and a subtle
- * shimmer plays across the fill while the scan has not yet reached a
- * terminal status — purely decorative, gated on `data-live` so a finished
- * scan's bar sits still. Motion respects prefers-reduced-motion globally
- * (App.tsx's `<MotionConfig reducedMotion="user">`; the CSS shimmer keyframe
- * is capped the same way every other animation in this app is, in app.css's
- * global `@media (prefers-reduced-motion: reduce)` rule).
+ * shimmer plays while there is still real work outstanding — either the scan
+ * itself, or a report rendering from it — purely decorative, gated on
+ * `data-live` so a fully finished scan's bar sits still. Motion respects
+ * prefers-reduced-motion globally (App.tsx's `<MotionConfig
+ * reducedMotion="user">`; the CSS shimmer keyframe is capped the same way
+ * every other animation in this app is, in app.css's global `@media
+ * (prefers-reduced-motion: reduce)` rule).
  */
-function OverallBar({ progress }: { progress: Progress }) {
-  const live = !isTerminal(progress.status);
+function OverallBar({
+  progress,
+  reports,
+}: {
+  progress: Progress;
+  reports: Report[] | undefined;
+}) {
+  const pending = reportsPending(reports);
+  const live = !isTerminal(progress.status) || pending;
+  const percent = displayPercent(progress, reports);
   return (
     <section className="progress-overall">
       <div className="progress-head">
         <StatusPill status={progress.status} />
         <m.span
           className="progress-percent"
-          key={Math.round(progress.percent)}
+          key={Math.round(percent)}
           initial={{ opacity: 0.4 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.2 }}
         >
-          {Math.round(progress.percent)}%
+          {Math.round(percent)}%
         </m.span>
       </div>
       <div
         className="progress-track"
         role="progressbar"
-        aria-valuenow={Math.round(progress.percent)}
+        aria-valuenow={Math.round(percent)}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-label="Overall scan progress"
@@ -191,13 +238,14 @@ function OverallBar({ progress }: { progress: Progress }) {
           className="progress-fill"
           data-live={live ? 'true' : undefined}
           initial={false}
-          animate={{ width: `${progress.percent}%` }}
+          animate={{ width: `${percent}%` }}
           transition={{ type: 'spring', stiffness: 120, damping: 20 }}
         />
       </div>
       <p className="progress-note">
-        Weighted by engine, not a simple average — a fast lockfile parser and a slow vulnerability
-        match are not equal halves of a scan.
+        {isTerminal(progress.status) && pending
+          ? 'The scan itself is done — this holds just under 100% until every report requested from it has also finished rendering.'
+          : 'Weighted by engine, not a simple average — a fast lockfile parser and a slow vulnerability match are not equal halves of a scan.'}
       </p>
     </section>
   );
@@ -252,11 +300,19 @@ function ActivityFeed({ items }: { items: ActivityItem[] }) {
  * ScanProgressRoute for why this exists. Every field traces to a real,
  * already-recorded value (started_at/finished_at/status/message); nothing
  * here is invented, only re-presented in the feed's shape.
+ *
+ * ⚠ A "started" ENTRY IS ONLY SYNTHESIZED FOR AN ENGINE THAT HAS NOT ALSO
+ * FINISHED. Adding both unconditionally meant an engine that finished
+ * minutes (or, live, 36 minutes) ago still showed a `phase: 'running'` item
+ * — present-tense wording plus the pulsing "live" dot (ActivityFeed's own
+ * CSS) — right next to a bar already sitting at 100%, reading as "this is
+ * happening right now" for something that is long over. A genuinely
+ * still-in-progress engine (finishedAt not yet set) still gets it, correctly.
  */
 function deriveActivity(engines: EngineProgress[]): ActivityItem[] {
   const items: ActivityItem[] = [];
   for (const e of engines) {
-    if (e.startedAt) {
+    if (e.startedAt && !e.finishedAt) {
       items.push({
         id: `${e.engineId}-started`,
         engine: e.engineId,
@@ -291,6 +347,77 @@ function relativeTime(iso: string): string {
   const m = Math.round(s / 60);
   if (m < 60) return `${m}m ago`;
   return `${Math.round(m / 60)}h ago`;
+}
+
+/**
+ * ReportsSection is where the actual deliverable lives — every report
+ * `/generate` queued for this scan, with a real download link the moment
+ * each one reaches `ready`.
+ *
+ * ⚠ query IS LIFTED TO ScanProgressRoute, NOT OWNED HERE. OverallBar needs
+ * the same data (displayPercent's own doc comment: the bar holds under 100%
+ * until reports finish too), and querying it twice would mean the two could
+ * observe different moments of the same poll cycle and visibly disagree.
+ * useReports polls on its own short interval while any report is still
+ * queued/rendering (see its own doc comment) rather than waiting on a WS
+ * event that was never guaranteed to arrive for report state in the first
+ * place.
+ */
+function ReportsSection({ query }: { query: ReturnType<typeof useReports> }) {
+  const { data, isPending, isError, error } = query;
+
+  if (isPending) return <SkeletonRows rows={2} columns={3} />;
+  if (isError) return <ErrorState error={error} action="load this scan's reports" />;
+
+  // Nothing queued yet is not an error — a scan run from Generate always has
+  // reports, but a scan triggered another way (the API, a campaign) may not.
+  if (data.reports.length === 0) return null;
+
+  return (
+    <section className="reports-section" aria-label="Reports from this scan">
+      <h2 className="activity-feed-title">Reports</h2>
+      <ul className="report-list">
+        {data.reports.map((r) => (
+          <ReportRow key={r.id} report={r} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function ReportRow({ report: r }: { report: Report }) {
+  const size = formatBytes(r.size_bytes);
+  return (
+    <li className="report-row">
+      <BomTypeChip type={r.bom_type} />
+      <span className="report-meta">
+        {levelLabel(r.level)} · {r.standard} · {r.format.toUpperCase()}
+      </span>
+      <span className="report-action">
+        {r.status === 'ready' ? (
+          <a
+            className="btn btn-sm"
+            href={`/api/v1/reports/${r.id}/download`}
+            // Prefetching on hover would download it twice — the metadata
+            // is already loaded, only the bytes are the actual download.
+            download
+          >
+            Download{size ? ` (${size})` : ''}
+          </a>
+        ) : r.status === 'failed' ? (
+          <span className="report-failed">
+            <StatusPill status={r.status} />
+            {r.error_code && <code>{r.error_code}</code>}
+          </span>
+        ) : (
+          <StatusPill status={r.status} />
+        )}
+      </span>
+      <Link className="report-detail-link" to={`/reports/${r.id}`}>
+        Details
+      </Link>
+    </li>
+  );
 }
 
 function EngineTable({ engines }: { engines: Progress['engines'] }) {
