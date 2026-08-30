@@ -16,6 +16,7 @@ import { useLocation, useParams } from 'react-router';
 import { StatusPill } from '../../components/Chips';
 import { SkeletonRows } from '../../components/States';
 import { getAccessToken } from '../../lib/api';
+import { isTerminal } from '../../lib/scans';
 import {
   bearerProtocols,
   connectProgress,
@@ -38,15 +39,36 @@ export function ScanProgressRoute() {
   useEffect(() => {
     if (!id) return;
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    return connectProgress({
+    // ⚠ dispose IS CALLED FROM INSIDE onProgress, NOT ONLY FROM CLEANUP.
+    //
+    // The server sends the snapshot and, for an already-terminal scan,
+    // closes immediately after with a normal (code 1000) closure — a
+    // deliberate "nothing more will ever arrive," not a failure. But ws.ts's
+    // reconnect loop treats EVERY close identically (by design: it is a
+    // dumb, transport-only module that does not parse scan status — see its
+    // own doc comment). Without this, a finished scan's progress page
+    // reconnected forever: connect, get the same terminal snapshot, get
+    // closed again, back off, repeat — each cycle logging a browser-level
+    // "WebSocket connection failed" even though nothing was actually wrong.
+    // Only the CALLER knows the scan is done, from the snapshot it just
+    // received, so only the caller can correctly decide to stop.
+    let dispose: (() => void) | null = null;
+    dispose = connectProgress({
       url: `${proto}://${window.location.host}/api/v1/scans/${id}/progress`,
-      handlers: { onProgress: setProgress, onConnection: setConnection },
+      handlers: {
+        onProgress: (p) => {
+          setProgress(p);
+          if (isTerminal(p.status)) dispose?.();
+        },
+        onConnection: setConnection,
+      },
       // ⚠ READ LAZILY. The token is renewed roughly every quarter hour and a
       // reconnect may happen long after this effect ran; capturing the value
       // here would present an expired credential and close the socket the
       // moment it recovered.
       protocols: () => bearerProtocols(getAccessToken()),
     });
+    return () => dispose?.();
   }, [id]);
 
   return (

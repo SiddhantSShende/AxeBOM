@@ -33,7 +33,7 @@ export function ProjectPractices() {
   const project = useProject(id);
   const practices = usePractices(id);
   const options = useProjectOptions();
-  const save = useSetPractices(id);
+  const save = useSetPractices();
 
   const [draft, setDraft] = useState<PracticesInput>(EMPTY);
   const [saved, setSaved] = useState(false);
@@ -98,7 +98,7 @@ export function ProjectPractices() {
         className="panel"
         onSubmit={(e) => {
           e.preventDefault();
-          save.mutate(draft, { onSuccess: () => setSaved(true) });
+          save.mutate({ projectId: id, ...draft }, { onSuccess: () => setSaved(true) });
         }}
       >
         <label className="field">

@@ -17,7 +17,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -44,10 +46,38 @@ type Handler struct {
 	bus         *bus.Bus
 	registry    *policy.Registry
 	policyStore *policy.Store
+
+	// originHost is the public origin the browser actually connects from,
+	// parsed once from FrontendURL. See Progress's own comment for why the
+	// WebSocket upgrade needs it explicitly rather than trusting r.Host.
+	originHost string
 }
 
-func New(orch *orchestr.Orchestrator, store *orchestr.Store, b *bus.Bus, reg *policy.Registry, policyStore *policy.Store) *Handler {
-	return &Handler{orch: orch, store: store, bus: b, registry: reg, policyStore: policyStore}
+// New builds a Handler. frontendURL is the same FRONTEND_URL config value
+// already threaded into orchestr.Config for notification links (deps.go) —
+// reused here, not duplicated, as the one source of truth for "what origin
+// does the browser actually use."
+func New(
+	orch *orchestr.Orchestrator, store *orchestr.Store, b *bus.Bus,
+	reg *policy.Registry, policyStore *policy.Store, frontendURL string,
+) *Handler {
+	h := &Handler{orch: orch, store: store, bus: b, registry: reg, policyStore: policyStore}
+
+	if frontendURL == "" {
+		slog.Warn("FRONTEND_URL is empty; the scan progress WebSocket will refuse every " +
+			"real browser connection (Origin will never match the proxy-rewritten Host) " +
+			"until it is set")
+		return h
+	}
+	u, err := url.Parse(frontendURL)
+	if err != nil || u.Host == "" {
+		slog.Warn("FRONTEND_URL could not be parsed; the scan progress WebSocket will "+
+			"refuse every real browser connection until it is fixed",
+			"frontend_url", frontendURL, "error", err)
+		return h
+	}
+	h.originHost = u.Host
+	return h
 }
 
 // ---------------------------------------------------------------------------
@@ -672,9 +702,29 @@ func (h *Handler) Progress(w http.ResponseWriter, r *http.Request) {
 	}
 
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		// No cross-origin upgrades: the browser's same-origin policy is a real
-		// control here, and OriginPatterns would weaken it.
+		// ⚠ InsecureSkipVerify STAYS false — the browser's same-origin policy
+		// is a real control here. OriginPatterns is NOT a weakening of it: it
+		// is what makes the check actually work behind this deployment's
+		// reverse proxy.
+		//
+		// coder/websocket's own same-origin check (accept.go's
+		// authenticateOrigin) auto-authorizes only when the request's Host
+		// equals the Origin header's host — "the request host is always
+		// authorized" — which assumes Host still reflects the browser's real,
+		// public-facing address. It does not here: gateway's reverse proxy
+		// deliberately rewrites Host to the upstream's own address before
+		// this handler ever sees the request (services/gateway/internal/
+		// proxy/proxy.go's Rewrite — correct and necessary for ordinary HTTP
+		// routing across every OTHER route). Left as InsecureSkipVerify:false
+		// with no OriginPatterns, EVERY real browser handshake here got a
+		// pre-101 403 — Origin said the public host, Host said
+		// "scan-orchestrator:8093", and neither matched — while curl (which
+		// sends no Origin header at all) sailed through untouched, masking
+		// the bug from every curl-based check performed while diagnosing it.
+		// originHost is the one value that actually reflects the browser's
+		// real origin in this topology; see New's doc comment.
 		InsecureSkipVerify: false,
+		OriginPatterns:     []string{h.originHost},
 		// ⚠ THIS IS NOT DECORATION. The browser cannot put an Authorization
 		// header on a handshake, so the SPA offers its access token as a second
 		// subprotocol (oidcauth.WSBearerPrefix) alongside this one. RFC 6455

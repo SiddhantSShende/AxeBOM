@@ -167,13 +167,27 @@ export interface PracticesInput {
   errata_policy?: string | undefined;
 }
 
-export function useSetPractices(projectId: string) {
+/**
+ * useSetPractices takes the project id as part of the MUTATE call, not the
+ * hook constructor.
+ *
+ * ⚠ THIS IS NOT A STYLE CHOICE. The wizard (ProjectWizard.tsx) does not know
+ * the project's id until `createProject` resolves, and calls this in the same
+ * synchronous continuation — `setState` never updates a value a closure
+ * already captured, only what the NEXT render sees. A hook built as
+ * `useSetPractices(createdId ?? '')` therefore stays bound to `''` for the
+ * entire submit(), sending `PUT /v1/projects//practices` — which the server
+ * 307-redirects to `/v1/projects/practices`, a URL that resolves to nothing
+ * useful. Taking the id in the call lets the caller pass the just-resolved
+ * `project.id` directly, with no render in between to go stale across.
+ */
+export function useSetPractices() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: PracticesInput) =>
+    mutationFn: ({ projectId, ...input }: PracticesInput & { projectId: string }) =>
       request<Practices>(`/v1/projects/${projectId}/practices`, { method: 'PUT', body: input }),
-    onSuccess: (data) => {
-      qc.setQueryData(['practices', projectId], data);
+    onSuccess: (data, variables) => {
+      qc.setQueryData(['practices', variables.projectId], data);
     },
   });
 }
@@ -187,13 +201,19 @@ export interface ConnectInput {
   token?: string | undefined;
 }
 
-export function useConnectRepo(projectId: string) {
+// useConnectRepo, useCreateWebSource and useUploadFile all take the project
+// id in the MUTATE call rather than the hook constructor, for the identical
+// reason useSetPractices does — see its own comment. All three are called
+// from ProjectWizard.tsx's submit(), in the same synchronous continuation
+// right after `createProject` resolves and before any re-render.
+
+export function useConnectRepo() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: ConnectInput) =>
+    mutationFn: ({ projectId, ...input }: ConnectInput & { projectId: string }) =>
       request(`/v1/projects/${projectId}/connections`, { method: 'POST', body: input }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['connections', projectId] });
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({ queryKey: ['connections', variables.projectId] });
     },
   });
 }
@@ -204,28 +224,28 @@ export interface WebSourceInput {
   discovery_disabled?: boolean | undefined;
 }
 
-export function useCreateWebSource(projectId: string) {
+export function useCreateWebSource() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: WebSourceInput) =>
+    mutationFn: ({ projectId, ...input }: WebSourceInput & { projectId: string }) =>
       request(`/v1/projects/${projectId}/web-sources`, { method: 'POST', body: input }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['web-sources', projectId] });
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({ queryKey: ['web-sources', variables.projectId] });
     },
   });
 }
 
-export function useUploadFile(projectId: string) {
+export function useUploadFile() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ file, kind }: { file: File; kind: string }) => {
+    mutationFn: ({ projectId, file, kind }: { projectId: string; file: File; kind: string }) => {
       const form = new FormData();
       form.append('file', file);
       form.append('kind', kind);
       return upload(`/v1/projects/${projectId}/uploads`, form);
     },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['uploads', projectId] });
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({ queryKey: ['uploads', variables.projectId] });
     },
   });
 }

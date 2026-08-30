@@ -131,6 +131,7 @@ var ErrTooLarge = errors.New("upload exceeds the maximum allowed size")
 // content, which defeats content addressing and every integrity check built on
 // it later.
 func (s *Store) Put(ctx context.Context, key string, r io.Reader, opts PutOptions) (Object, error) {
+	key = TrimKeyScheme(key)
 	if err := validateKey(key); err != nil {
 		return Object{}, err
 	}
@@ -175,6 +176,7 @@ func (s *Store) Put(ctx context.Context, key string, r io.Reader, opts PutOption
 
 // Get opens an object for reading. The caller must close it.
 func (s *Store) Get(ctx context.Context, key string) (io.ReadCloser, error) {
+	key = TrimKeyScheme(key)
 	if err := validateKey(key); err != nil {
 		return nil, err
 	}
@@ -200,6 +202,7 @@ func (s *Store) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 // than through the API. The expiry is short by design: a presigned URL is a
 // bearer credential, and it lands in browser history and Referer headers.
 func (s *Store) PresignedGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	key = TrimKeyScheme(key)
 	if err := validateKey(key); err != nil {
 		return "", err
 	}
@@ -219,6 +222,42 @@ func (s *Store) PresignedGet(ctx context.Context, key string, ttl time.Duration)
 // sequence here means something upstream is building a key from user input.
 // S3 has no directories, but ".." in a key still breaks the prefix-based
 // isolation every listing and lifecycle rule depends on.
+// TrimKeyScheme strips a "<scheme>://<bucket-or-host>/" prefix from a key,
+// if one is present.
+//
+// ⚠ A URI IS NOT AN OBJECT KEY. `scan-orchestrator` builds every job's
+// Output.Prefix as "<ArtifactPrefix>/scans/<id>/raw/<engine>/<job>/", and
+// ArtifactPrefix defaults to "s3://axebom" (documented as "the object-storage
+// root"). A caller that concatenates onto that prefix without stripping the
+// scheme first hands Put a key that literally begins "s3://axebom/", and
+// MinIO rejects it deep inside the SDK with "Object name contains
+// unsupported characters" — a message that names neither the key nor the
+// colon that caused it. That failure sits on a RETRYABLE path (bus.ErrRetry),
+// so the job redelivers forever and the scan never leaves `queued`.
+//
+// Originally fixed once, locally, as `objectKeyPrefix` in the fetcher's own
+// archive.go — which still calls it, unchanged, because it needs the clean
+// key BEFORE Put to run a content-addressed dedup Get against it, not only
+// as a Put-time correction. It recurred anyway in services/webrecon's own
+// Put call the moment a second caller built a key from the same
+// Output.Prefix by hand — proof this belongs at the one place every caller
+// already goes through (Put, Get, PresignedGet, all normalized here), not
+// only in the one caller that happened to need it first. The store is
+// already bucket-scoped, so the bucket must not appear in the key regardless
+// of who is asking.
+func TrimKeyScheme(key string) string {
+	i := strings.Index(key, "://")
+	if i < 0 {
+		return key
+	}
+	rest := key[i+len("://"):]
+	// Drop the bucket/host segment too; what follows is the key.
+	if j := strings.Index(rest, "/"); j >= 0 {
+		return rest[j+1:]
+	}
+	return ""
+}
+
 func validateKey(key string) error {
 	switch {
 	case key == "":

@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -115,7 +116,7 @@ func (w *Worker) Render(ctx context.Context, tenantID, reportID string) (err err
 		}
 	}()
 
-	bom, err := w.source.Load(ctx, report)
+	bom, err := w.loadNormalizedBOM(ctx, report)
 	if err != nil {
 		return errs.Wrap(err, errs.ReportRenderFailed,
 			"the normalized BOM could not be read")
@@ -178,6 +179,68 @@ func (w *Worker) Render(ctx context.Context, tenantID, reportID string) (err err
 	// view, never finished.
 	w.publishReportReady(ctx, tenantID, report, bom)
 	return nil
+}
+
+// normalizedBOMRetryAttempts and normalizedBOMRetryDelay bound how long
+// loadNormalizedBOM waits for normalization to catch up. See its own doc
+// comment for why this exists at all.
+//
+// ⚠ VARS, NOT CONSTS. Tests shrink normalizedBOMRetryDelay so the "gives up
+// after every attempt" case does not cost normalizedBOMRetryAttempts *
+// (a real few seconds) of wall-clock time; production never touches these.
+var (
+	normalizedBOMRetryAttempts = 5
+	normalizedBOMRetryDelay    = 3 * time.Second
+)
+
+// loadNormalizedBOM retries Load a bounded number of times while the
+// document does not exist YET, rather than treating a first miss as
+// permanent.
+//
+// ⚠ THIS RACE IS REAL, NOT HYPOTHETICAL, AND JETSTREAM REDELIVERY CANNOT FIX
+// IT HERE. A report is deliberately queued the moment its scan is created,
+// before the scan has run — bomsource.go's own resolveDocument error already
+// says so ("the scan may still be running"). For a slow git-sourced scan
+// that race closes long before this worker gets to the message. It does not
+// for a fast webrecon scan: normalization can land a second or two AFTER the
+// render is first attempted. Confirmed live: a report queued at
+// 19:25:05.719 was marked failed at 19:25:05.737, while
+// normalize.bom_documents for the same scan was not written until
+// 19:25:07.622 — about 1.9s later.
+//
+// This is NOT solved by classifying the error as retryable and letting
+// queue.go's bus.ErrRetry path redeliver the message: Render's own deferred
+// marker calls svc.Fail — status='failed' — unconditionally on ANY error
+// before queue.go ever decides retryable or not, and ClaimForRender only
+// claims from status='queued'. A redelivery's Claim would find the row
+// already `failed` and no-op as "already claimed", never actually retrying
+// the load. (That same gap already exists for the blob-store-failure path
+// below, which believes itself retryable for the identical reason — a
+// separate, pre-existing issue, not fixed here.) Retrying in-process, before
+// this attempt's single Fail-on-error can fire, is what actually gives
+// normalization the moment it needs — bounded to a few seconds, well inside
+// the render job's 5-minute AckWait, and paid only by the one report that
+// hit the race.
+func (w *Worker) loadNormalizedBOM(ctx context.Context, report store.Report) (render.BOM, error) {
+	var bom render.BOM
+	var err error
+	for attempt := 1; attempt <= normalizedBOMRetryAttempts; attempt++ {
+		bom, err = w.source.Load(ctx, report)
+		if err == nil || !errors.Is(err, store.ErrNotFound) {
+			return bom, err
+		}
+		if attempt == normalizedBOMRetryAttempts {
+			break
+		}
+		w.log.Info("normalized BOM not written yet; waiting for the scan's "+
+			"normalization to catch up", "report_id", report.ID, "attempt", attempt)
+		select {
+		case <-ctx.Done():
+			return render.BOM{}, ctx.Err()
+		case <-time.After(normalizedBOMRetryDelay):
+		}
+	}
+	return bom, err
 }
 
 // publishReportReady sends the one notify.> event this worker emits today.

@@ -77,7 +77,7 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 	return &deps{
 		cfg: cfg, pool: pool, bus: b, store: store, orch: orch,
 		reaper: reaper, identity: identity,
-		handler: handler.New(orch, store, b, registry, policyStore),
+		handler: handler.New(orch, store, b, registry, policyStore, cfg.Auth.FrontendURL),
 	}, nil
 }
 

@@ -44,6 +44,11 @@ import { GitHubRepoPicker } from './GitHubRepoPicker';
 // upload attached to a project that was never classified for one.
 const UPLOAD_KINDS = ['source_archive', 'manifest', 'lockfile', 'sbom'] as const;
 
+// SUPPORTED_SOURCE_TYPES is every source_type this wizard has a real
+// attach-flow for. See SourceStep's own comment on `sources` for why this
+// filters the server's full list rather than using it verbatim.
+const SUPPORTED_SOURCE_TYPES = ['github', 'upload', 'url', 'manual'];
+
 interface UploadDraftFile {
   file: File;
   kind: (typeof UPLOAD_KINDS)[number];
@@ -125,11 +130,10 @@ export function ProjectWizard() {
 
   const options = useProjectOptions();
   const createProject = useCreateProject();
-  const [createdId, setCreatedId] = useState<string | null>(null);
-  const setPractices = useSetPractices(createdId ?? '');
-  const uploadFile = useUploadFile(createdId ?? '');
-  const connectRepo = useConnectRepo(createdId ?? '');
-  const createWebSource = useCreateWebSource(createdId ?? '');
+  const setPractices = useSetPractices();
+  const uploadFile = useUploadFile();
+  const connectRepo = useConnectRepo();
+  const createWebSource = useCreateWebSource();
 
   const patch = (p: Partial<Draft>) => setDraft((d) => ({ ...d, ...p }));
 
@@ -147,21 +151,27 @@ export function ProjectWizard() {
         classifications: draft.classifications,
       };
       const project = await createProject.mutateAsync(input);
-      setCreatedId(project.id);
+
+      // ⚠ project.id, NOT A PIECE OF STATE, IN EVERY CALL BELOW. There is no
+      // re-render between this line and the calls that follow, so a state
+      // variable set from `project.id` would not be observable here even if
+      // one existed — every mutate call below takes the project id as an
+      // argument for exactly this reason. See useSetPractices's own doc
+      // comment for the bug this replaced.
 
       // Practices are written as a second call because they are a distinct
       // resource with its own permission — who may change a compliance
       // declaration is a different question from who may rename a project.
       const hasAny = recordedPractices(draft.practices) > 0;
       if (hasAny) {
-        await setPractices.mutateAsync(draft.practices);
+        await setPractices.mutateAsync({ projectId: project.id, ...draft.practices });
       }
 
       // Uploaded one at a time, not in parallel: a project with three staged
       // files that fails on the second should say which one, not leave the
       // caller guessing which of three concurrent requests it was.
       for (const { file, kind } of draft.uploadFiles) {
-        await uploadFile.mutateAsync({ file, kind });
+        await uploadFile.mutateAsync({ projectId: project.id, file, kind });
       }
 
       // Connecting the repository is a second call for the same reason
@@ -169,6 +179,7 @@ export function ProjectWizard() {
       // exist until the create call above returns.
       if (draft.sourceType === 'github' && draft.githubRepo) {
         await connectRepo.mutateAsync({
+          projectId: project.id,
           provider: 'github',
           repo_full_name: draft.githubRepo.fullName,
           repo_external_id: draft.githubRepo.externalId,
@@ -180,7 +191,7 @@ export function ProjectWizard() {
       // Same pattern as the repo connection above: the project id this
       // attaches to does not exist until the create call returns.
       if (draft.sourceType === 'url' && draft.webSourceUrl) {
-        await createWebSource.mutateAsync({ root_url: draft.webSourceUrl });
+        await createWebSource.mutateAsync({ projectId: project.id, root_url: draft.webSourceUrl });
       }
 
       void navigate(`/projects/${project.id}`);
@@ -273,7 +284,18 @@ function SourceStep({
   patch: (p: Partial<Draft>) => void;
   options: { source_types: string[] } | undefined;
 }) {
-  const sources = options?.source_types ?? ['github', 'upload', 'url', 'manual'];
+  // ⚠ FILTERED, NOT THE RAW API LIST. `/v1/projects/options` reflects the
+  // full project.source_type CHECK constraint — github, gitlab, bitbucket,
+  // upload, image, manual, url — because that column also has to accept
+  // whatever a project was created with by any other means. This wizard has
+  // a real flow for exactly four of them; offering the rest as a radio
+  // option that renders no fields and connects nothing on submit is a
+  // control that looks like it does something and does not. Restricted here,
+  // not on the server: another client is still free to create a project
+  // with a source_type this wizard has no UI for.
+  const sources = (options?.source_types ?? SUPPORTED_SOURCE_TYPES).filter((s) =>
+    SUPPORTED_SOURCE_TYPES.includes(s),
+  );
 
   return (
     <section aria-labelledby="source-heading">

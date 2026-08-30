@@ -213,6 +213,7 @@ The `/shared/:token` endpoint is unauthenticated by design and therefore rate-li
 | Publish a CSAF advisory from a VEX statement | ✅ | ✅ | ✅ | |
 | View and add comments | ✅ | ✅ | ✅ | ✅ |
 | Edit or delete a comment | ✅ (own) | ✅ (own) | ✅ (own) | ✅ (own) |
+| Generate a report from a scan | ✅ | ✅ | ✅ | |
 | View reports and dependencies | ✅ | ✅ | ✅ | ✅ |
 | View crypto BOM (CBOM) asset inventory | ✅ | ✅ | ✅ | ✅ |
 | View AI BOM (AIBOM) model inventory | ✅ | ✅ | ✅ | ✅ |

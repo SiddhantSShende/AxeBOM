@@ -80,7 +80,18 @@ export function useCancelScan(projectId: string | undefined) {
   });
 }
 
-/** Terminal scans never change again, so they are safe to treat as immutable. */
+/**
+ * Terminal scans never change again, so they are safe to treat as immutable.
+ *
+ * ⚠ MUST MATCH scan.scans' real status vocabulary — `scans_status_check` in
+ * the migrations, and `isTerminal` in
+ * services/scan-orchestrator/internal/handler/handler.go. This previously
+ * checked 'succeeded'/'partial', neither of which is a status this system
+ * ever produces (the real values are 'completed'/'completed_with_errors'),
+ * so it silently returned false — "still running" — for the two most common
+ * terminal outcomes, forever. ProjectScans.tsx's "running" indicator never
+ * cleared for a scan that had already finished.
+ */
 export function isTerminal(status: string): boolean {
-  return ['succeeded', 'failed', 'partial', 'cancelled'].includes(status);
+  return ['completed', 'completed_with_errors', 'failed', 'cancelled'].includes(status);
 }

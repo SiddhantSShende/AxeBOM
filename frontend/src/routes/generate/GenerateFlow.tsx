@@ -37,15 +37,25 @@ import {
 
 /**
  * sourceKindFor maps a project's registered source onto what the scan API
- * accepts (events.SourceKind: git | upload | image).
+ * accepts (events.SourceKind: git | upload | image | url).
  *
- * ⚠ `manual` HAS NO ANSWER, ON PURPOSE. A manually-registered project has no
- * engine that can reach it — HBOM is an import, not a scan (CLAUDE.md honest
- * labels) — and `orch.CreateScan` already refuses an unrecognised source_kind
- * with a clear message. Returning null here, rather than guessing, is what
- * lets the Review step say so before Run rather than after a 422.
+ * ⚠ `url` IS A REAL, SCANNABLE SOURCE KIND — NOT A GAP LIKE `manual`.
+ * `events.SourceURL` (libs/go-shared/events/events.go) exists precisely so
+ * `Orchestrator.CreateScan` can dispatch a url-registered project to
+ * services/webrecon instead of the fetcher. Omitting it here left every
+ * url-sourced project (created via the wizard's URL flow) unable to ever
+ * reach Run — the mutation threw "has no scannable source" before a single
+ * request left the browser, for a source kind the backend has always
+ * accepted.
+ *
+ * ⚠ `manual` STILL HAS NO ANSWER, ON PURPOSE. A manually-registered project
+ * has no engine that can reach it — HBOM is an import, not a scan (CLAUDE.md
+ * honest labels) — and `orch.CreateScan` already refuses an unrecognised
+ * source_kind with a clear message. Returning null here, rather than
+ * guessing, is what lets the Review step say so before Run rather than after
+ * a 422.
  */
-function sourceKindFor(sourceType: string): 'git' | 'upload' | 'image' | null {
+function sourceKindFor(sourceType: string): 'git' | 'upload' | 'image' | 'url' | null {
   switch (sourceType) {
     case 'github':
     case 'gitlab':
@@ -55,6 +65,8 @@ function sourceKindFor(sourceType: string): 'git' | 'upload' | 'image' | null {
       return 'upload';
     case 'image':
       return 'image';
+    case 'url':
+      return 'url';
     default:
       return null;
   }

@@ -307,8 +307,17 @@ var matrix = map[Permission]rule{
 	{ResourceCSAF, ActionCreate}: {minRole: RoleAnalyst},
 
 	// --- reports ---
-	{ResourceReport, ActionRead}: {minRole: RoleViewer},
-	{ResourceReport, ActionList}: {minRole: RoleViewer},
+	// ⚠ ActionCreate WAS MISSING ENTIRELY from Phase 6 onward — POST
+	// /v1/reports has always required (report, create), and a missing cell
+	// fails closed (see Allow's own doc comment), so every role in every
+	// tenant got a 403 minting ANY report through the real HTTP API for the
+	// whole life of this codebase. Same RoleAnalyst floor as ResourceScan's
+	// ActionRun and ResourceCSAF's ActionCreate: queuing a render consumes
+	// real compute and produces a compliance artifact, the same class of
+	// action as starting the scan that feeds it.
+	{ResourceReport, ActionCreate}: {minRole: RoleAnalyst},
+	{ResourceReport, ActionRead}:   {minRole: RoleViewer},
+	{ResourceReport, ActionList}:   {minRole: RoleViewer},
 	// Download depends on the REPORT, not only the role: a `private` report
 	// contains vulnerability detail (CERT-In §5.3.2) and a Viewer must not
 	// have it. See CanDownloadReport.
