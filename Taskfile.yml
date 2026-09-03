@@ -331,11 +331,21 @@ tasks:
       - go run ./cmd/axebom dev snapshot
       - cmd: echo ""
         silent: true
-      - cmd: echo "  frontend  http://localhost:5173"
+      # ⚠ $ZITADEL_PUBLIC_URL, NOT A HARDCODED URL. These two lines used to
+      # read http://localhost:5173, which is wrong on BOTH counts the moment
+      # the deployment is not plain-HTTP-localhost — and this file is the
+      # first place anyone looks for the address. The wrong scheme dead-ends
+      # at nginx's "400 The plain HTTP request was sent to HTTPS port"; the
+      # wrong host serves the app and then fails at login, because the SPA
+      # sends window.location.origin as its redirect_uri and ZITADEL matches
+      # the registered value exactly. nginx now redirects both cases to the
+      # canonical origin (deploy/docker/nginx.conf), but printing the real
+      # one means nobody has to be redirected in the first place.
+      - cmd: echo "  frontend  ${ZITADEL_PUBLIC_URL:-http://localhost:5173}"
         silent: true
       - cmd: echo "  api       http://localhost:8080"
         silent: true
-      - cmd: echo "  identity  http://localhost:5173/ui/console"
+      - cmd: echo "  identity  ${ZITADEL_PUBLIC_URL:-http://localhost:5173}/ui/console"
         silent: true
       - cmd: echo "  minio     http://localhost:59001   (minioadmin/minioadmin)"
         silent: true
@@ -557,12 +567,18 @@ tasks:
       - go run ./cmd/axebom db down-all
 
   profile:lint:
-    desc: Validate the compliance profile — counts, ids, statuses, paths
+    desc: Validate the compliance and operational profiles — counts, ids, statuses, paths
     # The counts are TRANSCRIPTION ASSERTIONS against the source PDF. A
     # mismatch means the guideline was revised or the transcription is wrong;
     # both need a human. Never "fix" the expected value to match.
     cmds:
       - go run ./cmd/axebom profile lint
+      # ⚠ THE OPERATIONAL PROFILE IS LINTED TOO, BY THE SAME CHECKER.
+      # A second field set that nothing validates is a second field set that
+      # drifts. Its `kind: operational` is what stops the checker holding it to
+      # compliance rules it has no authority behind — and, conversely, what
+      # makes the checker refuse it if it ever grows a CERT-In section.
+      - go run ./cmd/axebom profile lint docs/reference/hbom-manufacturing-v1.yaml
 
   profile:gen:
     desc: Regenerate Go and Python models from the compliance profile

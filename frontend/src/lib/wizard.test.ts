@@ -118,26 +118,50 @@ describe('the review count', () => {
 });
 
 describe('scannableBomTypes', () => {
-  it('drops HBOM and QBOM, keeping the rest', () => {
+  // ⚠ HBOM MOVED OUT OF THIS FILTER, AND THAT IS THE ASSERTION.
+  //
+  // It had no scanner while a CSV and a form were the only ways in. `hbom-ecad`
+  // parses the customer's own KiCad, Altium and OrCAD design files out of an
+  // upload or a repository — a real scan, publishing real jobs. Filtering it
+  // out now would stop a Generate run from producing the hardware BOM the
+  // customer asked for, with no explanation they could act on.
+  it('drops QBOM only — HBOM is scannable now', () => {
     expect(scannableBomTypes(complete({ bomTypes: ['SBOM', 'HBOM', 'CBOM', 'QBOM'] }))).toEqual([
       'SBOM',
+      'HBOM',
       'CBOM',
     ]);
+  });
+
+  // QBOM is unchanged, and for the original reason: it is DERIVED from CBOM
+  // discovery, not scanned. The server still refuses the family outright.
+  it('still drops QBOM, which is derived rather than scanned', () => {
+    expect(scannableBomTypes(complete({ bomTypes: ['QBOM'] }))).toEqual([]);
   });
 });
 
 describe('local validation', () => {
-  it('blocks a draft made entirely of HBOM and/or QBOM, against step 2', () => {
-    const errors = validateDraft(complete({ bomTypes: ['HBOM', 'QBOM'] }));
+  it('blocks a draft made entirely of QBOM, against step 2', () => {
+    const errors = validateDraft(complete({ bomTypes: ['QBOM'] }));
     const hard = blocking(errors);
 
     expect(hard).toHaveLength(1);
     expect(hard[0]!.step).toBe(2);
     expect(hard[0]!.message).toMatch(/not produced by a scan/);
+    // ⚠ AND IT SAYS HOW TO GET ONE. A refusal that does not name the route to
+    // the thing the user wanted leaves them with a disabled button and no idea
+    // why — the worst outcome for a validation error.
+    expect(hard[0]!.message).toMatch(/CBOM/);
   });
 
-  it('does not block HBOM/QBOM alongside a scannable type', () => {
-    const errors = validateDraft(complete({ bomTypes: ['SBOM', 'HBOM'] }));
+  // ⚠ HBOM ALONE IS NO LONGER A BLOCKED DRAFT. Before hbom-ecad this was a
+  // guaranteed 422 from the server and the wizard was right to catch it early.
+  it('does not block a draft made entirely of HBOM', () => {
+    expect(blocking(validateDraft(complete({ bomTypes: ['HBOM'] })))).toHaveLength(0);
+  });
+
+  it('does not block QBOM alongside a scannable type', () => {
+    const errors = validateDraft(complete({ bomTypes: ['SBOM', 'QBOM'] }));
     expect(blocking(errors)).toHaveLength(0);
   });
 
@@ -157,6 +181,12 @@ describe('local validation', () => {
     const errors = validateDraft(complete({ levels: ['complete'], formats: ['pdf'] }));
     // Legitimate for a small project. The client must not overrule a decision
     // the server is happy to make.
+    expect(blocking(errors)).toHaveLength(0);
+    expect(errors.some((e) => e.step === 5)).toBe(true);
+  });
+
+  it('warns about Complete + docx the same way, without refusing it', () => {
+    const errors = validateDraft(complete({ levels: ['complete'], formats: ['docx'] }));
     expect(blocking(errors)).toHaveLength(0);
     expect(errors.some((e) => e.step === 5)).toBe(true);
   });

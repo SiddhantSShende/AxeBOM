@@ -99,6 +99,38 @@ type Component struct {
 	// as a property so the CERT-In form is present in the document without
 	// being mistaken for a PURL.
 	CertInIdentifier string
+
+	// PrimaryPurpose is what KIND of thing this is, in the standards' own
+	// vocabulary: "" for ordinary software, "device" for a hardware component,
+	// "firmware" for firmware.
+	//
+	// ⚠ THIS IS WHAT MAKES A HARDWARE BOM A HARDWARE BOM RATHER THAN A LIST OF
+	// LIBRARIES. It becomes CycloneDX `type: device` and SPDX
+	// `primaryPackagePurpose: DEVICE`. Without it a consumer reads a gateway's
+	// parts list as software dependencies — the document would validate and
+	// mean something false.
+	PrimaryPurpose string
+
+	// Manufacturer is who MADE the part, kept separate from Supplier, who SOLD
+	// it. SPDX and CycloneDX both distinguish them (originator vs supplier),
+	// and CERT-In Table 11 lists both because supply-chain provenance is the
+	// point of §10.2.1. Collapsing them would assert that a distributor
+	// manufactured a microcontroller.
+	Manufacturer string
+
+	// Properties carry facts the standards have no field for.
+	//
+	// ⚠ NAMESPACED, AND NEVER IDENTIFIERS. Reference designators, DNP flags,
+	// lifecycle status and prices are real and belong in the document, but a
+	// consumer must not mistake any of them for something resolvable. Same
+	// treatment `certin:unique_identifier` already gets.
+	Properties []Property
+}
+
+// Property is one namespaced name/value pair on a component.
+type Property struct {
+	Name  string
+	Value string
 }
 
 // Hash is one digest of a component.
@@ -129,7 +161,35 @@ type Document struct {
 type Dependency struct {
 	From string
 	To   string
+	// Kind is the relationship. Empty means "depends on", which is every
+	// software edge.
+	//
+	// ⚠ "contains" IS NOT A SYNONYM FOR "depends on". A board CONTAINS a
+	// capacitor: remove it and you have a different physical object. A program
+	// DEPENDS ON a library: remove it and the program stops working.
+	//
+	// ⚠ AND ONLY SPDX ACTUALLY CARRIES THE DISTINCTION. Verified against real
+	// output, not assumed:
+	//
+	//   SPDX 2.3   emits a genuine `relationshipType: CONTAINS`.
+	//   CycloneDX  flattens it to `dependencies[].dependsOn`. protobom's CDX
+	//              serializer ignores Edge.Type entirely (buildDependencies in
+	//              serializer_cdx.go, v0.5.8), and CycloneDX 1.6's dependency
+	//              graph has no containment relationship to map onto anyway —
+	//              the spec expresses assembly through NESTED components[],
+	//              which a flat protobom NodeList cannot produce.
+	//
+	// So the CycloneDX form says "dependsOn" where it means "contains". Rather
+	// than leave a reader to guess, the caller emits an explicit
+	// `axebom:hbom:parent` property alongside; see worker.hardwareProperties.
+	// This is recorded here rather than fixed because fixing it means either
+	// post-processing serialized JSON (which would break the byte-reproducibility
+	// ADR-0003 requires) or replacing protobom.
+	Kind string
 }
+
+// KindContains marks an assembly relationship rather than a dependency.
+const KindContains = "contains"
 
 // Serialize renders the document in the requested format.
 func Serialize(doc Document, format Format) ([]byte, error) {
@@ -324,22 +384,36 @@ func toProtobom(doc Document, format Format) (*sbom.Document, error) {
 		if edges[i].From != edges[j].From {
 			return edges[i].From < edges[j].From
 		}
+		if edges[i].Kind != edges[j].Kind {
+			return edges[i].Kind < edges[j].Kind
+		}
 		return edges[i].To < edges[j].To
 	})
 
-	byFrom := map[string][]string{}
-	order := []string{}
+	// ⚠ GROUPED BY (from, KIND), NOT BY from ALONE. protobom's Edge carries one
+	// type for its whole `To` list, so a component that both contains parts and
+	// depends on libraries needs two edges. Grouping on `from` only would file
+	// every target under whichever kind was seen first and quietly restate the
+	// relationship for the rest.
+	type edgeKey struct{ from, kind string }
+	byFrom := map[edgeKey][]string{}
+	order := []edgeKey{}
 	for _, e := range edges {
-		if _, seen := byFrom[e.From]; !seen {
-			order = append(order, e.From)
+		key := edgeKey{from: e.From, kind: e.Kind}
+		if _, seen := byFrom[key]; !seen {
+			order = append(order, key)
 		}
-		byFrom[e.From] = append(byFrom[e.From], e.To)
+		byFrom[key] = append(byFrom[key], e.To)
 	}
-	for _, from := range order {
+	for _, key := range order {
+		edgeType := sbom.Edge_dependsOn
+		if key.kind == KindContains {
+			edgeType = sbom.Edge_contains
+		}
 		bom.NodeList.Edges = append(bom.NodeList.Edges, &sbom.Edge{
-			Type: sbom.Edge_dependsOn,
-			From: from,
-			To:   byFrom[from],
+			Type: edgeType,
+			From: key.from,
+			To:   byFrom[key],
 		})
 	}
 
@@ -421,8 +495,30 @@ func toNode(c Component, nodeID string) (*sbom.Node, error) {
 	}
 	node.LicenseConcluded = c.LicenseConcluded
 
+	// ⚠ IsOrg, BECAUSE Yageo IS NOT A PERSON. protobom's SPDX serializer writes
+	// `Person: <name>` for a Person and `Organization: <name>` for an org, and
+	// a compliance document that files STMicroelectronics as a person is
+	// wrong in a way a reader will notice and an auditor may question.
 	if c.Supplier != "" {
-		node.Suppliers = []*sbom.Person{{Name: c.Supplier}}
+		node.Suppliers = []*sbom.Person{{Name: c.Supplier, IsOrg: true}}
+	}
+	// ⚠ Originators, NOT a second Suppliers entry. SPDX calls the maker the
+	// originator and the seller the supplier, and Table 11 lists both because
+	// supply-chain provenance is the entire point of §10.2.1.
+	//
+	// ⚠ THIS SURVIVES INTO SPDX AND IS DROPPED BY CycloneDX. protobom's CDX
+	// serializer reads Suppliers and never reads Originators (verified in
+	// serializer_cdx.go at v0.5.8), so the manufacturer would silently vanish
+	// from the CycloneDX form of a hardware BOM — the single most important
+	// supply-chain field in it. The caller therefore ALSO emits it as a
+	// namespaced property; see worker.hardwareProperties. Belt and braces on
+	// purpose: the property is not a substitute for the structured field where
+	// the structured field works.
+	if c.Manufacturer != "" {
+		node.Originators = []*sbom.Person{{Name: c.Manufacturer, IsOrg: true}}
+	}
+	if purpose, ok := purposeFor(c.PrimaryPurpose); ok {
+		node.PrimaryPurpose = []sbom.Purpose{purpose}
 	}
 
 	node.Identifiers = map[int32]string{}
@@ -471,6 +567,13 @@ func toNode(c Component, nodeID string) (*sbom.Node, error) {
 		})
 	}
 
+	for _, p := range c.Properties {
+		if p.Name == "" || p.Value == "" {
+			continue
+		}
+		node.Properties = append(node.Properties, &sbom.Property{Name: p.Name, Data: p.Value})
+	}
+
 	locations := append([]string(nil), c.Locations...)
 	sort.Strings(locations)
 	for _, loc := range locations {
@@ -506,5 +609,24 @@ func hashAlgorithm(name string) (sbom.HashAlgorithm, bool) {
 		return sbom.HashAlgorithm_MD5, true
 	default:
 		return sbom.HashAlgorithm_UNKNOWN, false
+	}
+}
+
+// purposeFor maps our vocabulary onto protobom's Purpose enum.
+//
+// ⚠ AN UNKNOWN PURPOSE IS DROPPED, NEVER GUESSED. protobom's serializers turn
+// a Purpose into a CycloneDX component `type` and an SPDX
+// `primaryPackagePurpose`; a wrong one is a machine-readable assertion about
+// what kind of thing a component IS, which is worse than saying nothing.
+func purposeFor(name string) (sbom.Purpose, bool) {
+	switch name {
+	case "device":
+		return sbom.Purpose_DEVICE, true
+	case "firmware":
+		return sbom.Purpose_FIRMWARE, true
+	case "":
+		return sbom.Purpose_UNKNOWN_PURPOSE, false
+	default:
+		return sbom.Purpose_UNKNOWN_PURPOSE, false
 	}
 }

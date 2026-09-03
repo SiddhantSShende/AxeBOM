@@ -97,17 +97,21 @@ def test_a_user_supplied_value_is_reflected_in_the_row_and_its_coverage() -> Non
     assert with_user_value["coverage"]["completeness_pct"] > without["coverage"]["completeness_pct"]
 
 
-def test_two_calls_over_the_same_input_are_byte_identical_except_provenance() -> None:
-    """CLAUDE.md invariant 10: normalization is a pure function of its input
-    at a given ruleset version, `provenance.alias_snapshot_id` excepted (see
-    `build_canonical_aibom`'s own docstring on why AIBOM has no real alias
-    concept for that field to describe)."""
+def test_two_calls_over_the_same_input_are_byte_identical() -> None:
+    """CLAUDE.md invariant 10: normalization is a pure function of its input at
+    a given ruleset version.
+
+    ⚠ provenance IS NO LONGER POPPED BEFORE COMPARING. It used to be, because
+    `alias_snapshot_id` was minted fresh per call to satisfy a `uuid NOT NULL`
+    column AIBOM had nothing real to put in. Migration 0012 made it nullable
+    with a real FK, so the field is None and the comparison covers the whole
+    document — including the key that used to be the one exception.
+    """
     first = build_canonical_aibom(_discovery(), _cards())
     second = build_canonical_aibom(_discovery(), _cards())
 
-    first.pop("provenance")
-    second.pop("provenance")
     assert first == second
+    assert first["provenance"]["alias_snapshot_id"] is None
 
 
 def test_no_models_produces_an_empty_but_valid_document() -> None:

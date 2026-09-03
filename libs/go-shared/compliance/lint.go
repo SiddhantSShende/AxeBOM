@@ -121,14 +121,23 @@ func Lint(p *Profile) LintResult {
 				add("status", "status is `assumed` but no note explains the inference", f.ID)
 			}
 		case "extension":
-			// An AxeBOM analysis field, not a requirement of the standard.
-			// It has no source page to verify against, and it must not be
-			// scored — otherwise our own analysis would move a compliance
-			// percentage.
+			// An AxeBOM field, not a requirement of the standard. It has no
+			// source page to verify against.
 			if !strings.HasPrefix(f.ID, "axebom.") {
 				add("status", "status `extension` is only valid for axebom.* ids", f.ID)
 			}
-			if f.IsScored() {
+			// ⚠ THE `scored: false` RULE INVERTS FOR AN OPERATIONAL PROFILE,
+			// AND ONLY THERE.
+			//
+			// In a COMPLIANCE profile an extension is our own analysis riding
+			// alongside the standard's fields, and scoring it would move a
+			// number a regulator reads — so `scored: false` is mandatory.
+			//
+			// An operational profile is nothing BUT our own fields, with its
+			// own separately-labelled number that is never published as
+			// compliance. There, scoring them is the entire point rather than
+			// the danger.
+			if p.Meta.IsCompliance() && f.IsScored() {
 				add("status", "an extension must set `scored: false`; scoring our own "+
 					"analysis would inflate or deflate a compliance percentage", f.ID)
 			}
@@ -136,6 +145,16 @@ func Lint(p *Profile) LintResult {
 			add("status", "missing `status` (verified | assumed | extension)", f.ID)
 		default:
 			add("status", "unknown status "+f.Status, f.ID)
+		}
+
+		// --- 6b. an operational profile cites no document ---------------------
+		//
+		// A source_page is a promise that an auditor can open that page and
+		// check. An AxeBOM-defined field set has no such document, so a page
+		// number here would imply an authority behind it that does not exist.
+		if !p.Meta.IsCompliance() && f.SourcePage != 0 {
+			add("source-page", "an operational profile has no source document; a "+
+				"source_page here implies a citation nobody can check", f.ID)
 		}
 
 		// --- 7. source_page within the document ------------------------------
@@ -191,13 +210,37 @@ func Lint(p *Profile) LintResult {
 	}
 
 	// --- all_entries_verified must match reality ----------------------------
-	if p.Meta.AllEntriesVerified && res.AssumedCount > 0 {
-		add("meta",
-			fmt.Sprintf("profile.all_entries_verified is true but %d entries are `assumed`; "+
-				"every report would then overstate its provenance", res.AssumedCount), "")
-	}
-	if !p.Meta.AllEntriesVerified && res.AssumedCount == 0 {
-		add("meta", "profile.all_entries_verified is false but no entry is `assumed`", "")
+	//
+	// ⚠ A COMPLIANCE CLAIM ABOUT TRANSCRIPTION FROM A PDF, so it is checked
+	// only where there is a PDF. An operational profile is held to the
+	// opposite rule: claiming verification it cannot have is the error.
+	if p.Meta.IsCompliance() {
+		if p.Meta.AllEntriesVerified && res.AssumedCount > 0 {
+			add("meta",
+				fmt.Sprintf("profile.all_entries_verified is true but %d entries are `assumed`; "+
+					"every report would then overstate its provenance", res.AssumedCount), "")
+		}
+		if !p.Meta.AllEntriesVerified && res.AssumedCount == 0 {
+			add("meta", "profile.all_entries_verified is false but no entry is `assumed`", "")
+		}
+	} else {
+		if p.Meta.AllEntriesVerified {
+			add("meta", "all_entries_verified without a source document reads as a "+
+				"provenance claim there is nothing behind", "")
+		}
+		// ⚠ THE CHECK THAT MAKES THE SEPARATION ENFORCED RATHER THAN INTENDED.
+		//
+		// Every CERT-In accessor in this package reads the named sections. If
+		// an operational profile ever defined one, its fields would be read as
+		// a standard's — scored into completeness_pct, generated into
+		// HBOM_FIELDS, printed in the evidence pack. Refuse the shape outright
+		// rather than trusting that nobody does it.
+		if len(p.SBOM.DataFields)+len(p.QBOM.Elements)+len(p.AIBOM.Elements)+
+			len(p.HBOM.Elements)+len(p.CryptoAsset.Types) > 0 {
+			add("kind", "an operational profile must not define CERT-In sections; a "+
+				"`sbom:`/`hbom:`/`crypto_asset:` block here would be read as a "+
+				"standard by every accessor in this package", "")
+		}
 	}
 
 	// --- crypto discriminator ------------------------------------------------

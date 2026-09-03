@@ -44,7 +44,18 @@ RUN pip install --no-cache-dir -e ".[normalize-consumer]"
 # itself has no __init__.py (an implicit namespace package, same as
 # Dockerfile.worker's COPY workers ./workers relies on).
 COPY workers/sbom ./workers/sbom
+# ⚠ workers/hbom NEEDS workers/sbom ABOVE, and not only for the runner: its
+# adapters import ArtifactWriter from workers/sbom/adapters/common.py, and its
+# consumer reuses the shared consume loop. Copying hbom alone would fail at
+# import time inside the container, not at build time.
+COPY workers/hbom ./workers/hbom
 COPY docs/reference/certin-v2.0.yaml ./docs/reference/certin-v2.0.yaml
+# ⚠ MANDATORY FOR THE HBOM CONSUMER, NOT OPTIONAL. workers/hbom/profile.py
+# reads this file AT RUNTIME to score the manufacturing number, exactly the way
+# normalize_runner.sbom_fields() reads the CERT-In profile above. Omit it and
+# the first HBOM trigger raises FileNotFoundError inside the container rather
+# than failing the build.
+COPY docs/reference/hbom-manufacturing-v1.yaml ./docs/reference/hbom-manufacturing-v1.yaml
 
 # ---------------------------------------------------------------------------
 # Non-root, unlike Dockerfile.worker (which runs root only for the Docker
@@ -53,4 +64,7 @@ COPY docs/reference/certin-v2.0.yaml ./docs/reference/certin-v2.0.yaml
 RUN useradd --uid 65532 --create-home --shell /usr/sbin/nologin axebom
 USER 65532
 
+# The default is SBOM's consumer; docker-compose.app.yml overrides `entrypoint`
+# for the HBOM one. One image, one credential-bearing build, two processes that
+# scale and roll back independently.
 ENTRYPOINT ["python", "-m", "workers.sbom.normalize_consumer"]

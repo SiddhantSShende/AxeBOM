@@ -44,7 +44,11 @@ def with_purl(name: str, version: str, purl: str) -> dict[str, object]:
         "name": name,
         "versionInfo": version,
         "externalRefs": [
-            {"referenceCategory": "PACKAGE-MANAGER", "referenceType": "purl", "referenceLocator": purl}
+            {
+                "referenceCategory": "PACKAGE-MANAGER",
+                "referenceType": "purl",
+                "referenceLocator": purl,
+            }
         ],
     }
 

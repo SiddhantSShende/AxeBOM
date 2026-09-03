@@ -279,7 +279,11 @@ def test_a_non_durable_cluster_id_falls_back_with_a_loud_diagnostic() -> None:
         model(
             components=[component("k")],
             findings=[
-                {"vuln_cluster_id": "fixture-cluster-0001", "component_key": "k", "display_id": "CVE-1"}
+                {
+                    "vuln_cluster_id": "fixture-cluster-0001",
+                    "component_key": "k",
+                    "display_id": "CVE-1",
+                }
             ],
         ),
         tenant_id="t1",

@@ -42,13 +42,36 @@ import (
 // trigger, since the consumer's own idempotency (pre-check by scan_id/
 // bom_type/normalization_version, backed by a UNIQUE constraint) absorbs a
 // duplicate the way it already absorbs a redelivered one.
+// normalizedFamilies are the families whose NormalizeTriggerV1 has a consumer
+// on the other end.
+//
+// ⚠ AN ALLOWLIST, NOT A REMOVED GUARD, AND THE DIFFERENCE IS A SILENT FAILURE.
+//
+// NORMALIZE_JOBS is a WorkQueue stream. Publishing scan.normalize.cbom with no
+// consumer attached leaves a message nobody acks: it sits until MaxAge and
+// that scan simply never normalizes, with no error raised anywhere and a
+// completed scan showing zero results. That is the exact shape of failure this
+// codebase keeps finding, so the gate stays and the list grows by one entry
+// when a family's consumer is actually deployed.
+//
+// The entry and the compose service are two halves of one fact. Adding either
+// without the other is the bug.
+//
+// CBOM and AIBOM are NOT here yet: both have a build_canonical_* function and
+// both already have their bulk.py writers, so each is one consumer module away
+// — see docs/STATE.md.
+var normalizedFamilies = map[events.Family]bool{
+	events.FamilySBOM: true,
+	events.FamilyHBOM: true,
+}
+
 func (o *Orchestrator) maybeTriggerNormalize(ctx context.Context, result events.ScanResultV1) {
 	e, ok := o.registry.Get(result.Engine)
 	if !ok {
 		return
 	}
-	family := familyOf(e)
-	if family != string(events.FamilySBOM) {
+	family := events.Family(familyOf(e))
+	if !normalizedFamilies[family] {
 		return
 	}
 
@@ -60,7 +83,7 @@ func (o *Orchestrator) maybeTriggerNormalize(ctx context.Context, result events.
 	}
 
 	latest := latestRunsByEngine(runs)
-	if !familyTerminal(latest, o.registry, events.FamilySBOM) {
+	if !familyTerminal(latest, o.registry, family) {
 		return
 	}
 
@@ -69,7 +92,7 @@ func (o *Orchestrator) maybeTriggerNormalize(ctx context.Context, result events.
 	// redelivery of one that already fired it. NormalizeTriggerID must never
 	// claim on its own — see its doc comment — or this stops being a safe
 	// probe.
-	if existing, err := o.store.NormalizeTriggerID(ctx, result.TenantID, result.ScanID, events.FamilySBOM); err != nil {
+	if existing, err := o.store.NormalizeTriggerID(ctx, result.TenantID, result.ScanID, family); err != nil {
 		o.log.Warn("could not check whether normalize already fired",
 			"scan_id", result.ScanID, "cause", err.Error())
 		return
@@ -84,7 +107,7 @@ func (o *Orchestrator) maybeTriggerNormalize(ctx context.Context, result events.
 		return
 	}
 
-	trigger, err := o.buildNormalizeTrigger(ctx, scan, latest, newID.String(), events.FamilySBOM)
+	trigger, err := o.buildNormalizeTrigger(ctx, scan, latest, newID.String(), family)
 	if err != nil {
 		o.log.Error("could not assemble the normalize trigger",
 			"scan_id", result.ScanID, "cause", err.Error())
@@ -112,7 +135,7 @@ func (o *Orchestrator) maybeTriggerNormalize(ctx context.Context, result events.
 	}
 
 	if _, fired, err := o.store.MarkNormalizeTriggered(
-		ctx, result.TenantID, result.ScanID, events.FamilySBOM, trigger.TriggerID,
+		ctx, result.TenantID, result.ScanID, family, trigger.TriggerID,
 	); err != nil {
 		o.log.Error("published the normalize trigger but could not record the claim; "+
 			"a future terminal result will publish a harmless duplicate",

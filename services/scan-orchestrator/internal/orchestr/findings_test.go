@@ -18,13 +18,21 @@ func insertBOMDocument(t *testing.T, f *fixture, tenantID, scanID string, versio
 	t.Helper()
 	var docID string
 	err := f.pool.WithTenant(context.Background(), tenantID, func(ctx context.Context, tx db.Tx) error {
+		// ⚠ A REAL normalize.alias_snapshot ROW, NOT uuid.NewString(). Migration
+		// 0012 gave the column a foreign key, so an invented id is rejected —
+		// and SBOM is the BOM type that genuinely has a snapshot, so the
+		// fixture mints one rather than passing NULL.
 		return tx.QueryRow(ctx, `
+			WITH snap AS (
+				INSERT INTO normalize.alias_snapshot (ruleset_version)
+				VALUES ('test-ruleset-1') RETURNING id
+			)
 			INSERT INTO normalize.bom_documents
 				(tenant_id, scan_id, bom_type, normalization_version,
 				 ruleset_version, alias_snapshot_id, spdx_license_list_version)
-			VALUES ($1, $2, 'SBOM', $3, 'test-ruleset-1', $4, '3.24')
+			SELECT $1, $2, 'SBOM', $3, 'test-ruleset-1', snap.id, '3.24' FROM snap
 			RETURNING id`,
-			tenantID, scanID, version, uuid.NewString()).Scan(&docID)
+			tenantID, scanID, version).Scan(&docID)
 	})
 	if err != nil {
 		t.Fatalf("insert bom document: %v", err)

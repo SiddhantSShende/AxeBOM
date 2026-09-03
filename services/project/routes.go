@@ -134,6 +134,22 @@ func registerRoutes(mux *http.ServeMux, d *deps) {
 		guard(authz.ResourceHardware, authz.ActionCreate, h.SaveHardwareComponent))
 	mux.Handle("POST /v1/hbom/{projectId}/import",
 		guard(authz.ResourceHardware, authz.ActionCreate, h.ConfirmHBOMImport))
+	// ⚠ THE THREE-SEGMENT FORM, BECAUSE THE FRONTEND HAS ALWAYS CALLED IT AND
+	// IT HAS ALWAYS 404'd.
+	//
+	// frontend/src/lib/hbom.ts's useConfirmImport posts to `/v1/hbom/import`
+	// with `project_id` in the multipart body. No ServeMux pattern matched
+	// three segments, so confirm-import failed for every customer who ever
+	// reached the last step of the import wizard — with a 404, which reads as
+	// "the feature is not deployed" rather than "you found a bug".
+	//
+	// Both forms are mounted rather than one being deleted: the path-scoped
+	// form is the better shape (the project id is part of the resource, and
+	// the route guard can see it), and breaking a client to prove a point is
+	// not worth a release. ConfirmHBOMImport already reads `project_id` from
+	// the body when the path carries none — see its own comment on which wins.
+	mux.Handle("POST /v1/hbom/import",
+		guard(authz.ResourceHardware, authz.ActionCreate, h.ConfirmHBOMImport))
 
 	// --- Quantum BOM (QBOM) device metadata ----------------------------------
 	// Captured by form, never scanned — CERT-In Table 8 has no open-source

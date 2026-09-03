@@ -27,7 +27,7 @@ import type { ApiError } from './api';
 
 export type Level = 'top_level' | 'complete';
 export type Standard = 'SPDX' | 'CycloneDX';
-export type Format = 'pdf' | 'xlsx' | 'json' | 'spdx' | 'cyclonedx';
+export type Format = 'pdf' | 'docx' | 'xlsx' | 'json' | 'spdx' | 'cyclonedx';
 
 /** StepId numbers the five steps plus review. */
 export type StepId = 1 | 2 | 3 | 4 | 5 | 6;
@@ -156,19 +156,25 @@ export function effectiveFormats(draft: WizardDraft): Format[] {
 }
 
 /**
- * scannableBomTypes drops the two types Generate cannot ask the scanner for.
+ * scannableBomTypes drops the one type Generate cannot ask the scanner for.
  *
- * HBOM has no scanner — it is a CSV/form import — and QBOM is derived from
- * CBOM discovery rather than scanned directly (CLAUDE.md honest labels).
- * `Orchestrator.CreateScan` refuses either family outright
- * (`SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE`); this is what the wizard sends to
- * `POST /v1/scans`, kept separate from `draft.bomTypes` (which still drives
- * `POST /v1/reports` — a report can honestly be requested for HBOM/QBOM
- * without this run scanning for it, since the API resolves bom_document_id
- * from whatever already exists at render time).
+ * ⚠ HBOM USED TO BE ON THIS LIST AND IS NOT ANY MORE. It had no scanner while
+ * a CSV and a form were the only ways in; `hbom-ecad` parses the customer's own
+ * KiCad, Altium and OrCAD design files out of an upload or a connected
+ * repository, which is a real scan producing real jobs on `scan.job.hbom`.
+ *
+ * QBOM stays excluded, and for the original reason: it is DERIVED from CBOM
+ * discovery with quantum-vulnerability rules applied, not scanned directly.
+ * `Orchestrator.CreateScan` still refuses that family outright
+ * (`SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE`).
+ *
+ * This is what the wizard sends to `POST /v1/scans`, kept separate from
+ * `draft.bomTypes` (which still drives `POST /v1/reports` — a report can
+ * honestly be requested for QBOM without this run scanning for it, since the
+ * API resolves bom_document_id from whatever already exists at render time).
  */
 export function scannableBomTypes(draft: WizardDraft): BomType[] {
-  return draft.bomTypes.filter((t) => t !== 'HBOM' && t !== 'QBOM');
+  return draft.bomTypes.filter((t) => t !== 'QBOM');
 }
 
 /**
@@ -194,10 +200,10 @@ export function validateDraft(draft: WizardDraft): CombinationError[] {
     errors.push({
       step: 2,
       message:
-        'HBOM and QBOM are not produced by a scan — HBOM is imported from the ' +
-        "project's Hardware tab, and QBOM becomes available once a CBOM scan " +
-        'has run for this project. Select a scannable type as well (SBOM, ' +
-        'CBOM or AIBOM), or use those tools directly instead of Generate.',
+        'QBOM is not produced by a scan — it becomes available once a CBOM ' +
+        'scan has run for this project, because quantum readiness is derived ' +
+        'from the crypto assets that scan finds. Select a scannable type as ' +
+        'well (SBOM, CBOM, AIBOM or HBOM).',
     });
   }
 
@@ -219,9 +225,10 @@ export function validateDraft(draft: WizardDraft): CombinationError[] {
   }
 
   // ⚠ A WARNING THE USER CAN OVERRIDE, NOT A REFUSAL. A Complete BOM of a large
-  // project is thousands of PDF pages; the renderer caps it and says so. But
-  // "Complete + PDF" is legitimate for a small project, and refusing it outright
-  // would be the client overruling a decision the server is happy to make.
+  // project is thousands of PDF pages (or, for docx, thousands of table rows);
+  // the renderer caps either and says so. But "Complete + PDF"/"Complete +
+  // docx" is legitimate for a small project, and refusing it outright would
+  // be the client overruling a decision the server is happy to make.
   if (draft.levels.includes('complete') && draft.formats.includes('pdf')) {
     errors.push({
       step: 5,
@@ -229,6 +236,15 @@ export function validateDraft(draft: WizardDraft): CombinationError[] {
         'A Complete BOM can exceed a PDF page cap on a large project, in which ' +
         'case the PDF is truncated with a note pointing at the XLSX. XLSX and ' +
         'JSON have no page limit.',
+    });
+  }
+  if (draft.levels.includes('complete') && draft.formats.includes('docx')) {
+    errors.push({
+      step: 5,
+      message:
+        'A Complete BOM can exceed the Word document’s row cap on a large ' +
+        'project, in which case its tables are truncated with a note pointing ' +
+        'at the XLSX. XLSX and JSON have no row limit.',
     });
   }
 

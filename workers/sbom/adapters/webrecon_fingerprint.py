@@ -169,9 +169,7 @@ class WebreconFingerprintAdapter(ToolAdapterBase):
             )
 
         component_count = sum(
-            len(h.get("libraries", []) or [])
-            for h in hosts
-            if isinstance(h, dict)
+            len(h.get("libraries", []) or []) for h in hosts if isinstance(h, dict)
         )
         unreachable = sum(
             1 for h in hosts if isinstance(h, dict) and h.get("status") != "succeeded"
@@ -195,8 +193,8 @@ class WebreconFingerprintAdapter(ToolAdapterBase):
                 status=ResultStatus.PARTIAL,
                 artifacts=[artifact] if artifact else [],
                 summary=summarize(self.capabilities, {"components": 0}),
-                diagnostics=diagnostics
-                + [
+                diagnostics=[
+                    *diagnostics,
                     {
                         "severity": "warn",
                         "code": "ENGINE_ZERO_RESULTS",
@@ -206,7 +204,7 @@ class WebreconFingerprintAdapter(ToolAdapterBase):
                             "and a silent zero is indistinguishable from a page with "
                             "nothing detectable"
                         ),
-                    }
+                    },
                 ],
             )
 

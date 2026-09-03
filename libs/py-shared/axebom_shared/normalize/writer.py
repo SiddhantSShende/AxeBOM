@@ -41,7 +41,7 @@ table, permanently, and every table this module writes to has RLS FORCED
 (CLAUDE.md invariant 6). `_CHUNK_SIZE` rows go into one `INSERT ... VALUES
 (...), (...), ...` statement — Postgres's own bind-parameter ceiling
 (65535) is the hard reason there is a limit at all; 500 is comfortably under
-it for even the widest table here (normalize.components, 20 columns) and
+it for even the widest table here (normalize.components, 21 columns) and
 keeps each statement's own size reasonable.
 
 See `docs/03-NORMALIZER-SPEC.md` §8 and `libs/py-shared/axebom_shared/
@@ -127,12 +127,45 @@ def write_bom_document(
     Raises RefusedError if bulk.plan() refuses (a cap was exceeded) — nothing
     is written; the transaction is left to roll back.
     """
-    alias_snapshot_id = _require_uuid(
+    alias_snapshot_id = _optional_uuid(
         (canonical.get("provenance") or {}).get("alias_snapshot_id"),
         field_name="canonical['provenance']['alias_snapshot_id']",
     )
 
+    # ⚠ NULL IS LEGAL FOR THE BOM TYPES THAT HAVE NO ALIAS CLOSURE, AND ONLY
+    # FOR THOSE. migration 0012 made alias_snapshot_id nullable so CBOM, AIBOM,
+    # QBOM and HBOM could stop minting a meaningless uuid to satisfy NOT NULL.
+    # SBOM is the one type the column exists FOR: its snapshot is what makes a
+    # finding's alias clustering explainable months later (ADR-0005).
+    #
+    # Without this guard, an SBOM path that silently stopped minting a snapshot
+    # would lose exactly that provenance with nothing failing anywhere — the
+    # column would just accept NULL. That is the failure mode dropping a NOT
+    # NULL always risks, so the constraint moves here rather than disappearing.
+    if bom_type == "SBOM" and alias_snapshot_id is None:
+        raise ValueError(
+            "canonical['provenance']['alias_snapshot_id'] is required for an "
+            "SBOM: the alias snapshot is what makes a finding's cluster "
+            "explainable at re-normalization time. It is optional only for the "
+            "BOM types that run no alias closure (CBOM, AIBOM, QBOM, HBOM)."
+        )
+
     coverage = canonical.get("coverage") or {}
+
+    # ⚠ SCORED FIELD SETS THAT ARE NOT COMPLIANCE, KEPT OUT OF THE TWO COLUMNS
+    # THAT ARE.
+    #
+    # completeness_pct and declaration_pct answer "how much of what CERT-In
+    # requires is present". A supplementary profile — HBOM's manufacturing
+    # readiness today — answers a different question with a different authority
+    # behind it, so it lands in its own column, keyed by profile id, carrying
+    # its own label and an is_compliance flag. Nothing here can move the two
+    # numbers above; see migration 0012's comment for why this is a keyed jsonb
+    # rather than another pair of numeric columns.
+    #
+    # Empty for every BOM type that has no supplementary profile, which is all
+    # of them except HBOM.
+    supplementary = canonical.get("supplementary_coverage") or {}
 
     with conn.transaction():
         cur = conn.cursor()
@@ -144,8 +177,8 @@ def write_bom_document(
                 (tenant_id, scan_id, bom_type, normalization_version,
                  ruleset_version, alias_snapshot_id, spdx_license_list_version,
                  completeness_pct, declaration_pct, coverage_breakdown,
-                 unidentified_count)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 unidentified_count, project_id, supplementary_coverage)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -160,6 +193,13 @@ def write_bom_document(
                 coverage.get("declaration_pct"),
                 json.dumps(coverage),
                 canonical.get("unidentified_count") or 0,
+                # ⚠ HBOM's SECOND LINEAGE KEY. An imported hardware BOM has no
+                # scan, so services/project borrows scan_id for the project id;
+                # a SCANNED one carries a real scan_id. Both set project_id,
+                # which is what resolveHBOMDocument reads — see migration 0012.
+                # None for every other BOM type, which resolves by scan_id.
+                canonical.get("project_id"),
+                json.dumps(supplementary),
             ),
         )
         row = cur.fetchone()
@@ -214,23 +254,32 @@ def _insert_batch(cur: Cursor, batch: bulk.CopyBatch) -> None:
         )
 
 
-def _require_uuid(value: Any, *, field_name: str) -> str:
-    """Fail with a message naming the field, not a Postgres type-cast error.
+def _optional_uuid(value: Any, *, field_name: str) -> str | None:
+    """Normalize a uuid-or-absent field, failing with a message naming it.
 
-    alias_snapshot_id is a `uuid NOT NULL` column, but the canonical model
-    carries it as a plain string — production values come from
-    normalize.alias_snapshot, which this module does not mint (see the
-    module docstring: normalization TRIGGERING is deferred). Fixture and test
-    callers routinely pass a human-readable placeholder like
-    "fixture-npm-simple-aliases" instead, which is not a UUID at all. Either
-    way, "invalid input syntax for type uuid: fixture-npm-simple-aliases"
-    from three network round trips away is a worse first message than this.
+    ⚠ None IS A LEGITIMATE ANSWER, AND A MALFORMED STRING STILL IS NOT.
+
+    alias_snapshot_id is nullable as of
+    migrations/normalize/0012_bom_document_provenance.sql: the BOM types with
+    no alias-closure pipeline (CBOM, AIBOM, QBOM, HBOM) have no snapshot to
+    point at, and they used to mint a throwaway uuid purely to satisfy NOT
+    NULL. None says the true thing; the column's new foreign key would reject
+    the throwaway anyway.
+
+    What has NOT changed is the error for a value that is present but is not a
+    uuid. Production values come from normalize.alias_snapshot, but fixture and
+    test callers routinely pass a human-readable placeholder like
+    "fixture-npm-simple-aliases", and "invalid input syntax for type uuid:
+    fixture-npm-simple-aliases" from three network round trips away is a worse
+    first message than this one.
     """
+    if value is None:
+        return None
     try:
         return str(uuid.UUID(str(value)))
     except (ValueError, AttributeError, TypeError) as exc:
         raise ValueError(
             f"{field_name} must be a real uuid (got {value!r}); a fixture-style "
-            "placeholder string will fail the alias_snapshot_id NOT NULL uuid "
-            "column with a much less legible Postgres error"
+            "placeholder string will fail the alias_snapshot_id uuid column "
+            "with a much less legible Postgres error"
         ) from exc

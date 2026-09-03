@@ -22,7 +22,7 @@ product ships a false compliance claim when a guideline is revised.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -41,6 +41,62 @@ MAX_DEPTH = 10
 #: Criticality is a closed set, matching the CHECK constraint on
 #: `normalize.hardware_components`.
 CRITICALITY_VALUES = ("critical", "high", "medium", "low")
+
+#: Assembly method. Closed, matching migration 0011's CHECK.
+ASSEMBLY_TYPES = ("smt", "tht", "mechanical")
+
+#: Part lifecycle. Closed, matching migration 0011's CHECK.
+#:
+#: ⚠ "nrnd" IS NOT A SYNONYM FOR EITHER NEIGHBOUR. Not Recommended for New
+#: Designs means buyable today and refused at the next respin — the one status
+#: that prompts a redesign before the part actually goes away. Collapsing it
+#: into "active" or "obsolete" destroys exactly that signal.
+#:
+#: ⚠ "unknown" IS STORABLE AND SCORES ZERO. It is in
+#: axebom_shared.normalize.coverage.NON_SUBSTANTIVE, so a distributor that
+#: answered "unknown" is REPORTED without counting as knowledge — invariant 3
+#: on the field where that answer is most common.
+LIFECYCLE_VALUES = ("active", "nrnd", "obsolete", "eol", "preview", "unknown")
+
+#: How confident we are that an alternate really substitutes.
+#:
+#: ⚠ "unverified" IS THE DEFAULT, NOT "drop-in". Asserting that a part is a
+#: drop-in replacement is a substitution decision about somebody's hardware;
+#: defaulting to the flattering value would make AxeBOM the author of a claim
+#: it never checked.
+EQUIVALENCE_VALUES = ("drop-in", "functional", "unverified")
+
+
+@dataclass
+class Alternate:
+    """An approved second source for a part.
+
+    Mirrors `normalize.hardware_component_alternates`. Not a CERT-In element —
+    see the manufacturing block on HardwareComponent.
+    """
+
+    #: The customer's own preference order, preserved rather than re-sorted:
+    #: which second source they would actually use is a procurement judgement.
+    ordinal: int = 0
+
+    manufacturer_name: str = ""
+    model_number: str = ""
+    supplier_info: str = ""
+    supplier_sku: str = ""
+    lifecycle_status: str = ""
+    equivalence: str = "unverified"
+    #: "Approved by EE 2026-03, pin-compatible." An alternate nobody signed off
+    #: on is a suggestion, not an alternate.
+    approval_note: str = ""
+
+    def identifies_a_part(self) -> bool:
+        """Whether this names anything at all.
+
+        Mirrors the `hardware_alternate_identifiable` CHECK: an alternate that
+        names no manufacturer, no MPN and no SKU is not an alternate.
+        """
+        return bool(self.manufacturer_name or self.model_number or self.supplier_sku)
+
 
 #: Elements no import path can populate from a parts list, and which the form
 #: collects instead.
@@ -122,6 +178,52 @@ class HardwareComponent:
     #: Vulnerability cluster ids. Populated by matching, not by import.
     findings: list[str] = field(default_factory=list)
 
+    # --- manufacturing and procurement -------------------------------------
+    #
+    # ⚠ NOT CERT-In ELEMENTS, AND THEY MUST NEVER MOVE completeness_pct.
+    #
+    # Table 11 describes a component's identity and provenance. It says nothing
+    # about how many are fitted, where they sit, what they cost, or whether the
+    # part can still be bought — all of which the customer's own parts list
+    # already carries. These are scored separately, against
+    # docs/reference/hbom-manufacturing-v1.yaml, into their own number. See
+    # `workers/hbom/profile.py` and migration 0011.
+
+    #: Reference designators. A LIST, because one line item covers many
+    #: placements: "R1, R4, R17" is one part with quantity 3.
+    designators: list[str] = field(default_factory=list)
+    package_footprint: str = ""
+
+    supplier_sku: str = ""
+    preferred_supplier: str = ""
+    #: Held as a string all the way to the writer, which casts it. A float here
+    #: would lose cents the moment a price like 0.1 round-trips.
+    unit_price: str = ""
+    #: ISO 4217. Never defaulted — a guessed currency turns an unusable number
+    #: into a wrong one.
+    currency: str = ""
+
+    #: Deliberately not fitted for this variant. Distinct from absent: the part
+    #: IS on the schematic.
+    do_not_populate: bool = False
+    assembly_type: str = ""
+    lifecycle_status: str = ""
+
+    datasheet_url: str = ""
+
+    #: Which engine produced this node — `hbom-ecad`, `hbom-cdxgen-host`, or
+    #: empty for a row entered through the REST import or the form.
+    #:
+    #: ⚠ PROVENANCE, NOT DECORATION. A parts list assembled from a schematic
+    #: and a host inventory in the same scan holds two different KINDS of
+    #: claim, and a reader who cannot tell them apart will read one as the
+    #: other.
+    source_engine: str = ""
+
+    #: Approved second sources. The field that decides whether an obsolete part
+    #: delays a build or stops it.
+    alternates: list[Alternate] = field(default_factory=list)
+
     # --- provenance --------------------------------------------------------
     #: Which fields an enrichment provider supplied, so a report can say where a
     #: value came from. A datasheet URL from Nexar is a different kind of fact
@@ -182,21 +284,38 @@ def validate_mapping() -> list[str]:
     ]
 
 
-def to_profile_row(component: HardwareComponent) -> dict[str, Any]:
+def to_profile_row(
+    component: HardwareComponent, fields: Sequence[Any] | None = None
+) -> dict[str, Any]:
     """Render one component as {profile field id: value}.
 
     ⚠ EVERY ELEMENT APPEARS. An absent value becomes `not-provided` — reported,
     never omitted — because omission hides the gap while `not-provided` states
     it. Coverage scoring then treats `not-provided` as present = 0, which is
     what keeps `completeness_pct` honest.
+
+    ⚠ `fields` MAKES THIS REUSABLE ACROSS PROFILES, AND THAT IS THE WHOLE POINT.
+    The same component is scored twice — once against the CERT-In elements and
+    once against the manufacturing set — and both scores must apply the
+    identical `not-provided` rule. One implementation, two field lists. A second
+    copy of this loop is how the two would eventually disagree about what counts
+    as absent, which would show up as two percentages that cannot both be right.
+
+    Defaults to the CERT-In elements so every existing caller is unchanged.
     """
     row: dict[str, Any] = {}
 
-    for f in HBOM_FIELDS:
-        attribute = _ATTRIBUTE_FOR[f.id]
+    for f in fields if fields is not None else HBOM_FIELDS:
+        attribute = _attribute_for(f.canonical_path)
         value = getattr(component, attribute, None)
 
-        if f.type == "recursive_ref":
+        # ⚠ getattr, BECAUSE TWO FIELD SHAPES REACH THIS LOOP. The generated
+        # `ProfileField` carries `type`; `coverage.Field` — what
+        # `fields_from_profile` builds for the manufacturing profile — carries
+        # only what scoring needs and has no `type` at all. Only CERT-In
+        # element 20 is ever `recursive_ref`, so an absent type is simply not
+        # that case rather than an error.
+        if getattr(f, "type", "") == "recursive_ref":
             # Element 20 is the sub-component list. Its VALUE is the count of
             # direct children: a report needs to say "this assembly declares
             # four sub-components", and the children themselves are rendered as
@@ -208,6 +327,16 @@ def to_profile_row(component: HardwareComponent) -> dict[str, Any]:
             row[f.id] = value if value else NOT_PROVIDED
             continue
 
+        # ⚠ A BOOLEAN IS ALWAYS AN ANSWER, INCLUDING False. "This part IS
+        # populated" is a stated fact, not an absence, and
+        # coverage.is_substantive agrees (`False` is substantive). Falling
+        # through to the `value not in ("", None)` check below would work by
+        # accident today; saying it explicitly keeps it working if that check
+        # ever changes.
+        if isinstance(value, bool):
+            row[f.id] = value
+            continue
+
         row[f.id] = value if value not in ("", None) else NOT_PROVIDED
 
     return row
@@ -216,10 +345,17 @@ def to_profile_row(component: HardwareComponent) -> dict[str, Any]:
 def normalize(component: HardwareComponent) -> HardwareComponent:
     """Return a component with its values cleaned, recursively.
 
-    Deliberately narrow: it trims whitespace, lower-cases the criticality enum,
+    Deliberately narrow: it trims whitespace, canonicalises the closed enums,
     and drops empty strings out of list fields. It does NOT guess — an absent
     manufacturer stays absent, because a plausible default would be read as a
     fact about somebody's hardware.
+
+    ⚠ EVERY CLOSED SET IS DROPPED-IF-UNRECOGNISED, NEVER COERCED, and every one
+    of them is normalised HERE as well as in the importer. The importer is not
+    the only way in: the form writes these fields too, and a value that reached
+    the database bypassing this function would either violate a CHECK
+    constraint (a lower-case currency against `^[A-Z]{3}$`) or store an enum
+    nothing can render.
     """
     component.product_name = component.product_name.strip()
     component.criticality = component.criticality.strip().lower()
@@ -252,6 +388,92 @@ def normalize(component: HardwareComponent) -> HardwareComponent:
     ):
         setattr(component, attribute, str(getattr(component, attribute) or "").strip())
 
+    # --- manufacturing enums, same drop-rather-than-coerce rule -------------
+    component.assembly_type = component.assembly_type.strip().lower()
+    if component.assembly_type and component.assembly_type not in ASSEMBLY_TYPES:
+        component.assembly_type = ""
+
+    component.lifecycle_status = component.lifecycle_status.strip().lower()
+    if component.lifecycle_status and component.lifecycle_status not in LIFECYCLE_VALUES:
+        component.lifecycle_status = ""
+
+    # ⚠ UPPER-CASED, BECAUSE THE COLUMN IS CHECKed ON `^[A-Z]{3}$`. A file that
+    # writes "usd" is not wrong about the currency, only about the case, and
+    # rejecting the row over that would lose a real price. A string that is not
+    # three letters IS dropped — "US Dollars" is not an ISO 4217 code, and
+    # storing it would make the column unusable for anything that reads it.
+    component.currency = component.currency.strip().upper()
+    if len(component.currency) != 3 or not component.currency.isalpha():
+        component.currency = ""
+
+    for attribute in (
+        "package_footprint",
+        "supplier_sku",
+        "preferred_supplier",
+        "unit_price",
+        "datasheet_url",
+    ):
+        setattr(component, attribute, str(getattr(component, attribute) or "").strip())
+
+    component.designators = [d.strip() for d in component.designators if d and d.strip()]
+    component.alternates = [a for a in component.alternates if a.identifies_a_part()]
+
     component.compliance = [c.strip() for c in component.compliance if c and c.strip()]
     component.children = [normalize(child) for child in component.children]
+    return component
+
+
+# ---------------------------------------------------------------------------
+# Serialization
+# ---------------------------------------------------------------------------
+#
+# ⚠ THIS IS WHAT MAKES AN HBOM SCAN REPLAYABLE (CLAUDE.md invariant 10).
+#
+# An engine writes its parsed tree as a raw artifact, once, and never mutates
+# it. Normalization then runs from that stored artifact — so fixing a
+# normalizer bug is a re-normalization pass, not a re-parse of files that may
+# no longer exist at the same commit. Round-tripping through these two
+# functions is what the artifact's `roots` array is.
+
+
+def to_dict(component: HardwareComponent) -> dict[str, Any]:
+    """One component and its subtree as plain JSON-safe data.
+
+    Every field is emitted, including empty ones: an absent key and an empty
+    value are different facts on the way back in, and a reader that had to
+    guess which it was looking at would be guessing about the customer's data.
+    """
+    out: dict[str, Any] = {}
+    for name in HardwareComponent.__dataclass_fields__:
+        if name in ("children", "alternates"):
+            continue
+        out[name] = getattr(component, name)
+    out["alternates"] = [
+        {n: getattr(a, n) for n in Alternate.__dataclass_fields__} for a in component.alternates
+    ]
+    out["children"] = [to_dict(child) for child in component.children]
+    return out
+
+
+def from_dict(payload: Mapping[str, Any]) -> HardwareComponent:
+    """Rebuild a component and its subtree.
+
+    ⚠ UNKNOWN KEYS ARE IGNORED AND MISSING ONES TAKE THEIR DEFAULT. A stored
+    artifact may predate a field this model has since gained, and re-reading it
+    must not raise — that is the whole point of storing artifacts immutably.
+    The failure mode to avoid is a normalizer that cannot read its own history.
+    """
+    known = HardwareComponent.__dataclass_fields__
+    component = HardwareComponent(
+        **{k: v for k, v in payload.items() if k in known and k not in ("children", "alternates")}
+    )
+    alt_fields = Alternate.__dataclass_fields__
+    component.alternates = [
+        Alternate(**{k: v for k, v in a.items() if k in alt_fields})
+        for a in payload.get("alternates") or []
+        if isinstance(a, Mapping)
+    ]
+    component.children = [
+        from_dict(c) for c in payload.get("children") or [] if isinstance(c, Mapping)
+    ]
     return component

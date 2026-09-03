@@ -25,7 +25,7 @@ import uuid
 import pytest
 
 from .test_bulk import ai_model, component, crypto_asset, model
-from .writer import RefusedError, _require_uuid, write_bom_document
+from .writer import RefusedError, _optional_uuid, write_bom_document
 
 psycopg = pytest.importorskip("psycopg")
 
@@ -86,6 +86,13 @@ def pg_conn():
 #: correct shape here, not one-row-per-test cleanup.
 _TEST_CLUSTER_ID = "01900000-0000-7000-8000-0000000000c1"
 
+#: An SBOM canonical model must carry a REAL alias snapshot as of
+#: migrations/normalize/0012_bom_document_provenance.sql, which gave
+#: bom_documents.alias_snapshot_id the foreign key it never had. Same
+#: situation _TEST_CLUSTER_ID is in, for the same reason, so it gets the
+#: same treatment: a fixed id and a fixture that guarantees the row.
+_TEST_ALIAS_SNAPSHOT_ID = "01900000-0000-7000-8000-0000000000a1"
+
 
 @pytest.fixture
 def ensure_test_cluster(pg_conn):
@@ -103,6 +110,28 @@ def ensure_test_cluster(pg_conn):
         "INSERT INTO normalize.vuln_clusters (id, display_id) VALUES (%s, %s) "
         "ON CONFLICT (id) DO NOTHING",
         (_TEST_CLUSTER_ID, "CVE-2024-0001"),
+    )
+
+
+@pytest.fixture
+def ensure_test_alias_snapshot(pg_conn):
+    """Guarantees normalize.alias_snapshot has a row for _TEST_ALIAS_SNAPSHOT_ID.
+
+    ⚠ REQUIRED SINCE bom_documents_alias_snapshot_id_fkey (migration
+    normalize/0012_bom_document_provenance.sql). Exactly the ensure_test_cluster
+    story one table over: the column used to accept any uuid at all, so every
+    caller minted a throwaway; now Postgres enforces that the row is real, which
+    is the whole point of the FK — and it means this fixture, not writer.py, is
+    what keeps canonical_model()'s SBOM fixture representative of a real write.
+
+    CBOM/AIBOM/QBOM/HBOM need no such fixture: they run no alias closure and
+    pass None, which the same migration made legal.
+    """
+    cur = pg_conn.cursor()
+    cur.execute(
+        "INSERT INTO normalize.alias_snapshot (id, ruleset_version) VALUES (%s, %s) "
+        "ON CONFLICT (id) DO NOTHING",
+        (_TEST_ALIAS_SNAPSHOT_ID, "test-ruleset-1"),
     )
 
 
@@ -188,7 +217,8 @@ def canonical_model(tenant_suffix: str = "") -> dict:
         "spdx_license_list_version": "3.24",
         "unidentified_count": 0,
         "coverage": {"completeness_pct": 42.5, "declaration_pct": 80.0},
-        "provenance": {"alias_snapshot_id": str(uuid.uuid4())},
+        # A real snapshot row, not a minted uuid — see ensure_test_alias_snapshot.
+        "provenance": {"alias_snapshot_id": _TEST_ALIAS_SNAPSHOT_ID},
     }
 
 
@@ -197,7 +227,9 @@ def canonical_model(tenant_suffix: str = "") -> dict:
 # --------------------------------------------------------------------------
 
 
-def test_every_planned_column_exists_in_the_live_schema(pg_conn, written, ensure_test_cluster) -> None:
+def test_every_planned_column_exists_in_the_live_schema(
+    pg_conn, written, ensure_test_cluster, ensure_test_alias_snapshot
+) -> None:
     """For every table bulk.plan() writes to, every column it declares must
     be a real column in the live database. This is a MECHANICAL check
     against information_schema, not a human re-reading two files and hoping
@@ -271,7 +303,9 @@ def test_every_planned_column_exists_in_the_live_schema(pg_conn, written, ensure
 # --------------------------------------------------------------------------
 
 
-def test_a_live_write_round_trips(pg_conn, written, ensure_test_cluster) -> None:
+def test_a_live_write_round_trips(
+    pg_conn, written, ensure_test_cluster, ensure_test_alias_snapshot
+) -> None:
     tenant_id = str(uuid.uuid4())
     canonical = canonical_model()
 
@@ -327,7 +361,7 @@ def test_a_live_write_round_trips(pg_conn, written, ensure_test_cluster) -> None
     assert cur.fetchone()[0] == 1
 
 
-def test_a_refused_plan_writes_nothing(pg_conn, written) -> None:
+def test_a_refused_plan_writes_nothing(pg_conn, written, ensure_test_alias_snapshot) -> None:
     """A refused plan must leave no trace — not even the header row. A
     bom_documents row with nothing under it would resolve as a real, empty
     document to any reader querying by (scan_id, bom_type), which is a worse
@@ -367,7 +401,9 @@ def test_a_refused_plan_writes_nothing(pg_conn, written) -> None:
     assert cur.fetchone()[0] == 0
 
 
-def test_the_write_is_tenant_scoped(pg_conn, written, ensure_test_cluster) -> None:
+def test_the_write_is_tenant_scoped(
+    pg_conn, written, ensure_test_cluster, ensure_test_alias_snapshot
+) -> None:
     """RLS, not a WHERE clause this code could forget to write — the same
     property orchestrator_test.go's TestScansAreInvisibleAcrossTenants
     proves on the Go side, proven here for the write path instead of a read."""
@@ -425,7 +461,10 @@ def cbom_canonical_model() -> dict:
         "spdx_license_list_version": "",
         "unidentified_count": 0,
         "coverage": {"completeness_pct": 55.0, "declaration_pct": 100.0},
-        "provenance": {"alias_snapshot_id": str(uuid.uuid4())},
+        # ⚠ None, and that is the CBOM-shaped answer: no alias closure runs,
+        # so there is no snapshot. Legal since migration 0012; before it,
+        # this had to be a throwaway uuid to satisfy NOT NULL.
+        "provenance": {"alias_snapshot_id": None},
     }
 
 
@@ -502,6 +541,23 @@ def test_alias_snapshot_id_must_be_a_real_uuid() -> None:
     a message naming the field, rather than three network round trips later
     as an opaque Postgres type-cast error."""
     with pytest.raises(ValueError, match="alias_snapshot_id"):
-        _require_uuid(
+        _optional_uuid(
             "fixture-npm-simple-aliases", field_name="canonical['provenance']['alias_snapshot_id']"
         )
+
+
+def test_alias_snapshot_id_may_be_absent_but_a_bad_value_still_fails() -> None:
+    """⚠ THE TWO HALVES ARE ONE RULE, AND KEEPING THEM TOGETHER IS THE POINT.
+
+    migration 0012 made the column nullable so the BOM types with no
+    alias-closure pipeline (CBOM, AIBOM, QBOM, HBOM) could stop minting a
+    throwaway uuid to satisfy NOT NULL. The easy mistake when relaxing a
+    constraint is to relax it too far — to start accepting a malformed string
+    as "absent enough" — which would put the opaque Postgres cast error back.
+
+    Absent is fine. Present-but-not-a-uuid is still an error.
+    """
+    field = "canonical['provenance']['alias_snapshot_id']"
+    assert _optional_uuid(None, field_name=field) is None
+    with pytest.raises(ValueError, match="alias_snapshot_id"):
+        _optional_uuid("", field_name=field)

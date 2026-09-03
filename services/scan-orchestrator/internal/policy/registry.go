@@ -269,6 +269,28 @@ func DefaultRegistry() *Registry {
 			ConsumesNativeSBOM: true,
 		},
 		{
+			// A second independent generator alongside syft, Apache-2.0 and
+			// actively maintained. Its ecosystem coverage genuinely exceeds
+			// syft's in several languages, and the normalizer is built to
+			// reconcile two inventories of the same tree rather than trust one
+			// — which is the whole reason more than one generator is useful.
+			//
+			// GraphTrust is deliberately BELOW syft's everywhere the two
+			// overlap: the normalizer REPLACES an ecosystem's subgraph by
+			// trust rank rather than unioning (03-NORMALIZER-SPEC), and syft
+			// is the engine this codebase has actually run against real
+			// projects. cdxgen ranks above it in nothing until it has.
+			ID:            "cdxgen",
+			Mode:          "container",
+			Families:      []events.Family{events.FamilySBOM},
+			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload},
+			Ecosystems:    []string{"npm", "pypi", "maven", "golang", "gem", "cargo", "nuget", "swift", "dart", "elixir", "php", "ruby"},
+			Produces:      []string{"components", "licenses"},
+			NativeFormat:  "cyclonedx-json-1.6",
+			DefaultWeight: 3,
+			GraphTrust:    map[string]int{"npm": 1, "pypi": 1, "maven": 1, "golang": 1},
+		},
+		{
 			ID:            "cbomkit-theia",
 			Mode:          "container",
 			Families:      []events.Family{events.FamilyCBOM},
@@ -299,8 +321,19 @@ func DefaultRegistry() *Registry {
 			DefaultWeight: 3,
 		},
 		{
+			// ⚠ "container", NOT "pip", AND THE REGISTRY WAS THE ONE THAT WAS
+			// WRONG. Upstream publishes ai-bom only as a pip package, so this
+			// field was set from that fact — but AxeBOM does not consume it
+			// that way: deploy/docker/engines/Dockerfile.ai-bom wraps it into a
+			// locally-built image, AIBomAdapter is a SandboxedAdapter, and the
+			// manifest and docs/04-OSINT-INTEGRATION.md both say container.
+			//
+			// This field feeds the UI's Engine Coverage panel, so the
+			// disagreement rendered as a claim that a sandboxed engine runs
+			// unsandboxed in the worker's own Python environment — the opposite
+			// of the truth, on the panel whose whole job is being precise.
 			ID:            "ai-bom",
-			Mode:          "pip",
+			Mode:          "container",
 			Families:      []events.Family{events.FamilyAIBOM},
 			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload},
 			Ecosystems:    []string{"pypi"},
@@ -311,14 +344,97 @@ func DefaultRegistry() *Registry {
 		{
 			// HONEST LABEL: not a scanner. A structured CSV/form import plus a
 			// data model. The UI must never imply discovery.
+			//
+			// ⚠ SourceKinds IS DELIBERATELY EMPTY, AND THAT IS WHAT KEEPS IT
+			// OUT OF FAN-OUT.
+			//
+			// This engine id names the interactive REST path — POST
+			// /v1/hbom/preview then /v1/hbom/{projectId}/import — not a job.
+			// It used to declare `upload`, which was harmless only because the
+			// whole hbom family was refused at scan-create time. `hbom-ecad`
+			// makes the family scannable, and Resolve() filters candidates on
+			// Supports(kind) ALONE — it does not look at RequiresImport — so a
+			// declared source kind would have started publishing real
+			// scan.job.hbom jobs for an engine no worker implements, putting a
+			// permanent `skipped`/ENGINE_NOT_IMPLEMENTED row in the Engine
+			// Coverage section of every HBOM scan. That section is the one
+			// place invariant 12 promises is precise.
+			//
+			// Filtering RequiresImport inside Resolve() would have been the
+			// wrong fix: github-dependency-graph-sbom carries that same flag
+			// and IS dispatched on every git SBOM scan. The flag is an honest
+			// label about where data came from, not a statement about
+			// dispatch. An empty SourceKinds says the dispatch thing exactly.
+			//
+			// Resolve() still records it in SkippedForSource, so it stays
+			// visible rather than vanishing — and hbom-ecad reports
+			// `hardware` as COVERED, which is what stops that record turning
+			// into a false "no engine for this ecosystem" line (see
+			// Store.CoverageGaps).
 			ID:             "hbom-csv",
+			Mode:           "internal",
+			Families:       []events.Family{events.FamilyHBOM},
+			SourceKinds:    nil,
+			Ecosystems:     []string{"hardware"},
+			Produces:       []string{"hardware_components"},
+			NativeFormat:   "csv",
+			DefaultWeight:  1,
+			RequiresImport: true,
+		},
+		{
+			// ⚠ NOT DISCOVERY OF A DEVICE. NOTHING HERE LOOKS AT HARDWARE.
+			//
+			// This parses the customer's OWN hardware DESIGN files — KiCad
+			// schematics and netlists, and BOM exports from KiCad, Altium and
+			// OrCAD — out of an upload or a connected repository. It is the
+			// exact analogue of parsing package-lock.json for an SBOM: a
+			// design artifact the customer wrote, read as data.
+			//
+			// It is the first HBOM engine that is neither an import of a
+			// foreign document nor a derivation, which is precisely what makes
+			// the hbom family scannable at all: rejectNonScannableFamilies
+			// refuses a family only when EVERY engine in it is metadata-only,
+			// so this entry flips HBOM without that function being touched.
+			//
+			// Mode "internal" like webrecon-fingerprint: native parsing, no
+			// container, no manifest-pinned third-party tool.
+			//
+			// ⚠ Ecosystems MUST INCLUDE "hardware" AND THE ADAPTER MUST REPORT
+			// IT COVERED. hbom-csv above is recorded as unavailable for
+			// `hardware` at create time; CoverageGaps only neutralises that
+			// with a matching available=true row, which comes from this
+			// engine's GenerateResult.ecosystems_covered.
+			ID:            "hbom-ecad",
+			Mode:          "internal",
+			Families:      []events.Family{events.FamilyHBOM},
+			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload},
+			Ecosystems:    []string{"hardware"},
+			Produces:      []string{"hardware_components"},
+			NativeFormat:  "axebom-hbom-json-1",
+			DefaultWeight: 3,
+		},
+		{
+			// HONEST LABEL: an IMPORT of a document the CUSTOMER produced by
+			// running `cdxgen -t hbom` on their own device. AxeBOM never
+			// touches the device and never claims to have inventoried one.
+			//
+			// cdxgen's hbom command inventories THE HOST IT RUNS ON — board,
+			// firmware, TPM, storage, NIC — as CycloneDX 1.7. Running it
+			// inside our sandbox would document AxeBOM's own container host
+			// and present it as the customer's hardware, which is why this is
+			// an upload path and never a container engine.
+			//
+			// RequiresImport says all of that as data — the same claim
+			// github-dependency-graph-sbom makes about GitHub's published
+			// SBOM, and like that engine this one IS dispatched.
+			ID:             "hbom-cdxgen-host",
 			Mode:           "internal",
 			Families:       []events.Family{events.FamilyHBOM},
 			SourceKinds:    []events.SourceKind{events.SourceUpload},
 			Ecosystems:     []string{"hardware"},
 			Produces:       []string{"hardware_components"},
-			NativeFormat:   "csv",
-			DefaultWeight:  1,
+			NativeFormat:   "cyclonedx-json-1.7",
+			DefaultWeight:  2,
 			RequiresImport: true,
 		},
 		{
@@ -419,10 +535,26 @@ func (r *Registry) ValidateCombination(engineIDs []string, kind events.SourceKin
 		}
 
 		if !engine.Supports(kind) {
+			// ⚠ NO SOURCE KINDS AT ALL IS A DIFFERENT FACT FROM THE WRONG ONE,
+			// and it deserves a different sentence.
+			//
+			// "cannot read an upload source; it supports nothing" is true and
+			// useless — it reads like a misconfiguration. An engine with an
+			// empty SourceKinds is deliberately unreachable from fan-out
+			// because it names an interactive path rather than a job
+			// (hbom-csv, whose work happens at POST /v1/hbom/{projectId}/import).
+			// Saying so is what makes the 422 actionable, which is this
+			// package's whole stated reason for existing.
+			reason := fmt.Sprintf("%s cannot read a %s source; it supports %s",
+				id, kind, joinKinds(engine.SourceKinds))
+			if len(engine.SourceKinds) == 0 {
+				reason = fmt.Sprintf("%s is not a scan engine — it reads no source kind "+
+					"because its work happens through an interactive import endpoint, "+
+					"not a scan job", id)
+			}
 			offending = append(offending, OffendingPair{
 				Engine: id, SourceKind: string(kind),
-				Reason: fmt.Sprintf("%s cannot read a %s source; it supports %s",
-					id, kind, joinKinds(engine.SourceKinds)),
+				Reason:     reason,
 				Suggestion: r.suggestFor(kind, engine.Families),
 			})
 			continue

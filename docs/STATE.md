@@ -6,9 +6,9 @@ A session that writes code but does not update this file has failed — the next
 
 ---
 
-**Last updated:** 2026-08-29
-**Current phase:** Project registration — URL / Upload / GitHub-connect sources, SBOM-only for this pass (new 5-milestone plan, `~/.claude/plans/the-project-section-while-rippling-shamir.md`) — 🟢 **ALL 5 MILESTONES DONE AND VERIFIED AGAINST REAL INFRASTRUCTURE.** A url-registered project is now fully scannable end to end: register by URL → `services/webrecon` discovers subdomains and fingerprints JS libraries → `webrecon-fingerprint` (a new, ninth SBOM engine) parses the result into components and findings → the scan completes and normalizes, all confirmed against the LIVE dev stack, not just unit tests. See the 2026-08-29 (a)/(b)/(c)/(d) session entries — (d) is Milestone 5 and is the long one; it also found and fixed a real, previously-unnoticed bug in Milestone 3's own mechanism (see below). `sbom-worker`'s own preflight log now reports `'engines': 9`, up from 8. The prior SBOM completion pass below (2026-08-26/27) is unaffected — a full `go test ./... -race`, `task verify`, and `task test:golden` at the end of (d) are clean repo-wide (one pre-existing, unrelated `crypto-mixed` CBOM golden failure, documented since 2026-08-26).
-**Next action:** 🟢 The project-registration plan is COMPLETE, including a live spot-check against a real external site (`https://www.python.org/`, real jQuery 1.8.2 correctly detected with 6 accurate CVEs — see (d)'s entry, final paragraph). Nothing is queued next for this initiative — the next session should read this file fresh and take a new instruction. If asked to extend web recon further, read (d)'s entry in full first: the two remaining, deliberately-deferred gaps are a headless-browser renderer for post-paint-injected JS (Playwright, explicitly out of scope per the plan) and `retire.js`'s `hashes`/`filecontentreplace` fields (not loaded at all). 🟡 Carried forward, neither a regression from this session: (1) a pre-existing e2e/environment mismatch — this stack's ZITADEL OAuth client expects an `http://` redirect URI but the frontend container serves HTTPS-only (`task tls:gen`'s cert, `ZITADEL_DOMAIN` is a LAN IP here) — blocks any Playwright test that signs in for real, including the pre-existing `auth.spec.ts`/`generate.spec.ts` (also confirmed broken independently — they click a "Sign in" button that no longer exists; the real one says "Log in"); (2) ~20/52 `services/auth/internal/service` tests skip nondeterministically on a pre-existing `ownerConn(t)` bug (dials with an already-cancelling `t.Context()` from inside `t.Cleanup()`) — untouched, unrelated to this work. Both are one person's five-minute fix away, just not this session's to make unasked. 🟡 `NVD_API_KEY` is still NOT set (unchanged since the SBOM pass) and GitHub OAuth `CLIENT_ID`/`CLIENT_SECRET` are also genuinely empty in this environment's `.env`, so neither the connect flow's nor the Dependency Graph client's live exchange against real github.com is tested here — both are tested only against fake-GitHub httptest servers. Nothing has been committed to git this session — everything above is still uncommitted working-tree changes.
+**Last updated:** 2026-09-03
+**Current phase:** Enterprise HBOM (6-milestone plan, `~/.claude/plans/now-create-me-hbom-vast-firefly.md`) — 🟢 **ALL SIX MILESTONES DONE.** **AN HBOM SCAN NOW RUNS END TO END THROUGH REAL NATS WITH NO MANUAL STEP**: `POST /v1/scans` → fetcher → `scan.job.hbom` → `hbom-ecad` parses a KiCad schematic → `NormalizeTriggerV1` → the new HBOM consumer → 5 rows in `normalize.hardware_components`, correctly grouped (R1+R4 → one line, qty 2), then rendered into 14 sheets with a populated 24-field coverage table. `cdxgen` is a working second SBOM generator (2 components against syft's 4, merged by the normalizer). `task verify` exits 0.
+**Next action:** Nothing is queued for this initiative — read this file fresh and take a new instruction. If asked to extend HBOM, the two real gaps are `hardware_findings` (CERT-In element 24 is unpopulated, so the Vulnerabilities column is always empty and that element scores zero for every component — its migration was deliberately deferred so the columns are designed against a real matcher) and the alternates editor (alternates are read, rendered, exported and round-tripped, but arrive only by import). 🟡 Carried forward, none of it a regression from this work: CBOM and AIBOM still have no normalize consumer — each is genuinely ONE module away, since both already have `build_canonical_*` and their `bulk.py` writers, and `normalizedFamilies` in `normalize_trigger.go` is the one-line gate; `component_provenance` is written by nothing, so per-component engine attribution is empty; `axebom toolctl pin` has never existed, which is why every `image_digest` but cdxgen's is null; `workers/cbom` and `workers/aibom` carry the same namespace-package relative import that breaks under pytest collection (latent — no test imports them); the ZITADEL http/https redirect still blocks Playwright; and the `crypto-mixed` golden failure is pre-existing.
 
 > 🟢 **A REAL SCAN NOW NORMALIZES, LIVE, WITH NO MANUAL TRIGGER — THE
 > NORMALIZER'S DEPLOYED BOUNDARY FROM (e)/(k)/(l) IS CLOSED FOR SBOM.**
@@ -2266,6 +2266,605 @@ mind**, because a claim about limits should be falsifiable.
 
 ## Session log
 
+### 2026-09-03 (f) — Milestone 6: the live OSINT pass, and three bugs only running it could find
+
+**Goal:** run it for real. Nothing in milestones 1–5 had gone through NATS end to end.
+
+#### The headline: an HBOM scan runs itself
+
+`POST /v1/scans {"families":["hbom"]}` → fetcher materializes the upload → fan-out → `scan.job.hbom` → `hbom-ecad` parses a KiCad schematic → `scan.result.hbom` → the orchestrator publishes `NormalizeTriggerV1` → `hbom-normalize-consumer` → **5 rows in `normalize.hardware_components`**. No manual step anywhere.
+
+The grouping held on real data: R1 and R4 became one line item with quantity 2 and both designators, carrying the manufacturer that was recorded on R1 only. `source_engine` tagged every row. CERT-In 12.07/100.00, manufacturing 38.33, `alias_snapshot_id` NULL.
+
+**And the ecosystem-coverage interaction worked exactly as predicted.** Both rows are present — `hardware available=false by hbom-csv` and `hardware available=true by hbom-ecad` — so `CoverageGaps` reports no gap. That was the one-missing-list-literal trap flagged in (b); it is now demonstrated rather than reasoned about.
+
+Rendering the live document produced **14 sheets and `coverage-fields=24`**. That number is the (a)-era bug fixed end to end: the per-field coverage table was empty in every report this product had ever rendered, and it is populated here from a real scan.
+
+#### Three bugs, none of them findable without running it
+
+**1. `ECADAdapter` returned a plain dict where the worker calls `.as_dict()`.** The job died three frames inside `SBOMWorker._result` with `AttributeError`, *after* the engine had done all its work and written its artifact. The adapters' own tests exercise parsing and never go through the worker; the worker's tests use adapters that already got it right. New `workers/hbom/test_adapters.py` tests the SEAM, parametrized over the registry so a third engine cannot repeat it. Mutation-verified.
+
+**2. `CdxgenAdapter` read `layout.container_workspace`, which does not exist** — the field is `container_scratch`. Same shape: raised before the container started, on a real scan. New `workers/sbom/test_adapter_contract.py` exercises `extra_env` and `build_argv` for **every** sandboxed adapter against real types, and asserts the rules that matter: every scratch path lives under the writable root, and no argv contains a package-manager invocation (invariant 7, asserted in CI as well as enforced in the Go sandbox).
+
+**3. cdxgen ignores `TMPDIR`, then deletes its own temp directory.** Two live failures in sequence. First `EROFS` on a hardcoded `/tmp/cdxgen-temp` — it builds scratch paths from `CDXGEN_TEMP_DIR`/`CDXGEN_TMP_DIR`, not `TMPDIR`. Then, handed the scratch root, its `cleanupTmpDir` tried to `rm /workspace` — the tmpfs **mount point** — and died with errno -4094 *after* producing a correct SBOM. Fixed by giving it subdirectories it creates and owns. The contract test now pins both halves.
+
+#### cdxgen works, and disagrees with syft, which is the point
+
+Against a real npm lockfile: **cdxgen 2 components, syft 4**, both `succeeded`, scan `completed`, and the normalizer merged them into 4 canonical components. Two independent inventories of one tree, reconciled — which is exactly why a second generator was worth adding and why its `GraphTrust` ranks below syft's everywhere they overlap.
+
+⚠ **The image is 15.5 GB** and pulling it filled the disk mid-session (96 G volume, 41 G of reclaimable build cache). That is a real operational cost for a second generator and belongs in any deployment sizing.
+
+#### Manifest and registry divergences, reconciled
+
+- **The manifest's cdxgen tag was wrong.** I wrote `v13.0.1` from the GitHub *release* tag; the registry publishes `13.0.1`, `v13` and `latest` but **not** `v13.0.1` — the identical trap this manifest already records for cbomkit-theia. Probed against the real registry and corrected.
+- **`ai-bom`'s `Mode` said `pip` in the Go registry** while the manifest, the docs and `AIBomAdapter` all say container. That field feeds the Engine Coverage panel, so it rendered a claim that a sandboxed engine runs unsandboxed in the worker's own Python environment — the opposite of the truth, on the panel whose whole job is being precise.
+- **`hbom-cdxgen-host` probed as unavailable** because its `upstream` named cdx-hbom. The Python `ManifestAdapter` reads that field as "resolve an artifact for this", so a working engine reported a false gap. AxeBOM implements it; the URL moved to `format_reference`.
+- **`default_weight` disagreed for every engine** between the manifest and the registry (syft 5 vs 3, grype 4 vs 3, ...). The registry is authoritative — only the orchestrator computes progress, and nothing reads the manifest's copy — so all 13 shared entries are aligned and the manifest says which file to change.
+- **`axebom toolctl pin` has never existed.** Every manifest entry says that command fills `image_digest`, and the CLI offers `list|dryrun|pull|sync|verify|licenses`. That is the root cause of every digest being null, and the "pin by digest, never by tag" rule being unenforced since it was written. `cdxgen`'s digest is pinned by hand and cross-checked against the daemon; the rest await the command, which is now recorded in `docs/04-OSINT-INTEGRATION.md` rather than implied.
+- **`syft-spdx`'s absence from the registry is now a decision, not an oversight.** The reason to add it would be CERT-In's Automation Support element — but AxeBOM already emits both standards from its own canonical model, so `syft-spdx`'s only value is a second reconciliation source for the *same tool's* view of the *same tree*, at the cost of doubling every SBOM scan's syft runtime. Two independent inventories are worth paying for; two runs of one tool are not.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | ✅ exit 0 |
+| HBOM scan through real NATS | ✅ `POST /v1/scans` → 5 rows, no manual step |
+| Engine Coverage interaction | ✅ both ecosystem rows present; no false gap |
+| Live document → report | ✅ 14 sheets, **24 coverage fields**, formula present |
+| cdxgen against a real lockfile | ✅ 2 components, npm; merged with syft's 4 |
+| Adapter seam guards | ✅ both mutation-verified against the real bugs |
+| Manifest/registry weights | ✅ 13 shared engines, 0 mismatches |
+
+#### What is NOT done, honestly
+
+- **`component_provenance` is written by nothing**, so per-component engine attribution came back empty on the live scan. Pre-existing, unrelated to this work, and not investigated.
+- **The `hbom-cdxgen-host` engine has never parsed a real cdxgen document in a live scan** — only in tests. It reported `unavailable` on the HBOM scan because the upload contained no CycloneDX file, which is correct behaviour, not a run.
+- **CBOM and AIBOM still do not normalize automatically.** `normalizedFamilies` lists sbom and hbom only. The gate is deliberate — publishing to a WorkQueue subject with no consumer loses the message silently for seven days — and each family is one consumer module from being added.
+- **No Playwright.** Unchanged environment blocker.
+
+---
+
+### 2026-09-03 (e) — Milestone 5: the two import paths agree, and the hardware UI becomes real
+
+**Goal:** the frontend HBOM module, plus the Go/Python inconsistency deferred from Milestone 2.
+
+#### The inconsistency, which was the load-bearing part
+
+`services/project/internal/hbom` is a hand-written Go port of `workers/hbom`, and its own package doc says the two must be kept in step by hand. They were not: the manufacturing columns were added to Python for the scan path and not to Go, so **the interactive import silently dropped designators, prices, SKUs and lifecycle that a scan of the very same file kept** — a difference a customer could see and had no way to explain.
+
+Both maps now carry the identical 35 columns. The guard is `test_the_go_port_understands_the_same_columns`, which **reads the Go source and parses its map literal**. That is ugly, and it is the point: there is no shared artifact between the two languages to compare instead, and the alternative is a comment asking the next person to remember — which is exactly what failed. Mutation-verified: changing one Go mapping fails it by name. A second test pins `canonicalOrder`, whose ordering is load-bearing on the Go side only (a Go map iterates randomly; `part_number` must be visited before `mpn` or "first column wins" prefers whichever the customer's file happens to list).
+
+#### `POST /v1/hbom/import` has always returned 404
+
+`frontend/src/lib/hbom.ts` has posted to the three-segment form since Phase 15, carrying `project_id` in the multipart body; `routes.go` mounted only `/v1/hbom/{projectId}/import`. No ServeMux pattern matched, so **confirm-import failed for every customer who ever reached the last step of the import wizard** — with a 404, which reads as "not deployed" rather than "you found a bug".
+
+Both forms are now mounted. The path value stays authoritative and the form field is a fallback used **only when the path is empty**, so on the path-scoped route a hostile `project_id` is ignored entirely rather than compared — there is no precedence bug to get wrong. Verified live from inside the compose network: the three-segment route answers **401** where a genuinely bogus path answers **404**.
+
+Two of the 24 CERT-In elements — `product_details` and `manufacturing_date` — also could not round-trip through the API at all. The database had both and the model had both; the DTO did not, so a component edited in the UI came back without them and a save wrote them away.
+
+#### The UI
+
+`/projects/:id/hardware` gains **three audience-specific views** rather than one forty-column table — Provenance (compliance, §10.2.1), Engineering (assembly), Procurement (purchasing). A tab list, not a column picker: a picker makes every reader build their own table, and two people looking at "Procurement" should be looking at the same thing.
+
+- **Lifecycle pills** use the design system's own `.pill[data-status]` (ok/warn/down/info). An earlier draft invented `badge-danger`, which has no CSS behind it and would have rendered as unstyled text — I checked the stylesheet rather than assuming, and switched to what exists.
+- **The stranded-parts warning** lists obsolete or EOL parts with no approved alternate. It is the most actionable fact a hardware BOM contains and one row among hundreds.
+- **The cost roll-up** totals per currency, refuses a combined total across them, and states how many lines carry no usable price. Arithmetic is integer micro-units via `BigInt`, not floating point — `0.1 + 0.2 !== 0.3` in JavaScript and the error accumulates across every line.
+- **The `Fitted` column is not headed `DNP`.** A boolean headed with an initialism is what a reader gets backwards, and backwards here means a factory omitting a part the design needs.
+
+#### Per-supplier order files — the native replacement for a GPL dependency
+
+`KiCAD-Multi-BOM-Plugin` is GPL-3.0 and was rejected in Milestone 2. Its capability is built here: one CSV per supplier, in that supplier's **own** column layout (a JLCPCB PCBA upload is rejected outright if the headers are not `Comment,Designator,Footprint,LCSC` — "close enough" is a file somebody hand-edits while trying to place an order). Do-not-populate parts are excluded from every file, and parts with no recorded supplier are grouped under an explicit label rather than dropped: a silently shorter file is one somebody orders from and then discovers is missing parts.
+
+⚠ **The CSV is built in the browser and never passes through `render/safe`.** A part named `=cmd|'/c calc'!A1` would execute when the supplier opens it — the same vulnerability class invariant 8 exists for, at the second place a spreadsheet leaves this product. Escaping is applied here too, with a test that walks every cell.
+
+#### A comment that described behaviour the code did not have
+
+`golangci-lint` flagged `dnpFalsy` as unused, and it was right in a more interesting way than usual: the comment beside it claimed "an unrecognised value must not silently become fitted", but both branches returned `false`, so the set was never consulted and the claim was never true. Rather than delete the lint error, the rule was restated to what actually happens — and why it is correct: the two errors are **not symmetric**. Treating a marked DNP as fitted puts one unwanted part on a board; treating an unrecognised value as DNP omits a part the design needs, which is a board that does not work. Fixed in both languages so they stay in step.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | ✅ exit 0 |
+| Go/Python column parity | ✅ 35 = 35, no key or value differences; mutation-verified |
+| The route that always 404'd | ✅ **401** from inside the compose network, where a bogus path gives 404 |
+| Live containers | ✅ project and frontend rebuilt and restarted; `task health` 10 up, 0 degraded |
+| The SERVED bundle | ✅ "do not populate", "Order files", "cannot be bought", "did not examine any hardware" in `HardwareTree-*.js`; "JLCPCB", "LCSC", "Digi-Key" in `hbom-*.js` |
+| Frontend suite | ✅ 118 tests, including formula-injection escaping on the browser-built CSV |
+| Store round trip | ✅ project store tests green against real Postgres with the new columns |
+
+#### What Milestone 5 does NOT have
+
+- **No Playwright run.** The pre-existing ZITADEL http/https redirect mismatch blocks any test that signs in for real, unchanged from before this work. Verification was against the served bundle instead, which proves the code shipped but not that a human can click through it.
+- **The import wizard's mapping UI was not rebuilt.** It now OFFERS the manufacturing columns (asserted by a test), but the step-by-step confirmation screen is unchanged in layout.
+- **No alternates editor.** Alternates are read, rendered, exported and round-tripped through the API, but there is no UI to add one — they arrive by import or not at all.
+
+---
+
+### 2026-09-03 (d) — Milestone 4: the report, and four bugs that were only visible in output
+
+**Goal:** finish the report — the sheets, the notes, the level projection, and the coverage-table bug carried from (a).
+
+#### The per-field coverage table was empty in every report ever rendered
+
+`applyCoverageBreakdown` decoded `fields` into a `map[string]…` while Python's `CoverageResult.as_dict()` emits a **list**. `json.Unmarshal` returned an UnmarshalTypeError, the deliberate `//nolint:nilerr` swallowed it, and the function returned early — discarding the formula string, **which had decoded perfectly well**, along with the fields.
+
+There was no error, no log line and no failing test. The section of the report an auditor actually reads was simply blank, for every BOM type, since the feature shipped.
+
+The regression test uses a fixture **generated by the real Python serializer**, committed at `services/report/testdata/coverage_breakdown.json`. A hand-written fixture would not have caught it, because the hand would have written whatever shape the Go struct expected. Mutation-verified: restoring the map shape reproduces `fields = 0` exactly.
+
+#### Three more, each found by reading output rather than code
+
+**A `Top-Level` hardware BOM rendered the entire assembly.** `level.Project` walks software components and nothing applied the same rule to `render.BOM.Hardware`, so a customer who chose a Top-Level view of a 900-part product got all 900 under a heading promising otherwise. The level is a CERT-In §3.1 projection the customer *chose*; ignoring it misdescribes the document's own scope. Fixed with depth ≤ 1, everything dropped counted and stated. The first attempt put the note in the field the software projection then overwrote — the test caught that, and the ordering is now explicit.
+
+**Every BOM type's honesty label reached the XLSX and nothing else.** CBOM's type-discrimination caveat, QBOM's form disclosure and AIBOM's extensions note were appended to a *local copy* of the notes inside `Sheets()`, so `WriteJSON` and the DOCX renderer — both of which read `BOM.Notes` — never saw them. A caveat present in one downloadable artifact and absent from another is worse than one absent everywhere: the reader holding the JSON has no way to know a caveat exists. Extracted to `render.TypeNotes` and wired into all of them. **HBOM's notes were missing from all four** — `HBOMNotes` was written in Phase 15, tested, and wired to nothing at all.
+
+**`estimatePages` did not count hardware.** It summed components, findings, licences and crypto assets, so a 4000-line parts list estimated as an eight-page document and the early refusal that protects a caller from asking for an unrenderable PDF never fired for the one BOM type whose entire row count lives in that field.
+
+#### The sheets, and why there are five
+
+One forty-column table would be complete and unreadable. The split is by **audience**: Tree (engineering), Origin and Suppliers (compliance, §10.2.1), Engineering (assembly), Procurement (purchasing), Lifecycle (the one that bites). None adds a fact; each makes a fact already in the data possible to see.
+
+- **The cost roll-up totals per currency and refuses a grand total across them.** 4.10 USD + 3.20 EUR is not a number, there is no exchange rate in this data, and inventing one would put a fabricated figure in a procurement document. It also states how many lines are unpriced — a total over a parts list where half the prices are missing is not the cost of the product, and a reader who is not told will treat it as one. Summed with `big.Rat`, not `float64`: the prices arrive as exact decimal strings from a `numeric(18,6)` column precisely so they never touch binary floating point, and summing as floats would reintroduce the error the column type exists to avoid, in the one place it accumulates across every line.
+- **The totals are literal numbers, not spreadsheet formulas.** `render/safe` escapes a leading `=` unconditionally (invariant 8) and weakening that for a convenience is not a trade worth making. More importantly a live formula *recalculates* — a report is a signed statement about what was true when it was generated, and a cell that quietly changes when somebody edits a quantity is no longer the artifact that was signed. An interactive calculator belongs in the frontend, where recalculating is honest.
+- **The Lifecycle sheet leads with what is broken.** Obsolete first, then NRND — buyable today, refused at the next respin, which is the window in which acting is still cheap. The action column names the consequence, not the status: "will stop a build", not "obsolete".
+- **The Engineering sheet's column is `Fitted`, not `DNP`.** A boolean headed with an initialism is what a reader gets backwards, and backwards here means a factory omitting a part the design needs.
+
+#### The provenance note was rewritten rather than left to drift
+
+It said the BOM "was IMPORTED from structured entry" — true while a CSV and a form were the only ways in, and now understating the product in one direction while its caveat overstated in the other. It now denies the thing that is actually false: that anything examined physical hardware. A new source note distinguishes a design file (what was *designed*) from a host inventory (what one operating system could see), because they describe different objects and a document that mixes them without saying so lets a reader take one for the other.
+
+The existing test required the literal word "IMPORTED". It now asserts the **claim** rather than chosen words, so a rewording that keeps the meaning passes and one that loses the denial fails.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | ✅ exit 0 |
+| End to end from a real database document | ✅ 12 sheets including all five hardware ones and Notes; JSON bundle 4 KB with the structured tree, exact extended prices and alternates |
+| Coverage-breakdown fix | ✅ against the REAL Python serializer output; mutation-verified |
+| Cost roll-up | ✅ exact `8.425400`, per-currency totals, grand total refused across currencies, unpriced lines disclosed |
+| Formula-injection escaping | ✅ the existing hostile-input test iterates all `HBOMSheets`, so it covers the three new ones automatically, and still fails if nothing was escaped |
+| Honesty labels in every format | ✅ all four BOM types, XLSX + JSON + DOCX |
+| `task test:golden` | ✅ 85 passed; the `crypto-mixed` failure remains pre-existing |
+
+#### What Milestone 4 does NOT have
+
+- **The frontend is untouched.** `/hbom` still says *detail view not yet available*.
+- **`hardware_findings` is still unpopulated**, so the Vulnerabilities column on the tree sheet is always empty and CERT-In element 24 scores zero for every component.
+- **The PDF hardware page shows five columns.** Designator, quantity and lifecycle were chosen over manufacturer and origin because a page budget forces a choice and a part that cannot be bought is what a reader has to see; the full set is in the XLSX and JSON, which are not page-capped. That is a judgement, not a limitation, but it is a judgement worth revisiting with a real customer.
+
+---
+
+### 2026-09-03 (c) — Milestone 3 + M4's loader: a hardware BOM leaves AxeBOM in SPDX and CycloneDX
+
+**Goal:** §10.4.1.6 — the standards export HBOM never had. The milestones were reordered: the export needs `render.BOM.Hardware` populated, and that loader was Milestone 4's first item, so it was built first.
+
+#### `loadHardware` — the reason every HBOM report rendered empty
+
+`HBOMSheets` and `docxHardware` have read `b.Hardware` since Phase 15 and **nothing ever populated it**. A customer who imported a 400-line parts list got a report with two blank hardware sheets and no error anywhere.
+
+The loader orders the tree with a **recursive CTE, not a sort**: the renderer indents by depth and the exporter emits containment edges, and sorting by any column would put a child before its parent whenever names happened to sort that way — a mangled assembly in the sheet, an unresolvable reference in the export. Alternates load in a **second query rather than a join**, because joining would multiply every hardware row by its alternate count and the scan loop would then have to de-duplicate — the classic shape that silently doubles a component count in a compliance document.
+
+The static `schemacheck` test validated all 33 new column names against the migrations, and was **mutation-tested**: misspelling `package_footprint` fails it by name.
+
+#### A live read found a bug the writer had been hiding
+
+Prices came back empty for a CSV that plainly had them. **`_numeric_or_none` rejects strings by design** — it was written for `ai_models.risk_score`, which Trusera emits as a real float. Hardware prices are deliberately kept as *strings* all the way to the writer precisely so they never pass through a Python float, because binary floating point cannot represent 0.10 and the error accumulates across a 4000-line BOM into a total somebody procures against.
+
+So every unit price was being silently NULLed. New `_hardware_price` passes the string to Postgres for `numeric(18,6)` to parse exactly, dropping an unparseable cell rather than failing a 400-row batch. Verified live: 3 × 0.001800 = 0.005400, computed by Postgres, no float anywhere.
+
+#### The export, and three things reading the real output revealed
+
+Serializing is generic — `toExportDocument` now maps hardware, so `spdx`, `cyclonedx` **and** the `json` bundle all pick it up with no dispatch change.
+
+**1. My own comment was wrong, and the output proved it.** I wrote that the assembly tree becomes `contains` in both standards. It does in SPDX. It does **not** in CycloneDX: protobom's `buildDependencies` ignores `Edge.Type` entirely (verified in `serializer_cdx.go` at v0.5.8), and CycloneDX 1.6's dependency graph has no containment relationship to map onto anyway — the spec expresses assembly through nested `components[]`, which a flat protobom NodeList cannot produce. Rather than leave a document that says "dependsOn" where it means "contains", the fact is now also emitted as an explicit `axebom:hbom:parent` property, and the comment says plainly what each standard actually carries.
+
+**2. The manufacturer was vanishing from every CycloneDX hardware BOM.** protobom's CDX serializer reads `Suppliers` and never reads `Originators`. SPDX gets a real `originator`; CycloneDX got nothing — losing the field §10.2.1 exists for, in the standard most consumers read. Also emitted as `certin:hbom:manufacturer` now, with a regression test.
+
+**3. SPDX filed companies as people.** `Person: Yageo`. protobom's `sbom.Person` has an `IsOrg` flag; setting it produces `Organization: Yageo`. This changed one line of an existing SBOM golden (`Person: Example Corp` → `Organization: Example Corp`) — **the justification for that golden change**: a component supplier in an SBOM is an npm org or a Maven groupId owner, essentially never a natural person, so the previous output was wrong for software too.
+
+None of the three was findable by reading the code. All three came from serializing a realistic fixture and reading the JSON.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | ✅ exit 0 |
+| **Official `spdx-tools` validator** on the hardware SPDX | ✅ **0 validation messages** |
+| CycloneDX structure | ✅ 1.6, every component has a bom-ref, **zero dangling dependency refs**, root correctly in `metadata.component` |
+| Component typing | ✅ `device`/`firmware` in CDX, `DEVICE`/`FIRMWARE` in SPDX — a parts list serialized with software defaults would validate and say something false |
+| SPDX `CONTAINS` | ✅ 3 real relationships |
+| Byte-reproducibility | ✅ both formats, two renders of the same model (ADR-0003) |
+| `loadHardware` against a live document | ✅ tree parents-first, quantities, designators, footprints, SKUs, prices, extended prices, lifecycle, alternates and compliance all present |
+| `schemacheck` mutation test | ✅ a misspelt column fails by name |
+
+#### What is NOT done
+
+- **The rest of Milestone 4.** No Engineering/Procurement/Lifecycle/cost-roll-up sheets yet; `HBOMNotes` is still not wired into `Sheets` (pre-existing — CBOM's and QBOM's are); and `level.Project` still ignores the hardware tree, so a *Top-Level* HBOM report renders the entire assembly.
+- **`applyCoverageBreakdown` is still broken** and still empties the per-field coverage table on every report of every BOM type.
+- **CycloneDX containment is a documented limitation, not a fix.** Correcting it means either post-processing serialized JSON — which would break the byte-reproducibility ADR-0003 requires — or replacing protobom.
+
+---
+
+### 2026-09-03 (b) — Enterprise HBOM, Milestone 2 of 6: HBOM becomes a scannable BOM type, end to end
+
+**Goal:** the engines, the worker and the normalize path — everything between "a customer connects a repo" and "rows exist in `normalize.hardware_components`".
+
+#### What now works, proven by running it
+
+A KiCad schematic in an uploaded or committed tree → `hbom-ecad` parses it → an immutable `axebom-hbom-json-1` artifact → `scan.normalize.hbom` → the new HBOM consumer → real rows. Verified against the live database, including that a redelivery of the same trigger writes nothing twice.
+
+Two engines, neither of which looks at hardware:
+
+- **`hbom-ecad`** — KiCad `.kicad_sch` S-expressions, KiCad netlist XML, and BOM exports (KiCad/Altium/OrCAD, CSV and TSV). No container, no third-party binary, no network.
+- **`hbom-cdxgen-host`** — a CycloneDX 1.7 host inventory the CUSTOMER generated with `cdxgen -t hbom` on their own device. Never invoked by us; running it in our sandbox would document AxeBOM's container host and present it as their hardware.
+
+Also `cdxgen` itself as a second, independent SBOM generator (Apache-2.0, container-only, graph trust ranked deliberately BELOW syft everywhere they overlap).
+
+#### The honest-label guard was changed, and this is the entry to read before touching it again
+
+`test_nothing_in_this_package_claims_to_scan` failed on my own comments, which is exactly what it is for. The resolution was not to suppress it:
+
+**"hbom scan" was removed from the forbidden list**, because `hbom-ecad` made it true — parsing a schematic the customer committed is a real scan of a document they wrote, the same act as reading a committed lockfile. **The list was simultaneously widened on what is still false**: "scans your hardware", "inspects the device", "discovers hardware", "detects your hardware". Nothing looks at a physical device, and that is the claim the guard now actually guards.
+
+It also became **regexes rather than substrings**, and that was not cosmetic. The old list caught `discovers hardware` and missed `discover your hardware` — a real discovery claim walking straight through a guard that looked thorough. Found by the mutation test's own example failing. A new test pins both directions: a design-file scan must NOT be flagged, and four phrasings of "we looked at your hardware" must be.
+
+#### Three traps that would each have shipped a silent failure
+
+**1. `Registry.Resolve` would have dispatched `hbom-csv`.** It filters on `Supports(kind)` alone and never consults `RequiresImport`, so the moment the family became scannable it would have published `scan.job.hbom` for an engine no worker implements — a permanent `skipped`/`ENGINE_NOT_IMPLEMENTED` row in the Engine Coverage section of every HBOM scan, which is the one place invariant 12 promises is precise. Fixed by giving `hbom-csv` an **empty `SourceKinds`**: it names the interactive REST path, not a job. Filtering `RequiresImport` inside `Resolve` was rejected as the fix — `github-dependency-graph-sbom` carries that flag and is dispatched on every git SBOM scan.
+
+**2. That fix has its own consequence, and it is one missing list literal away.** A skipped engine is recorded against the `hardware` ecosystem as *unavailable*, and `Store.CoverageGaps` only neutralises it when a matching *available* row exists. So `hbom-ecad` must report `ecosystems_covered=["hardware"]` or every HBOM report grows a false "no engine for this ecosystem" line — invariant 12 inverted. It does, and the registry comment says why.
+
+**3. `rejectNonScannableFamilies`' second loop rejected `hbom-cdxgen-host` for carrying an honest label.** It refused any explicitly-requested `RequiresImport` engine — a rule `github-dependency-graph-sbom` had already been quietly disproving, since it has that flag and runs on every git SBOM scan. The predicate is now `Derived || len(SourceKinds) == 0`: `RequiresImport` describes where data came from, not whether a job can be published.
+
+#### Bugs found by running the code rather than reading it
+
+- **`_find_all` returned KiCad symbols in reverse document order** (LIFO stack), and grouping read fields off `members[0]`. A resistor whose manufacturer and tolerance were recorded on R1 came out blank because R4 was visited first. Both fixed: document order restored, and grouping now **coalesces the first non-empty value across every member**, so walk order cannot lose data either way.
+- **The `compliance` array wrote empty to the database.** CERT-In list fields keep the profile's `[]` suffix in their flat-row key (`hardware_component.compliance[]`, straight from `HBOM_FIELDS`) while manufacturing fields do not (`fields_from_profile` strips it). Both are correct for SCORING — each field list matches the keys it wrote — but the writer read one spelling and silently dropped every RoHS/CE certification while `field_status` still recorded it as present. The writer now accepts both, and normalising it in `flatten()` instead would have collapsed CERT-In coverage to zero.
+- **`usd` would have violated the `^[A-Z]{3}$` CHECK.** Currency is upper-cased in `normalize()`, and a value that is not three letters is dropped — "US Dollars" is not an ISO 4217 code.
+- **`source_engine` was a column nothing populated.** Now tagged at ingest rather than per-adapter, so a third engine cannot forget it.
+
+#### Decisions worth keeping
+
+- **A separate HBOM ingest + pipeline, not an `ingest._PARSERS` entry.** Four of the SBOM pipeline's seven stages are not merely unnecessary for hardware but actively wrong: `merge` would fall every hardware row to `opaque` identity and inflate the coverage denominator by the entire parts list; `graph` expects a dependency DAG, not an assembly tree; alias closure has nothing to close; findings are purl-keyed and hardware matches are CPE-keyed. `Ingested`'s six fields are all SBOM concepts.
+- **uuid5 surrogate ids** wire the recursive `parent_id` before Postgres assigns one — `COPY` has no `RETURNING` — and make re-normalization replay identically instead of renumbering a customer's parts list.
+- **The consume loop was extracted** to `axebom_shared.normalize.consumer_runtime` (SBOM's consumer went 472 → 326 lines) but **`ConsumerConfigEnv` was deliberately NOT moved**: `libs/py-shared` is on every worker's dependency tree, and putting credential loading there would weaken the exact containment argument that makes the normalize consumer's Postgres role an acceptable exception.
+- **Copyleft rejected and recorded**, verified against the GitHub API: FreeBOM (LGPL-2.1, and its repo contains no library at all), KiCAD-Multi-BOM-Plugin (GPL-3.0, unmaintained). KiBoM is MIT but archived by upstream in March 2025 — recorded as a FORMAT REFERENCE with its grouping rule reimplemented, rather than pinning an artifact that can never receive a fix.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | ✅ exit 0 end to end |
+| Engine → consumer → database, live | ✅ 3 components with correct quantities, designators, footprints and manufacturers; CERT-In 15.52% / manufacturing 37.5%; `project_id` set, `alias_snapshot_id` NULL |
+| Redelivery of the same trigger | ✅ 1 document, not 2 |
+| 901-node tree across chunk boundaries | ✅ 900 parents resolved, **0 dangling** — the case the DEFERRABLE FK exists for |
+| Artifact determinism | ✅ byte-identical across two runs of the same input (invariant 10) |
+| Decoy handling | ✅ a software-only CycloneDX beside an HBOM is skipped by CONTENT, not filename; `node_modules` and `README.md` ignored |
+| XML entity bomb | ✅ refused unparsed (`HBOM_NETLIST_REFUSED`); a normal netlist still parses |
+| `task test:golden` | ✅ 85 passed; the one `crypto-mixed` failure re-confirmed pre-existing with all this session's work stashed |
+| `task osint:licenses` | ✅ no copyleft in any binary after the cdxgen addition |
+| `docker compose config` | ✅ valid; `hbom-worker` and `hbom-normalize-consumer` present |
+
+#### What Milestone 2 does NOT have
+
+- **The Go port does not know the manufacturing columns.** `services/project/internal/hbom` still parses only the CERT-In vocabulary, so the interactive `/v1/hbom/*` import drops designators, prices, SKUs and lifecycle that a SCAN of the same file would keep. Deferred to Milestone 5 with the API/DTO work — but until then the two paths genuinely accept different column sets, and that is a real inconsistency, not a cosmetic one.
+- **`hardware_findings` (CERT-In element 24) is still unpopulated** and its migration is still deferred, so the advisory CPE matcher is not built. The scoring defect noted in (a) stands: `is_substantive([])` is False, so a component with no known vulnerability scores 0 while a vulnerable one scores 3.
+- **CBOM and AIBOM still have no normalize consumer**, so `normalizedFamilies` lists only sbom and hbom. Both already have `build_canonical_*` and both already have their `bulk.py` writers, so each is genuinely one consumer module away — the gate exists because publishing to a WorkQueue subject with no consumer loses the message silently for seven days.
+- **Nothing has been run through the real NATS path.** The consumer's handler was driven directly against live Postgres; a full `POST /v1/scans` → fetch → fan-out → `scan.job.hbom` → result → trigger → consumer round trip is Milestone 6's live pass.
+- **`cdxgen`'s image has never been pulled**, so the engine reports `unavailable` until `task osint:pull` runs. That is a first-class recorded status rather than a failure, but it means the adapter has never executed.
+
+---
+
+### 2026-09-03 (a) — Enterprise HBOM, Milestone 1 of 6: the data model, and a second coverage number that cannot touch the first
+
+**Goal:** make HBOM a first-class BOM type — registered like every other, scannable from an upload or a GitHub repo, carrying the manufacturing recipe (designators, footprints, quantities, supplier SKUs, alternates, cost, DNP, assembly type, lifecycle) and exporting to SPDX and CycloneDX. Six milestones; this session did Milestone 1 and the schema work Milestone 2 depends on.
+
+#### The framing decision, made before any code
+
+CLAUDE.md says HBOM is "a structured CSV/form import plus a data model" and must never imply discovery. That is right about physical hardware and wrong as a permanent boundary: **parsing a customer's own KiCad schematic is not hardware discovery** — it is exactly what parsing `package-lock.json` is for SBOM. So HBOM gets three honest acquisition paths (design-source parse, host self-inventory import, CSV/form), none of which claims AxeBOM looked at a device.
+
+The check that this is honest rather than a workaround: the existing discovery-claim guards (`"hbom scan"`, `"scan hardware"`, `"hardware scan"`, `"discovers parts"`, plus the frontend twin) pass **unmodified** against every new label. They were not touched.
+
+#### Licences verified against the GitHub API, not assumed — and two of four are copyleft
+
+The user named four tools. `KiBoM` is MIT but **archived by upstream in March 2025**; `cdxgen`/`cdx-hbom` are Apache-2.0/MIT and active. But **`FreeBOM` is LGPL-2.1** (and its repo is `LICENSE` + `README.md` + `requirements.txt` — there is no library to import at all), and **`KiCAD-Multi-BOM-Plugin` is GPL-3.0**, unmaintained since Oct 2024. Both rejected as dependencies per invariant 9, to be rebuilt natively and recorded in the manifest's `rejected:` block — the `django-bom` precedent.
+
+**And `cdxgen -t hbom` does not do what its name suggests.** Read from `cdxgen/docs/HBOM.md`: it inventories **the host it runs on** — board, firmware, TPM, storage, NIC — as CycloneDX 1.7, and cannot read design files. Run inside our sandbox it would document *AxeBOM's own container host* and present it as the customer's hardware. It is therefore integrated only as an import path for a document the customer generates on their own device.
+
+#### Migration 0011 — the manufacturing columns, and two data-loss bugs they close
+
+`quantity` and `enriched_fields` were modelled in `workers/hbom/model.py`, `services/project/internal/hbom`'s `Component` AND `frontend/src/lib/hbom.ts` since Phase 15 **with no column to land in**. `store/hbom.go`'s read path hardcodes `c := &hbom.Component{Quantity: 1}` — so `fixtures/hbom-nested/parts.csv`, which has a populated `Qty` header, has been silently rendering every quantity as 1. Provider enrichment lost its attribution the same way.
+
+`extended_price` is `GENERATED ALWAYS AS (quantity * unit_price) STORED` rather than computed at render: it cannot disagree with its own inputs, and there is one implementation of the arithmetic. NULL when either input is NULL — the extended price of an unknown unit price is not zero.
+
+**The self-FK became `DEFERRABLE INITIALLY DEFERRED`, and that is not a style change.** `writer.py` chunks every batch at `_CHUNK_SIZE = 500`, and a non-deferrable FK is validated at the end of *each* statement — so a 700-node assembly whose parent lands in chunk 2 while its child lands in chunk 1 fails, and only above 500 nodes, which is exactly the input size nobody writes a test for.
+
+New `normalize.hardware_component_alternates` (a table, not a JSONB array: the question it exists to answer needs a b-tree index on the alternate's MPN). `equivalence` defaults to **`unverified`, not `drop-in`** — defaulting to the flattering value would make AxeBOM the author of a substitution claim it never checked.
+
+#### Migration 0012 — and the `alias_snapshot_id` item the 2026-08-26 audit deliberately left open
+
+That audit wrote the FK, watched it break 17 tests and two production paths, reverted it, and flagged it "for a session with QBOM/HBOM in scope." This was that session.
+
+**The column is now nullable WITH a real FK, and no sentinel row was created.** A sentinel is a lie with a primary key: `alias_snapshot` has `edge_count`/`source`/`ruleset_version` all NOT NULL, so every non-SBOM document would point at a row claiming a snapshot was consulted. NULL declines to assert. And nullable-plus-FK is **strictly stronger than what was there**: `NOT NULL` with no FK enforced "some uuid is present" and nothing about whether it meant anything — the weakest possible pairing. Now: if a value is present, it resolves. Same gap migration 0007 closed for `findings.cluster_id`.
+
+All five fabricated-id writers fixed (`store/hbom.go` ×2, `store/qbom.go`, the CBOM and AIBOM pipelines), plus a guard in `writer.write_bom_document` that **refuses a NULL snapshot for an SBOM** — dropping a NOT NULL without that would lose the provenance the column exists for with nothing failing anywhere. **Two CBOM/AIBOM tests were inverted rather than deleted**: they asserted that normalization was deliberately *non-deterministic* in this one field, an exception that only existed to satisfy the old constraint. Both pipelines now replay byte-for-byte in every field, which is what invariant 10 asked for all along.
+
+Backfill correctness proved on live data rather than assumed: of 299 documents, **168 had fabricated ids and became NULL while 131 kept a real, resolvable one** — the `NOT EXISTS` clause discriminated instead of nulling everything. Both migrations lift `FORCE ROW LEVEL SECURITY` for the length of the backfill and restore it, rather than relying on the migration role happening to be a superuser (it is, in dev; under a non-superuser owner every backfill would have matched zero rows, silently).
+
+#### The coverage separation — the part that had to be structural
+
+The manufacturing fields are **not** CERT-In elements and must not move `completeness_pct`. So they live in a separate file, `docs/reference/hbom-manufacturing-v1.yaml`, under a **different top-level key** (`hbom_manufacturing:`, never a second `hbom:`) — because every CERT-In accessor in `libs/go-shared/compliance` reads the named sections, and a different key means not one of them can return an AxeBOM field by accident. New `Meta.Kind` (`operational`; **empty means compliance**, so a profile that forgets to declare itself is held to every check rather than escaping them), new `OperationalSection`, four lint rules gated on `IsCompliance()` — including one that **refuses an operational profile that defines a CERT-In section at all**.
+
+`FieldsForBOMType` was deliberately left untouched. That one function feeds `HBOM_FIELDS` → `_SCORED` → `completeness_pct`; leaving it alone *is* the separation.
+
+**Both guards are mutation-verified, not assumed.** Widening `FieldsForBOMType("HBOM")` to include the manufacturing set makes `TestOperationalFieldsNeverReachACertInAccessor` fail by field name; leaking `manufacturing_fields()` into Python's `_SCORED` fails both the dedicated test *and* the golden. Restored, both pass.
+
+#### The golden changed, and here is the justification
+
+`fixtures/hbom-nested/expected.json`: 9 removals of the structural `_quantity` key (now the real canonical path `hardware_component.quantity`), 9 additions each of the 11 new manufacturing paths, and one new `manufacturing_coverage` block. **Zero changes to any CERT-In element value, and zero changes to `completeness_pct` (52.490421455938694), `declaration_pct` (100.0), `denominator` (522) or `scored_entities` (9)** — verified by diffing before regenerating, which is what the golden is for. Manufacturing scores 20.83% completeness against 100% declaration on that fixture, which is right: the CSV carries quantity and description but no prices, SKUs or alternates.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | ✅ exit 0 end to end — both profile lints, guardrails, evidence check, golangci-lint, ruff, frontend lint, all Go tests, all Python tests, both builds |
+| Migrations applied live | ✅ `normalize` 10 → 12 against the running Postgres |
+| `db verify-rls` | ✅ 43 tenant-scoped tables, FORCE RLS, 0 gaps — including the new `hardware_component_alternates` |
+| Constraint negative tests | ✅ all 7 reject: bad currency, bad lifecycle, bad assembly type, negative quantity, dangling alias FK, explicit `extended_price`, alternate naming nothing |
+| Deferrable FK | ✅ child-inserted-before-parent in one statement succeeds |
+| `extended_price` | ✅ 2 × 0.0018 = 0.003600; NULL price → NULL total, not 0 |
+| `task test:golden` | ✅ 85 passed, 1 pre-existing `crypto-mixed` failure **confirmed to reproduce with all this session's work stashed** |
+| Mutation tests | ✅ both separation guards caught their leak and passed again on restore |
+
+#### What Milestone 1 does NOT have
+
+- **`supplementary_coverage` is written but nothing produces it yet.** `writer.py` inserts the column; `build_canonical_hbom` (Milestone 2) is what will fill it.
+- **`hardware_component_alternates` has no writer.** The table, the RLS policy and the model dataclass exist; `bulk.py` gains the batch in Milestone 2.
+- **No engine, no worker, no normalize trigger.** HBOM is still `SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE`. That is Milestone 2 and it is where the three traps in "Next action" bite.
+- **`hardware_findings` (CERT-In element 24) is still unpopulated**, and its migration is deliberately deferred to Milestone 2 so its columns are designed against a real matcher rather than guessed. Note the scoring defect found while designing it: `is_substantive([])` is False, so a component with **no** known vulnerability scores 0 on element 24 while a vulnerable one scores 3 — backwards. Recommended fix is NOT to widen `is_substantive` (the most sensitive function in the codebase, and it would churn every BOM type's goldens) but to store a `vuln_match_status` and say plainly in the report that element 24 scores "a vulnerability reference is present", not "we checked".
+- **One unrelated dead import removed** (`test_cluster_store.py`), noted only because it was in the way — `ruff check libs/py-shared` runs with `ignore_error: true`, so it was never failing the gate.
+
+---
+
+### 2026-09-02 (a) — the stack was already up; the only real bug was that nothing tells you which origin to open, and both wrong answers dead-end
+
+**Goal:** "start the application", then "fix this" against a screenshot of nginx's
+*400 The plain HTTP request was sent to HTTPS port* at `http://localhost:5173`.
+
+**Nothing needed starting.** All 23 containers were already running, `task health` reported
+10 up / 0 degraded / 0 unavailable, and both uncommitted migrations
+(`normalize/0010_vuln_ids_namespace_add_bit`, `report/0004_add_docx_format`) were already applied.
+Every changed app file's mtime predates the image running it (frontend 20:59 vs image 21:00,
+report 19:27 vs 19:28, auth 19:17 vs 19:18, webrecon 09:33 vs 09:36, normalize `pipeline.py` 20:26
+vs consumer image 20:30), so no rebuild was warranted and none was done for its own sake.
+
+**The actual defect: the canonical origin was knowable but never stated, and both ways of
+getting it wrong fail confusingly.** `ZITADEL_PUBLIC_URL` is `https://192.168.30.202:5173` in
+this deployment, and `iam bootstrap` derives the SPA's redirect URIs from it
+(`cmd/axebom/iam.go`), so ZITADEL had exactly `{https://192.168.30.202:5173/auth/callback,
+.../auth/silent}` registered, `is_dev_mode f`. Meanwhile:
+
+- **Wrong scheme** — `http://` against the TLS listener is nginx's internal 497, rendered as the
+  400 in the screenshot. It names neither the right scheme nor the right host.
+- **Wrong host** — `https://localhost:5173` **serves the app perfectly** and only fails at the
+  login button, because `frontend/src/lib/auth.ts` builds `redirect_uri` from
+  `window.location.origin` at runtime while ZITADEL matches registered URIs exactly. Confirmed
+  directly against `/oauth/v2/authorize`: the LAN-IP `redirect_uri` gets `302 -> /ui/v2/login`,
+  the localhost one gets `400 invalid_request`. The app looking fine right up until login is what
+  makes this expensive to diagnose.
+
+And `Taskfile.yml`'s own success banner printed a hardcoded `http://localhost:5173` — wrong on
+**both** counts here. That banner is the first place anyone looks for the address, and it is what
+sent this session down the wrong path in the first place.
+
+**Fix: redirect any non-canonical origin to the configured one, rather than allowing a second
+origin.** Adding `localhost` to the registered URIs was the obvious move and is the wrong one —
+`deploy/docker/nginx.conf`'s header documents that SPA and ZITADEL deliberately share **one**
+origin, which is what keeps the token endpoint free of CORS and the login round trip same-site.
+A second origin would quietly trade that away. So:
+
+- `deploy/docker/nginx.conf` gained a `__CANONICAL_REDIRECT__` placeholder, templated exactly
+  like the existing TLS ones, by a new `deploy/docker/frontend-entrypoint.d/40-canonical.sh`
+  reading `ZITADEL_PUBLIC_URL`. It emits `if ($http_host != "<host>") { return 302 <url>$request_uri; }`
+  plus `error_page 497 <url>$request_uri;` — the `if` covers a wrong host, the `error_page`
+  covers a wrong scheme (nginx answers 497 before the rewrite phase the `if` runs in), and both
+  land in the same place. **302, not 301**: this origin changes whenever `ZITADEL_PUBLIC_URL`
+  does, and a cached permanent redirect would pin a developer to a dead host.
+- The variable is passed as **runtime** `environment:` on the frontend service, deliberately not
+  a build arg like the three `VITE_*` values — the canonical origin can change without rebuilding
+  the bundle, because `redirect_uri` is derived in the browser, not compiled in.
+- Unset `ZITADEL_PUBLIC_URL` deletes the placeholder entirely and serves every Host as-is, so the
+  fresh-clone default is unchanged. Verified: `nginx -t` passes in **both** branches.
+- `Taskfile.yml`'s banner now renders `${ZITADEL_PUBLIC_URL:-http://localhost:5173}`, and
+  `.env.example` documents that this variable is also the canonical origin.
+
+**Verified live**, not just built: `http://localhost:5173`, `https://localhost:5173`, and
+`http://192.168.30.202:5173` all now `302` to `https://192.168.30.202:5173`; a deep link
+(`/scans/abc?tab=progress`) keeps its path and query; the canonical origin itself serves `200`
+with no loop; OIDC discovery, `/oauth/v2/authorize` (`302 -> /ui/v2/login`), `/ui/console`, the
+`/api` proxy (`401`, correct unauthenticated) and the SPA deep link `/auth/callback` all still
+work; `task health` is 10 up / 0 degraded after the change.
+
+**Note for whoever reads the 2026-08-29 carry-forward above:** its item (1) says "the ZITADEL
+OAuth client expects an `http://` redirect URI but the frontend serves HTTPS-only". That is now
+**stale** — the registered URIs are `https://192.168.30.202:5173/...` and match the frontend's
+scheme. Any remaining Playwright sign-in failure is a different problem, and the base URL those
+tests use should be the canonical origin.
+
+### 2026-08-31 (b) — GitHub OAuth wired end to end (three stacked bugs), a normalizer crash that silently dropped a whole scan, and CERT-In field 9 derived but never once written
+
+**Goal:** the user connected a real GitHub repo and wanted real OSINT results in a real report.
+Getting there surfaced five independent, real bugs — each masking the next, the same shape as the
+2026-08-30 (a) chain.
+
+**1. GitHub connect, three stacked bugs.** (a) `GITHUB_CLIENT_ID`/`SECRET` were simply unset —
+`AUTH_PROVIDER_ERROR` is the correct refusal, not a bug. (b) `GITHUB_CONNECT_REDIRECT_URL` was
+never passed through to the `auth` container at all in `deploy/compose/docker-compose.app.yml`
+(only the sign-in one was), so `redirect_uri=` went to GitHub **empty**. (c) The deeper one: both
+`.env` callback URLs pointed at bare `/auth/github/...` paths, but **only nginx's (and Vite's)
+`/api/` location routes to the gateway** — a bare path falls through to the SPA's own router and
+404s before the backend ever sees the OAuth code. Fixed in `.env`, `.env.example`, the compose
+defaults, and `docs/CREDENTIALS.md`, whose setup walkthrough had documented the wrong path all
+along. **(d) Then a fourth:** the CSRF state cookie's `Path` was scoped to the service's *internal*
+route (`/v1/auth/github/connect`), which per RFC 6265 is never a prefix of the browser-facing
+`/api/v1/auth/github/connect/callback` — so the browser correctly withheld it on every real
+callback and the flow died on `AUTH_STATE_MISMATCH`. Fixed for both the connect and sign-in flows
+(`githubStatePath`), each with a regression test asserting the `/api` prefix. Not reproducible by
+curl-against-the-gateway-port — the same trap as 2026-08-30 (a)'s WS-origin bug, and worth
+remembering: testing a browser flow without going through the real public origin proves nothing.
+- Flagged, deliberately NOT fixed: `refreshPath = "/v1/auth"` has the identical defect, but nothing
+  in the current frontend calls `POST /v1/auth/refresh` (session refresh goes through ZITADEL), so
+  it is unverified and left for whoever next touches local-account sign-in.
+
+**2. A normalizer crash that silently discarded an entire scan's SBOM.** A real osv-scanner run
+reported `BIT-GOLANG-2026-46600` — OSV.dev aggregates Bitnami's advisory database, whose ids carry
+a `BIT-` prefix. `normalize.vuln_ids.namespace`'s CHECK constraint didn't allow it, so
+`cluster_store.persist_clusters` raised `CheckViolation`, `normalize_consumer` treated it as
+permanent, DLQ'd it, and **the whole scan's normalized SBOM was lost** — not just the one
+vulnerability. Exactly the gap `0008_vuln_ids_namespace_widen.sql` fixed for GO/PYSEC/RUSTSEC/GSD/
+MAL, one namespace it hadn't been hit by yet. Fixed by adding `BIT` to `aliases.py`'s
+`_NAMESPACE_RANK` (the SSOT) and `migrations/normalize/0010_vuln_ids_namespace_add_bit.sql` to
+match. **Report rendering was never the real problem here** — the report failed with
+`REPORT_RENDER_FAILED` because normalization had produced nothing at all.
+
+**3. The report-render retry budget was sized for the wrong scan.** `loadNormalizedBOM`'s 5×3s=15s
+window was added in 2026-08-30 (a) for a ~2s webrecon race, on the stated assumption that "a slow
+git-sourced scan closes the race long before this worker gets to the message." That assumption was
+wrong: a real 6-engine git scan queued its report at 19:21:16, exhausted all attempts by 19:21:28,
+and the scan itself didn't finish until 19:21:56 — 28s after the report had given up. Widened to
+13×15s=180s, still well inside the 5-minute AckWait, and safe for throughput because JetStream's
+`MaxAckPending=8` processes render jobs in parallel.
+
+**4. CERT-In field 9 (`patch_status`) — derived, tested, and never once written.** The column
+exists, `bomsource.go` already reads it, `patch_status()` was fully implemented and unit-tested —
+and grepping the whole Python tree found it called **nowhere**. Three defects stacked: it returned
+`"patched"/"vulnerable"` (not the profile's `up-to-date`/`patch-available`/`no-fix-available`/
+`unknown`); it collapsed `resolve_fix_version`'s `"none"` (zero fix versions ever reported — a
+substantive finding) and `"unknown"` (no comparator — an admitted gap) into one `unknown`; and
+nothing joined findings back onto components. Fixed across `findings.py` (vocabulary +
+`aggregate_patch_status`), `merge.py`, `pipeline.py` (the join, **and** `_flatten`, without which
+the field scores 0/0 forever no matter how well it is derived), and `bulk.py` (an explicit-column
+COPY batch, not the dict-driven writer a first reading suggested — `or None` matters, `""` violates
+the CHECK constraint). Aggregation is **worst-case-wins**; a component with **no** findings stays
+unset rather than `up-to-date`, because "nothing was reported" and "verified clean" are different
+claims and only one of them was earned. Added `test_pipeline.py` (`normalize()` had no unit test of
+its own, which is exactly how a missing join survived — every ingredient was tested in isolation).
+**Golden update justified:** all 7 SBOM goldens' coverage numbers rose; verified programmatically
+that component counts, finding counts, component sets and finding sets are byte-identical and only
+the coverage percentages moved.
+
+**What was deliberately NOT "fixed", and told to the user plainly:** the many `not-provided`
+columns (Description, Supplier, Origin, Release/EOL Date, Criticality, Usage Restrictions,
+per-package Checksums, Comments). Checked against this scan's own raw artifacts: **0 of 456 syft
+entries and 0 of 382 trivy entries carry `description`, `supplier`, `author` or `copyright`.** No
+SCA scanner emits them — this is a category difference, not a wiring gap, and filling them would be
+fabrication. `certin_identifier` (field 21) cascades from Supplier, so it is a consequence, not its
+own bug. `github-dependency-graph-sbom` is unavailable because GitHub returned a real **404** for
+the repo (Dependency Graph not enabled) — external. `dependency-check` is unavailable purely
+because its NVD database was never provisioned, and `dbsync.provision()` **refuses to start**
+without a free `NVD_API_KEY` (empty in `.env`) rather than run a sync that throttles into looking
+like a hang — so it is blocked on the user, not on code. A package-registry metadata enrichment
+feature was **designed** (see the plan file) but explicitly not built; its honest scope is that it
+could fill Description and Release Date, partially Supplier, and **cannot** fill EOL Date, Origin,
+Criticality or Usage Restrictions at all.
+
+**Verification actually performed:** `go build`/`vet`/`golangci-lint run`/`go test ./...` clean;
+`pytest` 496 passed (the one pre-existing `crypto-mixed` golden failure confirmed to fail
+identically with these changes reverted). Rebuilt and redeployed `auth`, `report` and
+`sbom-normalize-consumer`. Every fix verified against the live stack, not assumed: the GitHub flow
+by driving the real `/api/v1/auth/github/connect/authorize` through the real public origin and
+watching the `Set-Cookie` `Path` and `redirect_uri` change; the `BIT` fix by re-running a real scan
+and confirming a `normalize.bom_documents` row where the previous attempt had produced none; the
+`patch_status` fix by a real Bliss scan whose live rows now read `brace-expansion@1.1.16` →
+`patch-available`, `x/crypto@v0.51.0` (14 findings) → `no-fix-available`, `brace-expansion@2.1.2`/
+`@5.0.8` → `up-to-date` (the same package at newer versions, correctly the opposite answer), a
+`github`-ecosystem action → `unknown`, and 263 finding-free components correctly NULL — with
+completeness rising 14.29% → 14.66% on the same project. Short-lived `scan:run`-scoped API keys
+were minted for the scan triggers and revoked immediately after (401 confirmed); `report:create`
+was never requested, as in every prior session.
+
+### 2026-08-31 (a) — PDF text was silently mojibaked, and RNR Consulting's "0 findings" was a real, fixable bug, not the honest zero a prior session claimed
+
+**Goal:** the user pasted the actual real text of a generated PDF report (RNR Consulting, SBOM,
+`01a05485-5a87-7190-bfc0-ed49846d7296`) showing garbled punctuation (`Â·` for `·`, `?` for
+`—`/`§`) and 0 components/0 findings/0% coverage, and pushed back directly: *"there are no
+findings here. Make sure all our OSINTs are getting executed... every scan should properly
+execute."* Two independent, real bugs, both root-caused by re-fetching and re-reading actual
+system state rather than trusting the prior session's own written conclusion.
+
+**Bug 1 — PDF character-encoding corruption (`services/report/internal/render/pdf.go`).**
+`sanitizePDF` used `strings.Builder.WriteRune` for any rune `< 0x100`, which re-encodes back to
+UTF-8 (2 bytes for `·`, U+00B7) rather than emitting the single CP1252 byte fpdf's core Helvetica
+font actually needs — fpdf then drew each UTF-8 byte as its own separate CP1252 glyph (`·` →
+`Â·`). Fixed by building a CP1252 translator once per document (`doc.UnicodeTranslatorFromDescriptor("")`,
+fpdf's own documented mechanism, loaded from its embedded `cp1252.map` — no filesystem font
+directory needed) and threading it through `pdfRender.tr` into every one of the 8 text-writing
+call sites via `sanitizePDF(tr, text)`. `·`, `§` and even `—` (em dash) are all natively
+representable in CP1252, so none of them degrade to `?` anymore — only genuinely unmappable runes
+(CJK, emoji) still do, using the SAME real signal the fpdf translator itself already produces (its
+own `.`-substitute for an unmapped rune, which is unambiguous here because every real CP1252
+mapping for a rune `>= 0x80` always produces a byte `>= 0x80` too — see `sanitizePDF`'s doc
+comment for why zipping tr's one-byte-per-rune output against the original runes works instead of
+a naive post-hoc `Contains` check). Added `TestLatin1SupplementCharactersAreCorrectlyCP1252EncodedNotMojibaked`
+and `TestRenderedPDFUsesRealCP1252BytesNotUTF8ForLatin1Supplement` (decodes the actual rendered
+bytes back through `golang.org/x/text/encoding/charmap.Windows1252`, not a naive UTF-8 string
+match — the whole point, since post-fix output is genuine single-byte CP1252). `sampleBOM()`
+already contained a `§` in its `Notes` field, so this corruption had been silently happening in
+nearly every existing PDF test run, never asserted on, until now.
+
+**Bug 2 — webrecon misses Vite/Rollup `<link rel="modulepreload">` script chunks
+(`services/webrecon/internal/fingerprint/fetch.go`).** `consultrnr.com` is a React 18 + Vite SPA:
+its HTML has exactly one `<script src>` (the tiny module entry chunk) — the real dependency
+bundles (`vendor-*.js`, `ui-*.js`, `three-*.js`) are referenced only via
+`<link rel="modulepreload" href="...">`, standard static, unexecuted markup, NOT the
+client-JS-injected-after-paint case CLAUDE.md's honest labels correctly disclaim. `extractScripts`
+walked only `<script>` tokens, silently skipping every `<link>` — proven, not assumed, by directly
+fetching `vendor-DfUbHF3V.js` and finding a real `react-dom@18.3.1` signature match sitting in it.
+Fixed by adding a `<link rel="modulepreload">` branch that extracts `href` and feeds it through the
+exact same `rawScript{Src: ...}` pipeline a `<script src>` already uses — same-origin/CDN-allowlist
+check, SSRF-hardened bounded `get()`, URI and content matching, all untouched. Also added a
+`Scripts` field to `hostDoc` (`services/webrecon/internal/work/document.go`, additive JSON field —
+`workers/sbom/adapters/webrecon_fingerprint.py` already ignores unknown fields via plain
+`dict.get`) so a future zero-result case is diagnosable from the stored artifact alone: "0
+libraries, 0 scripts" vs. "0 libraries, 4 scripts fetched, 0 matched" now read differently, and
+only investigating the second is worth anyone's time. `docs/04-OSINT-INTEGRATION.md`'s
+`webrecon-fingerprint` JSON-shape line updated to match (SSOT discipline — the shape changed, so
+the one place it's documented had to change with it).
+
+**The wrong prior claim, corrected in place (2026-08-30 (a)'s log entry, not deleted):** that
+session concluded RNR Consulting's 0-component report was "an honest zero... `consultrnr.com`
+simply doesn't load one that matches" — stated as a finding without actually re-fetching the page
+and reading what it contained. It was wrong. Worth remembering for next time: a user's direct
+pushback with real rendered evidence is a signal to re-verify from scratch, not to restate the
+earlier conclusion more firmly.
+
+**Verification actually performed (live, not assumed):** `go build ./...`, `go vet ./...`,
+`golangci-lint run ./services/report/... ./services/webrecon/...`, `go test ./...` all clean.
+Rebuilt and redeployed `report` and `webrecon` containers. Minted a short-lived
+`scan:run,scan:read,report:read,report:download`-scoped API key (`axebom apikey mint`, matching
+this codebase's established live-verification pattern; **`report:create` was deliberately never
+requested** — no API-key scope grants it, and the final "click Generate" action is left to the
+user's own session throughout, same discipline every prior session in this log follows) and
+triggered a real scan against RNR Consulting's real project through the real gateway:
+`components: 1` for the first time ever on this project. Read the actual stored
+`webrecon.json` back out of MinIO and confirmed `react-dom@18.3.1` detected via
+`vendor-DfUbHF3V.js` (`matched: true`), with the new `scripts[]` diagnostics showing all 5 assets
+fetched. Revoked the diagnostic API key immediately after (`auth.api_keys.revoked_at`), confirmed
+401 on reuse. The PDF encoding fix was verified via a full `WritePDF()` render decoded back through
+real CP1252 rather than through the live report-generation HTTP flow, since regenerating an actual
+report for this project requires the `report:create` scope this session deliberately never
+requested — left to the user's next real Generate click.
+
+**Told to the user:** the zero-findings report was caused by a real, now-fixed bug, not a
+limitation of the product. Separately, if they want real dependency/vulnerability scanning
+(syft/grype/trivy/osv) against their actual source code rather than what a live URL's HTML exposes
+client-side, that requires registering the source repository as a **separate** AxeBOM project
+(`source_type=github` or `upload`) — `project.projects.source_type` is a single, immutable column
+set once at creation, so the existing RNR Consulting project cannot gain a second source kind
+without a larger architecture change, out of scope here.
+
 ### 2026-08-30 (c) — the scan progress page had no way to reach its own reports, and its "100%" lied by about the width of a report render
 
 Direct follow-up to (b), from the user actually using the page that session shipped.
@@ -2315,6 +2914,7 @@ Direct follow-up to (b), from the user actually using the page that session ship
 - A parallel research pass confirmed no OTHER unresolved `REPORT_RENDER_FAILED` exists anywhere in this environment — every failed report row, across every project, traces to one of (7) above or the already-fixed 2026-08-26 CycloneDX/JSON export bug.
 - Same pass confirmed, empirically (`scan.normalize_triggers` has zero `cbom`/`aibom`/`qbom` rows against any real, non-test-fixture scan): the CBOM/AIBOM normalize-trigger wiring genuinely has never fired live even once. This is the SAME class of gap SBOM had before the 2026-08-26 session closed it (`normalize_trigger.go` is explicitly, deliberately gated to SBOM only — "no normalize consumer exists yet" for the other families) — a real, pre-existing, already-documented structural gap, **not fixed this session** (materially larger work: mirroring SBOM's whole live-trigger + consumer architecture for two more families), and moot for RNR Consulting specifically since a url-sourced project can't reach CBOM/QBOM/AIBOM/HBOM regardless (`events.SourceURL` appears in exactly one engine's `SourceKinds` in the whole registry: `webrecon-fingerprint`).
 - RNR Consulting's report is real, signed, and correctly rendered, but **empty** (0 components, 0% completeness) — not a bug. `webrecon-fingerprint` only ever detects client-side JS libraries matching a 76-library retire.js signature database, and `consultrnr.com` simply doesn't load one that matches, on either host. Told to the user plainly rather than left implicit.
+  **⚠ CORRECTED 2026-08-31 (a): this conclusion was wrong, not re-verified against the real evidence the user later provided, and it was a real, fixable bug — see that entry.** `consultrnr.com` is a Vite/Rollup SPA whose actual dependency bundles are referenced only via `<link rel="modulepreload">`, never a `<script src>`; `extractScripts` silently skipped every `<link>` token, so the bundles were never even fetched. "Doesn't load one that matches" was an unverified guess dressed as a finding — the correct standard, restated for next time: a user's direct pushback with real rendered evidence is a signal to re-fetch and re-check the actual page, not to re-assert the earlier conclusion more firmly.
 - A cosmetic, unfixed finding worth a future session: the WS 403 diagnostic response (and, separately, the 101 response after the fix) carries **duplicated** `Content-Security-Policy`/`Referrer-Policy`/`X-Content-Type-Options`/`X-Frame-Options` headers and two different `X-Request-Id` values on one response — both nginx and gateway stamp the same headers without the proxy clearing the upstream's first. Browsers tolerate it; flagged, not chased.
 
 **Verification actually performed:** `go build ./...`, `go vet`, `golangci-lint run` and `go test ./...` all clean across the whole module after every Go change; `npm run build`/`npm run lint`/`npm test` (93 tests) clean after every frontend change. Every fix rebuilt and redeployed to the real running containers (`frontend`, `report`, `webrecon`, `scan-orchestrator`) — never just committed and assumed. Each one re-verified live against the real stack before moving to the next: the RBAC fix via a real `POST /v1/reports` through the real gateway; the blob-key fix via `webrecon complete` actually logging a clean bucket-relative `artifact_key` and a real JetStream redelivery succeeding on its 4th and final attempt; the render-race fix via a real report reaching `status=ready` with a real sha256; the WS origin fix via a raw handshake replicating the exact `Origin`/`Host` shape a real browser sends through the real proxy chain, before and after. Two real, narrowly-scoped, short-TTL diagnostic API keys (`scan:read`/`scan:run` only — report creation was deliberately left to the user's own authenticated session throughout, since no API-key scope grants it) were minted via the sanctioned `axebom apikey mint` operator escape hatch for this verification and are not left in any file. Commit `027e143`.

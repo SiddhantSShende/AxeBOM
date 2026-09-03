@@ -36,7 +36,9 @@ def pg_conn():
             port=int(os.environ.get("POSTGRES_PORT", "55432")),
             dbname=os.environ.get("POSTGRES_DB", "axebom"),
             user=os.environ.get("POSTGRES_NORMALIZE_WRITER_ROLE", "axebom_normalize_writer"),
-            password=os.environ.get("POSTGRES_NORMALIZE_WRITER_PASSWORD", "axebom_normalize_writer"),
+            password=os.environ.get(
+                "POSTGRES_NORMALIZE_WRITER_PASSWORD", "axebom_normalize_writer"
+            ),
             connect_timeout=5,
             autocommit=True,
         )
@@ -152,7 +154,9 @@ def test_a_real_trigger_writes_a_real_bom_document(pg_conn, cleanup, tenant_id) 
         "than completeness_pct (CLAUDE.md invariant 3)"
     )
 
-    cur.execute("SELECT count(*) FROM normalize.components WHERE bom_document_id = %s", (bom_document_id,))
+    cur.execute(
+        "SELECT count(*) FROM normalize.components WHERE bom_document_id = %s", (bom_document_id,)
+    )
     component_count = cur.fetchone()[0]
     assert component_count > 0, "the real npm-simple fixture has real components"
 
@@ -179,7 +183,8 @@ def test_replaying_the_same_trigger_is_idempotent(pg_conn, cleanup, tenant_id) -
     cur = pg_conn.cursor()
     cur.execute("SELECT set_config('app.current_tenant_id', %s, false)", (tenant_id,))
     cur.execute(
-        "SELECT id FROM normalize.bom_documents WHERE scan_id = %s AND bom_type = 'SBOM'", (scan_id,)
+        "SELECT id FROM normalize.bom_documents WHERE scan_id = %s AND bom_type = 'SBOM'",
+        (scan_id,),
     )
     bom_document_id = cur.fetchone()[0]
     cleanup.append(bom_document_id)
@@ -189,6 +194,9 @@ def test_replaying_the_same_trigger_is_idempotent(pg_conn, cleanup, tenant_id) -
     asyncio.run(handle_trigger(pg_conn, trigger, artifacts_root=_FIXTURE))
 
     cur.execute(
-        "SELECT count(*) FROM normalize.bom_documents WHERE scan_id = %s AND bom_type = 'SBOM'", (scan_id,)
+        "SELECT count(*) FROM normalize.bom_documents WHERE scan_id = %s AND bom_type = 'SBOM'",
+        (scan_id,),
     )
-    assert cur.fetchone()[0] == 1, "a redelivered trigger must not create a second bom_documents row"
+    assert cur.fetchone()[0] == 1, (
+        "a redelivered trigger must not create a second bom_documents row"
+    )

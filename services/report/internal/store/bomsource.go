@@ -76,6 +76,9 @@ func (s *Store) LoadBOM(ctx context.Context, r Report) (render.BOM, error) {
 		if err := loadCryptoAssets(ctx, tx, docID, &out); err != nil {
 			return err
 		}
+		if err := loadHardware(ctx, tx, docID, &out); err != nil {
+			return err
+		}
 		if err := loadQuantumDevice(ctx, tx, docID, &out); err != nil {
 			return err
 		}
@@ -188,12 +191,31 @@ func applyCoverageBreakdown(raw []byte, out *render.BOM) error {
 		return nil
 	}
 
+	// ⚠ A LIST, NOT A MAP — AND DECODING IT AS A MAP EMPTIED THE PER-FIELD
+	// COVERAGE TABLE IN EVERY REPORT THIS PRODUCT HAS EVER RENDERED.
+	//
+	// `CoverageResult.as_dict()` (libs/py-shared/.../coverage.py) emits
+	// `"fields"` as a JSON ARRAY of objects, each carrying its own `field_id`.
+	// This decoded it into `map[string]struct{...}`, so `json.Unmarshal`
+	// returned an UnmarshalTypeError — and the deliberate `//nolint:nilerr`
+	// below swallowed it and returned early, discarding the formula string
+	// (which had decoded perfectly well) along with the fields.
+	//
+	// The result was not a visible failure. It was a coverage table that was
+	// always empty and a formula line that was always blank, in the section of
+	// the report an auditor actually reads, with no error anywhere. Verified
+	// against the real serializer output rather than inferred.
+	//
+	// The tolerant error handling below is kept — it was right, and it is what
+	// let the bug hide, which is exactly why the SHAPE has to be correct rather
+	// than the handling strict.
 	var breakdown struct {
 		Formula string `json:"formula"`
-		Fields  map[string]struct {
-			Present  int `json:"present"`
-			Declared int `json:"declared"`
-			Total    int `json:"total"`
+		Fields  []struct {
+			FieldID  string `json:"field_id"`
+			Present  int    `json:"present"`
+			Declared int    `json:"declared"`
+			Total    int    `json:"total"`
 		} `json:"fields"`
 	}
 	if err := json.Unmarshal(raw, &breakdown); err != nil {
@@ -206,13 +228,18 @@ func applyCoverageBreakdown(raw []byte, out *render.BOM) error {
 	}
 
 	out.Coverage.Formula = breakdown.Formula
-	for id, fc := range breakdown.Fields {
+	for _, fc := range breakdown.Fields {
+		if fc.FieldID == "" {
+			// A row that names no field cannot be joined to a profile element,
+			// so it would render as an unlabelled line in the coverage table.
+			continue
+		}
 		out.Coverage.Fields = append(out.Coverage.Fields, render.FieldCoverage{
-			FieldID: id, Present: fc.Present, Declared: fc.Declared, Total: fc.Total,
+			FieldID: fc.FieldID, Present: fc.Present, Declared: fc.Declared, Total: fc.Total,
 		})
 	}
-	// Deterministic order: a map would shuffle the table between renders, and
-	// the artifact has to be byte-reproducible.
+	// Deterministic order: the serializer's array order is Python dict order,
+	// and the artifact has to be byte-reproducible (ADR-0003).
 	sort.Slice(out.Coverage.Fields, func(i, j int) bool {
 		return out.Coverage.Fields[i].FieldID < out.Coverage.Fields[j].FieldID
 	})
@@ -1005,6 +1032,64 @@ func loadPractices(ctx context.Context, tx db.Tx, scanID string, out *render.BOM
 	return nil
 }
 
+// applyLevelToHardware narrows the hardware tree the same way.
+//
+// ⚠ WITHOUT THIS, A REPORT LABELLED "Top-Level" RENDERED THE ENTIRE ASSEMBLY.
+//
+// level.Project walks `render.BOM.Components` — software — and nothing applied
+// the same rule to `render.BOM.Hardware`. So a customer who asked for a
+// Top-Level hardware BOM got every one of 900 parts under a heading promising
+// the top level only. That is not a rendering nuisance: the level is a CERT-In
+// §3.1 projection the customer CHOSE, and a document that silently ignores the
+// choice misdescribes its own scope.
+//
+// ⚠ THE SUB-ASSEMBLIES ARE KEPT AND THEIR CONTENTS ARE NOT. Depth ≤ 1 is the
+// product plus the assemblies it is built from — which is exactly what a
+// top-level view of hardware means, and matches what depth ≤ 1 means for
+// software. Everything dropped is COUNTED and stated in the note, because "42
+// components" without "and 858 omitted" is indistinguishable from a product
+// that genuinely has 42 parts.
+func applyLevelToHardware(out *render.BOM, l level.Level) string {
+	if len(out.Hardware) == 0 || l != level.TopLevel {
+		return ""
+	}
+
+	kept := make([]render.HardwareComponent, 0, len(out.Hardware))
+	var excluded int
+	for _, h := range out.Hardware {
+		if h.Depth <= 1 {
+			kept = append(kept, h)
+			continue
+		}
+		excluded++
+	}
+	if excluded == 0 {
+		return ""
+	}
+
+	out.Hardware = kept
+	return fmt.Sprintf(
+		"%d sub-component(s) below the top level are omitted from this Top-Level "+
+			"hardware BOM; they appear in the Complete BOM.", excluded)
+}
+
+// appendLevelNote adds to the level note rather than replacing it.
+//
+// Two projections write into one field — software components and the hardware
+// tree — and a report can in principle carry both. Assigning would drop
+// whichever ran first, and the dropped one is an omission the reader is
+// entitled to know about.
+func appendLevelNote(out *render.BOM, note string) {
+	if note == "" {
+		return
+	}
+	if out.LevelNote == "" {
+		out.LevelNote = note
+		return
+	}
+	out.LevelNote += " " + note
+}
+
 // applyLevel narrows the component set to the report's level.
 //
 // ⚠ EVERYTHING EXCLUDED IS COUNTED AND SAID. A Top-Level report claiming "42
@@ -1015,6 +1100,13 @@ func applyLevel(out *render.BOM) {
 	if !level.Valid(l) {
 		return
 	}
+
+	// ⚠ THE HARDWARE NOTE IS HELD, NOT WRITTEN, UNTIL AFTER THE SOFTWARE
+	// PROJECTION. The software path ASSIGNS out.LevelNote from its own
+	// projection, so a note written here would be silently overwritten a few
+	// lines down — which is exactly what happened the first time, and the test
+	// caught it. Filtering happens now; the note is appended at the end.
+	hardwareNote := applyLevelToHardware(out, l)
 
 	byKey := make(map[string]render.Component, len(out.Components))
 	projectable := make([]level.Component, 0, len(out.Components))
@@ -1028,6 +1120,9 @@ func applyLevel(out *render.BOM) {
 
 	projection, err := level.Project(projectable, l)
 	if err != nil {
+		// The hardware was still projected above, and its note must not be lost
+		// because the software projection refused a level it does not implement.
+		appendLevelNote(out, hardwareNote)
 		return
 	}
 
@@ -1039,6 +1134,7 @@ func applyLevel(out *render.BOM) {
 	}
 	out.Components = kept
 	out.LevelNote = projection.Note
+	appendLevelNote(out, hardwareNote)
 
 	// Findings for components the level dropped go with them; keeping them
 	// would list a vulnerability against a component the report does not
@@ -1182,6 +1278,163 @@ func summariseHashes(raw []byte) string {
 			out += "; "
 		}
 		out += h.Algorithm + ":" + h.Value
+	}
+	return out
+}
+
+// ---------------------------------------------------------------------------
+// Hardware
+// ---------------------------------------------------------------------------
+
+// loadHardware fills render.BOM.Hardware.
+//
+// ⚠ THIS LOADER DID NOT EXIST, AND ITS ABSENCE WAS THE WHOLE REASON EVERY HBOM
+// REPORT RENDERED EMPTY.
+//
+// `render.HBOMSheets` and `docxHardware` have been wired into the renderer
+// since Phase 15 and read `b.Hardware`, which nothing ever populated — so a
+// customer who imported a 400-line parts list got a report with two blank
+// hardware sheets and no error anywhere. That is the silent-emptiness failure
+// invariant 12 exists to prevent, sitting in the product's own output path.
+//
+// ⚠ ORDERED PARENTS-BEFORE-CHILDREN BY A RECURSIVE CTE, NOT BY A SORT.
+//
+// The renderer indents by `Depth` and the exporter emits `contains` edges, and
+// both need the tree walked in a stable, parent-first order. Sorting by any
+// column would put a child before its parent whenever names happen to sort
+// that way, which reads as a mangled assembly in the spreadsheet and produces
+// an unresolvable reference in the export. The CTE computes depth from the
+// actual parent links, so the order is the tree's, not the data's.
+func loadHardware(ctx context.Context, tx db.Tx, docID string, out *render.BOM) error {
+	rows, err := tx.Query(ctx, `
+		WITH RECURSIVE tree AS (
+		    SELECT id, parent_id, 0 AS depth, ARRAY[product_name, id::text] AS path
+		      FROM normalize.hardware_components
+		     WHERE bom_document_id = $1 AND parent_id IS NULL
+		    UNION ALL
+		    SELECT c.id, c.parent_id, t.depth + 1,
+		           t.path || c.product_name || c.id::text
+		      FROM normalize.hardware_components c
+		      JOIN tree t ON c.parent_id = t.id
+		     WHERE c.bom_document_id = $1
+		)
+		SELECT h.id, COALESCE(h.parent_id::text, ''), t.depth,
+		       h.product_name, COALESCE(h.product_version,''), COALESCE(h.product_details,''),
+		       COALESCE(h.model_number,''), COALESCE(h.serial_number,''),
+		       COALESCE(h.manufacturer_name,''), COALESCE(h.manufacturer_location,''),
+		       COALESCE(h.origin,''),
+		       COALESCE(h.supplier_info,''), COALESCE(h.supplier_location,''),
+		       COALESCE(h.component_supplier_info,''), COALESCE(h.component_supplier_location,''),
+		       COALESCE(h.criticality,''), COALESCE(h.firmware_version,''), h.compliance,
+		       h.quantity, h.designators, COALESCE(h.package_footprint,''),
+		       COALESCE(h.supplier_sku,''), COALESCE(h.preferred_supplier,''),
+		       COALESCE(h.unit_price::text,''), COALESCE(h.currency,''),
+		       COALESCE(h.extended_price::text,''),
+		       h.do_not_populate, COALESCE(h.assembly_type,''), COALESCE(h.lifecycle_status,''),
+		       COALESCE(h.datasheet_url,''), COALESCE(h.technical_specification,''),
+		       COALESCE(h.source_engine,''), h.enriched_fields
+		  FROM tree t
+		  JOIN normalize.hardware_components h ON h.id = t.id
+		 ORDER BY t.path`, docID)
+	if err != nil {
+		return fmt.Errorf("load hardware components: %w", err)
+	}
+	defer rows.Close()
+
+	index := map[string]int{}
+	for rows.Next() {
+		var (
+			c           render.HardwareComponent
+			enriched    []byte
+			designators []string
+			compliance  []string
+		)
+		if err := rows.Scan(
+			&c.ID, &c.ParentID, &c.Depth,
+			&c.Name, &c.Version, &c.Description, &c.ModelNumber, &c.SerialNumber,
+			&c.ManufacturerName, &c.ManufacturerLocation, &c.Origin,
+			&c.SupplierInfo, &c.SupplierLocation,
+			&c.ComponentSupplierInfo, &c.ComponentSupplierLocation,
+			&c.Criticality, &c.FirmwareVersion, &compliance,
+			&c.Quantity, &designators, &c.PackageFootprint,
+			&c.SupplierSKU, &c.PreferredSupplier,
+			&c.UnitPrice, &c.Currency, &c.ExtendedPrice,
+			&c.DoNotPopulate, &c.AssemblyType, &c.LifecycleStatus,
+			&c.DatasheetURL, &c.TechnicalSpecification,
+			&c.SourceEngine, &enriched,
+		); err != nil {
+			return fmt.Errorf("scan hardware component: %w", err)
+		}
+		c.Compliance = compliance
+		c.Designators = designators
+		c.EnrichedFields = decodeStringMap(enriched)
+		index[c.ID] = len(out.Hardware)
+		out.Hardware = append(out.Hardware, c)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate hardware components: %w", err)
+	}
+
+	return loadHardwareAlternates(ctx, tx, docID, out, index)
+}
+
+// loadHardwareAlternates attaches second sources to the parts they belong to.
+//
+// A separate query rather than a join: an alternate is 1:N against a component
+// and joining would multiply every hardware row by its alternate count, which
+// the scan loop above would then have to de-duplicate — the classic shape that
+// silently doubles a component count in a compliance document.
+func loadHardwareAlternates(
+	ctx context.Context, tx db.Tx, docID string, out *render.BOM, index map[string]int,
+) error {
+	if len(index) == 0 {
+		return nil
+	}
+	rows, err := tx.Query(ctx, `
+		SELECT a.hardware_component_id, a.ordinal,
+		       COALESCE(a.manufacturer_name,''), COALESCE(a.model_number,''),
+		       COALESCE(a.supplier_info,''), COALESCE(a.supplier_sku,''),
+		       COALESCE(a.lifecycle_status,''), a.equivalence,
+		       COALESCE(a.approval_note,'')
+		  FROM normalize.hardware_component_alternates a
+		  JOIN normalize.hardware_components h ON h.id = a.hardware_component_id
+		 WHERE h.bom_document_id = $1
+		 ORDER BY a.hardware_component_id, a.ordinal`, docID)
+	if err != nil {
+		return fmt.Errorf("load hardware alternates: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			componentID string
+			alt         render.HardwareAlternate
+		)
+		if err := rows.Scan(&componentID, &alt.Ordinal,
+			&alt.ManufacturerName, &alt.ModelNumber, &alt.SupplierInfo, &alt.SupplierSKU,
+			&alt.LifecycleStatus, &alt.Equivalence, &alt.ApprovalNote); err != nil {
+			return fmt.Errorf("scan hardware alternate: %w", err)
+		}
+		if at, ok := index[componentID]; ok {
+			out.Hardware[at].Alternates = append(out.Hardware[at].Alternates, alt)
+		}
+	}
+	return rows.Err()
+}
+
+// decodeStringMap reads a jsonb map of strings, tolerating anything else.
+//
+// ⚠ NEVER FAILS THE LOAD. enriched_fields is provenance — useful, not
+// load-bearing — and refusing to render a whole parts list because one
+// provenance blob is malformed would withhold a correct report over a
+// decorative field.
+func decodeStringMap(raw []byte) map[string]string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var out map[string]string
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil
 	}
 	return out
 }

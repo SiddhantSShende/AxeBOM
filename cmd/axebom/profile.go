@@ -91,6 +91,24 @@ func profileGen(args []string) error {
 		return err
 	}
 
+	// ⚠ REFUSE AN OPERATIONAL PROFILE OUTRIGHT.
+	//
+	// GenerateGo emits `package model` with package-level ProfileID,
+	// ProfileRevision, ProfileAllVerified and type ProfileField. Generating a
+	// second profile into the same package is four duplicate declarations and
+	// a compile error — so the failure would be confusing rather than absent.
+	//
+	// Nothing needs it anyway: an operational field list has no Go consumer,
+	// and Python reads it at runtime exactly the way normalize_runner's
+	// sbom_fields() already reads the CERT-In one.
+	if !p.Meta.IsCompliance() {
+		return fmt.Errorf("refusing to generate from operational profile %q: the "+
+			"generated models declare package-level ProfileID/ProfileRevision/"+
+			"ProfileField that a second profile would collide with, and an "+
+			"operational field set has no generated consumer — Python reads it "+
+			"at runtime instead", p.Meta.ID)
+	}
+
 	// Refuse to generate from a profile that does not lint. Generating from a
 	// broken profile propagates the break into two languages and a runtime
 	// coverage calculation.

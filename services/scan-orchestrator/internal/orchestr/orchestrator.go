@@ -238,9 +238,15 @@ const defaultJobDeadline = 30 * time.Minute
 // — the registry's flags are the source of truth, not this map — but with a
 // generic message instead of a specific redirect. Add an entry here whenever
 // a new metadata-only family is registered, so the 422 stays actionable.
+// ⚠ HBOM IS NO LONGER LISTED HERE, AND ITS ABSENCE IS THE CHANGE.
+//
+// It used to redirect to /v1/hbom/*, because every HBOM engine was an import.
+// `hbom-ecad` is not — it parses the customer's own KiCad/Altium/OrCAD design
+// files out of an upload or a repository, which is a real scan producing real
+// jobs — so the family is directly scannable and this map must not claim
+// otherwise. The entry was removed rather than reworded: a redirect for a
+// family that is never rejected is dead text a future reader would trust.
 var familyRedirect = map[events.Family]string{
-	events.FamilyHBOM: "HBOM has no scanner; import hardware inventory via the " +
-		"/v1/hbom/* endpoints instead of requesting a scan.",
 	events.FamilyQBOM: "QBOM is derived from CBOM discovery, not scanned directly; " +
 		"it becomes available automatically once a CBOM report exists for this project.",
 }
@@ -251,8 +257,10 @@ var familyRedirect = map[events.Family]string{
 //
 // ⚠ GENERIC OFF THE REGISTRY FLAGS, NOT HARDCODED FAMILY NAMES.
 //
-// Today that is exactly HBOM (hbom-csv, RequiresImport) and QBOM
-// (qbom-derive, Derived) — see policy.DefaultRegistry — but this walks
+// Today that is exactly QBOM (qbom-derive, Derived) — see
+// policy.DefaultRegistry. HBOM used to qualify and no longer does, which is
+// the payoff of writing this generically: adding hbom-ecad to the registry
+// made the family scannable with no edit here at all. This walks
 // Engine.Derived / Engine.RequiresImport rather than switching on family
 // name, so it stays correct if the registry changes without a second edit
 // here.
@@ -283,9 +291,27 @@ func (o *Orchestrator) rejectNonScannableFamilies(in CreateScanInput) error {
 		}
 	}
 
+	// ⚠ RequiresImport ALONE IS NOT THE PREDICATE, AND github-dependency-graph-
+	// sbom ALREADY DISPROVED IT: that engine is RequiresImport AND is
+	// dispatched on every git-sourced SBOM scan. The rule only looked correct
+	// because nothing ever named it explicitly.
+	//
+	// RequiresImport is an HONEST LABEL about where data came from — "we did
+	// not discover this, somebody handed it to us". It says nothing about
+	// whether a job can be published. Two things actually make an engine
+	// undispatchable, and both are checked here instead:
+	//
+	//   Derived            produced from another BOM type's output, never
+	//                      from a job of its own (qbom-derive).
+	//   empty SourceKinds  nothing can ever select it, because Resolve
+	//                      filters on Supports(kind) (hbom-csv, which names
+	//                      the REST import path rather than a job).
+	//
+	// Without this, `POST /v1/scans {"engines":["hbom-cdxgen-host"]}` would be
+	// refused for carrying an honest label, even though its job runs fine.
 	var offendingEngines []string
 	for _, id := range in.RequestedEngines {
-		if e, ok := o.registry.Get(id); ok && (e.Derived || e.RequiresImport) {
+		if e, ok := o.registry.Get(id); ok && (e.Derived || len(e.SourceKinds) == 0) {
 			offendingEngines = append(offendingEngines, id)
 		}
 	}
@@ -308,11 +334,13 @@ func (o *Orchestrator) rejectNonScannableFamilies(in CreateScanInput) error {
 		err = err.WithDetail(errs.Detail{"family": string(f), "reason": reason})
 	}
 	for _, id := range offendingEngines {
-		err = err.WithDetail(errs.Detail{
-			"engine": id,
-			"reason": fmt.Sprintf("%s is a metadata-only engine (derived or import-only) "+
-				"and cannot be requested directly as a scan engine", id),
-		})
+		reason := fmt.Sprintf("%s is derived from another BOM type's output and cannot "+
+			"be requested directly as a scan engine", id)
+		if e, ok := o.registry.Get(id); ok && !e.Derived {
+			reason = fmt.Sprintf("%s reads no source kind — it names an interactive import "+
+				"path rather than a scan job, and cannot be requested as a scan engine", id)
+		}
+		err = err.WithDetail(errs.Detail{"engine": id, "reason": reason})
 	}
 	return err
 }

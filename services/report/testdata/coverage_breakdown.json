@@ -1,0 +1,33 @@
+{
+ "completeness_pct": 75.0,
+ "declaration_pct": 100.0,
+ "completeness_numerator": 9,
+ "declaration_numerator": 12,
+ "denominator": 12,
+ "scored_entities": 2,
+ "unidentified_count": 0,
+ "field_count": 2,
+ "formula": "pct = 100 \u00d7 \u03a3_c \u03a3_f (w_f \u00d7 present(c,f)) / \u03a3_c \u03a3_f w_f",
+ "fields": [
+  {
+   "field_id": "certin.sbom.01.component_name",
+   "name": "Component Name",
+   "weight": 3,
+   "present": 2,
+   "declared": 2,
+   "total": 2,
+   "completeness_pct": 100.0,
+   "declaration_pct": 100.0
+  },
+  {
+   "field_id": "certin.sbom.05.component_license",
+   "name": "Component License",
+   "weight": 3,
+   "present": 1,
+   "declared": 2,
+   "total": 2,
+   "completeness_pct": 50.0,
+   "declaration_pct": 100.0
+  }
+ ]
+}

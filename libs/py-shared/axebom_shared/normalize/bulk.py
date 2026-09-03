@@ -41,6 +41,7 @@ See `docs/03-NORMALIZER-SPEC.md` §8.
 
 from __future__ import annotations
 
+import datetime
 import json
 import uuid
 from collections.abc import Iterable, Sequence
@@ -55,6 +56,14 @@ _SURROGATE_NAMESPACE = uuid.UUID("f3cb4a2b-3d98-4d07-94d6-75efd23b2f4b")
 
 #: Refuse rather than truncate above this many components.
 MAX_COMPONENTS = 250_000
+
+#: Hardware components in one document.
+#:
+#: Lower than MAX_COMPONENTS by two orders of magnitude, and deliberately: a
+#: parts list is human-authored. The largest real electromechanical assemblies
+#: run to a few thousand line items; 100,000 is far past any of them and short
+#: of the point where a runaway `level` column could exhaust memory.
+MAX_HARDWARE_COMPONENTS = 100_000
 
 #: And above this many findings. A monorepo with 50k components routinely has
 #: several hundred thousand findings.
@@ -126,6 +135,7 @@ def plan(
     components = canonical.get("components") or []
     findings = canonical.get("findings") or []
     crypto_assets = canonical.get("crypto_assets") or []
+    hardware_components = canonical.get("hardware_components") or []
 
     if len(components) > MAX_COMPONENTS:
         out.refused = True
@@ -139,6 +149,21 @@ def plan(
                     "complete and every component past the cut-off becomes a false "
                     "negative the customer trusts"
                 ),
+            }
+        )
+        return out
+
+    if len(hardware_components) > MAX_HARDWARE_COMPONENTS:
+        out.refused = True
+        out.diagnostics.append(
+            {
+                "severity": "error",
+                "code": "NORMALIZE_HARDWARE_COMPONENT_CAP_EXCEEDED",
+                "message": f"{len(hardware_components)} hardware components exceeds the "
+                f"{MAX_HARDWARE_COMPONENTS} ceiling",
+                "hint": "refused rather than truncated, same as every other cap here: a "
+                "truncated parts list looks complete, and every part past the cut-off "
+                "becomes a component the customer believes was accounted for",
             }
         )
         return out
@@ -215,6 +240,17 @@ def plan(
     # unlike _component_id there is no client-side id to mint here at all:
     # normalize.crypto_assets.id keeps its schema DEFAULT app.uuid_v7().
     out.batches.append(_crypto_assets_batch(crypto_assets, tenant_id, bom_document_id))
+
+    # ⚠ MINTED FOR THE SAME REASON AS component_ids, and it is what wires the
+    # recursive parent_id. See _hardware_component_id.
+    if hardware_components:
+        hardware_ids = _hardware_component_ids(hardware_components, bom_document_id)
+        out.batches.append(
+            _hardware_components_batch(
+                hardware_components, tenant_id, bom_document_id, hardware_ids
+            )
+        )
+        out.batches.append(_hardware_alternates_batch(hardware_components, tenant_id, hardware_ids))
 
     # ⚠ MINTED FOR THE SAME REASON AS component_ids: `_ai_datasets_batch` and
     # `_ai_model_dependencies_batch` below need to reference the parent AI
@@ -318,6 +354,7 @@ def _components_batch(
             "license_effective",
             "license_rule",
             "license_ambiguous",
+            "patch_status",
             "scope",
             "is_direct",
             "hashes",
@@ -345,6 +382,12 @@ def _components_batch(
                 _text(component.get("license_effective")) or None,
                 _text(component.get("license_rule")) or None,
                 bool(component.get("license_ambiguous")),
+                # ⚠ `or None`, NOT the bare string. The CHECK constraint
+                # (migrations/normalize/0001_bom_components.sql) permits NULL or
+                # one of four CERT-In enum values — "" is neither, and an unset
+                # patch_status is exactly the common case (any component with no
+                # findings). Without this the whole COPY batch fails.
+                _text(component.get("patch_status")) or None,
                 _text(component.get("scope")) or "required",
                 bool(component.get("is_direct")),
                 json.dumps(component.get("hashes") or []),
@@ -1078,3 +1121,419 @@ def iter_rows(batches: Iterable[CopyBatch]):
     for batch in batches:
         for row in batch.rows:
             yield batch.table, batch.columns, row
+
+
+# ---------------------------------------------------------------------------
+# Hardware
+# ---------------------------------------------------------------------------
+
+
+def _hardware_component_id(bom_document_id: str, local_id: str) -> str:
+    """Mint the surrogate id one `normalize.hardware_components` row is
+    inserted with — the hardware analogue of `_component_id`, for both of the
+    same reasons.
+
+    ⚠ FIRST: `parent_id` and `hardware_component_alternates
+    .hardware_component_id` both need to reference this row from WITHIN THE
+    SAME write, before Postgres has assigned it an id — and `writer.py`'s
+    chunked INSERT has no `RETURNING` to read one back.
+
+    ⚠ SECOND: uuid5, NOT uuid4. Re-normalizing the same parsed tree at the same
+    ruleset version must mint the same ids (invariant 10), or every
+    re-normalization silently renumbers a customer's parts list and any
+    reference anybody kept to a row becomes wrong.
+
+    `local_id` is the importer's `row-<n>` or the ECAD adapter's `part-<n>` —
+    stable within one document by construction, which is exactly what uuid5
+    needs and what the raw artifact's committed row order guarantees.
+    """
+    return str(uuid.uuid5(_SURROGATE_NAMESPACE, f"hardware_component:{bom_document_id}:{local_id}"))
+
+
+def _hardware_component_ids(
+    components: Sequence[dict[str, Any]], bom_document_id: str
+) -> dict[str, str]:
+    """One surrogate id per node, keyed by `_local_id`."""
+    return {
+        _text(c.get("_local_id")): _hardware_component_id(
+            bom_document_id, _text(c.get("_local_id"))
+        )
+        for c in components
+    }
+
+
+#: Canonical path -> column, for the flat hardware row `flatten()` produces.
+#:
+#: ⚠ DERIVED FROM THE PATHS, NOT HAND-LISTED TWICE. Both profiles express a
+#: field as `hardware_component.<column>`, so the column IS the path minus its
+#: prefix. A hand-written second copy is what drifts when a profile is revised.
+_HARDWARE_PATH_PREFIX = "hardware_component."
+
+#: Columns whose value is a Postgres array.
+_HARDWARE_ARRAY_COLUMNS = frozenset({"compliance", "designators"})
+
+#: Columns Postgres will cast from a string but which must be a real int/None.
+_HARDWARE_INT_COLUMNS = frozenset({"quantity"})
+
+#: numeric(18,6). Passed as a string; Postgres casts it. NEVER through a float
+#: — see _numeric_or_none and the column comment in migration 0011.
+_HARDWARE_NUMERIC_COLUMNS = frozenset({"unit_price"})
+
+#: Boolean, where `False` is a stated fact rather than an absence.
+_HARDWARE_BOOL_COLUMNS = frozenset({"do_not_populate"})
+
+#: Every column `_hardware_components_batch` writes.
+#:
+#: ⚠ `extended_price` IS ABSENT, AND ITS ABSENCE IS REQUIRED. It is
+#: `GENERATED ALWAYS AS (quantity * unit_price) STORED`, and Postgres rejects
+#: an INSERT that names a generated column at all — not just one that gives it
+#: a wrong value.
+_HARDWARE_COLUMNS: tuple[str, ...] = (
+    "id",
+    "tenant_id",
+    "bom_document_id",
+    "parent_id",
+    "product_name",
+    "product_version",
+    "product_details",
+    "warranty_amc",
+    "manufacturer_name",
+    "manufacturer_location",
+    "manufacturing_date",
+    "supplier_info",
+    "supplier_location",
+    "model_number",
+    "serial_number",
+    "technical_specification",
+    "component_supplier_info",
+    "component_supplier_location",
+    "technology_node",
+    "compliance",
+    "power_supply",
+    "license_info",
+    "test_result",
+    "firmware_version",
+    "origin",
+    "criticality",
+    "quantity",
+    "designators",
+    "package_footprint",
+    "supplier_sku",
+    "preferred_supplier",
+    "unit_price",
+    "currency",
+    "do_not_populate",
+    "assembly_type",
+    "lifecycle_status",
+    "datasheet_url",
+    "enriched_fields",
+    "field_status",
+    "manufacturing_field_status",
+    "source_engine",
+)
+
+
+def _hardware_components_batch(
+    components: Sequence[dict[str, Any]],
+    tenant_id: str,
+    bom_document_id: str,
+    hardware_ids: dict[str, str],
+) -> CopyBatch:
+    """Plan the `normalize.hardware_components` batch.
+
+    ⚠ PARENTS BEFORE CHILDREN, AND ALSO A DEFERRABLE CONSTRAINT.
+
+    `flatten()` walks depth-first so a parent always precedes its children
+    here, which keeps the common path fast. That ordering is NOT what makes
+    this correct: `writer.py` chunks at 500 rows per INSERT and a
+    non-deferrable self-FK is checked at the end of each statement, so a
+    700-node assembly could split a parent from its child across chunks.
+    Migration 0011 made the constraint DEFERRABLE INITIALLY DEFERRED for that
+    reason. Ordering is the fast path; the constraint is the floor.
+    """
+    batch = CopyBatch(table="normalize.hardware_components", columns=_HARDWARE_COLUMNS)
+
+    for component in components:
+        local_id = _text(component.get("_local_id"))
+        parent_local_id = _text(component.get("_parent_local_id"))
+        row: list[Any] = [
+            hardware_ids[local_id],
+            tenant_id,
+            bom_document_id,
+            hardware_ids.get(parent_local_id) if parent_local_id else None,
+        ]
+
+        for column in _HARDWARE_COLUMNS[4:]:
+            row.append(_hardware_value(component, column))
+
+        batch.rows.append(tuple(row))
+
+    return batch
+
+
+def _hardware_value(component: dict[str, Any], column: str) -> Any:
+    """One column's value out of a flat hardware row."""
+    if column == "field_status":
+        return json.dumps(_hardware_field_status(component, certin=True))
+    if column == "manufacturing_field_status":
+        return json.dumps(_hardware_field_status(component, certin=False))
+    if column == "enriched_fields":
+        raw = component.get("_enriched_fields")
+        return json.dumps(raw if isinstance(raw, dict) else {})
+    if column == "source_engine":
+        return _text(component.get("_source_engine")) or None
+
+    value = _hardware_lookup(component, column)
+
+    if column in _HARDWARE_ARRAY_COLUMNS:
+        # `not-provided` is the sentinel for an absent list. It is a real,
+        # reported fact in `field_status`; the COLUMN gets an empty array,
+        # because a text[] holding the literal string "not-provided" would be
+        # read by every consumer as a compliance certification named
+        # "not-provided".
+        if not isinstance(value, list):
+            return []
+        return [_text(v) for v in value if _text(v)]
+
+    if column in _HARDWARE_BOOL_COLUMNS:
+        return bool(value) if isinstance(value, bool) else False
+
+    if column in _HARDWARE_INT_COLUMNS:
+        return _int_or_none(value)
+
+    if column in _HARDWARE_NUMERIC_COLUMNS:
+        return _hardware_price(value)
+
+    if column == "manufacturing_date":
+        return _hardware_date(value)
+
+    if column == "product_name":
+        # NOT NULL. Every path upstream guarantees one (csv_import._build falls
+        # back to the part number, then to "unnamed component (row n)"), so
+        # this is a defensive floor rather than the expected case.
+        return _text(value) or "unnamed component"
+
+    text = _text(value)
+    if not text or text == "not-provided":
+        # ⚠ NULL IN THE COLUMN, `not-provided` IN field_status. The gap is
+        # REPORTED — that is what field_status is — while the column stays
+        # queryable. Storing the literal string would make every `WHERE origin
+        # IS NULL` miss and every rendered value read as a real answer.
+        return None
+    return text
+
+
+def _hardware_lookup(component: dict[str, Any], column: str) -> Any:
+    """Read one column out of a flat hardware row, either key spelling.
+
+    ⚠ TWO SPELLINGS REACH THIS ROW, AND THAT IS NOT A BUG TO FIX HERE.
+
+    A list-valued CERT-In element keeps the profile's `[]` notation in its key
+    (`hardware_component.compliance[]`) because `HBOM_FIELDS` is generated
+    verbatim from the YAML. A manufacturing element does not
+    (`hardware_component.designators`) because `fields_from_profile` strips the
+    suffix while building its `Field`s.
+
+    Both are correct for SCORING — each field list matches the keys it wrote,
+    which is why coverage has always been right. Only a consumer reading by
+    column name, like this one, sees the difference. Normalising it in
+    `flatten()` instead would change the keys `_SCORED` matches on and silently
+    collapse CERT-In coverage to zero.
+
+    So the writer accepts both. Found by the compliance array arriving empty in
+    a real plan: `compliance` was looked up unbracketed, missed, and every
+    RoHS/CE certification would have been dropped on write while `field_status`
+    still recorded it as present.
+    """
+    if (key := _HARDWARE_PATH_PREFIX + column) in component:
+        return component[key]
+    return component.get(key + "[]")
+
+
+def _hardware_field_status(component: dict[str, Any], *, certin: bool) -> dict[str, str]:
+    """Which fields held a substantive value, and which were declared absent.
+
+    ⚠ TWO SEPARATE MAPS, NOT ONE WITH NAMESPACED KEYS.
+
+    `field_status` answers a CERT-In question; `manufacturing_field_status`
+    answers an AxeBOM one. Nesting the second inside the first would make every
+    reader parse a discriminator to find out whether a key it is looking at is
+    a compliance fact — and one that guessed wrong would report an AxeBOM field
+    as a CERT-In gap.
+    """
+    prefix_certin = "certin.hbom."
+    out: dict[str, str] = {}
+    for key, value in component.items():
+        if not key.startswith(_HARDWARE_PATH_PREFIX):
+            continue
+        # Strip the profile's `[]` list notation: field_status keys are column
+        # names, and `compliance[]` is not one.
+        column = key[len(_HARDWARE_PATH_PREFIX) :].removesuffix("[]")
+        is_manufacturing = column in _MANUFACTURING_COLUMNS
+        if certin == is_manufacturing:
+            continue
+        out[column] = "not-provided" if _is_absent(value) else "present"
+    if certin:
+        out.setdefault("_profile", prefix_certin.rstrip("."))
+    return out
+
+
+#: Columns that belong to the manufacturing profile rather than CERT-In.
+#:
+#: ⚠ `product_details` IS ABSENT ON PURPOSE. Both profiles score it — CERT-In
+#: element 3, and the manufacturing "Description" — because it is one stored
+#: fact answering two questions. It is a CERT-In column, so it belongs in
+#: `field_status`; the manufacturing profile scores the same value without
+#: claiming the column.
+_MANUFACTURING_COLUMNS = frozenset(
+    {
+        "quantity",
+        "designators",
+        "package_footprint",
+        "supplier_sku",
+        "preferred_supplier",
+        "unit_price",
+        "currency",
+        "do_not_populate",
+        "assembly_type",
+        "lifecycle_status",
+        "datasheet_url",
+        "alternates",
+    }
+)
+
+
+def _is_absent(value: Any) -> bool:
+    """Whether a flat-row value carries no substantive content.
+
+    Mirrors `coverage.is_substantive`'s answer without importing it — a
+    boolean is always an answer, including False.
+    """
+    if isinstance(value, bool):
+        return False
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() in ("", "not-provided", "unknown", "noassertion")
+    if isinstance(value, (list, tuple, dict)):
+        return not value
+    return False
+
+
+def _hardware_price(value: Any) -> str | None:
+    """A unit price, passed to Postgres as a STRING for it to cast.
+
+    ⚠ NOT `_numeric_or_none`, AND THE DIFFERENCE SILENTLY NULLED EVERY PRICE.
+
+    `_numeric_or_none` exists for `ai_models.risk_score`, which Trusera's ai-bom
+    emits as a real float; it rejects strings on purpose, because a string
+    satisfies no numeric column there. Hardware prices are the opposite case:
+    `csv_import._parse_price` keeps them as strings ALL THE WAY HERE precisely
+    so they never pass through a Python float, because binary floating point
+    cannot represent 0.10 and the error accumulates across a 4000-line BOM into
+    an extended total somebody procures against.
+
+    So the string goes to Postgres and `numeric(18,6)` parses it exactly. What
+    this function adds is the same protection `_hardware_date` gives: a cell
+    that will not parse is DROPPED rather than sent, because one bad price
+    would otherwise fail the entire batch and take a 400-row parts list with
+    it.
+
+    Found by a live loader read returning empty prices for a CSV that plainly
+    had them.
+    """
+    text = _text(value)
+    if not text or text == "not-provided":
+        return None
+    try:
+        if float(text) < 0:
+            return None
+    except ValueError:
+        return None
+    return text
+
+
+def _hardware_date(value: Any) -> str | None:
+    """A manufacturing date, or None.
+
+    ⚠ A DATE COLUMN FED FROM A SPREADSHEET CELL, WHICH IS THE WHOLE PROBLEM.
+
+    `_crypto_assets_batch` can pass dates through as plain strings because
+    `crypto.py` guarantees ISO-8601. Hardware dates come from a customer's
+    export, where "Q3 2024", "week 32" and "2024-13-45" are all things people
+    actually type. Handing any of those to Postgres fails the ENTIRE batch —
+    one bad cell taking down a 400-row parts list.
+
+    So an unparseable value is DROPPED, matching `services/project/internal
+    /store/hbom.go`'s `parseManufacturingDate`, which already does exactly this
+    on the Go side. The gap is still reported through `field_status`.
+    """
+    text = _text(value)
+    if not text or text == "not-provided":
+        return None
+    try:
+        datetime.date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+    return text[:10]
+
+
+def _hardware_alternates_batch(
+    components: Sequence[dict[str, Any]],
+    tenant_id: str,
+    hardware_ids: dict[str, str],
+) -> CopyBatch:
+    """Plan the `normalize.hardware_component_alternates` batch.
+
+    Reads each row's own `hardware_component.alternates` list, the same way
+    `_ai_datasets_batch` reads a model's `_datasets` rather than a second
+    top-level canonical list.
+    """
+    batch = CopyBatch(
+        table="normalize.hardware_component_alternates",
+        columns=(
+            "tenant_id",
+            "hardware_component_id",
+            "ordinal",
+            "manufacturer_name",
+            "model_number",
+            "supplier_info",
+            "supplier_sku",
+            "lifecycle_status",
+            "equivalence",
+            "approval_note",
+        ),
+    )
+
+    for component in components:
+        alternates = component.get(_HARDWARE_PATH_PREFIX + "alternates")
+        if not isinstance(alternates, list):
+            continue
+        component_id = hardware_ids[_text(component.get("_local_id"))]
+        for index, alternate in enumerate(alternates):
+            if not isinstance(alternate, dict):
+                continue
+            manufacturer = _text(alternate.get("manufacturer_name"))
+            model_number = _text(alternate.get("model_number"))
+            sku = _text(alternate.get("supplier_sku"))
+            if not (manufacturer or model_number or sku):
+                # Mirrors the `hardware_alternate_identifiable` CHECK. Skipped
+                # rather than sent, so one unnamed alternate cannot fail the
+                # whole batch.
+                continue
+            batch.rows.append(
+                (
+                    tenant_id,
+                    component_id,
+                    _int_or_none(alternate.get("ordinal")) or index,
+                    manufacturer or None,
+                    model_number or None,
+                    _text(alternate.get("supplier_info")) or None,
+                    sku or None,
+                    _text(alternate.get("lifecycle_status")) or None,
+                    _text(alternate.get("equivalence")) or "unverified",
+                    _text(alternate.get("approval_note")) or None,
+                )
+            )
+
+    return batch

@@ -34,7 +34,9 @@ def worker(tmp_path: Path) -> SBOMWorker:
     )
 
 
-def with_native_ref(j: dict[str, Any], uri: str = "scans/s/raw/fetcher/dependency-graph-sbom.json") -> dict[str, Any]:
+def with_native_ref(
+    j: dict[str, Any], uri: str = "scans/s/raw/fetcher/dependency-graph-sbom.json"
+) -> dict[str, Any]:
     j.setdefault("workspace", {})["native_sbom_ref"] = uri
     return j
 

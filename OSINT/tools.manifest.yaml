@@ -64,6 +64,16 @@ manifest:
   resolved_against_network: true
   tools_dir: .axebom/tools
 
+# ⚠ `default_weight` HERE MIRRORS services/scan-orchestrator/internal/policy
+# /registry.go, WHICH IS AUTHORITATIVE.
+#
+# The weight is a share of a scan's PROGRESS PERCENTAGE, and only the
+# orchestrator computes progress — nothing reads the value from this file. The
+# two disagreed for every engine (syft 5 vs 3, grype 4 vs 3, dependency-check
+# 2 vs 1, ...), which meant this file documented a progress model the product
+# does not use. Aligned rather than deleted, so a reader of the manifest sees
+# the real number; the Go registry remains the one to change.
+
 defaults:
   mode_preference: [container, binary]
   verify:
@@ -98,13 +108,68 @@ tools:
     produces: [components, licenses]
     native_format: cyclonedx-json-1.6
     also_emits: [spdx-json-2.3]
-    default_weight: 5
+    default_weight: 3
     db_backed: false
     notes: >
       PRIMARY SBOM generator; emits CycloneDX and SPDX natively, so we parse the
       standard document rather than screen-scraping. Version metadata is
       injected by goreleaser ldflags — a source build reports "unknown", which
       is why ADR-0002 forbids one.
+
+  - id: cdxgen
+    role: generator
+    families: [sbom]
+    upstream: https://github.com/cdxgen/cdxgen
+    license: Apache-2.0
+    version: "13.0.1"
+    container:
+      image: ghcr.io/cdxgen/cdxgen
+      # ⚠ NO `v` PREFIX. The GitHub RELEASE is tagged `v13.0.1`; the container
+      # registry publishes `13.0.1`, `v13` and `latest` but NOT `v13.0.1`.
+      # Guessing the image tag from the release tag gives a 404 at pull time —
+      # the identical trap this manifest already records for cbomkit-theia.
+      # Probed against the real registry, 2026-09-03.
+      image_tag: "13.0.1"
+      # ⚠ THE FIRST PINNED DIGEST IN THIS MANIFEST, AND IT WAS SET BY HAND.
+      #
+      # Every other entry says "`toolctl pin` fills this" and every other entry
+      # is null, because THAT COMMAND HAS NEVER EXISTED — `axebom toolctl`
+      # offers list|dryrun|pull|sync|verify|licenses and nothing else. So the
+      # manifest's own "pin by digest, never by tag" rule has been unenforced
+      # since it was written, and every engine runs tag-addressed while
+      # `SandboxedAdapter.classify()` honestly reports ENGINE_IMAGE_NOT_PINNED.
+      #
+      # This one is pinned because it could be: read from the registry manifest
+      # at pull time and cross-checked against the local daemon's RepoDigest.
+      # The missing command is recorded in docs/STATE.md rather than papered
+      # over by pinning the rest from memory.
+      image_digest: "sha256:0be75639a833b59d1ba29b3c8ac00dfd2e41e7568d56b6c039007caadebebc0d"
+    container_only: true
+    container_only_reason: >
+      A Node runtime plus dozens of per-ecosystem helpers. The npm package is
+      published, but installing it locally would put an unpinned transitive
+      closure on the worker host — exactly what ADR-0002 exists to prevent.
+    source_kinds: [git, upload]
+    produces: [components, licenses]
+    native_format: cyclonedx-json-1.6
+    default_weight: 3
+    db_backed: false
+    verify:
+      checksum: unavailable
+      signature: unavailable
+    supply_chain_gap: >
+      Distributed as a container image and an npm package; upstream publishes
+      no standalone checksums file and no cosign signature for either. Pinning
+      the image by DIGEST via `toolctl pin` is the available mitigation and is
+      what production must use — a tag is mutable.
+    notes: >
+      A SECOND, INDEPENDENT inventory alongside syft. Its graph trust ranks
+      BELOW syft's in every shared ecosystem: the normalizer replaces a
+      subgraph by trust rank rather than unioning, and syft is the engine this
+      codebase has actually run against real projects.
+      ⚠ Runs with FETCH_LICENSE=false under `--network=none`, and never
+      resolves dependencies by executing package managers — the sandbox's
+      CheckCommand refuses that for every engine, not just this one.
 
   - id: grype
     role: vulnerability
@@ -127,7 +192,7 @@ tools:
     source_kinds: [sbom]
     produces: [vulnerabilities]
     emits_id_namespaces: [GHSA, CVE, OSV]
-    default_weight: 4
+    default_weight: 3
     db_backed: true
     db_refresh: daily
     notes: >
@@ -162,7 +227,7 @@ tools:
     produces: [components, vulnerabilities, licenses, secrets]
     native_format: cyclonedx-json-1.6
     emits_id_namespaces: [CVE, GHSA]
-    default_weight: 4
+    default_weight: 3
     db_backed: true
     security_note: >
       ⚠ Trivy's distribution channel was compromised twice in a coordinated
@@ -183,7 +248,7 @@ tools:
     source_kinds: [image]
     produces: [components, vulnerabilities, licenses]
     native_format: cyclonedx-json-1.6
-    default_weight: 4
+    default_weight: 3
     db_backed: true
     notes: >
       Deliberately a SEPARATE engine from trivy-fs: different invocation,
@@ -217,7 +282,7 @@ tools:
     source_kinds: [git, upload, sbom]
     produces: [vulnerabilities]
     emits_id_namespaces: [OSV, GO, PYSEC, RUSTSEC, MAL, GHSA, CVE]
-    default_weight: 3
+    default_weight: 2
     db_backed: true
     notes: >
       The richest source of ALIAS EDGES — its `aliases` field is authoritative
@@ -241,7 +306,7 @@ tools:
     produces: [components, vulnerabilities]
     identity_kind: cpe
     emits_id_namespaces: [CVE]
-    default_weight: 2
+    default_weight: 1
     db_backed: true
     requires_env: [NVD_API_KEY]
     requires_volume: depcheck-data
@@ -286,7 +351,7 @@ tools:
     source_kinds: [git, upload, image]
     produces: [crypto_assets]
     native_format: cyclonedx-json-1.6
-    default_weight: 5
+    default_weight: 3
     notes: >
       PRIMARY CBOM discovery — directories and container images; certificates,
       keys, secrets, java.security. Output schema is early and moving: parse
@@ -354,7 +419,7 @@ tools:
     source_kinds: [git, upload]
     produces: [ai_models, ai_dependencies]
     native_format: cyclonedx-json-1.6
-    default_weight: 5
+    default_weight: 2
     notes: >
       Code-level AI discovery: LLM providers, agent frameworks (LangChain,
       CrewAI, AutoGen, LlamaIndex, LangGraph), MCP servers, model references.
@@ -406,17 +471,87 @@ tools:
       both, and how the Fetcher guards against them.
 
 # ============================================================================
-# HBOM — no scanner exists. Structured import only. Label honestly in the UI.
+# HBOM
+#
+# ⚠ THE HEADING HERE USED TO READ "no scanner exists. Structured import only."
+# That was true while every HBOM engine read a CSV or a form, and it is no
+# longer the whole truth: `hbom-ecad` parses the customer's own KiCad, Altium
+# and OrCAD DESIGN FILES out of an upload or a connected repository, which is a
+# real scan of documents they wrote — the same act as reading a committed
+# lockfile for an SBOM.
+#
+# ⚠ WHAT REMAINS TRUE, AND IS THE ACTUAL HONEST LABEL: nothing here inspects
+# PHYSICAL HARDWARE. No open-source tool looks at a device and enumerates its
+# parts. A schematic is a drawing; a cdxgen host inventory is a report the
+# customer's own machine produced. Neither is AxeBOM having examined hardware,
+# and no UI string may say otherwise.
 # ============================================================================
+
+  - id: hbom-ecad
+    role: generator
+    families: [hbom]
+    upstream: internal
+    license: proprietary
+    source_kinds: [git, upload]
+    produces: [hardware_components]
+    native_format: axebom-hbom-json-1
+    mode: internal
+    default_weight: 3
+    notes: >
+      Parses hardware DESIGN files the customer wrote: KiCad `.kicad_sch`
+      schematics, KiCad netlist XML, and BOM exports (KiCad, Altium, OrCAD,
+      generic CSV/TSV). Placements are grouped into line items — R1, R4 and R17
+      of the same 10k resistor become one row with quantity 3 and all three
+      designators, because that is what gets ordered and placed. Grouping is by
+      MPN where one exists, otherwise by value AND footprint together; never by
+      value alone, since a 10k 0402 and a 10k 0805 cannot substitute.
+      No container, no third-party binary, no network. Bounded file/byte caps,
+      symlinks never followed, XML entity declarations refused unparsed.
+
+  - id: hbom-cdxgen-host
+    role: importer
+    families: [hbom]
+    # ⚠ `internal`, BECAUSE AxeBOM IMPLEMENTS THIS ENGINE. It parses a document
+    # the customer generated; it never runs cdxgen, and there is no artifact to
+    # acquire. Pointing `upstream` at cdx-hbom named the format's ORIGIN, and
+    # the Python ManifestAdapter reads the field as "resolve a container,
+    # binary or pip package for this" — so the availability probe reported the
+    # engine unavailable while it worked perfectly, which would have shown as a
+    # false gap in the Engine Coverage panel. The URL belongs in notes, which
+    # is where hbom-csv already keeps its own format references.
+    upstream: internal
+    license: proprietary
+    format_reference: https://github.com/cdxgen/cdx-hbom
+    source_kinds: [upload]
+    produces: [hardware_components]
+    native_format: cyclonedx-json-1.7
+    mode: internal
+    default_weight: 2
+    notes: >
+      ⚠ NOT RUN BY AxeBOM. `cdxgen -t hbom` inventories THE HOST IT RUNS ON —
+      board, firmware, TPM, storage, NICs. Running it inside our sandbox would
+      document AxeBOM's own container host and present it as the customer's
+      hardware, so it is never invoked here. The customer runs it on the device
+      they want documented and uploads the CycloneDX 1.7 result; this engine
+      parses that document. The raw artifact is their file byte for byte.
+      Confirmed against cdxgen/docs/HBOM.md, 2026-09.
 
   - id: hbom-csv
     role: importer
     families: [hbom]
     upstream: internal
     license: proprietary
-    source_kinds: [upload]
+    # ⚠ EMPTY, AND THAT IS WHAT KEEPS IT OUT OF SCAN FAN-OUT. This id names the
+    # interactive REST path (POST /v1/hbom/preview, then
+    # /v1/hbom/{projectId}/import), not a job. It declared `upload` while the
+    # whole hbom family was refused at scan-create time, which was harmless
+    # then and is not now: hbom-ecad made the family scannable, and
+    # policy.Registry.Resolve filters candidates on source kind alone, so a
+    # declared kind would publish scan.job.hbom for an engine no worker
+    # implements. Mirrors registry.go's SourceKinds: nil.
+    source_kinds: []
     produces: [hardware_components]
-    default_weight: 5
+    default_weight: 1
     notes: >
       CSV/spreadsheet import (StockFlow-shaped or generic). Expected columns:
       level, part_number, description, quantity, manufacturer, mpn, supplier.
@@ -594,6 +729,41 @@ rejected:
     reason: >
       Hosted SaaS with no public source. Integrated as a CSV IMPORT SHAPE
       (see hbom-csv), not as a dependency.
+
+  - id: freebom
+    upstream: https://github.com/alekssadowski95/FreeBOM
+    license: LGPL-2.1
+    reason: >
+      ⚠ LGPL-2.1 — copyleft, and CLAUDE.md invariant 9 permits copyleft only in
+      a subprocess or a separate service, never imported. It is also moot: the
+      repository contains LICENSE, README.md and requirements.txt and NO
+      LIBRARY AT ALL, so there is nothing to import even if the licence
+      allowed it. Its capability — multi-level assembly and sub-assembly
+      management — is the recursive `parent_id` tree AxeBOM already has.
+      Checked against the GitHub API 2026-09-03.
+
+  - id: kicad-multi-bom-plugin
+    upstream: https://github.com/Kenneract/KiCAD-Multi-BOM-Plugin
+    license: GPL-3.0
+    reason: >
+      ⚠ GPL-3.0. Importing it would make the HBOM worker a derivative work
+      (invariant 9). Unmaintained since October 2024. Its capability —
+      splitting one BOM into per-supplier files, including a JLCPCB-PCBA
+      compatible layout — is roughly 300 lines of grouping and formatting and
+      is being built natively instead, the same decision django-bom got.
+      Checked against the GitHub API 2026-09-03.
+
+  - id: kibom
+    upstream: https://github.com/SchrodingersGat/KiBoM
+    license: MIT
+    reason: >
+      Licence is fine; the artifact is not. Upstream ARCHIVED the repository in
+      March 2025, so a pin here would be one that can never receive a fix — in
+      a supply chain whose entire discipline is pinned, verifiable, MAINTAINED
+      releases (ADR-0002). Its KiCad netlist grouping rule is about thirty
+      lines and is reimplemented in workers/hbom/adapters/kicad.py, with this
+      note recording where it came from. FORMAT REFERENCE ONLY.
+      Checked against the GitHub API 2026-09-03.
 
   - id: octopart
     upstream: https://octopart.com

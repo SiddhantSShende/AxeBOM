@@ -1,0 +1,93 @@
+# ============================================================================
+# HBOM manufacturing and procurement readiness
+#
+# ⚠ AN AxeBOM OPERATIONAL PROFILE, NOT A COMPLIANCE STANDARD.
+#
+# ⚠ NOTHING IN THIS FILE MAY EVER MOVE completeness_pct OR declaration_pct.
+#
+# Those two numbers answer "how much of what CERT-In requires is present".
+# The number this file produces answers "how buildable and buyable is this
+# parts list". They are different questions with different authorities behind
+# them — CERT-In's, and ours — and merging them would let a customer's
+# diligence about unit prices raise a percentage they hand to a regulator.
+#
+# ---------------------------------------------------------------------------
+# WHY A SEPARATE FILE, RATHER THAN AN `axebom_extensions:` BLOCK INSIDE
+# certin-v2.0.yaml
+# ---------------------------------------------------------------------------
+# That block already exists, for AxeBOM analysis fields, and it is DEFINED by
+# `scored: false` — those fields ride alongside the standard and must never be
+# scored at all. The fields here ARE scored, just into their own number.
+# Putting scored non-CERT-In fields inside the compliance profile would make
+# `scored` mean two different things in one document, and certin-v2.0.yaml is
+# the file CLAUDE.md invariant 2 names as the single source of truth for what
+# CERT-In requires. It stays clean.
+#
+# ---------------------------------------------------------------------------
+# WHY A NEW TOP-LEVEL KEY (`hbom_manufacturing:`) AND NOT A SECOND `hbom:`
+# ---------------------------------------------------------------------------
+# Every CERT-In accessor in libs/go-shared/compliance reads `p.HBOM.Elements`:
+# FieldsForBOMType, the guardrail's field counts, the evidence pack's HBOM
+# section, and the code generator that produces HBOM_FIELDS. A different key
+# means not one of them can return an AxeBOM field by accident. The separation
+# is structural, not a filter somebody has to remember to apply.
+#
+# ---------------------------------------------------------------------------
+# WHY THESE FIELDS EXIST AT ALL
+# ---------------------------------------------------------------------------
+# CERT-In Table 11 describes a component's IDENTITY and PROVENANCE. It says
+# nothing about how many are fitted, where they sit on the board, what they
+# cost, or whether the part can still be bought. A hardware BOM is also a
+# manufacturing recipe, and the recipe is what makes the document usable by
+# the people who build the product. AxeBOM holds what the customer's own file
+# already says, and reports on it separately.
+#
+# See docs/06-COMPLIANCE-PROFILES.md for the profile mechanism, and
+# migrations/normalize/0011_hardware_manufacturing.sql for the columns.
+# ============================================================================
+
+profile:
+  id: hbom-manufacturing-v1
+  name: HBOM manufacturing and procurement readiness
+  version: "1"
+  revision: 1
+
+  # ⚠ THE FIELD THAT MAKES THE DISTINCTION MACHINE-READABLE. compliance.Lint
+  # branches on it, and an absent `kind` means "compliance" — so a profile
+  # that forgets to declare itself is held to every compliance check rather
+  # than quietly escaping them.
+  kind: operational
+  authority: AxeBOM
+
+  # No source_document, no source_pages, no all_entries_verified. There is no
+  # PDF to cite and no page an auditor can open. That absence is exactly what
+  # `kind: operational` declares, and lint asserts both halves.
+
+hbom_manufacturing:
+  applies_to: hardware_component
+  label: Manufacturing and procurement readiness
+
+  elements:
+    # --- Engineering -------------------------------------------------------
+    - {id: axebom.hbom.mfg.01.designators,        name: Designators,           canonical_path: "hardware_component.designators[]", type: string_list, weight: 3, status: extension, description: "Reference designators (R1, C4, U2). One line item covers many placements, which is what makes a row traceable to a spot on the board."}
+    - {id: axebom.hbom.mfg.02.package_footprint,  name: Package / Footprint,   canonical_path: hardware_component.package_footprint, type: string,      weight: 3, status: extension, description: "Physical land pattern — 0402, QFN-48. Without it a line item cannot be placed."}
+    - {id: axebom.hbom.mfg.03.quantity,           name: Quantity,              canonical_path: hardware_component.quantity,          type: number,      weight: 3, status: extension, description: "How many the parent assembly contains. The one field every real parts list has and Table 11 does not."}
+    - {id: axebom.hbom.mfg.04.description,        name: Description,           canonical_path: hardware_component.product_details,   type: text,        weight: 1, status: extension, note: "Shares CERT-In element 3's column deliberately. A second description column would split one fact in two and halve element 3's coverage — so this scores the same stored value against a second, separate question."}
+
+    # --- Sourcing and procurement -----------------------------------------
+    - {id: axebom.hbom.mfg.05.supplier_sku,       name: Supplier SKU,          canonical_path: hardware_component.supplier_sku,      type: string,      weight: 3, status: extension, description: "The distributor's own order code. What a purchase order is actually raised against."}
+    - {id: axebom.hbom.mfg.06.preferred_supplier, name: Preferred supplier,    canonical_path: hardware_component.preferred_supplier, type: string,     weight: 1, status: extension}
+    - {id: axebom.hbom.mfg.07.alternates,         name: Alternate sources,     canonical_path: "hardware_component.alternates[]",    type: ref_list,    weight: 3, status: extension, description: "Approved drop-in or functional replacements. The single most useful field the moment a part goes obsolete, and the difference between a delayed build and a stopped one."}
+    - {id: axebom.hbom.mfg.08.unit_price,         name: Unit price,            canonical_path: hardware_component.unit_price,        type: number,      weight: 1, status: extension}
+    - {id: axebom.hbom.mfg.09.currency,           name: Currency,              canonical_path: hardware_component.currency,          type: string,      weight: 1, status: extension, description: "ISO 4217. A price with no currency is unusable, and it is never defaulted — guessing would turn an unusable number into a wrong one."}
+
+    # --- Manufacturing and assembly ---------------------------------------
+    - {id: axebom.hbom.mfg.10.do_not_populate,    name: DNI / DNP,             canonical_path: hardware_component.do_not_populate,   type: boolean,     weight: 1, status: extension, description: "Deliberately not fitted for this variant. `false` is an answer and counts as covered — coverage.is_substantive treats a boolean False as present, because 'this part IS populated' is a stated fact."}
+    - {id: axebom.hbom.mfg.11.assembly_type,      name: Assembly type,         canonical_path: hardware_component.assembly_type,     type: enum,        weight: 1, status: extension, values: [smt, tht, mechanical]}
+    - {id: axebom.hbom.mfg.12.lifecycle_status,   name: Lifecycle status,      canonical_path: hardware_component.lifecycle_status,  type: enum,        weight: 3, status: extension, values: [active, nrnd, obsolete, eol, preview, unknown], description: "`unknown` is storable and REPORTED, and scores zero for completeness — coverage.NON_SUBSTANTIVE contains it, so a distributor answering 'unknown' is recorded without counting as knowledge."}
+
+# ⚠ A TRANSCRIPTION ASSERTION, NOT APPLICATION LOGIC — the one place a count
+# legitimately appears (docs/06-COMPLIANCE-PROFILES.md §2). Nothing in code,
+# UI copy or tests may write this number; it renders from the data.
+expected_counts:
+  hbom_manufacturing_elements: 12

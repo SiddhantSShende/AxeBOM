@@ -64,6 +64,31 @@ type componentDTO struct {
 	LicenseInfo string `json:"license_info"`
 	TestResult  string `json:"test_result"`
 
+	// ⚠ TWO OF THE 24 CERT-In ELEMENTS THAT COULD NOT ROUND-TRIP THROUGH THIS
+	// API. The database has both and the model has both; this DTO did not, so a
+	// component edited through the UI came back without them and a save wrote
+	// them away. A field the product stores and refuses to hand back is worse
+	// than one it never had.
+	ProductDetails    string `json:"product_details"`
+	ManufacturingDate string `json:"manufacturing_date"`
+
+	// --- manufacturing and procurement -------------------------------------
+	// Not CERT-In elements; scored separately. See migration 0011.
+	Designators       []string `json:"designators"`
+	PackageFootprint  string   `json:"package_footprint"`
+	SupplierSKU       string   `json:"supplier_sku"`
+	PreferredSupplier string   `json:"preferred_supplier"`
+	// A STRING, deliberately: JSON numbers are float64 and 0.0018 does not
+	// survive the round trip exactly. The column is numeric(18,6).
+	UnitPrice       string `json:"unit_price"`
+	Currency        string `json:"currency"`
+	DoNotPopulate   bool   `json:"do_not_populate"`
+	AssemblyType    string `json:"assembly_type"`
+	LifecycleStatus string `json:"lifecycle_status"`
+	DatasheetURL    string `json:"datasheet_url"`
+
+	Alternates []alternateDTO `json:"alternates"`
+
 	Findings       []string          `json:"findings"`
 	EnrichedFields map[string]string `json:"enriched_fields"`
 
@@ -97,6 +122,19 @@ func toComponentDTO(c *hbom.Component, depth int) componentDTO {
 		TestResult:                c.TestResult,
 		Findings:                  emptyIfNil(c.Findings),
 		EnrichedFields:            c.EnrichedFields,
+		ProductDetails:            c.ProductDetails,
+		ManufacturingDate:         c.ManufacturingDate,
+		Designators:               emptyIfNil(c.Designators),
+		PackageFootprint:          c.PackageFootprint,
+		SupplierSKU:               c.SupplierSKU,
+		PreferredSupplier:         c.PreferredSupplier,
+		UnitPrice:                 c.UnitPrice,
+		Currency:                  c.Currency,
+		DoNotPopulate:             c.DoNotPopulate,
+		AssemblyType:              c.AssemblyType,
+		LifecycleStatus:           c.LifecycleStatus,
+		DatasheetURL:              c.DatasheetURL,
+		Alternates:                toAlternateDTOs(c.Alternates),
 	}
 	if c.ParentID != "" {
 		dto.ParentID = &c.ParentID
@@ -106,6 +144,47 @@ func toComponentDTO(c *hbom.Component, depth int) componentDTO {
 		dto.Children = append(dto.Children, toComponentDTO(child, depth+1))
 	}
 	return dto
+}
+
+// alternateDTO is one approved second source.
+type alternateDTO struct {
+	Ordinal          int    `json:"ordinal"`
+	ManufacturerName string `json:"manufacturer_name"`
+	ModelNumber      string `json:"model_number"`
+	SupplierInfo     string `json:"supplier_info"`
+	SupplierSKU      string `json:"supplier_sku"`
+	LifecycleStatus  string `json:"lifecycle_status"`
+	// ⚠ THE UI MUST ALWAYS SHOW THIS BESIDE THE PART NUMBER. An alternate's MPN
+	// on its own reads as an approved substitution; "unverified" beside it is
+	// the difference between a decision somebody made and one nobody has.
+	Equivalence  string `json:"equivalence"`
+	ApprovalNote string `json:"approval_note"`
+}
+
+func toAlternateDTOs(alternates []hbom.Alternate) []alternateDTO {
+	out := make([]alternateDTO, 0, len(alternates))
+	for _, a := range alternates {
+		out = append(out, alternateDTO{
+			Ordinal: a.Ordinal, ManufacturerName: a.ManufacturerName,
+			ModelNumber: a.ModelNumber, SupplierInfo: a.SupplierInfo,
+			SupplierSKU: a.SupplierSKU, LifecycleStatus: a.LifecycleStatus,
+			Equivalence: a.Equivalence, ApprovalNote: a.ApprovalNote,
+		})
+	}
+	return out
+}
+
+func fromAlternateDTOs(dtos []alternateDTO) []hbom.Alternate {
+	out := make([]hbom.Alternate, 0, len(dtos))
+	for _, d := range dtos {
+		out = append(out, hbom.Alternate{
+			Ordinal: d.Ordinal, ManufacturerName: d.ManufacturerName,
+			ModelNumber: d.ModelNumber, SupplierInfo: d.SupplierInfo,
+			SupplierSKU: d.SupplierSKU, LifecycleStatus: d.LifecycleStatus,
+			Equivalence: d.Equivalence, ApprovalNote: d.ApprovalNote,
+		})
+	}
+	return out
 }
 
 func emptyIfNil(v []string) []string {
@@ -139,6 +218,19 @@ func (dto componentDTO) toComponent() *hbom.Component {
 		WarrantyAMC:               dto.WarrantyAMC,
 		LicenseInfo:               dto.LicenseInfo,
 		TestResult:                dto.TestResult,
+		ProductDetails:            dto.ProductDetails,
+		ManufacturingDate:         dto.ManufacturingDate,
+		Designators:               dto.Designators,
+		PackageFootprint:          dto.PackageFootprint,
+		SupplierSKU:               dto.SupplierSKU,
+		PreferredSupplier:         dto.PreferredSupplier,
+		UnitPrice:                 dto.UnitPrice,
+		Currency:                  dto.Currency,
+		DoNotPopulate:             dto.DoNotPopulate,
+		AssemblyType:              dto.AssemblyType,
+		LifecycleStatus:           dto.LifecycleStatus,
+		DatasheetURL:              dto.DatasheetURL,
+		Alternates:                fromAlternateDTOs(dto.Alternates),
 	}
 	if dto.ParentID != nil {
 		c.ParentID = *dto.ParentID
@@ -254,11 +346,26 @@ func (h *Handler) ConfirmHBOMImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// project_id also travels in the form body (see useConfirmImport in
-	// hbom.ts), but the path value is what routes.go and every other handler
-	// in this service treats as authoritative — a form field is not trusted
-	// over it.
-	docID, err := h.svc.ImportHBOM(r.Context(), tenantID, r.PathValue("projectId"), data, mapping)
+	// ⚠ THE PATH WINS WHEN IT HAS ONE; THE FORM FIELD IS THE FALLBACK, NEVER AN
+	// OVERRIDE.
+	//
+	// Two routes reach here. `/v1/hbom/{projectId}/import` is the better shape
+	// and is authoritative — a form field must never be trusted over a path
+	// segment the route guard has already seen. `/v1/hbom/import` exists
+	// because frontend/src/lib/hbom.ts has always called it, carrying
+	// `project_id` in the multipart body, and always got a 404 for it.
+	//
+	// Reading the body only when the path is empty keeps the security property:
+	// on the path-scoped route a hostile `project_id` field is ignored entirely
+	// rather than compared, so there is no precedence bug to get wrong. Either
+	// way, ImportHBOM re-checks the project belongs to this tenant, and RLS is
+	// underneath that.
+	projectID := r.PathValue("projectId")
+	if projectID == "" {
+		projectID = r.FormValue("project_id")
+	}
+
+	docID, err := h.svc.ImportHBOM(r.Context(), tenantID, projectID, data, mapping)
 	if err != nil {
 		errs.Write(w, r, err)
 		return

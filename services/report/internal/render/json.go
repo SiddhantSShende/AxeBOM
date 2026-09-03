@@ -100,6 +100,16 @@ type BundleCanonical struct {
 	CryptoAssets  []CryptoAsset  `json:"crypto_assets,omitempty"`
 	QuantumDevice *QuantumDevice `json:"quantum_device,omitempty"`
 	AIModels      []AIModel      `json:"ai_models,omitempty"`
+	// Hardware carries the assembly tree with its manufacturing and
+	// procurement columns.
+	//
+	// ⚠ THE ONLY PLACE A CONSUMER CAN READ IT IN FULL. The SPDX and CycloneDX
+	// documents in this same bundle carry the CERT-In elements and the
+	// AxeBOM manufacturing fields as namespaced PROPERTIES, because neither
+	// standard has a field for a reference designator, a DNP flag or a unit
+	// price. Properties are strings; this is the structured form, with the
+	// parent links intact and the numbers still numbers.
+	Hardware []HardwareComponent `json:"hardware,omitempty"`
 }
 
 // BundleDocuments holds the standard serializations.
@@ -159,8 +169,12 @@ func WriteJSON(b BOM, spdx, cyclonedx []byte) ([]byte, error) {
 			CryptoAssets:  b.CryptoAssets,
 			QuantumDevice: b.QuantumDevice,
 			AIModels:      b.AIModels,
+			Hardware:      b.Hardware,
 		},
-		Notes: orEmpty(b.Notes),
+		// ⚠ TypeNotes, NOT JUST b.Notes. The honesty label for this BOM type
+		// used to be appended only inside Sheets(), so it reached the XLSX
+		// and never this bundle — see render.TypeNotes.
+		Notes: orEmpty(append(append([]string{}, b.Notes...), TypeNotes(b)...)),
 	}
 
 	if len(spdx) > 0 {

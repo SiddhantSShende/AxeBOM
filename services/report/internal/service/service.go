@@ -187,13 +187,13 @@ func parseLevel(raw string) (level.Level, error) {
 
 func parseFormat(raw string) (string, error) {
 	switch raw {
-	case "pdf", "xlsx", "json", "spdx", "cyclonedx":
+	case "pdf", "docx", "xlsx", "json", "spdx", "cyclonedx":
 		return raw, nil
 	case "":
 		return "", errs.New(errs.ValidationFieldRequired, "format is required")
 	default:
 		return "", errs.Newf(errs.ValidationFieldInvalid,
-			"format %q is not produced; want one of pdf, xlsx, json, spdx, cyclonedx", raw)
+			"format %q is not produced; want one of pdf, docx, xlsx, json, spdx, cyclonedx", raw)
 	}
 }
 

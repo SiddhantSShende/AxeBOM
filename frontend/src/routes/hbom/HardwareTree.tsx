@@ -17,14 +17,38 @@ import { EmptyState, ErrorState, SkeletonRows } from '../../components/States';
 import {
   CRITICALITY_VALUES,
   JUDGEMENT_FIELDS,
+  SUPPLIER_FORMATS,
+  bySupplier,
+  describeAlternate,
   describeProvenance,
   flatten,
+  rollUp,
+  strandedParts,
+  toCSV,
   useHardwareTree,
   usePartLookup,
   usePartProvider,
   useSaveComponent,
   type HardwareComponent,
+  type SupplierFormat,
 } from '../../lib/hbom';
+
+/**
+ * The three lenses on one parts list.
+ *
+ * ⚠ ONE FORTY-COLUMN TABLE WOULD BE COMPLETE AND UNREADABLE. The split is by
+ * AUDIENCE, and it is the same split the XLSX makes: compliance reads
+ * provenance, assembly reads placements, purchasing reads cost and
+ * availability. A reader who has to scroll horizontally past twenty columns
+ * they do not need is a reader who stops looking.
+ */
+type View = 'compliance' | 'engineering' | 'procurement';
+
+const VIEWS: { id: View; label: string; hint: string }[] = [
+  { id: 'compliance', label: 'Provenance', hint: 'Where each part came from — CERT-In §10.2.1.' },
+  { id: 'engineering', label: 'Engineering', hint: 'What goes where on the board.' },
+  { id: 'procurement', label: 'Procurement', hint: 'What to buy, from whom, at what price.' },
+];
 
 export function HardwareTree() {
   const { id: projectId = '' } = useParams();
@@ -33,6 +57,7 @@ export function HardwareTree() {
   const lookup = usePartLookup();
 
   const [editing, setEditing] = useState<HardwareComponent | null>(null);
+  const [view, setView] = useState<View>('compliance');
 
   if (isPending) return <SkeletonRows rows={8} columns={6} />;
   if (error) {
@@ -61,9 +86,17 @@ export function HardwareTree() {
       <header className="page-header">
         <div>
           <h1>Hardware</h1>
+          {/*
+            ⚠ THIS USED TO READ "imported from structured entry". It was true
+            while a CSV and a form were the only ways in, and a design-file scan
+            now populates the same table. What must NOT change is the denial: no
+            open-source tool inspects a device and enumerates its parts, and a
+            reader who assumes otherwise finds out at an audit.
+          */}
           <p className="muted">
-            {rows.length} components, imported from structured entry. Nothing here was discovered by
-            a scan.
+            {rows.length} components. AxeBOM did not examine any hardware to produce this — every
+            value came from a design file, a parts list, a form, or an inventory your own machine
+            reported.
           </p>
         </div>
 
@@ -89,6 +122,32 @@ export function HardwareTree() {
       </header>
 
       <MissingJudgements rows={rows} />
+      <StrandedParts roots={roots} />
+      <CostSummary roots={roots} />
+
+      {/*
+        ⚠ A TAB LIST, NOT A COLUMN PICKER. A picker makes every reader build
+        their own table and remember which columns they turned off; three named
+        lenses mean two people looking at "Procurement" are looking at the same
+        thing.
+      */}
+      <div className="chips" role="tablist" aria-label="Hardware views">
+        {VIEWS.map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            role="tab"
+            aria-selected={view === v.id}
+            className={view === v.id ? 'btn btn-sm' : 'btn btn-sm btn-quiet'}
+            title={v.hint}
+            onClick={() => setView(v.id)}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'procurement' && <SupplierExport roots={roots} />}
 
       <table className="table">
         <caption className="sr-only">Hardware component tree</caption>
@@ -97,10 +156,32 @@ export function HardwareTree() {
             <th scope="col">Component</th>
             <th scope="col">Part number</th>
             <th scope="col">Qty</th>
-            <th scope="col">Manufacturer</th>
-            <th scope="col">Origin</th>
-            <th scope="col">Criticality</th>
-            <th scope="col">Provenance</th>
+            {view === 'compliance' && (
+              <>
+                <th scope="col">Manufacturer</th>
+                <th scope="col">Origin</th>
+                <th scope="col">Criticality</th>
+                <th scope="col">Provenance</th>
+              </>
+            )}
+            {view === 'engineering' && (
+              <>
+                <th scope="col">Designators</th>
+                <th scope="col">Footprint</th>
+                <th scope="col">Assembly</th>
+                <th scope="col">Fitted</th>
+              </>
+            )}
+            {view === 'procurement' && (
+              <>
+                <th scope="col">Supplier SKU</th>
+                <th scope="col">Supplier</th>
+                <th scope="col">Unit</th>
+                <th scope="col">Extended</th>
+                <th scope="col">Lifecycle</th>
+                <th scope="col">Alternates</th>
+              </>
+            )}
             <th scope="col">
               <span className="sr-only">Actions</span>
             </th>
@@ -117,10 +198,51 @@ export function HardwareTree() {
               </th>
               <td>{component.model_number || <NotProvided />}</td>
               <td>{component.quantity}</td>
-              <td>{component.manufacturer_name || <NotProvided />}</td>
-              <td>{component.origin || <NotProvided />}</td>
-              <td>{component.criticality || <NotProvided />}</td>
-              <td className="muted">{describeProvenance(component)}</td>
+              {view === 'compliance' && (
+                <>
+                  <td>{component.manufacturer_name || <NotProvided />}</td>
+                  <td>{component.origin || <NotProvided />}</td>
+                  <td>{component.criticality || <NotProvided />}</td>
+                  <td className="muted">{describeProvenance(component)}</td>
+                </>
+              )}
+              {view === 'engineering' && (
+                <>
+                  <td>
+                    {component.designators.length > 0 ? (
+                      component.designators.join(', ')
+                    ) : (
+                      <NotProvided />
+                    )}
+                  </td>
+                  <td>{component.package_footprint || <NotProvided />}</td>
+                  <td>{component.assembly_type || <NotProvided />}</td>
+                  {/*
+                    ⚠ "Fitted", NOT "DNP". A column headed with an initialism is
+                    what a reader gets backwards, and backwards here means a
+                    factory omitting a part the design needs.
+                  */}
+                  <td>{component.do_not_populate ? 'No — do not populate' : 'Yes'}</td>
+                </>
+              )}
+              {view === 'procurement' && (
+                <>
+                  <td>{component.supplier_sku || <NotProvided />}</td>
+                  <td>{component.preferred_supplier || <NotProvided />}</td>
+                  <td>{component.unit_price || <NotProvided />}</td>
+                  <td>{component.extended_price || <NotProvided />}</td>
+                  <td>
+                    <LifecycleBadge status={component.lifecycle_status} />
+                  </td>
+                  <td>
+                    {component.alternates.length > 0 ? (
+                      component.alternates.map(describeAlternate).join('; ')
+                    ) : (
+                      <NotProvided />
+                    )}
+                  </td>
+                </>
+              )}
               <td>
                 <button type="button" className="btn btn-sm" onClick={() => setEditing(component)}>
                   Complete
@@ -291,4 +413,198 @@ function ComponentForm({
 
 function NotProvided() {
   return <span className="not-provided">not-provided</span>;
+}
+
+
+/**
+ * LifecycleBadge renders availability, and says what it means.
+ *
+ * ⚠ THE TITLE NAMES THE CONSEQUENCE, NOT THE STATUS. "obsolete" is a label
+ * somebody has to look up; "cannot be bought" is the thing they act on. NRND is
+ * the one most worth explaining — Not Recommended for New Designs is buyable
+ * today and refused at the next respin, which is the window in which acting is
+ * still cheap, and nothing about the word says that.
+ */
+function LifecycleBadge({ status }: { status: HardwareComponent['lifecycle_status'] }) {
+  if (!status) return <NotProvided />;
+
+  const meaning: Record<string, string> = {
+    active: 'In production.',
+    nrnd: 'Not Recommended for New Designs — buyable now, refused at the next respin.',
+    obsolete: 'No longer manufactured.',
+    eol: 'End of life — no longer manufactured.',
+    preview: 'Pre-production. Availability and specification may still change.',
+    unknown: 'No status was supplied. Not the same as active — nothing has been checked.',
+  };
+  // ⚠ THE DESIGN SYSTEM'S OWN STATUSES, NOT NEW ONES. `.pill[data-status]` has
+  // ok/warn/down/info and nothing else; inventing a `badge-danger` would ship a
+  // class with no CSS behind it, which renders as unstyled text and looks like
+  // a bug rather than a warning.
+  const tone: Record<string, string> = {
+    active: 'ok',
+    nrnd: 'warn',
+    obsolete: 'down',
+    eol: 'down',
+    preview: 'info',
+    unknown: 'info',
+  };
+
+  return (
+    <span className="pill" data-status={tone[status] ?? 'info'} title={meaning[status] ?? ''}>
+      {status}
+    </span>
+  );
+}
+
+/**
+ * StrandedParts is the warning that justifies the whole Lifecycle column.
+ *
+ * ⚠ AN OBSOLETE PART WITH NO APPROVED ALTERNATE IS THE MOST ACTIONABLE FACT IN
+ * A HARDWARE BOM, and it is one row among hundreds. Each one stops a build when
+ * remaining stock runs out — and the cheapest moment to find a second source is
+ * before it is needed, not after.
+ */
+function StrandedParts({ roots }: { roots: HardwareComponent[] }) {
+  const stranded = strandedParts(roots);
+  if (stranded.length === 0) return null;
+
+  return (
+    <aside className="callout callout-warn">
+      <h3>
+        {stranded.length} part{stranded.length === 1 ? '' : 's'} cannot be bought, with no recorded
+        alternate
+      </h3>
+      <p className="muted">
+        Each will stop a build when remaining stock runs out. Recording an approved second source
+        now is far cheaper than finding one under a deadline.
+      </p>
+      <ul>
+        {stranded.map((c) => (
+          <li key={c.id}>
+            <strong>{c.model_number || c.product_name}</strong>{' '}
+            <span className="muted">
+              ({c.lifecycle_status}
+              {c.designators.length > 0 ? ` · ${c.designators.join(', ')}` : ''})
+            </span>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  );
+}
+
+/**
+ * CostSummary totals the parts list, per currency.
+ *
+ * ⚠ NEVER ACROSS CURRENCIES, AND ALWAYS WITH THE UNPRICED COUNT. 4.10 USD +
+ * 3.20 EUR is not a number and there is no exchange rate here to make one. A
+ * total over a list where half the prices are missing is not the cost of the
+ * product, and a reader who is not told will read it as one — so the count is
+ * rendered beside the figure rather than in a footnote.
+ */
+function CostSummary({ roots }: { roots: HardwareComponent[] }) {
+  const { totals, unpriced } = rollUp(roots);
+  if (totals.length === 0 && unpriced === 0) return null;
+
+  return (
+    <aside className="callout">
+      <h3>Cost</h3>
+      {totals.length === 0 ? (
+        <p className="muted">No line carries a price.</p>
+      ) : (
+        <ul>
+          {totals.map((t) => (
+            <li key={t.currency}>
+              <strong>
+                {t.total} {t.currency}
+              </strong>{' '}
+              <span className="muted">
+                across {t.lines} priced line{t.lines === 1 ? '' : 's'}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {unpriced > 0 && (
+        <p className="muted">
+          {unpriced} line{unpriced === 1 ? '' : 's'} carry no usable price and are not included in
+          any total above.
+        </p>
+      )}
+      {totals.length > 1 && (
+        <p className="muted">
+          No combined total: this BOM is priced in more than one currency, and there is no exchange
+          rate in this data to combine them with.
+        </p>
+      )}
+    </aside>
+  );
+}
+
+
+/**
+ * SupplierExport writes one order file per supplier.
+ *
+ * ⚠ THIS IS THE NATIVE REPLACEMENT FOR A GPL-3.0 PLUGIN WE DECLINED.
+ * `KiCAD-Multi-BOM-Plugin` does the same job and is GPL-3.0, which invariant 9
+ * forbids importing; the rejection and its reason are recorded in
+ * OSINT/tools.manifest.yaml.
+ *
+ * ⚠ THE FILE IS BUILT AND DOWNLOADED IN THE BROWSER, never round-tripped
+ * through the server. There is nothing to store: it is a projection of data the
+ * page already holds, and a server round trip would only add a way for it to be
+ * stale.
+ */
+function SupplierExport({ roots }: { roots: HardwareComponent[] }) {
+  const [format, setFormat] = useState<SupplierFormat>('generic');
+  const boms = bySupplier(roots, format);
+
+  if (boms.length === 0) return null;
+
+  const download = (supplier: string) => {
+    const bom = boms.find((b) => b.supplier === supplier);
+    if (!bom) return;
+    const blob = new Blob([toCSV(bom)], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${supplier.replace(/[^\w.-]+/g, '-').toLowerCase()}-bom.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <aside className="callout">
+      <h3>Order files</h3>
+      <p className="muted">
+        One file per supplier, in that supplier&rsquo;s own column layout. Do-not-populate parts are
+        excluded — ordering them wastes money, and listing them on an assembly file tells a factory
+        to place a part the design says to leave off.
+      </p>
+
+      <label>
+        <span>Layout</span>
+        <select value={format} onChange={(e) => setFormat(e.target.value as SupplierFormat)}>
+          {SUPPLIER_FORMATS.map((f) => (
+            <option key={f.id} value={f.id} title={f.hint}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div className="chips">
+        {boms.map((b) => (
+          <button
+            key={b.supplier}
+            type="button"
+            className="btn btn-sm btn-quiet"
+            onClick={() => download(b.supplier)}
+          >
+            {b.supplier} ({b.rows.length})
+          </button>
+        ))}
+      </div>
+    </aside>
+  );
 }

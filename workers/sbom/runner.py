@@ -36,6 +36,7 @@ from axebom_shared.sandbox import Sandbox
 from axebom_shared.worker_runtime import run_worker
 
 from .adapters import (
+    CdxgenAdapter,
     DependencyCheckAdapter,
     GitHubDependencyGraphAdapter,
     GrypeAdapter,
@@ -60,6 +61,7 @@ log = get_logger("sbom-worker")
 #: adding an engine that needs no sandbox should not need a second worker
 #: class.
 ADAPTERS: dict[str, type[SandboxedAdapter]] = {
+    "cdxgen": CdxgenAdapter,
     "syft": SyftAdapter,
     "syft-spdx": SyftSPDXAdapter,
     "grype": GrypeAdapter,

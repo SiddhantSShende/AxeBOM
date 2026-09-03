@@ -31,6 +31,8 @@ This is worth stating plainly because the instinct to vendor and build is strong
 **Trivy's distribution channel was compromised twice in a coordinated attack in March 2026.** Treat every scanner artifact as untrusted until verified:
 
 - Pin container images **by digest**, never by tag. A tag is mutable.
+
+> ⚠ **`axebom toolctl pin` does not exist, and that is why almost every `image_digest` is still `null`.** Every manifest entry says the field is filled by `toolctl pin`; the CLI offers `list|dryrun|pull|sync|verify|licenses` and never had a `pin`. So the rule above has been unenforced since it was written — engines run tag-addressed, and `SandboxedAdapter.classify()` reports `ENGINE_IMAGE_NOT_PINNED` honestly rather than claiming a pin it does not have. `cdxgen` is pinned by hand (digest read from the registry at pull time, cross-checked against the local daemon's `RepoDigest`); the rest await the command.
 - Verify SHA256 against the upstream checksum file for every binary.
 - Verify cosign signatures where published.
 - If `cosign` is absent, verification degrades to checksum-only **with a loud warning** — never silently. The warning appears in `toolctl sync` output and in `provenance_manifest`.
@@ -52,6 +54,7 @@ The unit is **(tool, mode)**, not tool — see `02-CONTRACTS.md §7`.
 | engine_id | Upstream | Mode | Role |
 |---|---|---|---|
 | `syft` | `anchore/syft` | binary / image | **Primary SBOM generator.** Emits CycloneDX and SPDX natively |
+| `cdxgen` | `cdxgen/cdxgen` | container only | **Second, independent inventory.** Apache-2.0. Graph trust ranks BELOW syft in every shared ecosystem — the normalizer replaces a subgraph by trust rank rather than unioning, and syft is the engine actually run against real projects |
 | `grype` | `anchore/grype` | binary / image | Vulnerability matching **against the syft SBOM** |
 | `trivy-fs` | `aquasecurity/trivy` | binary / image | Filesystem scan: vulns + licenses + secrets |
 | `trivy-image` | `aquasecurity/trivy` | image | Container image scan — different capability, different parser |
@@ -68,6 +71,14 @@ The unit is **(tool, mode)**, not tool — see `02-CONTRACTS.md §7`.
 > **Go's `regexp` (RE2) cannot execute every retire.js signature regex verbatim** — spiked against the real signature database (76 libraries, 76 `uri` + 208 `filecontent` = 284 patterns loaded; `filecontentreplace` and `hashes` are deliberately not loaded at all) before committing to this design, not assumed. Two constructs are genuinely unsupported: a backreference (`\1`/`\2`/`\3` inside a pattern — 1 of the 284) and a lookbehind (`(?<=...)` — 1 of the 284); both are skipped, counted at load. A third issue is fixable rather than fundamental: RE2's hardcoded 1000-repeat-count cap rejects 7 patterns using bounds like `{0,8000}` (Vue ×2, Next.js ×2, lodash, tinyMCE, underscore.js, select2) — these are capped at 1000 rather than dropped, a real but honestly-documented precision loss (a real gap between two anchors in a minified bundle can exceed 1000 characters), and every affected library still has other, unaffected filecontent signatures. Full counts and per-pattern reasoning: `services/webrecon/internal/fingerprint/signatures/PROVENANCE.md`; the regression guard is `services/webrecon/internal/fingerprint/retire_test.go`.
 >
 > **`max_hosts` and the CDN allowlist are abuse guards, not incidental config.** A url-registered project auto-discovers and fetches from hosts the tenant never individually named — a confused-deputy/recon-abuse surface distinct from SSRF against AxeBOM's own infrastructure, not just a variant of it. See `05-SECURITY-MODEL.md` §1 and §3/§4 for the full threat-model treatment.
+
+> **`syft-spdx` exists in the worker and is deliberately NOT in the dispatch registry.**
+>
+> `workers/sbom/adapters/syft.py` defines a second adapter that re-runs syft with `-o spdx-json`, it has a parser in `ingest._PARSERS`, and it has fixtures. It is absent from `policy.DefaultRegistry()`, so the orchestrator never fans out a job for it — which looked like an oversight and is now a decision.
+>
+> The reason to add it would be CERT-In's Automation Support element, which names SPDX **and** CycloneDX. But AxeBOM already emits both, from its own canonical model, through `services/report/internal/export` — it does not need a scanner to hand it an SPDX document. So `syft-spdx`'s only value is as a second reconciliation source for the *same tool's* view of the *same tree*, and the cost is doubling every SBOM scan's syft runtime.
+>
+> Two independent inventories are worth paying for — that is why `cdxgen` was added. Two runs of one tool are not. The adapter stays because re-parsing a stored SPDX artifact is still how a golden is replayed; the dispatch entry stays absent.
 
 ### CBOM / QBOM
 
@@ -100,10 +111,26 @@ Both emit CycloneDX 1.6, so merging is clean.
 
 ### HBOM
 
-| engine_id | Mode | Role |
-|---|---|---|
-| `hbom-csv` | internal | CSV/spreadsheet import (StockFlow-shaped or generic) |
-| `hbom-form` | internal | Structured manual entry, recursive subcomponents |
+| engine_id | Mode | Source kinds | Role |
+|---|---|---|---|
+| `hbom-ecad` | internal | `git`, `upload` | Parses the customer's own hardware **design files** — KiCad `.kicad_sch`, KiCad netlist XML, and BOM exports from KiCad/Altium/OrCAD |
+| `hbom-cdxgen-host` | internal | `upload` | Ingests a CycloneDX 1.7 **host inventory the customer generated themselves** with `cdxgen -t hbom` |
+| `hbom-csv` | internal | *(none)* | The interactive REST import path, `POST /v1/hbom/{projectId}/import`. Not a scan job |
+| `hbom-form` | internal | *(manual)* | Structured manual entry, recursive subcomponents. Not in the Go registry |
+
+> **The honest label moved, and it is worth being precise about how far.**
+>
+> This section used to say flatly that no HBOM scanner exists. That was right while every HBOM document came from a CSV or a form. `hbom-ecad` changed it: parsing a KiCad schematic the customer committed is a real scan of a document they wrote — the same act as reading a committed lockfile for an SBOM, and it produces real jobs on `scan.job.hbom`.
+>
+> **What has not changed is the claim that would still be false: nothing here inspects PHYSICAL HARDWARE.** No open-source tool looks at a device and enumerates its parts. A schematic is a drawing of an intent; a cdxgen document is a report the customer's own machine produced. Neither is AxeBOM having examined hardware, and no UI string may say otherwise. `workers/hbom/test_hbom.py`'s discovery-claim guard enforces exactly that line — it stopped forbidding "HBOM scan" (now true) and started catching "scans your hardware", "inspects the device" and "discovers hardware" (still false).
+
+> **`hbom-csv` declares no source kind, and that is load-bearing.** `policy.Registry.Resolve` filters candidates on `Supports(kind)` alone — it does not consult `RequiresImport` — so the moment `hbom-ecad` made the family scannable, a declared `upload` would have published `scan.job.hbom` for an engine no worker implements, leaving a permanent `skipped`/`ENGINE_NOT_IMPLEMENTED` row in the Engine Coverage section of every HBOM scan. Filtering `RequiresImport` inside `Resolve` was **not** the fix: `github-dependency-graph-sbom` carries that same flag and is dispatched on every git SBOM scan. `RequiresImport` is an honest label about where data came from; an empty `SourceKinds` is the statement about dispatch.
+>
+> The consequence to watch: `Resolve` records the skipped engine against the `hardware` ecosystem as *unavailable*, and `Store.CoverageGaps` only neutralises that when a matching *available* row exists. **`hbom-ecad` must therefore report `ecosystems_covered=["hardware"]` on success** — without it, every HBOM report grows a false "ecosystem `hardware` had no available engine" line, which is invariant 12 inverted.
+
+**`hbom-ecad` groups placements into line items.** R1, R4 and R17 of the same 10 kΩ resistor are one row with quantity 3 and all three designators — because that is what gets ordered and what gets placed. Emitting three components would inflate the component count in a compliance document and produce a BOM nobody can order from. Grouping is by MPN where one exists, otherwise by **value *and* footprint together**, never value alone: a 10 kΩ 0402 and a 10 kΩ 0805 are different parts that cannot substitute.
+
+**`hbom-cdxgen-host` is an import, never an invocation.** `cdxgen -t hbom` inventories *the host it runs on*. Executed inside our sandbox it would document AxeBOM's own container host and present it as the customer's hardware, so it is never run here — the customer runs it on the device they want documented and uploads the result, and the raw artifact is their file byte for byte.
 
 Part enrichment sits behind a `PartDataProvider` interface: `nexar` (Octopart's current API, Altium), `mouser`, `manual`. **`manual` is the default**, so no paid quota-limited API is ever a hard dependency.
 
@@ -227,7 +254,9 @@ Where a tool emits CycloneDX or SPDX natively, **parse the standard document**. 
 | `author_of_sbom_data` / timestamp | scan provenance |
 | everything else | explicit `not-provided` — **never silently omitted** |
 
-**`webrecon-fingerprint` is the one exception to "parse the standard document"** — `services/webrecon` produces AxeBOM's own JSON shape (`{root_url, hosts: [{host, fetched_url, status, libraries: [{name, version, npm_purl, vulnerabilities}]}]}`), not a CycloneDX or SPDX document, because there is no such thing as a "native" format for a retire.js-style fingerprint result. `workers/sbom/adapters/webrecon_fingerprint.py` does the real parsing this one time — a matched library becomes a component (`purl` synthesized as `pkg:npm/<name>@<version>`, honest because virtually every JS library retire.js signatures cover is npm-published, though this is inference, not a certainty the tool asserts), `Location.path` records the host + script URL it was found at, and a retire.js `vulnerabilities[]` entry whose version range matches becomes a `RawFinding` with the CVE/GHSA identifiers retire.js itself carries.
+**`webrecon-fingerprint` is the one exception to "parse the standard document"** — `services/webrecon` produces AxeBOM's own JSON shape (`{root_url, hosts: [{host, fetched_url, status, libraries: [{name, version, npm_purl, vulnerabilities}], scripts: [{src, skipped, matched}]}]}`), not a CycloneDX or SPDX document, because there is no such thing as a "native" format for a retire.js-style fingerprint result. `scripts` is diagnostic only — never read by the adapter below, which ignores unknown fields — recording every `<script src>` and `<link rel="modulepreload">` the host's page named, whether it was fetched or skipped (off-origin, not CDN-allowlisted), and whether it matched a signature, so a zero-library host is distinguishable as "nothing detectable" versus "everything was skipped" from the stored artifact alone. `workers/sbom/adapters/webrecon_fingerprint.py` does the real parsing this one time — a matched library becomes a component (`purl` synthesized as `pkg:npm/<name>@<version>`, honest because virtually every JS library retire.js signatures cover is npm-published, though this is inference, not a certainty the tool asserts), `Location.path` records the host + script URL it was found at, and a retire.js `vulnerabilities[]` entry whose version range matches becomes a `RawFinding` with the CVE/GHSA identifiers retire.js itself carries.
+
+`extractScripts` (`services/webrecon/internal/fingerprint/fetch.go`) walks both `<script>` and `<link rel="modulepreload">` elements — the latter matters because a Vite/Rollup-bundled SPA typically has exactly one tiny `<script src>` (its module entry chunk) and references every real dependency bundle only via `<link rel="modulepreload" href="...">`, standard static, unexecuted HTML markup. Missing it is a real detection gap, not the headless-browser-rendering case this document's honest labels disclaim elsewhere.
 
 ### Crypto assets (CERT-In Table 9)
 

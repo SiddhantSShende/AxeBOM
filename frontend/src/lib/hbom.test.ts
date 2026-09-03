@@ -3,9 +3,14 @@ import {
   CANONICAL_COLUMNS,
   CRITICALITY_VALUES,
   JUDGEMENT_FIELDS,
+  bySupplier,
   countComponents,
+  describeAlternate,
   describeProvenance,
   flatten,
+  rollUp,
+  strandedParts,
+  toCSV,
   type HardwareComponent,
 } from './hbom';
 
@@ -37,21 +42,46 @@ function component(overrides: Partial<HardwareComponent> = {}): HardwareComponen
     test_result: '',
     findings: [],
     enriched_fields: {},
+    product_details: '',
+    manufacturing_date: '',
+    designators: [],
+    package_footprint: '',
+    supplier_sku: '',
+    preferred_supplier: '',
+    unit_price: '',
+    currency: '',
+    do_not_populate: false,
+    assembly_type: '',
+    lifecycle_status: '',
+    datasheet_url: '',
+    alternates: [],
     children: [],
     ...overrides,
   };
 }
 
 describe('the honest label', () => {
-  // ⚠ THERE IS NO OPEN-SOURCE HBOM SCANNER. An "HBOM scan" button that reads a
-  // CSV is a lie the customer discovers while assembling audit evidence, having
-  // assumed for months that something was watching their hardware.
+  // ⚠ "hbom scan" WAS ON THIS LIST AND IS NOT ANY MORE — the same narrowing
+  // workers/hbom/test_hbom.py made, for the same reason.
+  //
+  // It belonged while a CSV and a form were the only ways in. `hbom-ecad`
+  // parses the customer's own design files out of a repository or an upload,
+  // which is a real scan of documents they wrote, so calling it one is accurate.
+  //
+  // ⚠ WHAT IS STILL FALSE, AND WHAT THIS GUARDS, IS THAT AxeBOM EXAMINED
+  // PHYSICAL HARDWARE. Nothing inspects a device and enumerates its parts. So
+  // the list got narrower on the phrase that became true and WIDER on the ones
+  // that stayed false.
   //
   // This checks the strings this module EXPORTS — the ones that reach a user.
   // The worker's own source is walked by `workers/hbom/test_hbom.py`, which can
   // read files; a bundler cannot, and a test that pretends to would be checking
   // nothing.
-  const claims = [/hbom scan/i, /scan (your )?hardware/i, /hardware scan/i, /discovers? parts/i];
+  const claims = [
+    /\b(hardware|device)\s+scan/i,
+    /\bscans?\s+(your\s+|the\s+|their\s+)?(hardware|device)\b/i,
+    /\b(discover|discovers|detect|detects|inspect|inspects|enumerate|enumerates)\s+(your\s+|the\s+|their\s+|its\s+)?(hardware|device|parts)\b/i,
+  ];
   const negations = /\b(not|no|never|cannot|is a lie|rather than)\b/i;
 
   const flagged = (text: string) => claims.some((c) => c.test(text)) && !negations.test(text);
@@ -72,8 +102,27 @@ describe('the honest label', () => {
   it('would actually catch a claim', () => {
     // ⚠ THE CHECK ABOVE PASSES TRIVIALLY IF THE NEGATION FILTER IS TOO BROAD,
     // leaving a green test that proves nothing.
-    expect(flagged('Run an HBOM scan to find your parts')).toBe(true);
+    //
+    // The old example here was "Run an HBOM scan to find your parts", which
+    // stopped being a lie when hbom-ecad shipped. These are the claims that are
+    // still false.
+    expect(flagged('AxeBOM scans your hardware for components')).toBe(true);
+    expect(flagged('we inspect the device and enumerate its parts')).toBe(true);
+    expect(flagged('this feature discovers hardware automatically')).toBe(true);
+    expect(flagged('run an HBOM scan to discover your hardware')).toBe(true);
+
     expect(flagged('Hardware is not discoverable by any scan')).toBe(false);
+  });
+
+  it('does not flag a design-file scan, which is accurate', () => {
+    // ⚠ THE OTHER HALF OF THE RULE. A guard that only ever forbids is one
+    // nobody can work with, and the natural response to a narrower list is to
+    // re-add "hbom scan" the next time somebody skims it — putting the honest
+    // label back to forbidding a true sentence, which is how a rule ends up
+    // ignored.
+    expect(flagged('an HBOM scan parses the design files in your repository')).toBe(false);
+    expect(flagged('run an HBOM scan to read your KiCad schematics')).toBe(false);
+    expect(flagged('this HBOM scan found 42 line items in your parts list')).toBe(false);
   });
 });
 
@@ -108,9 +157,36 @@ describe('canonical columns', () => {
     }
   });
 
-  it('says plainly which columns are accepted and ignored', () => {
+  // ⚠ THIS TEST USED TO REQUIRE THE WORD "ignored", AND THE PRODUCT CHANGED
+  // UNDER IT. `unit_cost` was accepted and thrown away because there was no
+  // column to store it in; migration 0011 added one. A hint still promising to
+  // ignore a price the report now totals would be worse than no hint.
+  it('says a stored non-CERT-In column is stored, and scored separately', () => {
     const cost = CANONICAL_COLUMNS.find((c) => c.id === 'unit_cost');
-    expect(cost?.hint).toMatch(/ignored/i);
+    expect(cost?.hint).toMatch(/stored/i);
+    expect(cost?.hint, 'a reader must not think this moves the compliance number').toMatch(
+      /separately/i,
+    );
+    expect(cost?.hint).not.toMatch(/ignored/i);
+  });
+
+  // Every manufacturing column the importer understands must be offered in the
+  // mapping UI, or a customer's file carries data the product silently drops —
+  // which is the exact failure the Go/Python drift caused on the server side.
+  it('offers every manufacturing column', () => {
+    const ids = CANONICAL_COLUMNS.map((c) => c.id);
+    for (const id of [
+      'designator',
+      'footprint',
+      'supplier_sku',
+      'preferred_supplier',
+      'dni',
+      'assembly_type',
+      'lifecycle',
+      'currency',
+    ]) {
+      expect(ids, `${id} is not offered in the mapping UI`).toContain(id);
+    }
   });
 });
 
@@ -197,5 +273,191 @@ describe('describeProvenance', () => {
     for (let i = 0; i < 20; i += 1) {
       expect(describeProvenance(enriched)).toBe(first);
     }
+  });
+});
+
+
+describe('cost roll-up', () => {
+  const part = (over: Partial<HardwareComponent> = {}): HardwareComponent =>
+    ({ ...component(), children: [], ...over });
+
+  it('never sums across currencies', () => {
+    // ⚠ 4.10 USD + 3.20 EUR IS NOT A NUMBER. There is no exchange rate in this
+    // data, and inventing one would put a fabricated figure in front of
+    // somebody about to raise a purchase order.
+    const { totals } = rollUp([
+      part({ extended_price: '4.100000', currency: 'USD' }),
+      part({ extended_price: '3.200000', currency: 'EUR' }),
+    ]);
+
+    expect(totals).toHaveLength(2);
+    expect(totals.map((t) => t.currency)).toEqual(['EUR', 'USD']);
+    expect(totals.every((t) => t.total !== '7.300000')).toBe(true);
+  });
+
+  it('adds in exact decimal, not floating point', () => {
+    // ⚠ 0.1 + 0.2 !== 0.3 IN JAVASCRIPT. The prices are exact decimal strings
+    // from a numeric(18,6) column precisely so they never touch a float, and
+    // the error would accumulate across every line of a 4000-part BOM.
+    const { totals } = rollUp([
+      part({ extended_price: '0.100000', currency: 'USD' }),
+      part({ extended_price: '0.200000', currency: 'USD' }),
+    ]);
+
+    expect(totals[0]!.total).toBe('0.300000');
+  });
+
+  it('counts the lines it could not price', () => {
+    // A total over a parts list where half the prices are missing is not the
+    // cost of the product, and a reader who is not told will treat it as one.
+    const { totals, unpriced } = rollUp([
+      part({ extended_price: '1.500000', currency: 'USD' }),
+      part({ extended_price: '', currency: '' }),
+      part({ extended_price: 'not a number', currency: 'USD' }),
+    ]);
+
+    expect(totals[0]!.total).toBe('1.500000');
+    expect(totals[0]!.lines).toBe(1);
+    expect(unpriced).toBe(2);
+  });
+
+  it('walks the whole tree, not just the roots', () => {
+    const root = part({ extended_price: '', currency: '' });
+    root.children = [part({ extended_price: '2.000000', currency: 'USD' })];
+
+    expect(rollUp([root]).totals[0]!.total).toBe('2.000000');
+  });
+});
+
+describe('stranded parts', () => {
+  const part = (over: Partial<HardwareComponent> = {}): HardwareComponent =>
+    ({ ...component(), children: [], alternates: [], ...over });
+
+  it('is an obsolete part with no approved alternate', () => {
+    // ⚠ THE MOST ACTIONABLE FACT IN A HARDWARE BOM. Each of these stops a build
+    // when remaining stock runs out; a part with an alternate does not.
+    const stranded = strandedParts([
+      part({ lifecycle_status: 'active' }),
+      part({ lifecycle_status: 'obsolete', model_number: 'DEAD-1' }),
+      part({
+        lifecycle_status: 'eol',
+        model_number: 'COVERED-1',
+        alternates: [
+          {
+            ordinal: 0,
+            manufacturer_name: '',
+            model_number: 'ALT-1',
+            supplier_info: '',
+            supplier_sku: '',
+            lifecycle_status: '',
+            equivalence: 'drop-in',
+            approval_note: '',
+          },
+        ],
+      }),
+    ]);
+
+    expect(stranded.map((p) => p.model_number)).toEqual(['DEAD-1']);
+  });
+});
+
+describe('describeAlternate', () => {
+  it('always shows the equivalence beside the part number', () => {
+    // ⚠ A PART NUMBER ON ITS OWN READS AS AN APPROVED SUBSTITUTION.
+    const base = {
+      ordinal: 0,
+      manufacturer_name: '',
+      supplier_info: '',
+      supplier_sku: '',
+      lifecycle_status: '',
+      approval_note: '',
+    };
+
+    expect(describeAlternate({ ...base, model_number: 'ALT-1', equivalence: 'drop-in' })).toBe(
+      'ALT-1 (drop-in)',
+    );
+    // An absent equivalence defaults to the CONSERVATIVE value, never the
+    // flattering one — the same rule the database CHECK enforces.
+    expect(
+      describeAlternate({
+        ...base,
+        model_number: 'ALT-2',
+        equivalence: '' as unknown as 'unverified',
+      }),
+    ).toBe('ALT-2 (unverified)');
+  });
+});
+
+
+describe('per-supplier export', () => {
+  const part = (over: Partial<HardwareComponent> = {}): HardwareComponent =>
+    ({ ...component(), children: [], alternates: [], ...over });
+
+  const parts = [
+    part({
+      model_number: 'RC0402',
+      supplier_sku: 'C25744',
+      preferred_supplier: 'JLCPCB',
+      designators: ['R1', 'R4'],
+      package_footprint: '0402',
+      product_details: '10k 1%',
+      quantity: 2,
+    }),
+    part({
+      model_number: 'STM32',
+      supplier_sku: '497-1234-ND',
+      preferred_supplier: 'Digi-Key',
+      designators: ['U1'],
+      quantity: 1,
+    }),
+    // ⚠ DELIBERATELY NOT FITTED. Ordering it wastes money, and having it on an
+    // assembly file tells a factory to place a part the design says to omit.
+    part({ model_number: 'TP-1', preferred_supplier: 'JLCPCB', do_not_populate: true }),
+    // Orderable, but nobody is named — grouped explicitly rather than dropped.
+    part({ model_number: 'MYSTERY-1', preferred_supplier: '' }),
+  ];
+
+  it('splits by supplier and excludes do-not-populate parts', () => {
+    const boms = bySupplier(parts);
+    expect(boms.map((b) => b.supplier)).toEqual(['Digi-Key', 'JLCPCB', 'No supplier recorded']);
+
+    const jlc = boms.find((b) => b.supplier === 'JLCPCB')!;
+    expect(jlc.rows).toHaveLength(1);
+    expect(jlc.rows[0]!.join(' ')).not.toContain('TP-1');
+  });
+
+  it('never silently drops a part nobody supplies', () => {
+    // A shorter file is one somebody orders from and then discovers is missing
+    // parts.
+    const unassigned = bySupplier(parts).find((b) => b.supplier === 'No supplier recorded');
+    expect(unassigned?.rows[0]).toContain('MYSTERY-1');
+  });
+
+  it("uses each supplier's own column names and order", () => {
+    // ⚠ A JLCPCB UPLOAD IS REJECTED OUTRIGHT IF THE HEADERS ARE WRONG. "Close
+    // enough" is a file somebody hand-edits at the moment they are placing an
+    // order.
+    const jlc = bySupplier(parts, 'jlcpcb').find((b) => b.supplier === 'JLCPCB')!;
+    expect(jlc.header).toEqual(['Comment', 'Designator', 'Footprint', 'LCSC']);
+    expect(jlc.rows[0]).toEqual(['10k 1%', 'R1,R4', '0402', 'C25744']);
+
+    const dk = bySupplier(parts, 'digikey').find((b) => b.supplier === 'Digi-Key')!;
+    expect(dk.header).toEqual(['Quantity', 'Part Number', 'Customer Reference']);
+    expect(dk.rows[0]).toEqual(['1', '497-1234-ND', 'U1']);
+  });
+
+  it('escapes formula injection in the browser-built CSV', () => {
+    // ⚠ THIS FILE NEVER PASSES THROUGH THE SERVER'S render/safe GUARD. A part
+    // named `=cmd|'/c calc'!A1` executes when the supplier opens it — the same
+    // vulnerability class, at the second place a spreadsheet leaves the
+    // product.
+    const hostile = bySupplier([part({ model_number: "=cmd|'/c calc'!A1", supplier_sku: '+1+1' })]);
+    const csv = toCSV(hostile[0]!);
+
+    for (const cell of csv.split(/[\r\n,]/)) {
+      const value = cell.replace(/^"|"$/g, '');
+      expect(/^[=+\-@]/.test(value), `unescaped: ${value}`).toBe(false);
+    }
+    expect(csv).toContain("'=cmd");
   });
 });

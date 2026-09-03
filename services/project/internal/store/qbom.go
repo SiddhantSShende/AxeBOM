@@ -133,11 +133,19 @@ func (s *Store) SaveQuantumDevice(ctx context.Context, tenantID, projectID strin
 			return err
 		}
 
+		// ⚠ alias_snapshot_id IS NULL, NOT A MINTED UUID. QBOM is derived from
+		// CBOM crypto assets plus a Table 8 device form; it runs no
+		// alias-closure pipeline, so there is no snapshot to reference. The
+		// column used to take a bare app.uuid_v7() — a value that satisfied
+		// NOT NULL and meant nothing — and since migration 0012 gave it a real
+		// FK, that id would now be rejected. NULL is also the honest answer:
+		// it declines to assert, where a fabricated id asserted something
+		// false to anyone joining bom_documents -> alias_snapshot.
 		if err := tx.QueryRow(ctx, `
 			INSERT INTO normalize.bom_documents
 				(tenant_id, scan_id, bom_type, normalization_version,
 				 ruleset_version, alias_snapshot_id, spdx_license_list_version)
-			VALUES ($1, $2, 'QBOM', $3, '', app.uuid_v7(), '')
+			VALUES ($1, $2, 'QBOM', $3, '', NULL, '')
 			RETURNING id`, tenantID, projectID, version).Scan(&docID); err != nil {
 			return fmt.Errorf("create qbom document: %w", err)
 		}

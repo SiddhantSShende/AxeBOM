@@ -64,6 +64,15 @@ _NAMESPACE_RANK = {
     "ELSA": 7,
     "DLA": 7,
     "NPM": 8,
+    # Confirmed live, not assumed: a real osv-scanner run against a real
+    # registered Go project reported a "BIT-GOLANG-<year>-<n>" id as a
+    # vulnerability's primary identifier (OSV.dev aggregates Bitnami's own
+    # per-image advisory database, whose ids carry this prefix). Missing from
+    # migrations/normalize/0008_vuln_ids_namespace_widen.sql's widened list —
+    # the same gap that migration fixed for GO/PYSEC/RUSTSEC/GSD/MAL, one
+    # namespace it hadn't been hit by yet. See
+    # migrations/normalize/0010_vuln_ids_namespace_add_bit.sql.
+    "BIT": 7,
 }
 
 _ID_SHAPE = re.compile(r"^([A-Za-z]+)[-:]?(.*)$")

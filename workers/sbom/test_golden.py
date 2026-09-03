@@ -225,8 +225,7 @@ def test_log4shell_ids_close_into_one_cluster() -> None:
     cluster = clusters[0]
     assert set(cluster["members"]) == {"CVE-2021-44228", "GHSA-JFH8-C2JP-5V3Q", "DSA-5022-1"}
     assert cluster["display_id_at_render"] == "CVE-2021-44228", (
-        "CVE outranks GHSA and DSA for display, and a remediation ticket "
-        "should cite the CVE"
+        "CVE outranks GHSA and DSA for display, and a remediation ticket should cite the CVE"
     )
     assert len(cluster["merges"]) == 2, "both the grype and osv-scanner edges must be recorded"
 

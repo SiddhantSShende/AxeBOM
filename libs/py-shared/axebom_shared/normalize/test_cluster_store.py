@@ -23,7 +23,6 @@ database that remembers what a PRIOR call wrote.
 from __future__ import annotations
 
 import os
-import uuid
 
 import pytest
 
@@ -41,7 +40,9 @@ def pg_conn():
             port=int(os.environ.get("POSTGRES_PORT", "55432")),
             dbname=os.environ.get("POSTGRES_DB", "axebom"),
             user=os.environ.get("POSTGRES_NORMALIZE_WRITER_ROLE", "axebom_normalize_writer"),
-            password=os.environ.get("POSTGRES_NORMALIZE_WRITER_PASSWORD", "axebom_normalize_writer"),
+            password=os.environ.get(
+                "POSTGRES_NORMALIZE_WRITER_PASSWORD", "axebom_normalize_writer"
+            ),
             connect_timeout=5,
             # ⚠ AUTOCOMMIT — see writer.py's write_bom_document docstring for
             # the exact trap this avoids (a bare statement outside a real
@@ -95,7 +96,9 @@ def cleanup(pg_conn):
         admin.close()
 
 
-def grype_artifact(vuln_id: str, *, related: tuple[str, ...] = (), component: str = "x") -> Artifact:
+def grype_artifact(
+    vuln_id: str, *, related: tuple[str, ...] = (), component: str = "x"
+) -> Artifact:
     return Artifact(
         engine="grype",
         payload={
@@ -132,7 +135,11 @@ def osv_artifact(vuln_id: str, *, aliases: tuple[str, ...] = (), component: str 
                                     "aliases": list(aliases),
                                     "affected": [
                                         {
-                                            "package": {"ecosystem": "npm", "name": component, "purl": f"pkg:npm/{component}"},
+                                            "package": {
+                                                "ecosystem": "npm",
+                                                "name": component,
+                                                "purl": f"pkg:npm/{component}",
+                                            },
                                             "ranges": [],
                                         }
                                     ],
@@ -174,7 +181,9 @@ def test_a_scan_with_no_vulnerabilities_touches_nothing(pg_conn) -> None:
 
 
 def test_a_brand_new_cluster_is_persisted(pg_conn, cleanup) -> None:
-    result = persist_clusters(pg_conn, [osv_artifact("CVE-2024-0001", aliases=("GHSA-aaaa-bbbb-cccc",))])
+    result = persist_clusters(
+        pg_conn, [osv_artifact("CVE-2024-0001", aliases=("GHSA-aaaa-bbbb-cccc",))]
+    )
 
     assert result["CVE-2024-0001"] == result["GHSA-AAAA-BBBB-CCCC"]
     cluster_id = result["CVE-2024-0001"]
@@ -211,9 +220,13 @@ def test_a_second_scan_adds_a_new_alias_to_an_existing_cluster(pg_conn, cleanup)
     cleanup.append(cluster_id)
 
     # A LATER, separate scan discovers the GHSA alias for the same CVE.
-    second = persist_clusters(pg_conn, [osv_artifact("CVE-2024-0003", aliases=("GHSA-dddd-eeee-ffff",))])
+    second = persist_clusters(
+        pg_conn, [osv_artifact("CVE-2024-0003", aliases=("GHSA-dddd-eeee-ffff",))]
+    )
 
-    assert second["CVE-2024-0003"] == cluster_id, "the SAME durable id must survive across scans (ADR-0005)"
+    assert second["CVE-2024-0003"] == cluster_id, (
+        "the SAME durable id must survive across scans (ADR-0005)"
+    )
     assert second["GHSA-DDDD-EEEE-FFFF"] == cluster_id
 
     cur = pg_conn.cursor()
@@ -253,7 +266,8 @@ def test_a_new_edge_merges_two_previously_separate_clusters(pg_conn, cleanup) ->
     assert member_count == 2
 
     cur.execute(
-        "SELECT evidence_edge_id FROM normalize.vuln_cluster_merges WHERE from_cluster_id = %s", (loser,)
+        "SELECT evidence_edge_id FROM normalize.vuln_cluster_merges WHERE from_cluster_id = %s",
+        (loser,),
     )
     row = cur.fetchone()
     assert row is not None, "the merge must be logged"
@@ -307,4 +321,6 @@ def test_the_cross_scan_cap_is_enforced_across_separate_scans(pg_conn, cleanup) 
 
     _, fresh_count, fresh_flagged = cluster_row(cur, fresh_cluster)
     assert fresh_count == 1
-    assert fresh_flagged is True, "the refused alias's new cluster is flagged too — it is a known-uncertain split"
+    assert fresh_flagged is True, (
+        "the refused alias's new cluster is flagged too — it is a known-uncertain split"
+    )

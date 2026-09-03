@@ -214,6 +214,39 @@ type FieldCoverage struct {
 	Total    int
 }
 
+// TypeNotes are the honesty labels a BOM type must carry, whatever format the
+// report is rendered in.
+//
+// ⚠ THESE USED TO BE BUILT INSIDE Sheets(), WHICH MEANT THEY REACHED THE XLSX
+// AND NOTHING ELSE.
+//
+// `WriteJSON` and the DOCX renderer both read `BOM.Notes` — the caller's notes
+// — and never saw the type-specific ones, because those were appended to a
+// local copy inside Sheets and discarded with it. So CBOM's type-discrimination
+// caveat, QBOM's form disclosure, AIBOM's extensions note and HBOM's provenance
+// line were all absent from two of the four artifacts a customer can download.
+//
+// A caveat that appears in one format and not another is worse than one that
+// appears nowhere: the reader who gets the JSON has no way to know a caveat
+// exists, and the product looks like it made an unqualified claim.
+//
+// ⚠ HBOM's NOTES WERE MISSING FROM ALL FOUR. `HBOMNotes` was written in Phase
+// 15, tested, and wired to nothing at all.
+func TypeNotes(b BOM) []string {
+	switch b.BOMType {
+	case model.BOMTypeCBOM:
+		return []string{CBOMTypeDiscriminationNote}
+	case model.BOMTypeQBOM:
+		return []string{QBOMFormDisclosure}
+	case model.BOMTypeAIBOM:
+		return []string{AIBOMExtensionsNote}
+	case model.BOMTypeHBOM:
+		return HBOMNotes(b.Hardware)
+	default:
+		return nil
+	}
+}
+
 // weightsNote states whose judgement the weights are.
 //
 // ⚠ REQUIRED BY THE PHASE FILE, AND IT IS NOT A FORMALITY. CERT-In does not
@@ -285,17 +318,15 @@ func Sheets(b BOM) ([]Sheet, error) {
 		engineCoverageSheet(b),
 	}
 
-	// extraNotes carries the type-specific honesty label into the Notes sheet
-	// (below), the same sheet every other methodology note lands on — a
-	// separate "CBOM caveats" sheet nobody thinks to open is how a caveat goes
-	// unread.
-	var extraNotes []string
+	// ⚠ THE TYPE-SPECIFIC HONESTY LABELS COME FROM TypeNotes, NOT FROM HERE.
+	// They used to be built inline in this function, which meant they reached
+	// the XLSX and nothing else — see TypeNotes for what that cost.
+	extraNotes := TypeNotes(b)
 
 	switch b.BOMType {
 	case model.BOMTypeCBOM:
 		sheets = append(sheets, practicesSheet(b))
 		sheets = append(sheets, CBOMSheets(b)...)
-		extraNotes = append(extraNotes, CBOMTypeDiscriminationNote)
 
 	case model.BOMTypeQBOM:
 		fields, err := FieldsFor(b.BOMType)
@@ -304,7 +335,6 @@ func Sheets(b BOM) ([]Sheet, error) {
 		}
 		sheets = append(sheets, fieldCoverageSheet(b, fields), practicesSheet(b))
 		sheets = append(sheets, QBOMSheets(b)...)
-		extraNotes = append(extraNotes, QBOMFormDisclosure)
 
 	case model.BOMTypeAIBOM:
 		fields, err := FieldsFor(b.BOMType)
@@ -313,7 +343,6 @@ func Sheets(b BOM) ([]Sheet, error) {
 		}
 		sheets = append(sheets, fieldCoverageSheet(b, fields), practicesSheet(b))
 		sheets = append(sheets, AIBOMSheets(b, fields)...)
-		extraNotes = append(extraNotes, AIBOMExtensionsNote)
 
 	default:
 		fields, err := FieldsFor(b.BOMType)
@@ -330,9 +359,9 @@ func Sheets(b BOM) ([]Sheet, error) {
 	sheets = append(sheets, findingSheet(b), vexFieldCoverageSheet(b), licenseSheet(b))
 
 	// ⚠ THE HARDWARE SHEETS GO BEFORE THE NOTES, NOT AFTER. The notes sheet
-	// carries the provenance line saying this BOM was imported rather than
-	// discovered; a reader who reaches the tree first and the caveat last has
-	// already formed an impression the caveat then has to undo.
+	// carries the provenance line saying AxeBOM examined no hardware to produce
+	// this document; a reader who reaches the parts tree first and the caveat
+	// last has already formed an impression the caveat then has to undo.
 	if b.BOMType == model.BOMTypeHBOM {
 		sheets = append(sheets, HBOMSheets(b.Hardware)...)
 	}

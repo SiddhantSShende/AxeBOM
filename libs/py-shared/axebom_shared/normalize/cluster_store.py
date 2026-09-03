@@ -132,7 +132,9 @@ def seed_ids_and_edges(artifacts: list[Artifact]) -> tuple[list[str], list[alias
     edges: list[aliases.AliasEdge] = []
 
     for artifact in artifacts:
-        result = ingest.ingest(artifact.engine, artifact.payload, scan_id="", trusted_graph_ecosystems=frozenset())
+        result = ingest.ingest(
+            artifact.engine, artifact.payload, scan_id="", trusted_graph_ecosystems=frozenset()
+        )
         for finding in result.findings:
             if finding.vuln_id:
                 seed_ids.append(finding.vuln_id)
@@ -154,7 +156,10 @@ def _load_existing_clusters(cur: Cursor, normalized_ids: set[str]) -> dict[str, 
     if not normalized_ids:
         return {}
 
-    pairs = [(aliases.namespace_of(nid), nid.split("-", 1)[1] if "-" in nid else nid) for nid in normalized_ids]
+    pairs = [
+        (aliases.namespace_of(nid), nid.split("-", 1)[1] if "-" in nid else nid)
+        for nid in normalized_ids
+    ]
     namespaces = [p[0] for p in pairs]
     values = [p[1] for p in pairs]
 
@@ -351,7 +356,9 @@ def persist_clusters(conn: Connection, artifacts: list[Artifact]) -> dict[str, s
             evidence_id = next((m.edge_id for m in cluster.merges if m.edge_id), None)
             for root in resolved_roots:
                 if root != winner:
-                    _write_forwarding_row(cur, from_id=root, into_id=winner, evidence_edge_id=evidence_id)
+                    _write_forwarding_row(
+                        cur, from_id=root, into_id=winner, evidence_edge_id=evidence_id
+                    )
 
             _attach_members(cur, winner, new_members)
             full_members = _resolved_members(cur, winner)
@@ -466,14 +473,19 @@ def _write_alias_edges(cur: Cursor, edges: list[aliases.AliasEdge]) -> list[alia
 
         out.append(
             aliases.AliasEdge(
-                id_a=n.id_a, id_b=n.id_b, source=n.source,
-                authoritative=n.authoritative, edge_id=edge_id,
+                id_a=n.id_a,
+                id_b=n.id_b,
+                source=n.source,
+                authoritative=n.authoritative,
+                edge_id=edge_id,
             )
         )
     return out
 
 
-def _write_forwarding_row(cur: Cursor, *, from_id: str, into_id: str, evidence_edge_id: str | None) -> None:
+def _write_forwarding_row(
+    cur: Cursor, *, from_id: str, into_id: str, evidence_edge_id: str | None
+) -> None:
     """One row for `normalize.vuln_cluster_merges` — written whenever this
     run's closure discovered that two previously-separate clusters are the
     same vulnerability. `normalize.resolve_cluster()` reads this forward, so

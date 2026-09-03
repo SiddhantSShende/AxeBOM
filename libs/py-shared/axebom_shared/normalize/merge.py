@@ -111,6 +111,12 @@ class MergedComponent:
     candidate_identities: list[CandidateIdentity] = field(default_factory=list)
     #: OR'd across TRUSTED GRAPH SOURCES ONLY — never across all engines.
     is_direct: bool = False
+    #: CERT-In field 9, filled by pipeline.normalize() AFTER findings are deduped
+    #: — merge() cannot set it, because findings do not exist yet at merge time.
+    #: Stays "" for a component with no findings: "nothing was found against
+    #: this" is not the same claim as "we checked and it is up to date", and
+    #: only the second is a substantive value. See findings.aggregate_patch_status.
+    patch_status: str = ""
     diagnostics: list[dict[str, Any]] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -125,6 +131,7 @@ class MergedComponent:
             "version_raw": self.version_raw,
             "scope": self.scope,
             "is_direct": self.is_direct,
+            "patch_status": self.patch_status,
             "license_effective": value,
             "license_rule": rule,
             "license_ambiguous": self.licenses.ambiguous,

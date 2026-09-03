@@ -19,6 +19,7 @@ from .coverage import (
 from .findings import (
     CvssVector,
     RawFinding,
+    aggregate_patch_status,
     dedup,
     patch_status,
     resolve_fix_version,
@@ -528,9 +529,55 @@ def test_patch_status_is_unknown_when_the_ordering_is_unknown() -> None:
 
 
 def test_patch_status_derives_correctly_when_the_ordering_is_known() -> None:
-    assert patch_status("1.9.0", "1.9.0", "npm", "comparator") == "patched"
-    assert patch_status("2.0.0", "1.9.0", "npm", "comparator") == "patched"
-    assert patch_status("1.8.0", "1.9.0", "npm", "comparator") == "vulnerable"
+    assert patch_status("1.9.0", "1.9.0", "npm", "comparator") == "up-to-date"
+    assert patch_status("2.0.0", "1.9.0", "npm", "comparator") == "up-to-date"
+    assert patch_status("1.8.0", "1.9.0", "npm", "comparator") == "patch-available"
+
+
+def test_patch_status_reports_no_fix_available_separately_from_unknown() -> None:
+    """⚠ THE TWO ARE DIFFERENT CLAIMS AND WERE ONCE COLLAPSED INTO ONE.
+
+    `ordering == "none"` means the engines reported ZERO fix versions — a
+    substantive finding ("upstream has published nothing"), true whatever is
+    installed. `unknown` means we cannot order versions in this ecosystem and
+    so can say nothing at all. Reporting the first as the second turns a real
+    finding into an admitted gap.
+    """
+    assert patch_status("1.0.0", "", "npm", "none") == "no-fix-available"
+    # True regardless of the installed version — including when it is unknown.
+    assert patch_status("", "", "npm", "none") == "no-fix-available"
+    # And an ecosystem with no comparator at all is still just `unknown`.
+    assert patch_status("1.0.0", "", "conan", "unknown") == "unknown"
+
+
+def test_patch_status_only_emits_the_certin_vocabulary() -> None:
+    """The four values are the profile's own, and the column's CHECK constraint."""
+    allowed = {"up-to-date", "patch-available", "no-fix-available", "unknown"}
+    for installed, fixed, ecosystem, ordering in (
+        ("1.0.0", "1.9.0", "npm", "comparator"),
+        ("2.0.0", "1.9.0", "npm", "comparator"),
+        ("1.0.0", "", "npm", "none"),
+        ("1.0.0", "1.9.0", "conan", "unknown"),
+        ("", "", "", ""),
+    ):
+        assert patch_status(installed, fixed, ecosystem, ordering) in allowed
+
+
+def test_aggregate_patch_status_is_worst_case_wins() -> None:
+    """⚠ One unfixable finding among many fixed ones defines the component.
+
+    Reporting `up-to-date` because most findings are fixed would hide exactly
+    the gap the field exists to surface.
+    """
+    assert aggregate_patch_status(["up-to-date", "patch-available", "unknown"]) == "patch-available"
+    assert (
+        aggregate_patch_status(["up-to-date", "no-fix-available", "patch-available"])
+        == "no-fix-available"
+    )
+    # `unknown` outranks `up-to-date`: claiming up-to-date when one finding was
+    # never evaluated asserts a verification that did not happen.
+    assert aggregate_patch_status(["up-to-date", "unknown"]) == "unknown"
+    assert aggregate_patch_status(["up-to-date", "up-to-date"]) == "up-to-date"
 
 
 def test_dedup_output_is_deterministic() -> None:

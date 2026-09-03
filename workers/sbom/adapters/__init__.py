@@ -8,6 +8,7 @@ exceptions: both subclass ToolAdapterBase directly, since there is no tool to
 sandbox — see their own module docstrings.
 """
 
+from .cdxgen import CdxgenAdapter
 from .dependency_check import DependencyCheckAdapter
 from .github_dependency_graph import GitHubDependencyGraphAdapter
 from .grype import GrypeAdapter
@@ -18,6 +19,7 @@ from .trivy_image import TrivyImageAdapter
 from .webrecon_fingerprint import WebreconFingerprintAdapter
 
 __all__ = [
+    "CdxgenAdapter",
     "DependencyCheckAdapter",
     "GitHubDependencyGraphAdapter",
     "GrypeAdapter",

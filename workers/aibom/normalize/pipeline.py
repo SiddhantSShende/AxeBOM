@@ -12,13 +12,16 @@ module has few stages: merge (already done elsewhere), normalize each merged
 model into a canonical row (`.ai` already does this), link dependencies against
 the SBOM's cataloged components, then score coverage.
 
-⚠ DETERMINISTIC OVER EVERY FIELD EXCEPT ONE, same discipline as CBOM's pipeline
-and for the same reason (CLAUDE.md invariant 10): re-normalizing the same
-discovery + enrichment output at the same ruleset version must produce
-byte-identical `ai_models` and `coverage`, so a normalizer bug fix is a
-re-normalization pass over stored artifacts, never a re-scan. The one
-deliberate exception is `provenance.alias_snapshot_id` — AIBOM has no alias
-concept, same reasoning as CBOM's; see `build_canonical_cbom`'s docstring.
+⚠ DETERMINISTIC OVER EVERY FIELD, same discipline as CBOM's pipeline and for
+the same reason (CLAUDE.md invariant 10): re-normalizing the same discovery +
+enrichment output at the same ruleset version must produce byte-identical
+`ai_models` and `coverage`, so a normalizer bug fix is a re-normalization pass
+over stored artifacts, never a re-scan.
+
+⚠ THE ONE EXCEPTION THAT USED TO LIVE HERE IS GONE.
+`provenance.alias_snapshot_id` is now `None` rather than a minted uuid4 —
+migration 0012 made the column nullable and gave it a real FK. See
+`build_canonical_cbom`'s docstring.
 
 See `docs/03-NORMALIZER-SPEC.md` and `docs/04-OSINT-INTEGRATION.md` for what
 `ai-bom`/`aibom-generator` are and how their output maps to canonical.
@@ -26,7 +29,6 @@ See `docs/03-NORMALIZER-SPEC.md` and `docs/04-OSINT-INTEGRATION.md` for what
 
 from __future__ import annotations
 
-import uuid
 from typing import Any
 
 from axebom_shared.model.generated_certin import AIBOM_FIELDS
@@ -180,6 +182,10 @@ def build_canonical_aibom(
         # convention throughout this package.
         "spdx_license_list_version": "",
         "unidentified_count": coverage.unidentified_count,
-        "provenance": {"alias_snapshot_id": str(uuid.uuid4())},
+        # ⚠ None, not a minted uuid4 — see build_canonical_cbom's docstring.
+        # migration 0012 made this column nullable and gave it a real FK, so a
+        # fabricated id is now rejected as well as meaningless. AIBOM runs no
+        # alias closure; None is the value that says so.
+        "provenance": {"alias_snapshot_id": None},
         "diagnostics": diagnostics,
     }

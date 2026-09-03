@@ -126,7 +126,11 @@ def test_generate_carries_vulnerabilities_through_unmodified(tmp_path: Path) -> 
                 "jquery",
                 "1.6.2",
                 vulnerabilities=[
-                    {"severity": "medium", "cve": ["CVE-2011-4969"], "summary": "XSS with location.hash"}
+                    {
+                        "severity": "medium",
+                        "cve": ["CVE-2011-4969"],
+                        "summary": "XSS with location.hash",
+                    }
                 ],
             )
         ]
@@ -146,8 +150,16 @@ def test_generate_carries_vulnerabilities_through_unmodified(tmp_path: Path) -> 
 
 
 def test_generate_is_partial_not_succeeded_when_zero_libraries_found(tmp_path: Path) -> None:
-    doc = webrecon_doc([{"host": "example.com", "fetched_url": "https://example.com/",
-                          "status": "succeeded", "libraries": []}])
+    doc = webrecon_doc(
+        [
+            {
+                "host": "example.com",
+                "fetched_url": "https://example.com/",
+                "status": "succeeded",
+                "libraries": [],
+            }
+        ]
+    )
     staged = tmp_path / "webrecon.json"
     staged.write_text(json.dumps(doc))
 
@@ -162,8 +174,13 @@ def test_generate_notes_unreachable_hosts_without_failing_the_scan(tmp_path: Pat
     doc = webrecon_doc(
         [
             host_with_library("jquery", "3.5.1"),
-            {"host": "down.example.com", "fetched_url": "https://down.example.com/",
-             "status": "unreachable", "error": "connection refused", "libraries": []},
+            {
+                "host": "down.example.com",
+                "fetched_url": "https://down.example.com/",
+                "status": "unreachable",
+                "error": "connection refused",
+                "libraries": [],
+            },
         ]
     )
     staged = tmp_path / "webrecon.json"

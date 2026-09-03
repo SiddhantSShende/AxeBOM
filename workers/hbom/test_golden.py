@@ -42,6 +42,8 @@ def canonical() -> dict:
     result = normalize_bom(parse(PARTS.read_text(encoding="utf-8")).roots)
     coverage = result.coverage
     assert coverage is not None
+    manufacturing = result.manufacturing
+    assert manufacturing is not None
 
     return {
         "component_count": result.component_count(),
@@ -55,6 +57,21 @@ def canonical() -> dict:
             "declaration_pct": coverage.declaration_pct,
             "denominator": coverage.denominator,
             "scored_entities": coverage.scored_entities,
+        },
+        # ⚠ PINNED SEPARATELY, UNDER A SEPARATE KEY, AND NEVER MERGED.
+        #
+        # This is AxeBOM's manufacturing-readiness number, not CERT-In's. It is
+        # in the golden for the same reason the compliance pair is — so a
+        # change to it has to be deliberate — but the two are kept apart here
+        # exactly as they are kept apart everywhere else. The `denominator`
+        # matters most: if a manufacturing field ever leaked into the CERT-In
+        # field set, `coverage.denominator` above would move and this golden
+        # would fail, which is the cheapest possible detector for that mistake.
+        "manufacturing_coverage": {
+            "completeness_pct": manufacturing.completeness_pct,
+            "declaration_pct": manufacturing.declaration_pct,
+            "denominator": manufacturing.denominator,
+            "scored_entities": manufacturing.scored_entities,
         },
         "diagnostics": sorted(d["code"] for d in result.diagnostics),
     }

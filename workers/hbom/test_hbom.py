@@ -8,17 +8,19 @@ the test from the requirement.
 from __future__ import annotations
 
 import pathlib
+import re
 
 import pytest
 
 from axebom_shared.model.generated_certin import HBOM_FIELDS
 
-from .csv_import import ColumnMapping, HBOMImportError, parse
+from .csv_import import CANONICAL_COLUMNS, ColumnMapping, HBOMImportError, parse
 from .form import FormError, blank_form, from_payload
 from .model import (
     CRITICALITY_VALUES,
     MAX_DEPTH,
     NOT_PROVIDED,
+    Alternate,
     HardwareComponent,
     to_profile_row,
     validate_mapping,
@@ -42,8 +44,37 @@ def nested():
 # ---------------------------------------------------------------------------
 
 
-#: Phrases that would claim HBOM discovers hardware.
-_DISCOVERY_CLAIMS = ("hbom scan", "scan hardware", "hardware scan", "discovers parts")
+#: Patterns that would claim AxeBOM discovers PHYSICAL hardware.
+#:
+#: ⚠ "hbom scan" WAS ON THIS LIST AND IS NOT ANY MORE. THAT REMOVAL IS THE ONE
+#: THING HERE MOST WORTH READING BEFORE CHANGING ANYTHING.
+#:
+#: It belonged for as long as HBOM had no scanner at all: every hardware BOM
+#: came from a CSV or a form, so an "HBOM scan" button was a lie the customer
+#: discovered while assembling audit evidence.
+#:
+#: `hbom-ecad` made it true. It parses the customer's own KiCad, Altium and
+#: OrCAD design files out of an upload or a connected repository — a real scan,
+#: producing real jobs, over documents they wrote. That is the same act as
+#: reading a committed lockfile for an SBOM, and calling it a scan is accurate.
+#:
+#: ⚠ WHAT HAS NOT CHANGED IS THE ACTUAL LIE THIS GUARDS: that AxeBOM looks at
+#: PHYSICAL HARDWARE. Nothing inspects a device and enumerates its parts. A
+#: parts list the customer drew, and an inventory their own machine reported,
+#: are not us having examined their hardware.
+#:
+#: ⚠ REGEXES, NOT SUBSTRINGS, and the change is not cosmetic. The old list
+#: missed "discover your hardware" while catching "discovers hardware" — a real
+#: discovery claim walking straight through a guard that looked thorough. A
+#: rule expressed as a verb next to a noun cannot be defeated by a possessive.
+_DISCOVERY_CLAIMS = (
+    re.compile(r"\b(hardware|device)\s+scan"),
+    re.compile(r"\bscans?\s+(your\s+|the\s+|their\s+)?(hardware|device)\b"),
+    re.compile(
+        r"\b(discover|discovers|discovered|detect|detects|inspect|inspects|enumerate|enumerates)"
+        r"\s+(your\s+|the\s+|their\s+|its\s+)?(hardware|device|parts)\b"
+    ),
+)
 
 #: Words that turn one of the above into a warning AGAINST making the claim.
 #:
@@ -86,7 +117,7 @@ def test_nothing_in_this_package_claims_to_scan():
         for number, line in enumerate(lines, 1):
             lowered = line.lower()
             for phrase in _DISCOVERY_CLAIMS:
-                if phrase not in lowered:
+                if not phrase.search(lowered):
                     continue
                 context = (lines[number - 2].lower() if number >= 2 else "") + lowered
                 if any(negation in context for negation in _NEGATIONS):
@@ -97,6 +128,44 @@ def test_nothing_in_this_package_claims_to_scan():
         "HBOM is import plus a data model, and these read as discovery claims:\n  "
         + "\n  ".join(offenders)
     )
+
+
+def test_a_design_file_scan_is_not_a_discovery_claim():
+    """⚠ THE OTHER HALF OF THE RULE, ADDED WHEN "hbom scan" LEFT THE LIST.
+
+    A guard that only ever forbids is a guard nobody can work with. Parsing a
+    schematic the customer committed IS a scan and saying so is accurate; what
+    must stay forbidden is the claim that AxeBOM looked at their hardware.
+
+    Without this test the natural response to the narrower list would be to
+    re-add "hbom scan" the next time somebody skims it, and the honest label
+    would go back to forbidding a true sentence — which is how a rule ends up
+    ignored.
+    """
+    permitted = [
+        "an HBOM scan parses the design files in your repository",
+        "run an HBOM scan to read your KiCad schematics",
+        "this HBOM scan found 42 line items in your parts list",
+    ]
+    for text in permitted:
+        lowered = text.lower()
+        assert not any(claim.search(lowered) for claim in _DISCOVERY_CLAIMS), (
+            f"a design-file scan is not a discovery claim, but this was flagged: {text}"
+        )
+
+    forbidden = [
+        "AxeBOM scans your hardware for components",
+        "we inspect the device and enumerate its parts",
+        "this feature discovers hardware automatically",
+        "AxeBOM detects your hardware",
+        "run an HBOM scan to discover your hardware",
+        "we enumerate the parts on your board by inspecting it",
+    ]
+    for text in forbidden:
+        lowered = text.lower()
+        assert any(claim.search(lowered) for claim in _DISCOVERY_CLAIMS), (
+            f"this asserts discovery of physical hardware and was NOT caught: {text}"
+        )
 
 
 def test_the_scan_claim_check_would_actually_catch_one():
@@ -111,7 +180,7 @@ def test_the_scan_claim_check_would_actually_catch_one():
 
     def flagged(line: str) -> bool:
         lowered = line.lower()
-        return any(p in lowered for p in _DISCOVERY_CLAIMS) and not any(
+        return any(p.search(lowered) for p in _DISCOVERY_CLAIMS) and not any(
             n in lowered for n in _NEGATIONS
         )
 
@@ -700,3 +769,204 @@ def test_a_truncated_row_does_not_crash_the_import():
     result = parse(csv_text)
     assert result.roots[0].model_number == "ENC-1"
     assert result.roots[0].manufacturer_name == ""
+
+
+# ---------------------------------------------------------------------------
+# The manufacturing profile — scored, and structurally unable to move CERT-In
+# ---------------------------------------------------------------------------
+
+
+def test_a_fully_populated_manufacturing_block_does_not_move_completeness():
+    """⚠ INVARIANTS 2 AND 3, AND THE POINT OF THE WHOLE SEPARATION.
+
+    A customer who fills in every price, designator, SKU and alternate must see
+    exactly the SAME compliance percentage as one who fills in none of them.
+    Those fields are AxeBOM's, not CERT-In's — letting procurement diligence
+    raise a number that goes to a regulator would change what that number MEANS
+    while leaving its name intact.
+
+    The denominator is asserted as well as the percentages: a leak that added
+    manufacturing weight to BOTH numerator and denominator could leave a
+    percentage coincidentally unchanged while the number underneath it had
+    quietly become a different measurement.
+    """
+    certin_only = {
+        "product_name": "gateway",
+        "manufacturer_name": "Encore Systems",
+        "manufacturer_location": "Pune, India",
+        "model_number": "ENC-GW-4400",
+        "origin": "India",
+        "criticality": "critical",
+    }
+    bare = normalize_bom([HardwareComponent(**certin_only)])
+    loaded = normalize_bom(
+        [
+            HardwareComponent(
+                **certin_only,
+                designators=["U1", "U2"],
+                package_footprint="QFN-48",
+                quantity=12,
+                supplier_sku="497-11767-ND",
+                preferred_supplier="Digi-Key",
+                unit_price="1.2400",
+                currency="USD",
+                assembly_type="smt",
+                lifecycle_status="active",
+                alternates=[Alternate(model_number="STM32H753ZI", equivalence="drop-in")],
+            )
+        ]
+    )
+
+    assert bare.coverage is not None and loaded.coverage is not None
+    assert loaded.coverage.completeness_pct == bare.coverage.completeness_pct
+    assert loaded.coverage.declaration_pct == bare.coverage.declaration_pct
+    assert loaded.coverage.denominator == bare.coverage.denominator
+
+    # ...and the second number DOES move, or this test would pass by scoring
+    # nothing at all.
+    assert loaded.manufacturing is not None and bare.manufacturing is not None
+    assert loaded.manufacturing.completeness_pct > bare.manufacturing.completeness_pct
+
+
+def test_no_manufacturing_field_id_is_a_certin_field_id():
+    """The two field sets must not overlap.
+
+    An id collision would let a manufacturing field be mistaken for a CERT-In
+    element by anything that keys on the id — and the only warning would be a
+    duplicate-id lint failure, which fires only if both files are ever linted
+    as one document. They are not.
+    """
+    from .profile import manufacturing_fields
+
+    mfg = {f.id for f in manufacturing_fields()}
+    assert mfg, "no manufacturing fields loaded; this test would pass vacuously"
+    assert not mfg & {f.id for f in HBOM_FIELDS}
+    assert all(i.startswith("axebom.hbom.mfg.") for i in mfg)
+
+
+def test_the_manufacturing_count_is_never_written():
+    """⚠ INVARIANT 2, APPLIED TO THE SECOND PROFILE TOO.
+
+    The compliance profile's count is guarded by `axebom profile guardrails`.
+    This one is not in that tool's scope, so the equivalent guarantee is
+    asserted here: the number of manufacturing fields comes from the profile,
+    and nothing may hardcode it.
+    """
+    from .profile import manufacturing_fields
+
+    source = pathlib.Path(__file__).parent
+    count = str(len(manufacturing_fields()))
+    offenders = [
+        f"{path.name}:{n}: {line.strip()}"
+        for path in sorted(source.rglob("*.py"))
+        if path.name != pathlib.Path(__file__).name
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if f"{count} manufacturing" in line or f"{count} procurement" in line
+    ]
+    assert not offenders, "a manufacturing field count is written down:\n  " + "\n  ".join(
+        offenders
+    )
+
+
+def test_unknown_lifecycle_is_declared_but_scores_zero():
+    """⚠ THE FIELD WHERE A PARTS DATABASE MOST OFTEN ANSWERS "unknown".
+
+    `unknown` is in coverage.NON_SUBSTANTIVE, so it is stored and REPORTED
+    without counting as knowledge — invariant 3's rule, on the one manufacturing
+    field where the distinction matters most. A distributor saying it cannot
+    determine a part's lifecycle is not the same as the part being active, and
+    scoring it as covered would hide exactly the parts an engineer needs to see.
+    """
+    known = normalize_bom([HardwareComponent(product_name="p", lifecycle_status="nrnd")])
+    unknown = normalize_bom([HardwareComponent(product_name="p", lifecycle_status="unknown")])
+
+    assert known.manufacturing is not None and unknown.manufacturing is not None
+    assert unknown.manufacturing.completeness_pct < known.manufacturing.completeness_pct
+    # Declared either way: the value is present in the document, not omitted.
+    assert unknown.manufacturing.declaration_pct == known.manufacturing.declaration_pct
+
+
+def test_do_not_populate_false_is_an_answer():
+    """`False` means "this part IS fitted" — a stated fact, not an absence.
+
+    coverage.is_substantive treats a boolean as substantive for exactly this
+    reason. If DNP scored zero when false, every ordinary part on every board
+    would read as an unanswered question.
+    """
+    rows = flatten([HardwareComponent(product_name="p", do_not_populate=False)])
+    assert rows[0]["hardware_component.do_not_populate"] is False
+
+
+# ---------------------------------------------------------------------------
+# The Go port must not drift
+# ---------------------------------------------------------------------------
+
+
+def test_the_go_port_understands_the_same_columns():
+    """⚠ THE TWO IMPLEMENTATIONS DIVERGED ONCE, SILENTLY, AND THIS IS THE GUARD.
+
+    `services/project/internal/hbom` is a hand-written Go port of this module,
+    because there is no Go->Python bridge anywhere in this codebase and HBOM's
+    REST path is Go like every other. Its own package doc says the two must be
+    kept in step by hand.
+
+    They were not. The manufacturing columns were added here for the scan path
+    and not there, so the INTERACTIVE import silently dropped designators,
+    prices, SKUs and lifecycle that a SCAN of the very same file kept — a
+    difference no customer could see, explain, or work around.
+
+    ⚠ THIS TEST READS THE GO SOURCE, WHICH IS UGLY AND IS THE POINT. There is
+    no shared artifact between the two languages to compare instead, and the
+    alternative is a comment asking the next person to remember. A comment is
+    what failed.
+    """
+    go_source = pathlib.Path("services/project/internal/hbom/csvimport.go")
+    if not go_source.is_file():
+        pytest.skip("the Go port is not present in this checkout")
+
+    text = go_source.read_text(encoding="utf-8")
+    block = re.search(r"var canonicalColumns = map\[string\]string\{(.*?)\n\}", text, re.S)
+    assert block, "canonicalColumns is not in the shape this test can read"
+
+    go_columns = dict(re.findall(r'"([a-z_]+)":\s*"([a-z_]*)"', block.group(1)))
+    assert go_columns, "no columns parsed out of the Go source"
+
+    missing = sorted(set(CANONICAL_COLUMNS) - set(go_columns))
+    extra = sorted(set(go_columns) - set(CANONICAL_COLUMNS))
+    mismatched = {
+        key: (CANONICAL_COLUMNS[key], go_columns[key])
+        for key in set(CANONICAL_COLUMNS) & set(go_columns)
+        if CANONICAL_COLUMNS[key] != go_columns[key]
+    }
+
+    assert not missing, f"the Go port does not understand these columns: {missing}"
+    assert not extra, f"the Go port understands columns this module does not: {extra}"
+    assert not mismatched, f"the two ports disagree about where these land: {mismatched}"
+
+
+def test_the_go_ports_column_order_matches():
+    """⚠ ORDER IS LOAD-BEARING, AND ONLY ON THE GO SIDE.
+
+    `part_number` and `mpn` both target `model_number`, and "first column wins"
+    depends on visiting `part_number` first. Python's dict preserves insertion
+    order; a Go map does not, which is why the port carries an explicit
+    `canonicalOrder` slice. A slice that has drifted from the map it orders
+    would make the winner depend on which column a customer's file happens to
+    contain.
+    """
+    go_source = pathlib.Path("services/project/internal/hbom/csvimport.go")
+    if not go_source.is_file():
+        pytest.skip("the Go port is not present in this checkout")
+
+    text = go_source.read_text(encoding="utf-8")
+    block = re.search(r"var canonicalOrder = \[\]string\{(.*?)\n\}", text, re.S)
+    assert block, "canonicalOrder is not in the shape this test can read"
+
+    go_order = re.findall(r'"([a-z_]+)"', block.group(1))
+    assert sorted(go_order) == sorted(CANONICAL_COLUMNS), (
+        "canonicalOrder does not cover exactly the columns canonicalColumns declares"
+    )
+    assert go_order.index("part_number") < go_order.index("mpn"), (
+        "part_number must be visited before mpn, or the first-column-wins rule "
+        "silently prefers whichever the customer's file happens to list"
+    )

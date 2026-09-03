@@ -24,10 +24,16 @@ from __future__ import annotations
 
 import csv
 import io
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
-from .model import MAX_DEPTH, HardwareComponent, normalize
+from .model import (
+    ASSEMBLY_TYPES,
+    LIFECYCLE_VALUES,
+    MAX_DEPTH,
+    HardwareComponent,
+    normalize,
+)
 
 #: Canonical column names the importer understands.
 #:
@@ -42,7 +48,23 @@ CANONICAL_COLUMNS: dict[str, str] = {
     "manufacturer": "manufacturer_name",
     "mpn": "model_number",
     "supplier": "component_supplier_info",
-    "unit_cost": "",  # accepted and ignored: not a CERT-In element
+    # --- manufacturing and procurement -------------------------------------
+    #
+    # ⚠ NOT CERT-In ELEMENTS, AND THEY ARE STORED RATHER THAN IGNORED NOW.
+    # `unit_cost` used to map to "" — accepted and thrown away — because there
+    # was no column to put it in. Migration 0011 added the columns; these are
+    # scored against docs/reference/hbom-manufacturing-v1.yaml, never against
+    # CERT-In. See the manufacturing block on HardwareComponent.
+    "unit_cost": "unit_price",
+    "currency": "currency",
+    "designator": "designators",
+    "footprint": "package_footprint",
+    "supplier_sku": "supplier_sku",
+    "preferred_supplier": "preferred_supplier",
+    "dni": "do_not_populate",
+    "assembly_type": "assembly_type",
+    "lifecycle": "lifecycle_status",
+    "datasheet": "datasheet_url",
     "name": "product_name",
     "version": "product_version",
     "serial_number": "serial_number",
@@ -89,6 +111,37 @@ HEADER_SUGGESTIONS: dict[str, str] = {
     "vendor": "supplier",
     "cost": "unit_cost",
     "unit price": "unit_cost",
+    # --- manufacturing and procurement -------------------------------------
+    "ref": "designator",
+    "refs": "designator",
+    "refdes": "designator",
+    "reference": "designator",
+    "references": "designator",
+    "designator": "designator",
+    "designators": "designator",
+    "package": "footprint",
+    "footprint": "footprint",
+    "dnp": "dni",
+    "dni": "dni",
+    "do not populate": "dni",
+    "do not install": "dni",
+    "nofit": "dni",
+    "mounting": "assembly_type",
+    "mount type": "assembly_type",
+    "mounting technology": "assembly_type",
+    "lifecycle": "lifecycle",
+    "lifecycle status": "lifecycle",
+    "part status": "lifecycle",
+    "product status": "lifecycle",
+    "supplier part number": "supplier_sku",
+    "supplier sku": "supplier_sku",
+    "sku": "supplier_sku",
+    "distributor part number": "supplier_sku",
+    "preferred supplier": "preferred_supplier",
+    "distributor": "preferred_supplier",
+    "datasheet": "datasheet",
+    "datasheet url": "datasheet",
+    "currency": "currency",
 }
 
 
@@ -173,15 +226,46 @@ def parse(
     if mapping is None:
         mapping = ColumnMapping.suggest(list(reader.fieldnames))
 
-    result = ImportResult()
-    result.unmapped_headers = [h for h in reader.fieldnames if h and mapping.canonical(h) is None]
-
     if "level" not in mapping.columns.values():
         raise HBOMImportError(
             "no column is mapped to `level`. The level column is what builds the "
             "sub-component tree; without it every part would be a sibling of the "
             "product rather than a part of it."
         )
+
+    result = parse_rows(
+        (_canonicalize(raw, mapping) for raw in reader),
+        max_rows=max_rows,
+    )
+    result.unmapped_headers = [h for h in reader.fieldnames if h and mapping.canonical(h) is None]
+    return result
+
+
+def parse_rows(
+    rows: Iterable[Mapping[str, str]],
+    *,
+    max_rows: int = 50_000,
+) -> ImportResult:
+    """Build the component tree from rows already in canonical column names.
+
+    ⚠ EXTRACTED SO THE LEVEL-SEQUENCE RULE HAS EXACTLY ONE IMPLEMENTATION.
+
+    That rule — a level-3 row after a level-1 row is REJECTED, naming the row
+    and both levels — carries more safety comment than anything else in this
+    file, because quietly reparenting a part produces a structurally valid BOM
+    that says something false about how the hardware is assembled, and nothing
+    downstream can detect it.
+
+    `parse()` above is now this function plus a CSV reader and a column
+    mapping. The ECAD adapters (KiCad schematics and netlists, Altium/OrCAD
+    exports) build canonical rows their own way and then come here — because
+    an adapter that built its own tree would be a second copy of that rule,
+    and the second copy is the one that gets it wrong.
+
+    Rows are consumed lazily, so a caller may pass a generator over a file it
+    is still reading.
+    """
+    result = ImportResult()
 
     #: The current ancestor at each level. `stack[n]` is the open component at
     #: level n, so a row at level n+1 attaches to it.
@@ -190,7 +274,7 @@ def parse(
     previous_level: int | None = None
     row_number = 1  # the header
 
-    for raw in reader:
+    for values in rows:
         row_number += 1
         if row_number - 1 > max_rows:
             raise HBOMImportError(
@@ -199,7 +283,6 @@ def parse(
                 f"deliberately."
             )
 
-        values = _canonicalize(raw, mapping)
         level_text = str(values.get("level", "")).strip()
 
         if not level_text and not any(str(v).strip() for v in values.values()):
@@ -342,6 +425,22 @@ def _build(values: dict[str, str], level: int, row_number: int) -> HardwareCompo
             component.compliance = [
                 part.strip() for part in value.replace(";", ",").split(",") if part.strip()
             ]
+        elif attribute == "designators":
+            # ⚠ ONE CELL, MANY PLACEMENTS. "R1, R4, R17" is one line item with
+            # quantity 3, which is how every CAD and ERP export writes it.
+            # Splitting on both separators because both are common and neither
+            # is ambiguous here — a reference designator contains no comma.
+            component.designators = [
+                part.strip() for part in value.replace(";", ",").split(",") if part.strip()
+            ]
+        elif attribute == "do_not_populate":
+            component.do_not_populate = _parse_dnp(value)
+        elif attribute == "assembly_type":
+            component.assembly_type = _parse_enum(value, ASSEMBLY_TYPES, _ASSEMBLY_ALIASES)
+        elif attribute == "lifecycle_status":
+            component.lifecycle_status = _parse_enum(value, LIFECYCLE_VALUES, _LIFECYCLE_ALIASES)
+        elif attribute == "unit_price":
+            component.unit_price = _parse_price(value)
         else:
             # setdefault semantics: `part_number` and `mpn` both map to
             # model_number, and whichever the file supplies first wins rather
@@ -400,3 +499,99 @@ def _check_siblings(component: HardwareComponent, result: ImportResult) -> None:
         else:
             seen[key] = child.source_row or 0
         _check_siblings(child, result)
+
+
+# ---------------------------------------------------------------------------
+# Manufacturing value parsing
+# ---------------------------------------------------------------------------
+#
+# ⚠ EVERY ONE OF THESE DROPS WHAT IT CANNOT RECOGNISE, AND NONE OF THEM
+# GUESSES. That is the same rule `normalize()` applies to `criticality`, for
+# the same reason: mapping an unrecognised value onto a plausible neighbour
+# invents a fact about somebody's hardware, in a document they hand to an
+# auditor or a contract manufacturer.
+
+#: Spellings of "smt"/"tht" seen in real exports. Data, not inference — each
+#: entry is a name the industry actually uses for that exact process.
+_ASSEMBLY_ALIASES: dict[str, str] = {
+    "smd": "smt",
+    "surface mount": "smt",
+    "surface-mount": "smt",
+    "through hole": "tht",
+    "through-hole": "tht",
+    "thru-hole": "tht",
+    "pth": "tht",
+    "mech": "mechanical",
+    "hardware": "mechanical",
+}
+
+#: Likewise for lifecycle. `nrnd` has the most spellings because it is the
+#: status distributors word most freely.
+_LIFECYCLE_ALIASES: dict[str, str] = {
+    "not recommended for new designs": "nrnd",
+    "not recommended": "nrnd",
+    "nrfnd": "nrnd",
+    "end of life": "eol",
+    "end-of-life": "eol",
+    "discontinued": "obsolete",
+    "inactive": "obsolete",
+    "in production": "active",
+    "production": "active",
+    "new": "preview",
+    "pre-production": "preview",
+}
+
+#: Every spelling of "do not fit" seen in real exports.
+#:
+#: ⚠ THE COLUMN HAS NO THIRD STATE, SO AN UNRECOGNISED VALUE MEANS "fitted" —
+#: AND THAT IS THE SAFE DIRECTION, WHICH IS WHY IT IS ACCEPTABLE.
+#:
+#: The two errors are not symmetric. Treating a marked DNP as fitted puts one
+#: unwanted part on a board. Treating an unrecognised value as DNP OMITS a part
+#: the design needs, which is a board that does not work and a respin. So this
+#: is the affirmative spellings only, and anything else is fitted.
+#:
+#: (An earlier version carried an explicit falsy set as well, with a comment
+#: claiming an unrecognised value must not silently become False. Both branches
+#: returned False, so the comment described behaviour the code did not have —
+#: and the Go port's linter is what noticed.)
+_TRUTHY = frozenset({"1", "y", "yes", "true", "dnp", "dni", "x", "nofit", "do not populate"})
+
+
+def _parse_dnp(value: str) -> bool:
+    """Read a do-not-populate cell."""
+    return value.strip().lower() in _TRUTHY
+
+
+def _parse_enum(value: str, allowed: tuple[str, ...], aliases: dict[str, str]) -> str:
+    """Map a cell onto a closed set, or drop it.
+
+    Returns "" for anything unrecognised. A dropped value scores as absent,
+    which is honest; a coerced one would score as knowledge we do not have.
+    """
+    text = value.strip().lower()
+    text = aliases.get(text, text)
+    return text if text in allowed else ""
+
+
+def _parse_price(value: str) -> str:
+    """Read a unit price, keeping it a string all the way to the writer.
+
+    ⚠ NOT A float. Postgres casts the bound parameter into `numeric(18,6)`;
+    routing it through a Python float first would lose cents on values like
+    0.1, and an extended price over a 4000-line BOM accumulates that error into
+    a figure somebody procures against.
+
+    Currency symbols and thousands separators are stripped because exports
+    carry them; a value that still will not parse is DROPPED rather than
+    guessed at, since a wrong price is worse than an absent one.
+    """
+    text = value.strip().replace(",", "").lstrip("$£€₹").strip()
+    if not text:
+        return ""
+    try:
+        if float(text) < 0:
+            return ""
+    except ValueError:
+        return ""
+    return text

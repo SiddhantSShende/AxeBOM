@@ -53,11 +53,22 @@ func seedSBOM(t *testing.T, pool *db.Pool, tenantID, projectID string) sbomFixtu
 			return err
 		}
 
+		// ⚠ A REAL normalize.alias_snapshot ROW, NOT A MINTED UUID. Migration
+		// 0012 gave bom_documents.alias_snapshot_id the foreign key it never
+		// had, so an invented id is rejected. SBOM is the one BOM type the
+		// column exists FOR — its snapshot is what makes a finding's alias
+		// cluster explainable at re-normalization time — so the fixture mints
+		// the snapshot rather than passing NULL, which writer.py refuses for
+		// an SBOM for exactly that reason.
 		if err := tx.QueryRow(ctx, `
+			WITH snap AS (
+				INSERT INTO normalize.alias_snapshot (ruleset_version)
+				VALUES ('test-1') RETURNING id
+			)
 			INSERT INTO normalize.bom_documents
 				(tenant_id, scan_id, bom_type, normalization_version,
 				 ruleset_version, alias_snapshot_id, spdx_license_list_version, generated_at)
-			VALUES ($1, $2, 'SBOM', 1, 'test-1', app.uuid_v7(), 'test-1', now())
+			SELECT $1, $2, 'SBOM', 1, 'test-1', snap.id, 'test-1', now() FROM snap
 			RETURNING id`, tenantID, f.scanID).Scan(&f.docID); err != nil {
 			return err
 		}

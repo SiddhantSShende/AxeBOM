@@ -9,8 +9,6 @@ and `write_bom_document` expect. Live-Postgres write coverage lives in
 
 from __future__ import annotations
 
-import uuid
-
 from workers.cbom.adapters.cbomkit_theia import extract_crypto_assets
 from workers.cbom.normalize.crypto import normalize_all
 from workers.cbom.normalize.pipeline import FIELD_SETS, build_canonical_cbom
@@ -35,11 +33,14 @@ def test_the_document_has_every_key_write_bom_document_reads() -> None:
     assert isinstance(doc["unidentified_count"], int)
     assert isinstance(doc["diagnostics"], list)
 
-    # ⚠ MUST PARSE AS A REAL UUID — writer.py's _require_uuid rejects anything
-    # else, including a human-readable fixture placeholder, with a message
-    # naming the field rather than an opaque Postgres type-cast error.
-    alias_snapshot_id = doc["provenance"]["alias_snapshot_id"]
-    assert str(uuid.UUID(alias_snapshot_id)) == alias_snapshot_id
+    # ⚠ None IS THE CBOM-SHAPED ANSWER, AND THE KEY MUST STILL BE PRESENT.
+    # bom_documents.alias_snapshot_id became nullable with a real FK in
+    # migration 0012, so CBOM stopped minting a throwaway uuid to satisfy NOT
+    # NULL. writer.py's _optional_uuid accepts None and still rejects a
+    # malformed string, so what this asserts is that the key exists and carries
+    # the honest value — not that the key was quietly dropped.
+    assert "alias_snapshot_id" in doc["provenance"]
+    assert doc["provenance"]["alias_snapshot_id"] is None
 
 
 def test_the_assets_are_exactly_what_normalize_all_produces() -> None:
@@ -180,22 +181,26 @@ def test_an_empty_scan_produces_a_valid_zero_document() -> None:
     assert doc["coverage"]["completeness_pct"] == 0.0
 
 
-def test_two_calls_over_the_same_input_mint_different_alias_snapshot_ids() -> None:
-    """⚠ THE ONE DELIBERATE NON-DETERMINISM, DOCUMENTED RATHER THAN ACCIDENTAL.
+def test_two_calls_over_the_same_input_are_byte_identical() -> None:
+    """⚠ THIS TEST USED TO ASSERT THE OPPOSITE, AND THE INVERSION IS THE POINT.
 
-    Every other field is byte-identical across repeated calls (CLAUDE.md
-    invariant 10) — `alias_snapshot_id` is not, because CBOM has no real
-    snapshot concept for it to replay FROM in the first place (see
-    `build_canonical_cbom`'s docstring and the HBOM precedent it cites).
+    It previously required that repeated calls mint DIFFERENT
+    `alias_snapshot_id`s — a documented exception to CLAUDE.md invariant 10,
+    which exists only because the column was `uuid NOT NULL` and CBOM had no
+    snapshot to put in it, so the pipeline invented one per call.
+
+    `migrations/normalize/0012_bom_document_provenance.sql` made the column
+    nullable and gave it a real foreign key. The exception has no reason to
+    exist any more, so the whole document now replays byte-for-byte — which is
+    what invariant 10 asked for all along.
     """
     raw, _ = extract_crypto_assets(cyclonedx([ALGORITHM]))
 
     first = build_canonical_cbom(raw)
     second = build_canonical_cbom(raw)
 
-    assert first["crypto_assets"] == second["crypto_assets"]
-    assert first["coverage"] == second["coverage"]
-    assert first["provenance"]["alias_snapshot_id"] != second["provenance"]["alias_snapshot_id"]
+    assert first == second
+    assert first["provenance"]["alias_snapshot_id"] is None
 
 
 def test_a_custom_ruleset_version_is_carried_through() -> None:

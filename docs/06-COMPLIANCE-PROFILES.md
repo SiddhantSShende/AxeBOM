@@ -169,3 +169,39 @@ When CERT-In publishes v2.1:
 5. **Re-normalize** stored raw artifacts into a new `normalization_version`.
 
 Step 5 is the payoff of the replayable-normalization design (ADR-0003): a standards revision is a **data change plus a re-normalization pass**, not a re-scan of every customer project. Historical reports keep their original profile revision recorded, so a report issued under v2.0 remains explainable after v2.1 ships.
+
+---
+
+## 11. Operational profiles — scored, but never compliance
+
+A profile can also describe a field set **AxeBOM** defined, rather than one a standard requires. The first is `reference/hbom-manufacturing-v1.yaml`: reference designators, footprints, quantities, supplier SKUs, alternates, prices, DNP flags, assembly type and lifecycle status.
+
+These are scored — that is the whole point of them — but into their **own number, under their own label**, never into `completeness_pct` or `declaration_pct`.
+
+> **Why they cannot simply live in `certin-v2.0.yaml`.** That file already has `axebom_extensions:` blocks, and those are *defined* by `scored: false` — they ride alongside the standard and must never be scored at all. Manufacturing fields **are** scored. Putting scored non-CERT-In fields inside the compliance profile would make `scored` mean two different things in one document, and `certin-v2.0.yaml` is the file invariant 2 names as the single source of truth for what CERT-In requires. It stays clean.
+
+### The three things that make the separation structural
+
+**1. `profile.kind`.** `operational` marks it; an absent `kind` means `compliance`. The default is the safe direction — a new profile that forgets to declare itself is held to every compliance check rather than quietly escaping them.
+
+**2. A distinct top-level key.** The fields live under `hbom_manufacturing:`, never a second `hbom:`. Every CERT-In accessor in `libs/go-shared/compliance` reads the named sections — `FieldsForBOMType`, the guardrail's field counts, the evidence pack's HBOM section, and the code generator that produces `HBOM_FIELDS`. A different key means not one of them can return an AxeBOM field by accident. `TestOperationalFieldsNeverReachACertInAccessor` asserts that against both files, and it is mutation-verified: widening `FieldsForBOMType("HBOM")` to include the manufacturing set makes it fail by name.
+
+**3. Inverted and added lint rules**, all gated on `Meta.IsCompliance()`:
+
+| Rule | Compliance profile | Operational profile |
+|---|---|---|
+| A `status: extension` field | must set `scored: false` | **may be scored** — that is what it is for |
+| `source_page` on a field | must be within the source document | **refused** — there is no document, so a page number implies a citation nobody can check |
+| `all_entries_verified` | must match the `assumed` count | **refused** — a provenance claim with nothing behind it |
+| Defining `sbom:`/`hbom:`/`crypto_asset:` | expected | **refused** — those blocks are read as a standard by every accessor in the package |
+
+### What deliberately does *not* change
+
+- **`FieldsForBOMType` is untouched.** That one function feeds `HBOM_FIELDS` → `workers/hbom/normalize.py`'s `_SCORED` → `completeness_pct`. Leaving it alone *is* the separation.
+- **`axebom profile gen` refuses an operational profile.** The generated models declare package-level `ProfileID`/`ProfileRevision`/`ProfileField`; a second profile would collide with all three. Nothing in Go needs the list — Python reads it at runtime, exactly as `normalize_runner.sbom_fields()` reads the CERT-In one.
+- **`docs/COMPLIANCE-REPORT.md` is unchanged.** `BuildEvidencePack` never sees an operational profile. Adding non-CERT-In rows to a document titled "CERT-In coverage evidence" is the category error this design exists to prevent.
+- **`task profile:lint` runs over both files**, by the same checker. A second field set that nothing validates is a second field set that drifts.
+
+### Storage
+
+The score lands in `normalize.bom_documents.supplementary_coverage`, a JSONB keyed by profile id, carrying the profile's own `label` and an `is_compliance: false` flag alongside the numbers — so a renderer can never mislabel it and no consumer has to know which profile ids are standards. A keyed JSONB rather than two more `numeric` columns: the *set* of profiles is data too, which is invariant 2's reasoning one level up.

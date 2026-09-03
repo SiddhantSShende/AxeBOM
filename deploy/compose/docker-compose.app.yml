@@ -93,7 +93,8 @@ x-service-env: &service-env
 
   GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
   GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
-  GITHUB_REDIRECT_URL: ${GITHUB_REDIRECT_URL:-http://localhost:5173/auth/github/callback}
+  GITHUB_REDIRECT_URL: ${GITHUB_REDIRECT_URL:-http://localhost:5173/api/v1/auth/github/callback}
+  GITHUB_CONNECT_REDIRECT_URL: ${GITHUB_CONNECT_REDIRECT_URL:-http://localhost:5173/api/v1/auth/github/connect/callback}
   FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
 
   # Upstreams, by service name. NEVER derived from a request header.
@@ -494,22 +495,63 @@ services:
       # workspaces: this process never runs an engine or touches source.
       - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/artifacts:/var/lib/axebom/artifacts:ro
 
-  # ⚠ NO qbom-worker OR hbom-worker, DELIBERATELY.
+  # ⚠ THERE IS AN hbom-worker NOW, AND THIS BLOCK USED TO EXPLAIN WHY THERE
+  # WAS NOT. The reason it gave was true and has been overtaken:
   #
-  # Neither family is a scan, so neither has a sandboxed engine to dispatch:
+  #   "hbom is a CSV/form IMPORT. There is no open-source HBOM scanner."
   #
-  #   qbom  is a DERIVATION from CBOM crypto assets with quantum-vulnerability
-  #         rules applied, plus Table 8 device metadata captured by form. There
-  #         is no quantum-hardware scanner. The registry marks qbom-derive
-  #         `derived: true`.
-  #   hbom  is a CSV/form IMPORT. There is no open-source HBOM scanner. The
-  #         registry marks hbom-csv `requires_import: true`.
+  # Still true about PHYSICAL HARDWARE — nothing inspects a device and
+  # enumerates its parts. Not true about scanning: `hbom-ecad` parses the
+  # customer's own KiCad, Altium and OrCAD design files out of an upload or a
+  # connected repository, which is a real scan of documents they wrote, and
+  # `hbom-cdxgen-host` ingests a host inventory their own machine produced.
   #
-  # Adding a worker for either would mean inventing a scan where none exists —
-  # exactly the overselling CLAUDE.md's honest-labels section forbids. The real
-  # gap is on the Go side: the orchestrator's fan-out does not currently skip
-  # engines flagged `derived` or `requires_import`, so it would publish jobs
-  # nobody should consume. That is recorded in docs/STATE.md.
+  # ⚠ NO qbom-worker, STILL, AND FOR THE ORIGINAL REASON. QBOM is a DERIVATION
+  # from CBOM crypto assets with quantum-vulnerability rules applied, plus
+  # Table 8 device metadata captured by form. There is no quantum-hardware
+  # scanner, the registry marks qbom-derive `derived: true`, and
+  # rejectNonScannableFamilies refuses the family at scan-create time. A worker
+  # here would be inventing a scan where none exists.
+  hbom-worker:
+    <<: *service-defaults
+    image: axebom/worker:dev
+    environment:
+      <<: *service-env
+      AXEBOM_WORKER_FAMILY: hbom
+    # ⚠ NO docker.sock, NO enginedb, NO group_add — UNLIKE EVERY OTHER WORKER.
+    # Both HBOM engines are pure parsing with no container to start, so handing
+    # this process the Docker socket would grant an authority it has no use
+    # for. It needs the source workspace to read design files from, and the
+    # artifact tree to write its output to, and nothing else.
+    volumes:
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/workspaces:/var/lib/axebom/workspaces
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/artifacts:/var/lib/axebom/artifacts
+
+  # ----------------------------------------------- normalize consumer (hbom)
+  # Same image as sbom-normalize-consumer, different entrypoint. One
+  # credential-bearing image rather than two; separate services so an HBOM bug
+  # cannot stall SBOM normalization and either can be rolled back alone.
+  hbom-normalize-consumer:
+    <<: *service-defaults
+    image: axebom/normalize-consumer:dev
+    entrypoint: ["python", "-m", "workers.hbom.normalize_consumer"]
+    environment:
+      AXEBOM_ENV: ${AXEBOM_ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      NATS_URL: nats://nats:4222
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-axebom}
+      # The same narrower role sbom-normalize-consumer holds, and the same
+      # reason: SELECT/INSERT on the normalize schema only, so this process
+      # structurally cannot overwrite normalized data in place (invariant 10).
+      POSTGRES_NORMALIZE_WRITER_ROLE: ${POSTGRES_NORMALIZE_WRITER_ROLE:-axebom_normalize_writer}
+      POSTGRES_NORMALIZE_WRITER_PASSWORD: ${POSTGRES_NORMALIZE_WRITER_PASSWORD:-axebom_normalize_writer}
+      POSTGRES_SSLMODE: disable
+      AXEBOM_OUTPUT_ROOT: /var/lib/axebom/artifacts
+    volumes:
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/artifacts:/var/lib/axebom/artifacts:ro
 
   # ----------------------------------------------------------------- frontend
   frontend:
@@ -528,6 +570,13 @@ services:
     image: axebom/frontend:dev
     depends_on: [gateway]
     ports: ["${FRONTEND_PORT:-5173}:8085"]
+    environment:
+      # RUNTIME, not a build arg, unlike the three VITE_* values above: nginx
+      # reads this at container start to redirect any other origin here (see
+      # deploy/docker/frontend-entrypoint.d/40-canonical.sh). Changing the
+      # canonical origin therefore needs no rebuild of the bundle — only the
+      # ids above are compiled in.
+      ZITADEL_PUBLIC_URL: ${ZITADEL_PUBLIC_URL:-}
     networks: [default]
     volumes:
       # Read-only, and empty by default: nothing here until `task tls:gen`

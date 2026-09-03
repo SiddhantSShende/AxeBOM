@@ -57,6 +57,20 @@ SEVERITY_PRECEDENCE = [
     "tool-string-max",
 ]
 
+#: Precedence for a COMPONENT's `patch_status`, worst first. See
+#: `aggregate_patch_status` for why worst-case wins, and `patch_status` for the
+#: per-finding derivation this aggregates over.
+#:
+#: ⚠ These four strings are the CERT-In vocabulary, not ours to choose:
+#: docs/reference/certin-v2.0.yaml's `certin.sbom.09.patch_status.values`, and
+#: the CHECK constraint in migrations/normalize/0001_bom_components.sql.
+PATCH_STATUS_PRECEDENCE = [
+    "no-fix-available",
+    "patch-available",
+    "unknown",
+    "up-to-date",
+]
+
 
 @dataclass
 class CvssVector:
@@ -302,8 +316,9 @@ def resolve_fix_version(
                     "code": "NORMALIZE_NO_VERSION_COMPARATOR",
                     "message": f"no version ordering is defined for ecosystem {ecosystem or '<unknown>'!r}",
                     "hint": (
-                        "fixed_in_min is left empty and patch_status derives to unknown; "
-                        "a lexical sort would report the wrong minimum fix"
+                        "fixed_in_min is left empty and patch_status derives to unknown "
+                        "(not no-fix-available — the fix may exist, we just cannot order "
+                        "versions here); a lexical sort would report the wrong minimum fix"
                     ),
                 }
             ],
@@ -320,21 +335,37 @@ def resolve_fix_version(
                     "severity": "warn",
                     "code": "NORMALIZE_NO_VERSION_COMPARATOR",
                     "message": f"no version ordering for {ecosystem!r}",
-                    "hint": "patch_status derives to unknown",
+                    "hint": "patch_status derives to unknown, not no-fix-available",
                 }
             ],
         )
 
 
 def patch_status(installed: str, fixed_in_min: str, ecosystem: str, ordering: str) -> str:
-    """Derive `patch_status` for a component.
+    """Derive one finding's contribution to its component's `patch_status`.
 
-    Returns `unknown` whenever the ordering is unknown, rather than guessing —
-    the whole point of tracking `fix_version_ordering` separately.
+    Returns the CERT-In vocabulary — `up-to-date`, `patch-available`,
+    `no-fix-available`, `unknown` — never anything else. Those four values are
+    the profile's own (docs/reference/certin-v2.0.yaml) and the column's CHECK
+    constraint; a fifth string here is a write that fails at the database.
+
+    ⚠ `no-fix-available` AND `unknown` ARE DIFFERENT CLAIMS, AND resolve_fix_version
+    ALREADY TELLS THEM APART. `ordering == "none"` means the engines reported ZERO
+    fix versions for this vulnerability — a substantive finding a reader acts on
+    ("upstream has published nothing"), true regardless of what version is
+    installed. `ordering == "unknown"` means we have no comparator for this
+    ecosystem, so we cannot say anything at all. An earlier version of this
+    function collapsed both into `unknown`, discarding the distinction
+    resolve_fix_version went to the trouble of computing.
+
+    Everything else still returns `unknown` rather than guessing — the whole
+    point of tracking `fix_version_ordering` separately.
     """
-    if ordering == "unknown" or not fixed_in_min or not installed:
+    if ordering == "none":
+        return "no-fix-available"
+    if ordering != "comparator":
         return "unknown"
-    if not has_comparator(ecosystem):
+    if not fixed_in_min or not installed or not has_comparator(ecosystem):
         return "unknown"
 
     try:
@@ -344,4 +375,29 @@ def patch_status(installed: str, fixed_in_min: str, ecosystem: str, ordering: st
     except NoComparatorError:
         return "unknown"
 
-    return "patched" if result >= 0 else "vulnerable"
+    return "up-to-date" if result >= 0 else "patch-available"
+
+
+def aggregate_patch_status(statuses: Iterable[str]) -> str:
+    """Collapse a component's per-finding statuses into one, WORST FIRST.
+
+    ⚠ WORST-CASE WINS, AND THAT IS THE HONEST DIRECTION. CERT-In field 9 is a
+    claim about the whole component ("whether any patches or updates are
+    available to address known vulnerabilities"). A component with thirteen
+    fixed findings and one with no upstream fix is a component carrying an
+    outstanding, unfixable vulnerability; reporting `up-to-date` would hide the
+    exact gap the field exists to surface.
+
+    `unknown` outranks `up-to-date` for the same reason: if even one finding
+    could not be evaluated, claiming the component is up to date asserts a
+    verification that never happened for that finding.
+
+    Callers pass only components that HAVE findings — a component with none
+    keeps `patch_status` unset rather than being defaulted here (see
+    pipeline.normalize). The empty-iterable fallback is defensive only.
+    """
+    seen = set(statuses)
+    for status in PATCH_STATUS_PRECEDENCE:
+        if status in seen:
+            return status
+    return "unknown"

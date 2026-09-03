@@ -106,8 +106,8 @@ func WritePDF(w io.Writer, b BOM, opts PDFOptions) (PDFResult, error) {
 			})
 	}
 
-	doc := newDoc(b)
-	r := &pdfRender{doc: doc, bom: b, fields: fields, cap: cap}
+	doc, tr := newDoc(b)
+	r := &pdfRender{doc: doc, bom: b, fields: fields, cap: cap, tr: tr}
 
 	r.coverPage()
 
@@ -131,6 +131,8 @@ func WritePDF(w io.Writer, b BOM, opts PDFOptions) (PDFResult, error) {
 		r.cryptoInventoryPage()
 	case model.BOMTypeAIBOM:
 		r.aibomInventoryPage()
+	case model.BOMTypeHBOM:
+		r.hardwareInventoryPage()
 	default:
 		r.componentPages()
 	}
@@ -166,21 +168,37 @@ const pageOverrunFactor = 4
 
 // estimatePages is a deliberately rough forecast, used only to refuse early.
 //
-// CryptoAssets counts toward the same estimate as Components: a CBOM's
-// cryptoInventoryPage is one row per asset, exactly like componentPages is
-// one row per component, so a huge CBOM must be refused for the same reason a
+// CryptoAssets and Hardware count toward the same estimate as Components: a
+// CBOM's cryptoInventoryPage and an HBOM's hardwareInventoryPage are each one
+// row per entity, exactly like componentPages is one row per component, so a
+// huge CBOM or a 4000-line parts list must be refused for the same reason a
 // huge SBOM is.
+//
+// ⚠ Hardware WAS MISSING FROM THIS SUM, which meant a hardware BOM of any size
+// estimated as an eight-page document. The refusal that protects a caller from
+// asking for a PDF of something unrenderable would never have fired for the
+// one BOM type whose row count is entirely in a field it did not count.
 func estimatePages(b BOM) int {
 	const rowsPerPage = 40
 	const fixedPages = 8
-	rows := len(b.Components) + len(b.Findings) + len(b.Licenses) + len(b.CryptoAssets)
+	rows := len(b.Components) + len(b.Findings) + len(b.Licenses) +
+		len(b.CryptoAssets) + len(b.Hardware)
 	return fixedPages + rows/rowsPerPage
 }
 
-func newDoc(b BOM) *fpdf.Fpdf {
+func newDoc(b BOM) (*fpdf.Fpdf, func(string) string) {
 	doc := fpdf.New("P", "mm", "A4", "")
 	doc.SetMargins(marginLeft, marginTop, marginRight)
 	doc.SetAutoPageBreak(true, 18)
+
+	// ⚠ THE CP1252 TRANSLATOR, BUILT ONCE. fpdf's core Helvetica font is
+	// single-byte CP1252 — every text-writing call must route through this
+	// (via sanitizePDF) before reaching fpdf, or a rune like `·` (U+00B7)
+	// gets written back out as its raw UTF-8 bytes (0xC2 0xB7) and fpdf draws
+	// each byte as its own CP1252 glyph (`Â·`). Empty descriptor defaults to
+	// "cp1252", loaded from fpdf's own embedded font_embed/cp1252.map — no
+	// filesystem font directory needed.
+	tr := doc.UnicodeTranslatorFromDescriptor("")
 
 	// ⚠ WITHOUT THIS THE OUTPUT IS NOT REPRODUCIBLE, AND THE REASON IS FAMILIAR.
 	//
@@ -211,7 +229,7 @@ func newDoc(b BOM) *fpdf.Fpdf {
 		doc.SetY(-14)
 		doc.SetFont("Helvetica", "", 7)
 		doc.SetTextColor(110, 110, 110)
-		doc.CellFormat(contentW/2, 6, sanitizePDF(fmt.Sprintf(
+		doc.CellFormat(contentW/2, 6, sanitizePDF(tr, fmt.Sprintf(
 			"%s · %s · generated %s", b.ProjectName, b.BOMType, b.GeneratedAt)),
 			"", 0, "L", false, 0, "")
 		doc.CellFormat(contentW/2, 6, fmt.Sprintf("page %d", doc.PageNo()),
@@ -219,7 +237,7 @@ func newDoc(b BOM) *fpdf.Fpdf {
 		doc.SetTextColor(0, 0, 0)
 	})
 
-	return doc
+	return doc, tr
 }
 
 // pdfRender carries the state one render needs.
@@ -228,6 +246,10 @@ type pdfRender struct {
 	bom    BOM
 	fields []model.ProfileField
 	cap    int
+	// tr transcodes UTF-8 to CP1252 for fpdf's core font — see newDoc's own
+	// doc comment. Every text-writing method must route text through
+	// sanitizePDF(r.tr, ...), never draw a raw string directly.
+	tr func(string) string
 
 	truncated      bool
 	truncationNote string
@@ -239,9 +261,9 @@ func (r *pdfRender) coverPage() {
 	r.doc.AddPage()
 
 	r.doc.SetFont("Helvetica", "B", 20)
-	r.doc.MultiCell(contentW, 9, sanitizePDF(r.bom.ProjectName), "", "L", false)
+	r.doc.MultiCell(contentW, 9, sanitizePDF(r.tr, r.bom.ProjectName), "", "L", false)
 	r.doc.SetFont("Helvetica", "", 12)
-	r.doc.CellFormat(contentW, 8, sanitizePDF(fmt.Sprintf("%s · %s BOM",
+	r.doc.CellFormat(contentW, 8, sanitizePDF(r.tr, fmt.Sprintf("%s · %s BOM",
 		r.bom.BOMType, levelTitle(r.bom.Level))), "", 1, "L", false, 0, "")
 	r.doc.Ln(4)
 
@@ -606,20 +628,20 @@ func (r *pdfRender) markTruncated(kind string, shown, total int) {
 
 func (r *pdfRender) heading(text string) {
 	r.doc.SetFont("Helvetica", "B", 13)
-	r.doc.MultiCell(contentW, 7, sanitizePDF(text), "", "L", false)
+	r.doc.MultiCell(contentW, 7, sanitizePDF(r.tr, text), "", "L", false)
 	r.doc.SetFont("Helvetica", "", 9)
 	r.doc.Ln(1)
 }
 
 func (r *pdfRender) body(text string) {
 	r.doc.SetFont("Helvetica", "", 9)
-	r.doc.MultiCell(contentW, 4.6, sanitizePDF(text), "", "L", false)
+	r.doc.MultiCell(contentW, 4.6, sanitizePDF(r.tr, text), "", "L", false)
 }
 
 func (r *pdfRender) note(text string) {
 	r.doc.SetFont("Helvetica", "I", 8)
 	r.doc.SetTextColor(90, 90, 90)
-	r.doc.MultiCell(contentW, 4.2, sanitizePDF(text), "", "L", false)
+	r.doc.MultiCell(contentW, 4.2, sanitizePDF(r.tr, text), "", "L", false)
 	r.doc.SetTextColor(0, 0, 0)
 	r.doc.SetFont("Helvetica", "", 9)
 }
@@ -628,18 +650,18 @@ func (r *pdfRender) keyValues(rows [][2]string) {
 	r.doc.SetFont("Helvetica", "", 9)
 	for _, kv := range rows {
 		r.doc.SetFont("Helvetica", "B", 9)
-		r.doc.CellFormat(52, 5.6, sanitizePDF(kv[0]), "", 0, "L", false, 0, "")
+		r.doc.CellFormat(52, 5.6, sanitizePDF(r.tr, kv[0]), "", 0, "L", false, 0, "")
 		r.doc.SetFont("Helvetica", "", 9)
-		r.doc.MultiCell(contentW-52, 5.6, sanitizePDF(orNotProvided(kv[1])), "", "L", false)
+		r.doc.MultiCell(contentW-52, 5.6, sanitizePDF(r.tr, orNotProvided(kv[1])), "", "L", false)
 	}
 }
 
 func (r *pdfRender) calloutBox(title, text string) {
 	r.doc.SetFillColor(244, 244, 246)
 	r.doc.SetFont("Helvetica", "B", 9)
-	r.doc.CellFormat(contentW, 6, sanitizePDF(title), "", 1, "L", true, 0, "")
+	r.doc.CellFormat(contentW, 6, sanitizePDF(r.tr, title), "", 1, "L", true, 0, "")
 	r.doc.SetFont("Helvetica", "", 8.5)
-	r.doc.MultiCell(contentW, 4.4, sanitizePDF(text), "", "L", true)
+	r.doc.MultiCell(contentW, 4.4, sanitizePDF(r.tr, text), "", "L", true)
 	r.doc.SetFillColor(255, 255, 255)
 	r.doc.SetFont("Helvetica", "", 9)
 }
@@ -648,7 +670,7 @@ func (r *pdfRender) tableHeader(cells []string, widths []float64) {
 	r.doc.SetFont("Helvetica", "B", 8)
 	r.doc.SetFillColor(235, 235, 238)
 	for i, c := range cells {
-		r.doc.CellFormat(widths[i], 6, sanitizePDF(c), "1", 0, "L", true, 0, "")
+		r.doc.CellFormat(widths[i], 6, sanitizePDF(r.tr, c), "1", 0, "L", true, 0, "")
 	}
 	r.doc.Ln(-1)
 	r.doc.SetFillColor(255, 255, 255)
@@ -664,7 +686,7 @@ func (r *pdfRender) tableHeader(cells []string, widths []float64) {
 func (r *pdfRender) tableRow(cells []string, widths []float64) {
 	r.doc.SetFont("Helvetica", "", 7.5)
 	for i, c := range cells {
-		r.doc.CellFormat(widths[i], 5, r.clip(sanitizePDF(c), widths[i]-2), "1", 0, "L", false, 0, "")
+		r.doc.CellFormat(widths[i], 5, r.clip(sanitizePDF(r.tr, c), widths[i]-2), "1", 0, "L", false, 0, "")
 	}
 	r.doc.Ln(-1)
 }
@@ -690,29 +712,57 @@ func (r *pdfRender) clip(text string, width float64) string {
 // ⚠ NOT THE SPREADSHEET ESCAPING. A PDF has no formula semantics, so prefixing
 // a leading `=` here would corrupt the value for no gain — safe.Cell belongs to
 // the spreadsheet writers. What this does handle is the base-14 font encoding:
-// fpdf's standard fonts are single-byte (CP1252), and a rune outside it is
-// dropped silently, so a Chinese package name would render as nothing at all
-// rather than as something legible.
-func sanitizePDF(text string) string {
-	var sb strings.Builder
-	sb.Grow(len(text))
+// fpdf's standard fonts are single-byte (CP1252). tr (built once per document
+// by newDoc, via UnicodeTranslatorFromDescriptor) transcodes each UTF-8 rune
+// to its real CP1252 byte — e.g. `·` (U+00B7) becomes the single byte 0xB7,
+// not the two raw UTF-8 bytes 0xC2 0xB7 that a naive WriteRune would produce
+// and fpdf would then draw as two separate glyphs (`Â·`).
+//
+// ⚠ WHY NOT JUST CALL tr(text) DIRECTLY. tr substitutes any rune it cannot
+// represent in CP1252 with a literal '.' (fpdf's own repClosure behavior) —
+// indistinguishable from a real period, so a dropped Chinese package name
+// would silently read as "acme.pkg" instead of "acme?pkg". This runs the tab
+// and control-character pass first (producing an all-ASCII-safe intermediate
+// with '?' placeholders, which tr always passes through byte-for-byte), then
+// zips tr's one-byte-per-rune output back against the original runes to tell
+// "genuinely untranslatable" apart from "a real period" — see the loop below.
+func sanitizePDF(tr func(string) string, text string) string {
+	pre := make([]rune, 0, len(text))
 	for _, ch := range text {
 		switch {
 		case ch == '\t':
-			sb.WriteString("    ")
+			pre = append(pre, ' ', ' ', ' ', ' ')
 		case ch < 0x20 && ch != '\n':
 			// Control characters: same reasoning as the spreadsheet writer —
 			// replaced rather than deleted, so two names differing only by an
 			// invisible character do not read as one.
-			sb.WriteRune('?')
-		case ch < 0x100:
-			sb.WriteRune(ch)
+			pre = append(pre, '?')
 		default:
-			// ⚠ REPLACED, NOT DROPPED. fpdf's base-14 fonts cannot encode this
-			// rune. Dropping it renders a name as blank, which reads as a
-			// missing component; `?` reads as "this did not fit the page", and
-			// the XLSX and JSON exports carry the real text.
-			sb.WriteRune('?')
+			pre = append(pre, ch)
+		}
+	}
+
+	translated := tr(string(pre))
+	tb := []byte(translated)
+	if len(tb) != len(pre) {
+		// tr degraded to a no-op (its embedded CP1252 map failed to load) and
+		// is no longer one byte per rune — fall back to its raw output rather
+		// than risk indexing past the end of tb below.
+		return translated
+	}
+
+	var sb strings.Builder
+	sb.Grow(len(tb))
+	for i, ch := range pre {
+		if ch >= 0x80 && tb[i] == '.' {
+			// ⚠ REPLACED, NOT DROPPED. fpdf's base-14 font cannot encode this
+			// rune (tr's own substitute, unambiguous here — see doc comment).
+			// Dropping it renders a name as blank, which reads as a missing
+			// component; `?` reads as "this did not fit the page", and the
+			// XLSX and JSON exports carry the real text.
+			sb.WriteByte('?')
+		} else {
+			sb.WriteByte(tb[i])
 		}
 	}
 	return sb.String()

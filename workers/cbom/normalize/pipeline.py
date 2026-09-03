@@ -15,15 +15,18 @@ merge/graph/alias step here just to mirror the SBOM shape; add one only when a
 second crypto-discovery engine actually exists and two engines' assets need
 reconciling.
 
-⚠ DETERMINISTIC OVER EVERY FIELD EXCEPT ONE, same discipline as the SBOM
-pipeline and for the same reason (CLAUDE.md invariant 10): re-normalizing the
-same raw `cbomkit-theia` output at the same ruleset version must produce
-byte-identical `crypto_assets` and `coverage`, so a normalizer bug fix is a
-re-normalization pass over stored artifacts, never a re-scan. The one
-deliberate exception is `provenance.alias_snapshot_id`, minted fresh with
-`uuid.uuid4()` on every call — see `build_canonical_cbom`'s docstring for why
-that field carries no real meaning for a CBOM at all, so there is nothing for
-it to replay deterministically FROM.
+⚠ DETERMINISTIC OVER EVERY FIELD, same discipline as the SBOM pipeline and for
+the same reason (CLAUDE.md invariant 10): re-normalizing the same raw
+`cbomkit-theia` output at the same ruleset version must produce byte-identical
+`crypto_assets` and `coverage`, so a normalizer bug fix is a re-normalization
+pass over stored artifacts, never a re-scan.
+
+⚠ THERE USED TO BE ONE EXCEPTION, AND THERE NO LONGER IS.
+`provenance.alias_snapshot_id` was minted fresh with `uuid.uuid4()` on every
+call, because the column was `uuid NOT NULL` and CBOM has no alias snapshot to
+point at. `migrations/normalize/0012_bom_document_provenance.sql` made it
+nullable with a real foreign key, so the field is now `None` and this pipeline
+replays byte-for-byte in every field. See `build_canonical_cbom`'s docstring.
 
 See `docs/03-NORMALIZER-SPEC.md` and `docs/04-OSINT-INTEGRATION.md` for what
 `cbomkit-theia` is and how its output maps to canonical.
@@ -31,7 +34,6 @@ See `docs/03-NORMALIZER-SPEC.md` and `docs/04-OSINT-INTEGRATION.md` for what
 
 from __future__ import annotations
 
-import uuid
 from typing import Any
 
 from axebom_shared.model.generated_certin import CRYPTO_FIELDS_BY_ASSET_TYPE
@@ -108,20 +110,26 @@ def build_canonical_cbom(
     ⚠ NO MERGE, NO GRAPH, NO ALIAS CLOSURE — see the module docstring for why
     CBOM genuinely does not need the SBOM pipeline's other five stages today.
 
-    ⚠ `alias_snapshot_id` IS A FRESH, MEANINGLESS UUID, ON PURPOSE.
-    `normalize.bom_documents.alias_snapshot_id` is `uuid NOT NULL` for every
-    `bom_type`, but CBOM has no alias-closure concept at all — that machinery
-    exists for reconciling vulnerability identifiers across scanners
-    (`CVE-2021-44228` == `GHSA-jfh8-c2jp-5v3q`), which is an SBOM/vulnerability
-    idea with nothing to correspond to in a certificate or an algorithm. The
-    same situation was already resolved for HBOM, which also has no alias
-    concept: `services/project/internal/store/hbom.go`'s `ensureHBOMDocument`
-    and `ReplaceHardwareTree` both mint `app.uuid_v7()` directly in the INSERT
-    rather than route through a real snapshot. This is the Python-side
-    equivalent of that same call, made once, for the same reason —
-    `migrations/normalize/0001_bom_components.sql`'s column comment on
-    `alias_snapshot_id` describes what a REAL snapshot id means for the BOM
-    types that have one; CBOM (like HBOM) simply is not one of them.
+    ⚠ `alias_snapshot_id` IS `None`, AND IT USED TO BE A MINTED UUID.
+
+    CBOM has no alias-closure concept at all — that machinery reconciles
+    vulnerability identifiers across scanners (`CVE-2021-44228` ==
+    `GHSA-jfh8-c2jp-5v3q`), an SBOM idea with nothing to correspond to in a
+    certificate or an algorithm. The column was `uuid NOT NULL` for every
+    `bom_type`, so this function (and the AIBOM one, and the Go QBOM/HBOM
+    writers) minted a fresh uuid4 that satisfied the constraint and meant
+    nothing.
+
+    `migrations/normalize/0012_bom_document_provenance.sql` made the column
+    nullable and gave it the foreign key it never had. Both halves matter: a
+    fabricated id would now be REJECTED rather than merely meaningless, and
+    `None` is the honest value — it declines to assert, where a minted id
+    asserted to anyone joining `bom_documents -> alias_snapshot` that a
+    snapshot had been consulted.
+
+    It also makes this function deterministic in every field, which is what
+    CLAUDE.md invariant 10 actually asks for — the previous behaviour was a
+    documented exception that no longer needs to exist.
     """
     assets, asset_diagnostics = normalize_all(raw_assets)
     _resolve_certificate_analysis(assets, asset_diagnostics)
@@ -139,7 +147,7 @@ def build_canonical_cbom(
         # package.
         "spdx_license_list_version": "",
         "unidentified_count": coverage.unidentified_count,
-        "provenance": {"alias_snapshot_id": str(uuid.uuid4())},
+        "provenance": {"alias_snapshot_id": None},
         # ⚠ NOT YET WIRED TO ANYTHING. bulk.plan() (SBOM side) never reads a
         # top-level canonical["diagnostics"] either — see its own module for
         # where scan-level diagnostics actually surface today. Carried here

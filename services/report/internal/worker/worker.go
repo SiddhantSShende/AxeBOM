@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -188,9 +189,24 @@ func (w *Worker) Render(ctx context.Context, tenantID, reportID string) (err err
 // ⚠ VARS, NOT CONSTS. Tests shrink normalizedBOMRetryDelay so the "gives up
 // after every attempt" case does not cost normalizedBOMRetryAttempts *
 // (a real few seconds) of wall-clock time; production never touches these.
+//
+// ⚠ 13×15s = 180s, NOT THE ORIGINAL 5×3s = 15s. The original budget was
+// sized for a fast webrecon race (~2s) on the stated assumption that "a slow
+// git-sourced scan closes the race long before this worker gets to the
+// message" — that assumption was wrong, not just imprecise, and cost a real
+// report: confirmed live, a git-sourced scan for a real registered project
+// (6 real sandboxed engines: dependency-check, grype, mock-engine,
+// osv-scanner, syft, trivy-fs) queued its report at 19:21:16.227, exhausted
+// all 5 attempts and failed permanently at 19:21:28.262 — 12s later — while
+// the scan itself did not finish until 19:21:56.240, nearly 28s after the
+// report had already given up. 180s comfortably covers a realistic
+// multi-engine scan (dependency-check's NVD database pull in particular can
+// be slow) while leaving 120s of the render job's 5-minute AckWait for the
+// actual render, DB write and publish afterward — "seconds of in-process
+// work" per queue.go's own AckWait sizing comment.
 var (
-	normalizedBOMRetryAttempts = 5
-	normalizedBOMRetryDelay    = 3 * time.Second
+	normalizedBOMRetryAttempts = 13
+	normalizedBOMRetryDelay    = 15 * time.Second
 )
 
 // loadNormalizedBOM retries Load a bounded number of times while the
@@ -200,13 +216,17 @@ var (
 // ⚠ THIS RACE IS REAL, NOT HYPOTHETICAL, AND JETSTREAM REDELIVERY CANNOT FIX
 // IT HERE. A report is deliberately queued the moment its scan is created,
 // before the scan has run — bomsource.go's own resolveDocument error already
-// says so ("the scan may still be running"). For a slow git-sourced scan
-// that race closes long before this worker gets to the message. It does not
-// for a fast webrecon scan: normalization can land a second or two AFTER the
-// render is first attempted. Confirmed live: a report queued at
-// 19:25:05.719 was marked failed at 19:25:05.737, while
+// says so ("the scan may still be running"). This races EVERY scan, fast or
+// slow — a fast webrecon scan by a second or two, a real multi-engine
+// git-sourced scan by tens of seconds — not just the fast case an earlier
+// version of this comment assumed. Confirmed live twice, now: a webrecon
+// report queued at 19:25:05.719 was marked failed at 19:25:05.737 while
 // normalize.bom_documents for the same scan was not written until
-// 19:25:07.622 — about 1.9s later.
+// 19:25:07.622 (~1.9s later); a git-sourced report queued at 19:21:16.227
+// exhausted the ORIGINAL 15s budget and failed at 19:21:28.262, while its
+// scan did not finish until 19:21:56.240 (~28s after the report gave up) —
+// see normalizedBOMRetryAttempts's own doc comment for why the budget grew
+// from 15s to 180s rather than the assumption being trusted a second time.
 //
 // This is NOT solved by classifying the error as retryable and letting
 // queue.go's bus.ErrRetry path redeliver the message: Render's own deferred
@@ -218,9 +238,11 @@ var (
 // below, which believes itself retryable for the identical reason — a
 // separate, pre-existing issue, not fixed here.) Retrying in-process, before
 // this attempt's single Fail-on-error can fire, is what actually gives
-// normalization the moment it needs — bounded to a few seconds, well inside
-// the render job's 5-minute AckWait, and paid only by the one report that
-// hit the race.
+// normalization the moment it needs — bounded well inside the render job's
+// 5-minute AckWait, and paid only by the one report that hit the race: NATS
+// JetStream's default pull concurrency (MaxAckPending=8, bus.go) processes
+// up to 8 render jobs in parallel, so one report waiting out this budget
+// does not block reports for other, unrelated scans behind it.
 func (w *Worker) loadNormalizedBOM(ctx context.Context, report store.Report) (render.BOM, error) {
 	var bom render.BOM
 	var err error
@@ -382,6 +404,13 @@ func (w *Worker) renderArtifact(r store.Report, bom render.BOM) ([]byte, bool, s
 	switch r.Format {
 	case "pdf":
 		result, err := render.WritePDF(&buf, bom, render.PDFOptions{})
+		if err != nil {
+			return nil, false, "", err
+		}
+		return buf.Bytes(), result.Truncated, result.TruncationNote, nil
+
+	case "docx":
+		result, err := render.WriteDOCX(&buf, bom, render.DOCXOptions{})
 		if err != nil {
 			return nil, false, "", err
 		}
@@ -563,13 +592,159 @@ func toExportDocument(b render.BOM) export.Document {
 	for _, d := range b.Dependencies {
 		doc.Dependencies = append(doc.Dependencies, export.Dependency{From: d.From, To: d.To})
 	}
+
+	appendHardware(&doc, b)
 	return doc
+}
+
+// appendHardware maps the hardware tree into the export document.
+//
+// ⚠ THIS IS WHAT CLOSES §10.4.1.6, and it is the reason an HBOM can be handed
+// to anything other than AxeBOM. Before it, `b.Hardware` reached the XLSX and
+// DOCX renderers and stopped there — a customer asking for the CycloneDX or
+// SPDX form of their hardware BOM got a document containing zero components,
+// which validates and says nothing.
+//
+// ⚠ EVERY COMPONENT IS `device`, AND THE EDGES ARE `contains`. A parts list
+// serialized with software defaults would tell a downstream consumer that a
+// gateway depends on a capacitor at run time. See export.Dependency.Kind.
+func appendHardware(doc *export.Document, b render.BOM) {
+	if len(b.Hardware) == 0 {
+		return
+	}
+
+	for _, h := range b.Hardware {
+		purpose := "device"
+		if h.FirmwareVersion != "" && h.ModelNumber == "" {
+			// A node that carries a firmware version and no part number is
+			// firmware, not a part — cdxgen reports BIOS and embedded
+			// controllers exactly that way.
+			purpose = "firmware"
+		}
+
+		doc.Components = append(doc.Components, export.Component{
+			// ⚠ THE DATABASE ID, NOT THE NAME. Two 10k resistors on one board
+			// legitimately share a name; keying on it would collapse them into
+			// one component and understate the parts list.
+			Key:            h.ID,
+			Name:           h.Name,
+			VersionRaw:     h.Version,
+			Description:    h.Description,
+			Supplier:       firstNonEmpty(h.SupplierInfo, h.ComponentSupplierInfo),
+			Manufacturer:   h.ManufacturerName,
+			PrimaryPurpose: purpose,
+			Properties:     hardwareProperties(h),
+		})
+		if h.ParentID != "" {
+			doc.Dependencies = append(doc.Dependencies, export.Dependency{
+				From: h.ParentID, To: h.ID, Kind: export.KindContains,
+			})
+		} else {
+			doc.Roots = append(doc.Roots, h.ID)
+		}
+	}
+}
+
+// hardwareProperties carries the facts SPDX and CycloneDX have no field for.
+//
+// ⚠ NAMESPACED BY AUTHORITY, WHICH IS THE POINT OF SPLITTING THEM.
+// `certin:hbom:*` are elements a compliance standard requires; `axebom:hbom:*`
+// are AxeBOM's own manufacturing fields. A reader — human or machine — must be
+// able to tell which claims come with a regulator behind them and which are
+// ours, and one flat namespace makes that impossible to recover.
+//
+// Absent values are omitted rather than written as `not-provided`: the
+// two-number coverage model already reports the gap, and a standards document
+// full of literal "not-provided" strings is noise a consumer has to filter.
+func hardwareProperties(h render.HardwareComponent) []export.Property {
+	out := []export.Property{}
+	add := func(name, value string) {
+		if value != "" && value != "not-provided" {
+			out = append(out, export.Property{Name: name, Value: value})
+		}
+	}
+
+	// --- CERT-In Table 11 + §10.4.1.4 ---
+	// ⚠ THE MANUFACTURER IS EMITTED HERE AS WELL AS STRUCTURALLY, and that is
+	// not redundancy. It reaches SPDX as a real `originator`, but protobom's
+	// CycloneDX serializer never reads Originators — so without this property
+	// the manufacturer, the field §10.2.1 exists for, would be silently absent
+	// from every CycloneDX hardware BOM. Verified against real output.
+	add("certin:hbom:manufacturer", h.ManufacturerName)
+	add("certin:hbom:model_number", h.ModelNumber)
+	add("certin:hbom:serial_number", h.SerialNumber)
+	add("certin:hbom:manufacturer_location", h.ManufacturerLocation)
+	add("certin:hbom:origin", h.Origin)
+	add("certin:hbom:supplier_location", h.SupplierLocation)
+	// ⚠ THE TWO SUPPLIER RELATIONSHIPS STAY SEPARATE HERE TOO. Table 11 lists
+	// them twice with different meanings — who sold the customer the product,
+	// and who supplied a component to that product's manufacturer. Collapsing
+	// them in the export would lose the distinction the whole table exists for.
+	add("certin:hbom:component_supplier", h.ComponentSupplierInfo)
+	add("certin:hbom:component_supplier_location", h.ComponentSupplierLocation)
+	add("certin:hbom:firmware_version", h.FirmwareVersion)
+	add("certin:hbom:criticality", h.Criticality)
+	add("certin:hbom:technical_specification", h.TechnicalSpecification)
+	for _, c := range h.Compliance {
+		add("certin:hbom:compliance", c)
+	}
+
+	// --- AxeBOM manufacturing and procurement ---
+	add("axebom:hbom:quantity", strconv.Itoa(h.Quantity))
+	for _, d := range h.Designators {
+		add("axebom:hbom:designator", d)
+	}
+	add("axebom:hbom:package_footprint", h.PackageFootprint)
+	add("axebom:hbom:supplier_sku", h.SupplierSKU)
+	add("axebom:hbom:preferred_supplier", h.PreferredSupplier)
+	add("axebom:hbom:unit_price", h.UnitPrice)
+	add("axebom:hbom:extended_price", h.ExtendedPrice)
+	add("axebom:hbom:currency", h.Currency)
+	add("axebom:hbom:assembly_type", h.AssemblyType)
+	add("axebom:hbom:lifecycle_status", h.LifecycleStatus)
+	if h.DoNotPopulate {
+		// Only when true. `false` is the ordinary case for every fitted part,
+		// and writing it on all of them would bury the flag that matters.
+		add("axebom:hbom:do_not_populate", "true")
+	}
+	for _, a := range h.Alternates {
+		if id := firstNonEmpty(a.ModelNumber, a.SupplierSKU, a.ManufacturerName); id != "" {
+			// The equivalence rides WITH the identifier, never separately: an
+			// alternate's part number without "unverified" beside it reads as
+			// an approved substitution we never checked.
+			add("axebom:hbom:alternate", id+" ("+a.Equivalence+")")
+		}
+	}
+	// Which engine produced this row — a schematic parse and a self-reported
+	// host inventory are different kinds of claim.
+	add("axebom:hbom:source_engine", h.SourceEngine)
+
+	// ⚠ THE ASSEMBLY RELATIONSHIP, STATED EXPLICITLY, BECAUSE CycloneDX LOSES
+	// IT. SPDX carries a real `CONTAINS` relationship; CycloneDX flattens the
+	// same edge to `dependencies[].dependsOn`, which asserts that a gateway
+	// depends on a resistor at run time rather than containing one. This
+	// property is what lets a CycloneDX reader recover what was meant.
+	// See export.Dependency.Kind for why it is not fixed at the serializer.
+	add("axebom:hbom:parent", h.ParentID)
+
+	return out
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func mediaType(format string) string {
 	switch format {
 	case "pdf":
 		return render.PDFMediaType
+	case "docx":
+		return render.DOCXMediaType
 	case "xlsx":
 		return render.XLSXMediaType
 	case "spdx":

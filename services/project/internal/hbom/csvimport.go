@@ -14,8 +14,12 @@ import (
 // which is the superset frontend/src/lib/hbom.ts's own CANONICAL_COLUMNS (the
 // ids offered in the mapping UI) draws from.
 //
-// An empty target ("unit_cost") means the column is accepted and ignored: it
-// is not a CERT-In element.
+// ⚠ NON-CERT-In COLUMNS ARE STORED NOW, NOT IGNORED. `unit_cost` used to map
+// to "" — accepted and thrown away — because there was no column to put it in.
+// Migration 0011 added them, and the scan path (workers/hbom) has been reading
+// them since. Leaving this map behind meant the INTERACTIVE import silently
+// dropped designators, prices, SKUs and lifecycle that a SCAN of the very same
+// file kept, which is a difference no customer could see or explain.
 var canonicalColumns = map[string]string{
 	"level":                     "level",
 	"part_number":               "model_number",
@@ -24,7 +28,7 @@ var canonicalColumns = map[string]string{
 	"manufacturer":              "manufacturer_name",
 	"mpn":                       "model_number",
 	"supplier":                  "component_supplier_info",
-	"unit_cost":                 "",
+	"unit_cost":                 "unit_price",
 	"name":                      "product_name",
 	"version":                   "product_version",
 	"serial_number":             "serial_number",
@@ -43,6 +47,19 @@ var canonicalColumns = map[string]string{
 	"technical_specification":   "technical_specification",
 	"manufacturing_date":        "manufacturing_date",
 	"warranty":                  "warranty_amc",
+
+	// --- manufacturing and procurement -------------------------------------
+	// Not CERT-In elements; scored separately against
+	// docs/reference/hbom-manufacturing-v1.yaml.
+	"currency":           "currency",
+	"designator":         "designators",
+	"footprint":          "package_footprint",
+	"supplier_sku":       "supplier_sku",
+	"preferred_supplier": "preferred_supplier",
+	"dni":                "do_not_populate",
+	"assembly_type":      "assembly_type",
+	"lifecycle":          "lifecycle_status",
+	"datasheet":          "datasheet_url",
 }
 
 // canonicalOrder is canonicalColumns' key order, FIXED to match the Python
@@ -61,6 +78,8 @@ var canonicalOrder = []string{
 	"product_supplier_location", "firmware_version", "origin", "criticality",
 	"technology_node", "compliance", "power_supply", "license", "test_result",
 	"technical_specification", "manufacturing_date", "warranty",
+	"currency", "designator", "footprint", "supplier_sku",
+	"preferred_supplier", "dni", "assembly_type", "lifecycle", "datasheet",
 }
 
 // MaxRows caps a single import. A file this long is almost certainly an
@@ -345,9 +364,27 @@ func build(values map[string]string, level, rowNumber int) *Component {
 		if value == "" {
 			continue
 		}
-		if attribute == "compliance" {
+		switch attribute {
+		case "compliance":
 			// RoHS, CE and friends arrive as one cell.
 			c.Compliance = splitCompliance(value)
+			continue
+		case "designators":
+			// ⚠ ONE CELL, MANY PLACEMENTS. "R1, R4, R17" is one line item with
+			// quantity 3, which is how every CAD and ERP export writes it.
+			c.Designators = splitCompliance(value)
+			continue
+		case "do_not_populate":
+			c.DoNotPopulate = parseDNP(value)
+			continue
+		case "assembly_type":
+			c.AssemblyType = parseClosedSet(value, AssemblyTypes, assemblyAliases)
+			continue
+		case "lifecycle_status":
+			c.LifecycleStatus = parseClosedSet(value, LifecycleValues, lifecycleAliases)
+			continue
+		case "unit_price":
+			c.UnitPrice = parsePrice(value)
 			continue
 		}
 		// setdefault semantics: whichever canonical column reaches an
@@ -422,4 +459,96 @@ func checkSiblings(c *Component, result *ImportResult) {
 		}
 		checkSiblings(child, result)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Manufacturing value parsing
+// ---------------------------------------------------------------------------
+//
+// ⚠ EVERY ONE OF THESE DROPS WHAT IT CANNOT RECOGNISE, AND NONE GUESSES. Same
+// rule Normalize applies to `criticality`, for the same reason: mapping an
+// unrecognised value onto a plausible neighbour invents a fact about somebody's
+// hardware, in a document they hand to an auditor or a contract manufacturer.
+//
+// Mirrors workers/hbom/csv_import.py's block of the same name.
+
+// assemblyAliases are spellings of smt/tht seen in real exports. Data, not
+// inference: each is a name the industry actually uses for that exact process.
+var assemblyAliases = map[string]string{
+	"smd": "smt", "surface mount": "smt", "surface-mount": "smt",
+	"through hole": "tht", "through-hole": "tht", "thru-hole": "tht", "pth": "tht",
+	"mech": "mechanical", "hardware": "mechanical",
+}
+
+// lifecycleAliases likewise. `nrnd` has the most spellings because it is the
+// status distributors word most freely.
+var lifecycleAliases = map[string]string{
+	"not recommended for new designs": "nrnd", "not recommended": "nrnd", "nrfnd": "nrnd",
+	"end of life": "eol", "end-of-life": "eol",
+	"discontinued": "obsolete", "inactive": "obsolete",
+	"in production": "active", "production": "active",
+	"new": "preview", "pre-production": "preview",
+}
+
+// dnpTruthy is every spelling of "do not fit" seen in real exports.
+//
+// ⚠ THE COLUMN HAS NO THIRD STATE, SO AN UNRECOGNISED VALUE MEANS "fitted" —
+// AND THAT IS THE SAFE DIRECTION, WHICH IS WHY IT IS ACCEPTABLE.
+//
+// The two errors are not symmetric. Treating a marked DNP as fitted puts one
+// unwanted part on a board. Treating an unrecognised value as DNP OMITS a part
+// the design needs, which is a board that does not work and a respin. So the
+// list is of the affirmative spellings only, and anything else is fitted.
+//
+// (An earlier version carried an explicit "falsy" list too, with a comment
+// claiming an unrecognised value must not silently become fitted. The list was
+// never consulted — both branches returned false — so the comment described
+// behaviour the code did not have.)
+var dnpTruthy = map[string]bool{
+	"1": true, "y": true, "yes": true, "true": true, "dnp": true,
+	"dni": true, "x": true, "nofit": true, "do not populate": true,
+}
+
+func parseDNP(value string) bool {
+	return dnpTruthy[strings.ToLower(strings.TrimSpace(value))]
+}
+
+// parseClosedSet maps a cell onto a closed set, or drops it.
+//
+// Returns "" for anything unrecognised. A dropped value scores as absent,
+// which is honest; a coerced one would score as knowledge we do not have.
+func parseClosedSet(value string, allowed map[string]bool, aliases map[string]string) string {
+	text := strings.ToLower(strings.TrimSpace(value))
+	if canonical, ok := aliases[text]; ok {
+		text = canonical
+	}
+	if allowed[text] {
+		return text
+	}
+	return ""
+}
+
+// parsePrice reads a unit price, keeping it a STRING.
+//
+// ⚠ NOT A float64. Postgres casts the bound parameter into numeric(18,6);
+// routing it through a float first would lose cents on values like 0.1, and an
+// extended price over a 4000-line BOM accumulates that error into a figure
+// somebody procures against.
+//
+// Currency symbols and thousands separators are stripped because exports carry
+// them; a value that still will not parse is DROPPED rather than guessed at,
+// since a wrong price is worse than an absent one.
+func parsePrice(value string) string {
+	text := strings.TrimSpace(strings.ReplaceAll(value, ",", ""))
+	text = strings.TrimSpace(strings.TrimLeft(text, "$£€₹"))
+	if text == "" {
+		return ""
+	}
+	f, err := strconv.ParseFloat(text, 64)
+	if err != nil || f < 0 {
+		return ""
+	}
+	// The PARSED value is discarded; the original string is what is stored.
+	// Parsing is only how we decide whether it is a number at all.
+	return text
 }

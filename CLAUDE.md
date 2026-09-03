@@ -187,7 +187,9 @@ Probed on the primary dev machine (Windows 11), and the reason for two design ch
 
 ## Honest labels — do not oversell these in code, docs, or UI
 
-- **There is no open-source HBOM scanner.** HBOM is a structured CSV/form import plus a data model. Label it that way in the UI. Never imply discovery.
+- **Nothing inspects physical hardware.** No open-source tool looks at a device and enumerates its parts, and neither does this one. An HBOM reaches AxeBOM three ways, all of them documents the customer produced: their own **design files** parsed out of an upload or a repo (`hbom-ecad` — KiCad schematics and netlists, BOM exports from KiCad/Altium/OrCAD), a **host inventory their own machine reported** via `cdxgen -t hbom` (`hbom-cdxgen-host`), or a **CSV/form import**.
+  - ⚠ *"HBOM scan" is now accurate and is no longer forbidden* — parsing a committed schematic is a scan in exactly the sense that parsing a committed lockfile is. What stays forbidden is any claim that AxeBOM **examined the hardware**: "scans your hardware", "inspects the device", "discovers hardware", "detects your hardware". A schematic states what was *designed*, not what was built or what is currently fitted; a host inventory states what an operating system can see, not what is on the board.
+  - The rule is enforced, not remembered: `workers/hbom/test_hbom.py`'s discovery-claim guard and its frontend twin in `hbom.test.ts`.
 - **QBOM is largely a derivation.** Crypto assets come from CBOM discovery with quantum-vulnerability rules applied; only Table 8's *device* metadata is separately captured. There is no quantum-hardware scanner.
 - **A URL-registered project's SBOM is a static fetch, never a running browser.** `services/webrecon` fetches a page's HTML and scripts and matches them against a signature database. It never executes JavaScript, so a library injected purely client-side after paint is invisible. A headless-browser renderer is a named, deferred fast-follow — never imply it runs one.
 - **AxeBOM reports violations against a configured policy.** It never asserts "compliant." That word does not appear in generated output.

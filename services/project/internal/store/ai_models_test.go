@@ -28,7 +28,11 @@ func seedAIModels(t *testing.T, pool *db.Pool, tenantID, projectID string) (docI
 			INSERT INTO normalize.bom_documents
 				(tenant_id, scan_id, bom_type, normalization_version,
 				 ruleset_version, alias_snapshot_id, spdx_license_list_version, generated_at)
-			VALUES ($1, $2, 'AIBOM', 1, 'test-1', app.uuid_v7(), '', now())
+						-- ⚠ alias_snapshot_id IS NULL, NOT app.uuid_v7(). Migration 0012 gave
+			-- the column a real FK, so a minted id is now rejected outright.
+			-- NULL is also what production writes for this BOM type: AIBOM runs
+			-- no alias closure, so there is no snapshot to reference.
+VALUES ($1, $2, 'AIBOM', 1, 'test-1', NULL, '', now())
 			RETURNING id`, tenantID, scanID).Scan(&docID); err != nil {
 			return err
 		}

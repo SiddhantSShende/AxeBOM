@@ -31,7 +31,13 @@ type Profile struct {
 	VEX                VEXSection         `yaml:"vex"`
 	CSAF               CSAFSection        `yaml:"csaf"`
 	SecureDistribution SecureDistSection  `yaml:"secure_distribution"`
-	ExpectedCounts     map[string]int     `yaml:"expected_counts"`
+
+	// HBOMManufacturing is an AxeBOM OPERATIONAL field set, and it lives
+	// under its own top-level key for a structural reason rather than a
+	// stylistic one — see OperationalSection.
+	HBOMManufacturing OperationalSection `yaml:"hbom_manufacturing"`
+
+	ExpectedCounts map[string]int `yaml:"expected_counts"`
 }
 
 type Meta struct {
@@ -44,6 +50,61 @@ type Meta struct {
 	SourcePages        int    `yaml:"source_pages"`
 	Revision           int    `yaml:"revision"`
 	AllEntriesVerified bool   `yaml:"all_entries_verified"`
+
+	// Kind distinguishes a COMPLIANCE STANDARD from an AxeBOM OPERATIONAL
+	// profile.
+	//
+	// ⚠ EMPTY MEANS "compliance", AND THAT DEFAULT IS THE SAFE DIRECTION.
+	// Every existing profile keeps its meaning with no edit, and a new
+	// profile that forgets to declare its kind is held to every compliance
+	// check rather than quietly escaping them.
+	Kind string `yaml:"kind"`
+}
+
+// IsCompliance reports whether this profile describes an external standard
+// somebody can be audited against, as opposed to a field set AxeBOM defined
+// for its own operational reporting.
+//
+// The difference is not cosmetic: a compliance profile's fields move
+// completeness_pct, cite a page of a published document, and appear in the
+// evidence pack an auditor reads. An operational profile's fields do none of
+// those things and must never be able to.
+func (m Meta) IsCompliance() bool { return m.Kind == "" || m.Kind == "compliance" }
+
+// OperationalSection is an AxeBOM-defined field set that IS SCORED, BUT NEVER
+// AS COMPLIANCE.
+//
+// ⚠ IT IS DELIBERATELY UNREACHABLE FROM EVERY CERT-In ACCESSOR.
+// FieldsForBOMType, the guardrail's field counts and the evidence pack all
+// read the named CERT-In sections (SBOM.DataFields, HBOM.Elements, ...). An
+// operational set lives under its own key so not one of them can return one of
+// its fields by accident — the separation is structural, not a filter someone
+// has to remember to apply.
+//
+// It is distinct from the `axebom_extensions` blocks inside the CERT-In
+// profile, which are defined by `scored: false`: those ride alongside the
+// standard and must not be scored at all. These ARE scored, just into their
+// own separately-labelled number.
+type OperationalSection struct {
+	// AppliesTo names the canonical entity these fields describe, e.g.
+	// "hardware_component".
+	AppliesTo string `yaml:"applies_to"`
+	// Label is what a report calls this number. Carried as data so no
+	// renderer has to hardcode the string and none can mislabel it.
+	Label    string  `yaml:"label"`
+	Elements []Field `yaml:"elements"`
+}
+
+// OperationalFields returns the scored fields of a named operational set.
+//
+// Only "hbom_manufacturing" exists today; the lookup is by name rather than a
+// direct field reference so a second operational profile needs no new
+// accessor.
+func (p *Profile) OperationalFields(set string) []Field {
+	if set == "hbom_manufacturing" {
+		return p.HBOMManufacturing.Elements
+	}
+	return nil
 }
 
 // Field is one required element.
@@ -207,6 +268,12 @@ func (p *Profile) AllFields() []Field {
 	out = append(out, p.VEX.AdditionalFields...)
 	out = append(out, p.CSAF.RequiredContent...)
 	out = append(out, p.SecureDistribution.Controls...)
+
+	// ⚠ INCLUDED HERE ON PURPOSE, AND ONLY HERE. AllFields is what Lint walks,
+	// so an operational field still gets its id shape, uniqueness, canonical
+	// path and weight checked. It reaches no CERT-In accessor — see
+	// OperationalSection and FieldsForBOMType, which is deliberately untouched.
+	out = append(out, p.HBOMManufacturing.Elements...)
 	return out
 }
 
@@ -236,6 +303,7 @@ func (p *Profile) ActualCounts() map[string]int {
 			len(p.HBOM.AdditionalRequiredElements.Elements),
 		"vex_statuses":                 len(p.VEX.Statuses),
 		"secure_distribution_controls": len(p.SecureDistribution.Controls),
+		"hbom_manufacturing_elements":  len(p.HBOMManufacturing.Elements),
 	}
 
 	for _, c := range p.SBOM.MinimumElementCategories {

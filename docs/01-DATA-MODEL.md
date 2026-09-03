@@ -243,8 +243,10 @@ Feeds the **Engine Coverage** report section and auto-seeds `project.practices.k
 | `bom_type` | TEXT NOT NULL | CHECK in (`SBOM`,`CBOM`,`QBOM`,`AIBOM`,`HBOM`) |
 | `normalization_version` | INT NOT NULL DEFAULT 1 | **bumped on re-normalization; old rows retained** |
 | `ruleset_version` | TEXT NOT NULL | e.g. `2026.08.1` |
-| `alias_snapshot_id` | UUID NOT NULL | which alias graph produced this — FK-shaped reference to `normalize.alias_snapshot.id` (see below). ⚠ NOT an actual FK yet: `qbom.go`/`hbom.go` write `app.uuid_v7()` inline with no backing row, since QBOM/HBOM never run the SBOM alias-closure pipeline this column was designed for. Adding a real FK requires deciding what QBOM/HBOM should reference first (a shared sentinel row? a nullable column, SBOM-only?) — out of scope for a change that must stay additive to non-SBOM BOM types. |
+| `alias_snapshot_id` | UUID **NULL**, FK → `normalize.alias_snapshot.id` | which alias graph produced this. **Nullable with a real FK since migration `0012`** — resolved the gap this row used to describe. It was `NOT NULL` with *no* FK, the weakest possible pairing: it enforced "some uuid is present" and nothing about whether it meant anything, so `qbom.go`/`hbom.go` and the CBOM/AIBOM pipelines all minted a throwaway to satisfy it. Now: **NULL** for the BOM types that run no alias closure (CBOM, AIBOM, QBOM, HBOM) — declining to assert, where a fabricated id asserted to anyone joining `bom_documents → alias_snapshot` that a snapshot had been consulted — and a real, resolvable id for SBOM, which `writer.write_bom_document` **refuses to write without**. Same gap migration `0007` closed for `findings.cluster_id`. |
 | `spdx_license_list_version` | TEXT NOT NULL | ids get deprecated; a report must say which list it validated against |
+| `project_id` | UUID NULL | HBOM's second lineage key, added in migration `0012`. `services/project` has always borrowed `scan_id` for the project id on imported hardware BOMs (an import has no scan to point at, and `scan_id` has no FK by design). Once `hbom-ecad` produces real scans both meanings are live in that one column — they cannot collide, but resolving by `scan_id` would find only half of them. Both writers set `project_id`; `resolveHBOMDocument` reads it, ordering **newest-first** rather than highest-version-first, because `normalization_version` counts within a lineage and an import at v3 would otherwise outrank a fresh scan at v1. NULL for every other BOM type. |
+| `supplementary_coverage` | JSONB NOT NULL DEFAULT `{}` | scored field sets that are **not** compliance, keyed by profile id. HBOM's manufacturing readiness today (`hbom-manufacturing-v1`); the shape carries its own `label` and an `is_compliance: false` flag so no consumer has to know which profile ids are standards. ⚠ A keyed JSONB rather than another pair of `numeric` columns **on purpose**: `completeness_pct`/`declaration_pct` are load-bearing precisely *because* they are the compliance numbers, and giving a non-compliance percentage the same column shape one schema-tab away is how it eventually gets picked up by a query that meant the other one. |
 | `completeness_pct` | NUMERIC(5,2) | substantive values only — **the honest signal** |
 | `declaration_pct` | NUMERIC(5,2) | includes explicit `not-provided` — a representation check |
 | `coverage_breakdown` | JSONB | per-field presence counts, rendered as a table |
@@ -433,6 +435,30 @@ Two things Table 11 alone would get wrong:
 - **`firmware_version`, `origin`, `criticality` and vulnerabilities** appear nowhere in Table 11 but are mandated by §10.4.1.4 (p.62). They are required.
 
 Depth is capped (default 10) with a diagnostic rather than unbounded recursion.
+
+The `parent_id` self-reference is **`DEFERRABLE INITIALLY DEFERRED`** (migration `0011`). The Go store inserts one node at a time, parents first, so a per-row check was always satisfiable there — but the Python bulk path chunks at 500 rows per `INSERT`, and a non-deferrable FK is validated at the end of each statement. A 700-node assembly whose parent lands in chunk 2 while its child lands in chunk 1 would fail, and only above 500 nodes. `bulk.py` still emits parents before children (a deferred check buffers to commit time and costs memory on a large tree); the constraint is the correctness floor, the ordering is the fast path.
+
+#### Manufacturing and procurement columns — **not CERT-In elements**
+
+`(quantity, designators TEXT[], package_footprint, supplier_sku, preferred_supplier, unit_price NUMERIC(18,6), currency, extended_price NUMERIC GENERATED, do_not_populate BOOLEAN, assembly_type, lifecycle_status, datasheet_url, enriched_fields JSONB, manufacturing_field_status JSONB, source_engine)`
+
+> ⚠ **None of these may move `completeness_pct` or `declaration_pct`.** Table 11 describes a component's identity and provenance; it says nothing about how many are fitted, where they sit on the board, what they cost, or whether the part can still be bought. These are scored **separately**, against `reference/hbom-manufacturing-v1.yaml`, into `bom_documents.supplementary_coverage`. Same shape as the AxeBOM analysis columns already sitting beside CERT-In ones on `crypto_assets` and `ai_models`.
+
+- **`quantity` and `enriched_fields` closed real gaps.** Both were modelled in the Go and Python component types and in the TypeScript client since Phase 15 with no column to land in — `store/hbom.go`'s read path hardcoded `Quantity: 1`, so an imported quantity of 100 rendered as 1.
+- **`extended_price` is `GENERATED ALWAYS AS (quantity * unit_price) STORED`.** It cannot disagree with its inputs, there is one implementation of the arithmetic, and it stays `SUM`-able in SQL. `NULL` when either input is `NULL` — the extended price of an unknown unit price is not zero. **Writers must not name this column**; Postgres rejects an explicit value.
+- **`currency` is CHECKed on shape (`^[A-Z]{3}$`), not membership**, and is never defaulted. ISO 4217 gains and retires codes, and guessing a currency turns an unusable number into a wrong one.
+- **`lifecycle_status`'s `unknown` is storable and scores zero.** It is in `coverage.NON_SUBSTANTIVE`, so a distributor that answered "unknown" is reported without counting as knowledge. `nrnd` is a distinct value from both neighbours — Not Recommended for New Designs is buyable today and refused at the next respin, which is the one status that prompts a redesign before the part goes away.
+- **`manufacturing_field_status` is a second JSONB, not a namespaced key inside `field_status`.** `field_status` records which CERT-In elements held a substantive value; nesting a non-CERT-In block inside it would make every reader parse a discriminator to find out whether a key is a compliance fact.
+
+### `normalize.hardware_component_alternates`  ← not a CERT-In element
+
+`(id, tenant_id, hardware_component_id, ordinal, manufacturer_name, model_number, supplier_info, supplier_sku, lifecycle_status, equivalence, approval_note, created_at)`
+
+Approved second sources — the supply-chain field that decides whether an obsolete part delays a build or stops it. A child table rather than a JSONB array because the question it exists to answer ("which boards have a second source for this obsolete part?") needs a b-tree index on the alternate's MPN.
+
+`equivalence` CHECK in (`drop-in`,`functional`,`unverified`), **defaulting to `unverified`**. Asserting that a part is a drop-in replacement is a substitution decision about somebody's hardware; defaulting to the flattering value would make AxeBOM the author of a claim it never checked.
+
+`CONSTRAINT hardware_alternate_identifiable` — an alternate naming no manufacturer, no MPN and no SKU is not an alternate.
 
 ---
 

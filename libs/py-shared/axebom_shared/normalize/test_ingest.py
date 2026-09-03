@@ -43,9 +43,7 @@ def test_cyclonedx_vulnerabilities_are_no_longer_dropped() -> None:
                 "CVE-2021-23337",
                 ref="comp-1",
                 ratings=[
-                    cyclonedx_rating(
-                        method="CVSSv31", score=7.2, severity="high", source="nvd"
-                    )
+                    cyclonedx_rating(method="CVSSv31", score=7.2, severity="high", source="nvd")
                 ],
                 description="command injection via template",
             )
@@ -98,7 +96,9 @@ def test_a_dangling_affects_ref_is_diagnosed_not_silently_dropped() -> None:
             cyclonedx_vuln(
                 "CVE-9999-0001",
                 ref="comp-does-not-exist",
-                ratings=[cyclonedx_rating(method="CVSSv31", score=5.0, severity="medium", source="nvd")],
+                ratings=[
+                    cyclonedx_rating(method="CVSSv31", score=5.0, severity="medium", source="nvd")
+                ],
             )
         ],
     }
@@ -138,12 +138,18 @@ def test_dependency_check_uses_the_purl_when_one_is_reported() -> None:
     payload = {
         "dependencies": [
             dc_dependency(
-                packages=[{"id": "pkg:maven/org.apache.tomcat/tomcat@9.0.71", "confidence": "HIGHEST"}],
+                packages=[
+                    {"id": "pkg:maven/org.apache.tomcat/tomcat@9.0.71", "confidence": "HIGHEST"}
+                ],
                 vulnerabilities=[
                     {
                         "name": "CVE-2023-12345",
                         "severity": "HIGH",
-                        "cvssv3": {"baseScore": 7.5, "baseSeverity": "HIGH", "vectorString": "CVSS:3.1/AV:N"},
+                        "cvssv3": {
+                            "baseScore": 7.5,
+                            "baseSeverity": "HIGH",
+                            "vectorString": "CVSS:3.1/AV:N",
+                        },
                         "description": "a real advisory",
                     }
                 ],
@@ -170,7 +176,9 @@ def test_dependency_check_uses_the_purl_when_one_is_reported() -> None:
     assert finding.fixed_versions == []
 
 
-def test_dependency_check_cvss_v3_version_reads_the_explicit_field_when_the_vector_lacks_one() -> None:
+def test_dependency_check_cvss_v3_version_reads_the_explicit_field_when_the_vector_lacks_one() -> (
+    None
+):
     """⚠ REGRESSION GUARD. `cvssData.version` (the newer, NVD-schema-mirroring
     report shape) must be read even when no vector string is present to
     cross-check it against."""
@@ -182,7 +190,9 @@ def test_dependency_check_cvss_v3_version_reads_the_explicit_field_when_the_vect
                     {
                         "name": "CVE-2024-00001",
                         "severity": "HIGH",
-                        "cvssv3": {"cvssData": {"baseScore": 8.1, "baseSeverity": "HIGH", "version": "3.0"}},
+                        "cvssv3": {
+                            "cvssData": {"baseScore": 8.1, "baseSeverity": "HIGH", "version": "3.0"}
+                        },
                         "description": "an advisory scored under the newer report shape",
                     }
                 ],
@@ -262,7 +272,11 @@ def test_dependency_check_cvssv2_only_is_still_captured() -> None:
                 vulnerabilities=[
                     {
                         "name": "CVE-2010-0001",
-                        "cvssv2": {"score": 5.0, "severity": "MEDIUM", "vectorString": "AV:N/AC:L/Au:N/C:P/I:N/A:N"},
+                        "cvssv2": {
+                            "score": 5.0,
+                            "severity": "MEDIUM",
+                            "vectorString": "AV:N/AC:L/Au:N/C:P/I:N/A:N",
+                        },
                     }
                 ],
             )

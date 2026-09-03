@@ -32,53 +32,22 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import re
-import signal
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import nats
-import psycopg
-from nats.js.api import ConsumerConfig, DeliverPolicy
-from nats.js.errors import NotFoundError
-
 from axebom_shared.logging import get_logger
 from axebom_shared.normalize import RULESET_VERSION, cluster_store, writer
+from axebom_shared.normalize.consumer_runtime import run_consumer
 from axebom_shared.normalize.pipeline import Artifact, normalize
 
 from .normalize_runner import sbom_fields
 
 log = get_logger("normalize-consumer")
 
-STREAM_NORMALIZE = "NORMALIZE_JOBS"
 SUBJECT = "scan.normalize.sbom"
 DLQ_SUBJECT = "scan.dlq.normalize.sbom"
 DURABLE = "normalize-consumer-sbom"
-
-#: Total attempts, matching bus.go's MaxDeliver — three retries after the
-#: first.
-MAX_DELIVER = 4
-
-#: Seconds. Deliberately SHORTER than the 30-minute sandbox-sized ack_wait
-#: every SCAN_JOBS consumer uses — normalization is in-process CPU work, not
-#: a container run. Sized for the documented worst case: bulk-inserting
-#: hundreds of thousands of findings for one very large monorepo scan.
-ACK_WAIT_SECONDS = 15 * 60
-
-#: Redelivery schedule in seconds — same shape as bus.go's/bus.py's, not the
-#: same numbers: normalization failures are almost always a real bug (a bad
-#: artifact, a schema mismatch), not "the node is rolling," so there is
-#: little value in waiting minutes between attempts.
-BACKOFF_SECONDS = (10, 30, 90)
-
-
-class Retry(Exception):  # noqa: N818 — a control-flow signal, not an error report
-    """Raised to request redelivery with backoff. Anything else raised is
-    treated as PERMANENT and goes straight to the DLQ — the same default
-    axebom_shared.bus.Retry documents, and for the same reason: retrying an
-    unknown failure is a guess, and a wrong guess costs the whole retry
-    budget."""
 
 
 @dataclass(frozen=True)
@@ -101,9 +70,7 @@ class ConsumerConfigEnv:
     @staticmethod
     def load() -> ConsumerConfigEnv:
         missing = [
-            name
-            for name in ("POSTGRES_NORMALIZE_WRITER_PASSWORD",)
-            if not os.environ.get(name)
+            name for name in ("POSTGRES_NORMALIZE_WRITER_PASSWORD",) if not os.environ.get(name)
         ]
         if missing:
             raise RuntimeError(
@@ -124,9 +91,7 @@ class ConsumerConfigEnv:
                 f"host={host} port={port} dbname={db} user={user} "
                 f"password={password} sslmode={sslmode}"
             ),
-            artifacts_root=Path(
-                os.environ.get("AXEBOM_OUTPUT_ROOT", "/var/lib/axebom/artifacts")
-            ),
+            artifacts_root=Path(os.environ.get("AXEBOM_OUTPUT_ROOT", "/var/lib/axebom/artifacts")),
         )
 
 
@@ -155,8 +120,11 @@ def load_artifacts(trigger: dict[str, Any], artifacts_root: Path) -> list[Artifa
         if native is None:
             out.append(
                 Artifact(
-                    engine=engine_id, payload={}, engine_version=engine_version,
-                    engine_db_version=engine_db_version, status=status or "unavailable",
+                    engine=engine_id,
+                    payload={},
+                    engine_version=engine_version,
+                    engine_db_version=engine_db_version,
+                    status=status or "unavailable",
                 )
             )
             continue
@@ -166,12 +134,16 @@ def load_artifacts(trigger: dict[str, Any], artifacts_root: Path) -> list[Artifa
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             log.warning(
-                "raw artifact is unreadable", extra={"engine": engine_id, "path": str(path), "cause": str(exc)}
+                "raw artifact is unreadable",
+                extra={"engine": engine_id, "path": str(path), "cause": str(exc)},
             )
             out.append(
                 Artifact(
-                    engine=engine_id, payload={}, engine_version=engine_version,
-                    engine_db_version=engine_db_version, status="failed",
+                    engine=engine_id,
+                    payload={},
+                    engine_version=engine_version,
+                    engine_db_version=engine_db_version,
+                    status="failed",
                 )
             )
             continue
@@ -208,7 +180,9 @@ def _mint_alias_snapshot(conn: writer.Connection, edge_count: int) -> str:
     return str(cur.fetchone()[0])
 
 
-async def handle_trigger(conn: writer.Connection, trigger: dict[str, Any], artifacts_root: Path) -> None:
+async def handle_trigger(
+    conn: writer.Connection, trigger: dict[str, Any], artifacts_root: Path
+) -> None:
     """Normalize and write one scan's SBOM canonical model.
 
     ⚠ IDEMPOTENT: pre-checks `(scan_id, bom_type, normalization_version)`
@@ -326,140 +300,20 @@ def _loud_unexpected_mint(scan_id: str):
 # ---------------------------------------------------------------------------
 
 
-async def _run(cfg: ConsumerConfigEnv) -> None:
-    stopping = asyncio.Event()
-
-    nc = await nats.connect(
-        cfg.nats_url, name="axebom-normalize-consumer",
-        max_reconnect_attempts=-1, reconnect_time_wait=2,
-    )
-    js = nc.jetstream()
-
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, stopping.set)
-
-    await _await_stream(js)
-
-    try:
-        await js.add_consumer(
-            STREAM_NORMALIZE,
-            ConsumerConfig(
-                durable_name=DURABLE,
-                filter_subject=SUBJECT,
-                ack_wait=ACK_WAIT_SECONDS,
-                max_deliver=MAX_DELIVER,
-                max_ack_pending=4,
-                deliver_policy=DeliverPolicy.ALL,
-            ),
-        )
-    except Exception as exc:
-        raise RuntimeError(
-            f"could not attach consumer {DURABLE!r} to {SUBJECT!r}: {exc}"
-        ) from exc
-
-    sub = await js.pull_subscribe(SUBJECT, durable=DURABLE, stream=STREAM_NORMALIZE)
-    log.info("normalize consumer ready", extra={"subject": SUBJECT})
-
-    conn = await asyncio.to_thread(psycopg.connect, cfg.postgres_dsn, autocommit=True)
-    try:
-        while not stopping.is_set():
-            try:
-                msgs = await sub.fetch(batch=1, timeout=5)
-            except TimeoutError:
-                continue
-            for msg in msgs:
-                await _dispatch(msg, conn, cfg.artifacts_root, js)
-    finally:
-        conn.close()
-        await nc.drain()
-
-
-async def _await_stream(js: Any, attempts: int = 30, delay: float = 2.0) -> None:
-    for attempt in range(1, attempts + 1):
-        try:
-            await js.stream_info(STREAM_NORMALIZE)
-            return
-        except NotFoundError:
-            if attempt == attempts:
-                raise RuntimeError(
-                    f"stream {STREAM_NORMALIZE} does not exist after {attempts} attempts — "
-                    "it is created by the Go scan-orchestrator on boot"
-                ) from None
-            await asyncio.sleep(delay)
-
-
-async def _dispatch(msg: Any, conn: writer.Connection, artifacts_root: Path, js: Any) -> None:
-    delivered = _delivery_count(msg)
-
-    try:
-        trigger = json.loads(msg.data)
-    except json.JSONDecodeError as exc:
-        log.error("trigger is not valid JSON; sending to DLQ", extra={"error": str(exc)})
-        await _to_dlq(js, msg, f"invalid JSON: {exc}", delivered)
-        await msg.term()
-        return
-
-    scan_id = str(trigger.get("scan_id", ""))
-    try:
-        await handle_trigger(conn, trigger, artifacts_root)
-    except Retry as exc:
-        if delivered >= MAX_DELIVER:
-            log.error("retries exhausted; sending to DLQ", extra={"scan_id": scan_id, "delivered": delivered})
-            await _to_dlq(js, msg, f"retries exhausted: {exc}", delivered)
-            await msg.ack()
-            return
-        delay = _backoff_for(delivered)
-        log.warning("transient failure; redelivering", extra={"scan_id": scan_id, "delay_s": delay})
-        await msg.nak(delay=delay)
-        return
-    except Exception as exc:
-        log.exception("handler raised; treating as permanent", extra={"scan_id": scan_id})
-        await _to_dlq(js, msg, f"{type(exc).__name__}: {exc}", delivered)
-        await msg.term()
-        return
-
-    await msg.ack()
-
-
-async def _to_dlq(js: Any, msg: Any, reason: str, delivered: int) -> None:
-    try:
-        await js.publish(
-            DLQ_SUBJECT, msg.data,
-            headers={
-                "Axebom-Dlq-Reason": _sanitize_header(reason),
-                "Axebom-Original-Subject": msg.subject,
-                "Axebom-Delivery-Count": str(delivered),
-            },
-        )
-    except Exception:
-        log.exception("could not write to the DLQ")
-
-
-def _delivery_count(msg: Any) -> int:
-    try:
-        return int(msg.metadata.num_delivered)
-    except Exception:
-        return 1
-
-
-def _backoff_for(delivered: int) -> int:
-    if delivered < 1:
-        return BACKOFF_SECONDS[0]
-    if delivered > len(BACKOFF_SECONDS):
-        return BACKOFF_SECONDS[-1]
-    return BACKOFF_SECONDS[delivered - 1]
-
-
-def _sanitize_header(s: str) -> str:
-    s = re.sub(r"[\r\n\x00]", " ", s)
-    return s[:512] + "…" if len(s) > 512 else s
-
-
 def main() -> int:
     cfg = ConsumerConfigEnv.load()
     try:
-        asyncio.run(_run(cfg))
+        asyncio.run(
+            run_consumer(
+                subject=SUBJECT,
+                dlq_subject=DLQ_SUBJECT,
+                durable=DURABLE,
+                handler=handle_trigger,
+                nats_url=cfg.nats_url,
+                postgres_dsn=cfg.postgres_dsn,
+                artifacts_root=cfg.artifacts_root,
+            )
+        )
         return 0
     except KeyboardInterrupt:
         return 0

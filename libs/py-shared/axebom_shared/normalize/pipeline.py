@@ -40,7 +40,7 @@ from .aliases import (
     normalize_id,
 )
 from .coverage import CoverageResult, Field, score
-from .findings import Finding, dedup
+from .findings import Finding, aggregate_patch_status, dedup, patch_status
 from .graph import GraphResult, merge_edges
 from .graph import build as build_graph
 from .ingest import Ingested, ingest
@@ -263,6 +263,39 @@ def normalize(
         if finding.diagnostics:
             diagnostic_groups.append(finding.diagnostics)
 
+    # ── 5a. PATCH STATUS ─────────────────────────────────────────────────
+    # CERT-In field 9, and the ONLY place it can be derived: merge() has the
+    # installed version but no findings, dedup() has the fix versions but no
+    # component. The join belongs here, between them.
+    #
+    # ⚠ A COMPONENT WITH NO FINDINGS IS LEFT UNSET, NOT MARKED up-to-date.
+    # "No engine reported a vulnerability against this" is ambiguous between
+    # "verified clean" and "no engine covered this ecosystem at all" — and at
+    # this point nothing on the component can tell those apart (that lives in
+    # the provenance manifest's ecosystems_without_engine). Defaulting to
+    # up-to-date would manufacture a substantive claim out of an absence,
+    # which is the same false-negative `not-provided` exists to prevent.
+    findings_by_component: dict[str, list[Finding]] = {}
+    for finding in findings:
+        findings_by_component.setdefault(finding.component_key, []).append(finding)
+
+    for component in components:
+        component_findings = findings_by_component.get(component.component_key)
+        if not component_findings:
+            continue
+        component.patch_status = aggregate_patch_status(
+            # ⚠ component.ecosystem, NOT finding.ecosystem. The component is the
+            # authority on its own ecosystem; a RawFinding's copy is set at each
+            # of ingest.py's several construction sites and need not be present.
+            patch_status(
+                component.version_raw,
+                f.fixed_in_min,
+                component.ecosystem,
+                f.fix_version_ordering,
+            )
+            for f in component_findings
+        )
+
     # ── 6. COVERAGE ──────────────────────────────────────────────────────
     # ⚠ `excluded` AND `opaque` COMPONENTS STAY IN THE DENOMINATOR (spec §5.4).
     #
@@ -328,6 +361,12 @@ def _flatten(component: MergedComponent) -> dict[str, Any]:
         "component.license_effective": value,
         "component.hashes": component.hashes,
         "component.scope": component.scope,
+        # ⚠ WITHOUT THIS LINE THE FIELD SCORES ZERO FOREVER, even once it is
+        # populated — see this function's own docstring on absent fields. It is
+        # a weight-3 scored field, so filling it legitimately moves
+        # completeness_pct. "" and "unknown" both score present=0 already
+        # (coverage.NON_SUBSTANTIVE), so no special-casing is needed here.
+        "component.patch_status": component.patch_status,
         "component.author_of_sbom_data": ", ".join(
             sorted({o.engine for o in component.observed_by})
         ),
