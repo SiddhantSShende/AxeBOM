@@ -11,6 +11,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-pdf/fpdf"
+	"golang.org/x/text/encoding/charmap"
+
 	"github.com/axebom/axebom/libs/go-shared/model"
 	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
@@ -379,7 +382,7 @@ func TestAnAIBOMPDFRendersItsModelInventory(t *testing.T) {
 // as blank, which reads as a missing component; `?` reads as "this did not fit
 // the page", and the XLSX and JSON exports carry the real text.
 func TestNonLatinTextIsReplacedNotDropped(t *testing.T) {
-	got := sanitizePDF("包名-lodash")
+	got := sanitizePDF(testCP1252Translator(t), "包名-lodash")
 	if strings.HasPrefix(got, "-lodash") {
 		t.Fatalf("the non-Latin prefix was dropped, leaving %q — a name that is "+
 			"not the package's", got)
@@ -390,6 +393,89 @@ func TestNonLatinTextIsReplacedNotDropped(t *testing.T) {
 	if !strings.Contains(got, "?") {
 		t.Fatalf("nothing marks the lost characters: %q", got)
 	}
+}
+
+// TestLatin1SupplementCharactersAreCorrectlyCP1252EncodedNotMojibaked is the
+// regression test for the real bug a generated report exposed: `·` (used in
+// the footer's "Project · BOM · generated ..." and the cover page's "SBOM ·
+// Complete") rendered as `Â·`, and `§`/`—` as `Â§`/garbage. The old
+// sanitizePDF used strings.Builder.WriteRune for any rune < 0x100, which
+// re-encodes back to UTF-8 (2 bytes for `·`) instead of emitting the single
+// CP1252 byte fpdf's core Helvetica font actually needs — fpdf then drew each
+// UTF-8 byte as its own separate CP1252 glyph. A naive
+// strings.Contains(extracted, "·") would NOT catch this: the raw bytes
+// extracted from a correctly-fixed PDF are genuine single-byte CP1252, not
+// UTF-8, so they must be decoded back to UTF-8 first via
+// golang.org/x/text/encoding/charmap.Windows1252 before comparing.
+func TestLatin1SupplementCharactersAreCorrectlyCP1252EncodedNotMojibaked(t *testing.T) {
+	tr := testCP1252Translator(t)
+
+	for _, tc := range []struct {
+		name string
+		char string
+		want byte
+	}{
+		{"middle dot", "·", 0xB7},
+		{"section sign", "§", 0xA7},
+		{"em dash", "—", 0x97},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := sanitizePDF(tr, "a"+tc.char+"b")
+			want := string([]byte{'a', tc.want, 'b'})
+			if got != want {
+				t.Fatalf("sanitizePDF(%q) = %q (bytes %x), want %q (bytes %x) — "+
+					"a multi-byte result here is the exact mojibake bug "+
+					"(re-encoded to UTF-8 instead of transcoded to CP1252)",
+					tc.char, got, []byte(got), want, []byte(want))
+			}
+		})
+	}
+}
+
+// TestRenderedPDFUsesRealCP1252BytesNotUTF8ForLatin1Supplement renders an
+// actual document end-to-end (not just sanitizePDF in isolation) and decodes
+// the drawn bytes back through Windows-1252 to confirm the full pipeline —
+// newDoc's translator, threaded through pdfRender.tr, into every call site —
+// produces a correct document, not just a correct helper function.
+func TestRenderedPDFUsesRealCP1252BytesNotUTF8ForLatin1Supplement(t *testing.T) {
+	b := sampleBOM()
+	b.ProjectName = "Acme · Örg"
+
+	var buf bytes.Buffer
+	if _, err := WritePDF(&buf, b, PDFOptions{}); err != nil {
+		t.Fatalf("rendering: %v", err)
+	}
+
+	raw := extractPDFText(t, buf.Bytes())
+	decoded, err := charmap.Windows1252.NewDecoder().String(raw)
+	if err != nil {
+		t.Fatalf("decoding extracted text as CP1252: %v", err)
+	}
+
+	if !strings.Contains(decoded, "Acme · Örg") {
+		t.Fatalf("the rendered project name did not decode correctly from "+
+			"CP1252 — decoded text: %q", decoded)
+	}
+	// ⚠ NOT A BLANKET "no Â anywhere" CHECK. extractPDFText's own byte-scanning
+	// (not a real PDF parser — see its doc comment) occasionally mis-splits a
+	// later compressed stream on a coincidental "endstream" byte sequence
+	// inside the compressed data itself, and then reads binary noise out of
+	// it as if it were text literals — unrelated to this renderer's encoding
+	// and pre-existing in the helper. The specific bug this test guards
+	// against has one unambiguous signature: our own test string's `·`
+	// mis-rendered as the two-byte `Â·`, which is what checked here.
+	if strings.Contains(decoded, "Â·") || strings.Contains(decoded, "Ã–") {
+		t.Fatalf("decoded text contains the mojibake marker for `·` or `Ö` — "+
+			"raw output was not real single-byte CP1252: %q", decoded)
+	}
+}
+
+// testCP1252Translator returns the same kind of translator newDoc builds,
+// for tests that exercise sanitizePDF directly without a full render.
+func testCP1252Translator(t *testing.T) func(string) string {
+	t.Helper()
+	doc := fpdf.New("P", "mm", "A4", "")
+	return doc.UnicodeTranslatorFromDescriptor("")
 }
 
 // ─── helpers ────────────────────────────────────────────────────────────────

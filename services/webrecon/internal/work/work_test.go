@@ -3,9 +3,11 @@ package work
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/axebom/axebom/libs/go-shared/bus"
@@ -205,6 +207,65 @@ func TestFingerprintAllDetectsALibraryOnTheRootPage(t *testing.T) {
 	}
 	if host.Libraries[0].NPMPurl != "pkg:npm/jquery@3.5.1" {
 		t.Errorf("npm_purl = %q, want pkg:npm/jquery@3.5.1", host.Libraries[0].NPMPurl)
+	}
+}
+
+// TestFingerprintAllPersistsPerScriptDiagnostics is the regression test for
+// the compounding gap alongside the modulepreload detection bug: even after
+// a script is correctly fetched (or correctly skipped), the stored artifact
+// used to discard that information entirely — "0 libraries, 0 scripts" and
+// "0 libraries, 4 scripts skipped for CDN" read identically from storage,
+// and only the second is an actionable finding. This proves hostDoc.Scripts
+// is actually populated end-to-end, not just added to the struct.
+func TestFingerprintAllPersistsPerScriptDiagnostics(t *testing.T) {
+	evil := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`/*! jQuery v3.5.1 */`))
+	}))
+	defer evil.Close()
+
+	var mux http.ServeMux
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintf(w, `<html><head>
+			<script src="/matched.js"></script>
+			<script src="%s/unmatched.js"></script>
+			</head></html>`, evil.URL)
+	})
+	mux.HandleFunc("/matched.js", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`/*! jQuery v3.5.1 */`))
+	})
+	srv := httptest.NewServer(&mux)
+	defer srv.Close()
+
+	w := testWorker(t, refusingRunner{t: t})
+	src := projectsource.Source{RootURL: srv.URL, DiscoveryEnabled: false}
+
+	job := events.ScanJobV1{ScanID: "scan-1", TenantID: "tenant-1", JobID: "job-1"}
+	doc := w.fingerprintAll(t.Context(), job, src, []string{fingerprint.HostOf(srv.URL)})
+	if len(doc.Hosts) != 1 {
+		t.Fatalf("hosts = %d, want 1", len(doc.Hosts))
+	}
+	host := doc.Hosts[0]
+	if len(host.Scripts) != 2 {
+		t.Fatalf("scripts = %+v, want exactly 2 recorded", host.Scripts)
+	}
+
+	var sawMatched, sawSkipped bool
+	for _, s := range host.Scripts {
+		switch {
+		case strings.Contains(s.Src, "unmatched.js"):
+			sawSkipped = true
+			if s.Matched || !s.Skipped {
+				t.Errorf("unmatched.js (off-origin) diagnostics = %+v, want matched=false skipped=true", s)
+			}
+		case strings.Contains(s.Src, "matched.js"):
+			sawMatched = true
+			if !s.Matched || s.Skipped {
+				t.Errorf("matched.js diagnostics = %+v, want matched=true skipped=false", s)
+			}
+		}
+	}
+	if !sawMatched || !sawSkipped {
+		t.Fatalf("scripts = %+v, missing an expected entry", host.Scripts)
 	}
 }
 

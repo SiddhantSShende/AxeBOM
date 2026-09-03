@@ -215,6 +215,15 @@ func TestGitHubAuthorizeSetsAStateCookieAndRedirects(t *testing.T) {
 			if c.SameSite != http.SameSiteLaxMode {
 				t.Errorf("SameSite = %v, want Lax or the OAuth redirect drops the cookie", c.SameSite)
 			}
+			// ⚠ MUST BE /api-PREFIXED — see connectStatePath's identical
+			// guard (github_connect_test.go) for why: a real browser only
+			// ever requests this service through nginx's/Vite's /api/
+			// proxy, so a Path scoped to the bare internal /v1/... route is
+			// never a prefix of what the browser actually requests and the
+			// cookie is silently withheld on every real callback.
+			if c.Path != "/api/v1/auth/github" {
+				t.Errorf("Path = %q, want /api/v1/auth/github", c.Path)
+			}
 		}
 	}
 	if state == "" {
@@ -392,8 +401,15 @@ func TestGitHubConnectAuthorizeSetsAStateCookieAndRedirectsWithRepoScope(t *test
 	if c.SameSite != http.SameSiteLaxMode {
 		t.Errorf("SameSite = %v, want Lax or the OAuth redirect drops the cookie", c.SameSite)
 	}
-	if c.Path != "/v1/auth/github/connect" {
-		t.Errorf("Path = %q, want /v1/auth/github/connect", c.Path)
+	// ⚠ MUST BE /api-PREFIXED. Only nginx's (and the Vite dev proxy's) /api/
+	// location routes a real browser's request to the gateway — a Path
+	// scoped to this service's own internal /v1/... route is never a prefix
+	// of what the browser actually requests, so the browser would never send
+	// this cookie back on the real callback (RFC 6265 §5.1.4), and the
+	// connect flow would fail AUTH_STATE_MISMATCH on every real attempt
+	// despite passing every test that talks to the handler directly.
+	if c.Path != "/api/v1/auth/github/connect" {
+		t.Errorf("Path = %q, want /api/v1/auth/github/connect", c.Path)
 	}
 
 	loc := rec.Header().Get("Location")

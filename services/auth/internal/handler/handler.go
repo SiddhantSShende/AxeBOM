@@ -77,7 +77,24 @@ const (
 
 	// refreshPath scopes the cookie so it is not attached to every API call.
 	// A credential should travel only to the endpoint that consumes it.
+	//
+	// ⚠ NOT /api-PREFIXED, UNLIKE githubStatePath BELOW — and that is a real,
+	// currently-unverified gap, not a considered difference. Every browser
+	// request reaching this service goes through nginx's (or the Vite dev
+	// proxy's) /api/ location, so RFC 6265 path-matching means this cookie
+	// can only ever be sent back on a request under /api/v1/auth — never the
+	// bare /v1/auth this constant names. Left as-is because nothing in the
+	// current frontend actually calls POST /v1/auth/refresh (session refresh
+	// goes through ZITADEL's own OIDC flow instead, see frontend/src/lib/
+	// api.ts) — flagged for whoever next touches local-account sign-in
+	// rather than changed blind.
 	refreshPath = "/v1/auth"
+
+	// githubStatePath MUST carry the /api PREFIX — see connectStatePath's
+	// doc comment (github_connect.go) for why: this is the identical bug,
+	// found and fixed in the same pass, for the sign-in flow's own state
+	// cookie.
+	githubStatePath = "/api/v1/auth/github"
 )
 
 // ---------------------------------------------------------------------------
@@ -261,7 +278,7 @@ func (h *Handler) GitHubAuthorize(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     stateCookie,
 		Value:    state,
-		Path:     "/v1/auth/github",
+		Path:     githubStatePath,
 		HttpOnly: true,
 		Secure:   h.secure(),
 		// Lax, NOT Strict. The callback arrives as a cross-site redirect from
@@ -282,7 +299,7 @@ func (h *Handler) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 		want = c.Value
 	}
 	// Consume it either way: a state that survives one attempt is replayable.
-	h.clearCookie(w, stateCookie, "/v1/auth/github")
+	h.clearCookie(w, stateCookie, githubStatePath)
 
 	if want == "" {
 		errs.Write(w, r, errs.New(errs.AuthStateMismatch,

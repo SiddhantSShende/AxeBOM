@@ -183,6 +183,22 @@ Union `fixed_versions` per ecosystem, then compute `fixed_in_min` with an **ecos
 
 If no comparator exists for the ecosystem, set `fix_version_ordering = 'unknown'` and emit `NORMALIZE_NO_VERSION_COMPARATOR`. **Do not guess.** `patch_status` then derives to `unknown` rather than a fabricated answer.
 
+#### 2.5.1 `patch_status` (CERT-In field 9)
+
+Derived per finding, then aggregated per component. The four values are the profile's own (`certin.sbom.09.patch_status`), not ours to extend.
+
+| `fix_version_ordering` | Derives to | Why |
+|---|---|---|
+| `none` | `no-fix-available` | Engines reported **zero** fix versions. A substantive claim a reader acts on ("upstream has published nothing"), true regardless of the installed version. |
+| `unknown` | `unknown` | No comparator for the ecosystem — nothing can be said either way. |
+| `comparator` | `up-to-date` if installed ≥ `fixed_in_min`, else `patch-available` | The only case where a real comparison happened. |
+
+**`no-fix-available` and `unknown` are different claims and must not be collapsed** — the first is a finding, the second is an admitted gap.
+
+**Aggregation across a component's findings is worst-case-wins:** `no-fix-available` > `patch-available` > `unknown` > `up-to-date`. The field describes the whole component, so one unfixable vulnerability among thirteen fixed ones makes the component `no-fix-available`; reporting `up-to-date` would hide the gap the field exists to surface. `unknown` outranks `up-to-date` because claiming a component is up to date when one finding could not be evaluated asserts a verification that never happened.
+
+**A component with no findings leaves `patch_status` unset (`not-provided`), never `up-to-date`.** "Nothing was reported against this" is ambiguous between *verified clean* and *no engine covered this ecosystem* — and the component carries no signal to tell those apart (that is the provenance manifest's `ecosystems_without_engine`). Defaulting would manufacture a substantive value out of an absence, which is exactly what §5.4's `not-provided` rule forbids.
+
 ### 2.6 VEX
 
 VEX applies **after** dedup and **never mutates a finding**. It is a joined `normalize.vex_statements` row with a CSAF 2.0 status ∈ `not_affected`, `affected`, `fixed`, `under_investigation`, plus a justification code.

@@ -100,6 +100,11 @@ const STANDARDS: { value: Standard; label: string; hint: string }[] = [
 
 const FORMATS: { value: Format; label: string; hint: string }[] = [
   { value: 'pdf', label: 'PDF', hint: 'For reading. Page-capped — best paired with Top-Level.' },
+  {
+    value: 'docx',
+    label: 'Word (.docx)',
+    hint: 'For editing. Row-capped like PDF — best paired with Top-Level.',
+  },
   { value: 'xlsx', label: 'XLSX', hint: 'Every profile field as a column. No page limit.' },
   {
     value: 'json',
@@ -428,13 +433,26 @@ function Stepper({
         const done = s.id < current && stepComplete(draft, s.id);
         const canReach = reachable(draft, s.id, current);
         const stepErrors = errors.filter((e) => e.step === s.id);
+        // ⚠ HARD AND ADVISORY LOOKED IDENTICAL HERE, AND THAT WAS THE BUG A
+        // USER ACTUALLY HIT. "Complete + PDF/docx may truncate" (step 5) is
+        // advisory — it does not disable Run (see this component's own
+        // comment on hardErrors below) — but this pip painted it the exact
+        // same red "needs attention" as a real contradiction (step 2's
+        // HBOM/QBOM-not-scannable, step 4's format/standard mismatch), which
+        // reads as "your selection was rejected" for a warning that was
+        // never blocking anything. The Review step already drew this
+        // distinction per-error (data-hard); the stepper pip just never did.
+        const hardStepErrors = blocking(stepErrors);
         return (
           <li key={s.id}>
             <button
               type="button"
               className="step-pip"
               data-state={s.id === current ? 'current' : done ? 'done' : 'todo'}
-              data-invalid={stepErrors.length > 0 ? 'true' : undefined}
+              data-invalid={hardStepErrors.length > 0 ? 'true' : undefined}
+              data-note={
+                hardStepErrors.length === 0 && stepErrors.length > 0 ? 'true' : undefined
+              }
               disabled={!canReach}
               aria-current={s.id === current ? 'step' : undefined}
               onClick={() => onGoTo(s.id)}
@@ -443,7 +461,11 @@ function Stepper({
                 {s.id}
               </span>
               <span className="step-title">{s.title}</span>
-              {stepErrors.length > 0 && <span className="step-flag">needs attention</span>}
+              {hardStepErrors.length > 0 ? (
+                <span className="step-flag">needs attention</span>
+              ) : (
+                stepErrors.length > 0 && <span className="step-flag step-flag-note">note</span>
+              )}
             </button>
           </li>
         );

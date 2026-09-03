@@ -27,7 +27,19 @@ import (
 // user somehow has both a login and a connect attempt in progress at once.
 const (
 	connectStateCookie = "axebom_oauth_connect_state"
-	connectStatePath   = "/v1/auth/github/connect"
+	// connectStatePath MUST carry the /api PREFIX. This cookie is set and
+	// read by a real browser going through nginx's (or the Vite dev proxy's)
+	// /api/ location — the only rule that routes to the gateway at all — so
+	// the browser's own path-matching (RFC 6265 §5.1.4) only ever sees
+	// /api/v1/auth/github/connect/..., never the bare /v1/... path this
+	// service's own mux registers internally. A cookie Path scoped to the
+	// internal path is never a prefix of the external one the browser
+	// actually requests, so the browser correctly never sends it back —
+	// which reads as AUTH_STATE_MISMATCH on every real callback, never
+	// reproducible via a direct curl to the gateway's own port (see
+	// GitHubConnectAuthorize/GitHubConnectCallback's own tests, which must
+	// exercise this through the same /api-prefixed path a browser uses).
+	connectStatePath = "/api/v1/auth/github/connect"
 )
 
 // GitHubConnectAuthorize handles GET /v1/auth/github/connect/authorize.

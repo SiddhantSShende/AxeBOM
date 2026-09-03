@@ -31,6 +31,7 @@
           "native_id": "3fc5a8d3d86e9790"
         }
       ],
+      "patch_status": "",
       "purl": "",
       "scope": "excluded",
       "version_raw": ""
@@ -56,6 +57,7 @@
           "native_id": "f58b18d2-192a-4e3d-ba53-c8027a614a09"
         }
       ],
+      "patch_status": "",
       "purl": "",
       "scope": "required",
       "version_raw": ""
@@ -81,6 +83,7 @@
           "native_id": "pkg:golang/example.com/golang-incompatible"
         }
       ],
+      "patch_status": "",
       "purl": "pkg:golang/example.com/golang-incompatible",
       "scope": "required",
       "version_raw": ""
@@ -131,6 +134,7 @@
           "native_id": "SPDXRef-Package-go-module-github.com-BurntSushi-toml-9c7fbb949f92a1db"
         }
       ],
+      "patch_status": "",
       "purl": "pkg:golang/github.com/BurntSushi/toml@v1.3.2",
       "scope": "required",
       "version_raw": "v1.3.2"
@@ -181,6 +185,7 @@
           "native_id": "SPDXRef-Package-go-module-github.com-Masterminds-semver-v3-471e5d4ef99b5888"
         }
       ],
+      "patch_status": "",
       "purl": "pkg:golang/github.com/Masterminds/semver/v3@v3.2.1",
       "scope": "required",
       "version_raw": "v3.2.1"
@@ -206,6 +211,7 @@
           "native_id": "pkg:golang/github.com/burntsushi/toml@v1.3.2"
         }
       ],
+      "patch_status": "",
       "purl": "pkg:golang/github.com/burntsushi/toml@v1.3.2",
       "scope": "required",
       "version_raw": "v1.3.2"
@@ -338,6 +344,7 @@
           "native_id": "pkg:golang/github.com/docker/docker@v24.0.5%2Bincompatible"
         }
       ],
+      "patch_status": "patch-available",
       "purl": "pkg:golang/github.com/docker/docker@v24.0.5+incompatible",
       "scope": "required",
       "version_raw": "v24.0.5+incompatible"
@@ -363,6 +370,7 @@
           "native_id": "pkg:golang/github.com/masterminds/semver/v3@v3.2.1"
         }
       ],
+      "patch_status": "",
       "purl": "pkg:golang/github.com/masterminds/semver/v3@v3.2.1",
       "scope": "required",
       "version_raw": "v3.2.1"
@@ -419,16 +427,17 @@
           "native_id": "pkg:golang/gopkg.in/yaml.v3@v3.0.1"
         }
       ],
+      "patch_status": "",
       "purl": "pkg:golang/gopkg.in/yaml.v3@v3.0.1",
       "scope": "required",
       "version_raw": "v3.0.1"
     }
   ],
   "coverage": {
-    "completeness_numerator": 42,
-    "completeness_pct": 9.93,
-    "declaration_numerator": 54,
-    "declaration_pct": 12.77,
+    "completeness_numerator": 45,
+    "completeness_pct": 10.64,
+    "declaration_numerator": 57,
+    "declaration_pct": 13.48,
     "denominator": 423,
     "field_count": 21,
     "fields": [
@@ -513,12 +522,12 @@
         "weight": 3
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 12.5,
+        "declaration_pct": 12.5,
+        "declared": 1,
         "field_id": "certin.sbom.09.patch_status",
         "name": "Patch Status",
-        "present": 0,
+        "present": 1,
         "total": 8,
         "weight": 3
       },

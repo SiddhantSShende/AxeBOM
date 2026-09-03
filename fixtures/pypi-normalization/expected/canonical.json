@@ -31,6 +31,7 @@
           "native_id": "26ca2b7dc025d550"
         }
       ],
+      "patch_status": "",
       "purl": "",
       "scope": "excluded",
       "version_raw": ""
@@ -56,6 +57,7 @@
           "native_id": "31e0c021-0f0e-4239-88f6-9cf08b285696"
         }
       ],
+      "patch_status": "",
       "purl": "",
       "scope": "required",
       "version_raw": ""
@@ -394,6 +396,7 @@
           "native_id": "pkg:pypi/django-rest-framework@3.14.0"
         }
       ],
+      "patch_status": "",
       "purl": "pkg:pypi/django-rest-framework@3.14.0",
       "scope": "required",
       "version_raw": "3.14.0"
@@ -544,6 +547,7 @@
           "native_id": "pkg:pypi/flask@2.3.2"
         }
       ],
+      "patch_status": "patch-available",
       "purl": "pkg:pypi/flask@2.3.2",
       "scope": "required",
       "version_raw": "2.3.2"
@@ -630,6 +634,7 @@
           "native_id": "pkg:pypi/python-dateutil@2.8.2"
         }
       ],
+      "patch_status": "",
       "purl": "pkg:pypi/python-dateutil@2.8.2",
       "scope": "required",
       "version_raw": "2.8.2"
@@ -752,6 +757,7 @@
           "native_id": "pkg:pypi/pyyaml@6.0.1"
         }
       ],
+      "patch_status": "",
       "purl": "pkg:pypi/pyyaml@6.0.1",
       "scope": "required",
       "version_raw": "6.0.1"
@@ -994,16 +1000,17 @@
           "native_id": "pkg:pypi/zope.interface@6.0"
         }
       ],
+      "patch_status": "",
       "purl": "pkg:pypi/zope-interface@6.0",
       "scope": "required",
       "version_raw": "6.0"
     }
   ],
   "coverage": {
-    "completeness_numerator": 33,
-    "completeness_pct": 10.03,
-    "declaration_numerator": 48,
-    "declaration_pct": 14.59,
+    "completeness_numerator": 36,
+    "completeness_pct": 10.94,
+    "declaration_numerator": 51,
+    "declaration_pct": 15.5,
     "denominator": 329,
     "field_count": 21,
     "fields": [
@@ -1088,12 +1095,12 @@
         "weight": 3
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 16.67,
+        "declaration_pct": 16.67,
+        "declared": 1,
         "field_id": "certin.sbom.09.patch_status",
         "name": "Patch Status",
-        "present": 0,
+        "present": 1,
         "total": 6,
         "weight": 3
       },

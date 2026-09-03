@@ -93,12 +93,12 @@ func TestTheStandardIsDerivedWhenTheFormatImpliesIt(t *testing.T) {
 // than a rejected request: the customer sees `queued`, the UI spins, and the
 // reason arrives minutes later as an error code on a row nobody is watching.
 func TestAnUnknownFormatIsRefused(t *testing.T) {
-	for _, bad := range []string{"", "docx", "csv", "PDF", "html"} {
+	for _, bad := range []string{"", "csv", "PDF", "html", "doc"} {
 		if _, err := parseFormat(bad); err == nil {
 			t.Errorf("format %q was accepted", bad)
 		}
 	}
-	for _, good := range []string{"pdf", "xlsx", "json", "spdx", "cyclonedx"} {
+	for _, good := range []string{"pdf", "docx", "xlsx", "json", "spdx", "cyclonedx"} {
 		if _, err := parseFormat(good); err != nil {
 			t.Errorf("format %q was refused: %v", good, err)
 		}
@@ -133,6 +133,7 @@ func TestTheStorageKeyIsTenantPrefixedAndDerived(t *testing.T) {
 		"cyclonedx": ".cdx.json",
 		"xlsx":      ".xlsx",
 		"json":      ".json",
+		"docx":      ".docx",
 	} {
 		if got := StorageKey("t", "r", format); !strings.HasSuffix(got, want) {
 			t.Errorf("format %q produced key %q, want suffix %q", format, got, want)
@@ -143,7 +144,7 @@ func TestTheStorageKeyIsTenantPrefixedAndDerived(t *testing.T) {
 // TestErrorCodesAreTheTaxonomy — a bare string tells the UI nothing it can act
 // on and ends up rendered at the customer verbatim.
 func TestErrorCodesAreTheTaxonomy(t *testing.T) {
-	_, err := parseFormat("docx")
+	_, err := parseFormat("html")
 	if !errs.Is(err, errs.ValidationFieldInvalid) {
 		t.Errorf("format refusal carries %v, want %v",
 			errs.From(err).Code, errs.ValidationFieldInvalid)

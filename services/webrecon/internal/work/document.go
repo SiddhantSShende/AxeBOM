@@ -21,6 +21,23 @@ type hostDoc struct {
 	Status     string       `json:"status"`
 	Error      string       `json:"error,omitempty"`
 	Libraries  []libraryDoc `json:"libraries"`
+	// Scripts is diagnostic, never read by workers/sbom/adapters/
+	// webrecon_fingerprint.py (an additive field an old parser already
+	// ignores via plain dict access) — it exists so "0 libraries, 0 scripts
+	// found" and "0 libraries, 4 scripts skipped for CDN" are distinguishable
+	// from the stored artifact alone, without re-fetching the live page by
+	// hand. The second reading is actionable (a real detection gap); the
+	// first genuinely is not.
+	Scripts []scriptDoc `json:"scripts,omitempty"`
+}
+
+type scriptDoc struct {
+	// Src is "" for an inline script.
+	Src string `json:"src,omitempty"`
+	// Skipped records a same-origin/CDN-allowlist rejection — see
+	// fingerprint.ScriptResult's own doc comment.
+	Skipped bool `json:"skipped"`
+	Matched bool `json:"matched"`
 }
 
 type libraryDoc struct {
@@ -48,6 +65,11 @@ func toHostDoc(r fingerprint.HostResult) hostDoc {
 	}
 	for _, m := range r.Libraries {
 		h.Libraries = append(h.Libraries, toLibraryDoc(m))
+	}
+	for _, s := range r.Scripts {
+		h.Scripts = append(h.Scripts, scriptDoc{
+			Src: s.Src, Skipped: s.Skipped, Matched: s.Match != nil,
+		})
 	}
 	return h
 }

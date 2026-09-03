@@ -66,6 +66,13 @@ COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html
 # before nginx starts; nothing else has to invoke it.
 COPY --chown=nginx:nginx --chmod=755 deploy/docker/frontend-entrypoint.d/50-tls.sh /docker-entrypoint.d/50-tls.sh
 
+# Redirects any non-canonical origin to ZITADEL_PUBLIC_URL — see nginx.conf's
+# __CANONICAL_REDIRECT__ comment. Unlike the two VITE_* build args, this is
+# read at container START, not baked in: the canonical origin can change
+# without rebuilding the bundle, because the SPA derives redirect_uri from
+# window.location.origin rather than from anything compiled into it.
+COPY --chown=nginx:nginx --chmod=755 deploy/docker/frontend-entrypoint.d/40-canonical.sh /docker-entrypoint.d/40-canonical.sh
+
 USER nginx
 
 EXPOSE 8085

@@ -18,7 +18,8 @@
 
 import { useState } from 'react';
 import { useParams } from 'react-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { downloadFile, triggerSave } from '../../lib/api';
 import { levelLabel, useReport, type Report } from '../../lib/reports';
 import { BomTypeChip, StatusPill, Value } from '../../components/Chips';
 import { CommentRail } from '../../components/CommentRail';
@@ -356,15 +357,7 @@ function DownloadMenu({ report }: { report: Report }) {
           {all.map((s) => (
             <li key={s.id}>
               {s.status === 'ready' ? (
-                <a
-                  className="menu-item"
-                  href={`/api/v1/reports/${s.id}/download`}
-                  // Prefetching a large PDF on hover would download it twice.
-                  // The metadata is already loaded; the bytes are the download.
-                  download
-                >
-                  {s.format.toUpperCase()}
-                </a>
+                <DownloadLink id={s.id} format={s.format} />
               ) : (
                 <span className="menu-item menu-item-disabled">
                   {s.format.toUpperCase()} <StatusPill status={s.status} />
@@ -375,5 +368,41 @@ function DownloadMenu({ report }: { report: Report }) {
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * DownloadLink actually fetches and saves the file, rather than pointing a
+ * plain `<a href>` at an authenticated route.
+ *
+ * ⚠ A BARE ANCHOR CANNOT DOWNLOAD THIS. The access token lives in memory
+ * only (lib/api.ts's own note on `accessToken` — never a cookie), so a plain
+ * browser navigation to `/api/v1/reports/{id}/download` carries no
+ * Authorization header and 401s before a single byte returns. downloadFile
+ * fetches it through the same authenticated client every other call on this
+ * page uses; triggerSave hands the browser the resulting bytes via a
+ * same-origin blob: URL.
+ */
+function DownloadLink({ id, format }: { id: string; format: string }) {
+  const download = useMutation({
+    mutationFn: () => downloadFile(`/v1/reports/${id}/download`),
+    onSuccess: triggerSave,
+  });
+
+  return (
+    <button
+      type="button"
+      className="menu-item"
+      onClick={() => download.mutate()}
+      disabled={download.isPending}
+    >
+      {download.isPending ? 'Downloading…' : format.toUpperCase()}
+      {download.isError && (
+        <span className="report-download-error" role="alert">
+          {' '}
+          — {download.error.message}
+        </span>
+      )}
+    </button>
   );
 }

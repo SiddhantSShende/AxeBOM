@@ -31,6 +31,7 @@
           "native_id": "0328106cb52bb1b0"
         }
       ],
+      "patch_status": "",
       "purl": "",
       "scope": "excluded",
       "version_raw": ""
@@ -56,6 +57,7 @@
           "native_id": "f3b07e99-865c-4874-a3cd-055cea60fc82"
         }
       ],
+      "patch_status": "",
       "purl": "",
       "scope": "required",
       "version_raw": ""
@@ -124,6 +126,7 @@
           "native_id": "pkg:maven/com.example/MavenCase@1.0.0"
         }
       ],
+      "patch_status": "",
       "purl": "pkg:maven/com.example/MavenCase@1.0.0",
       "scope": "required",
       "version_raw": "1.0.0"
@@ -323,6 +326,7 @@
           "native_id": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2"
         }
       ],
+      "patch_status": "patch-available",
       "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.15.2",
       "scope": "required",
       "version_raw": "2.15.2"
@@ -408,6 +412,7 @@
           "native_id": "pkg:maven/org.apache.commons/commons-lang3@3.12.0"
         }
       ],
+      "patch_status": "patch-available",
       "purl": "pkg:maven/org.apache.commons/commons-lang3@3.12.0",
       "scope": "required",
       "version_raw": "3.12.0"
@@ -811,16 +816,17 @@
           "native_id": "pkg:maven/org.springframework/spring-core@6.0.11"
         }
       ],
+      "patch_status": "patch-available",
       "purl": "pkg:maven/org.springframework/spring-core@6.0.11",
       "scope": "required",
       "version_raw": "6.0.11"
     }
   ],
   "coverage": {
-    "completeness_numerator": 27,
-    "completeness_pct": 9.57,
-    "declaration_numerator": 39,
-    "declaration_pct": 13.83,
+    "completeness_numerator": 36,
+    "completeness_pct": 12.77,
+    "declaration_numerator": 48,
+    "declaration_pct": 17.02,
     "denominator": 282,
     "field_count": 21,
     "fields": [
@@ -905,12 +911,12 @@
         "weight": 3
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 60.0,
+        "declaration_pct": 60.0,
+        "declared": 3,
         "field_id": "certin.sbom.09.patch_status",
         "name": "Patch Status",
-        "present": 0,
+        "present": 3,
         "total": 5,
         "weight": 3
       },

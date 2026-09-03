@@ -14,9 +14,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { AnimatePresence, m } from 'motion/react';
+import { useMutation } from '@tanstack/react-query';
 import { BomTypeChip, StatusPill } from '../../components/Chips';
 import { ErrorState, SkeletonRows } from '../../components/States';
-import { getAccessToken } from '../../lib/api';
+import { downloadFile, getAccessToken, triggerSave } from '../../lib/api';
 import { formatBytes, levelLabel, useReports, type Report } from '../../lib/reports';
 import { isTerminal } from '../../lib/scans';
 import {
@@ -387,6 +388,19 @@ function ReportsSection({ query }: { query: ReturnType<typeof useReports> }) {
 
 function ReportRow({ report: r }: { report: Report }) {
   const size = formatBytes(r.size_bytes);
+  // ⚠ FETCHED AND SAVED THROUGH JS, NEVER A PLAIN <a href>. This report is
+  // only reachable with a Bearer token, and that token lives in memory —
+  // never a cookie (lib/api.ts's own note on accessToken) — so a bare
+  // browser navigation carries no Authorization header at all and the
+  // request 401s before a single byte comes back. downloadFile fetches it
+  // through the same authenticated client every other call on this page
+  // uses; triggerSave is what actually hands the browser the resulting
+  // bytes to save, via a same-origin blob: URL.
+  const download = useMutation({
+    mutationFn: () => downloadFile(`/v1/reports/${r.id}/download`),
+    onSuccess: triggerSave,
+  });
+
   return (
     <li className="report-row">
       <BomTypeChip type={r.bom_type} />
@@ -395,15 +409,14 @@ function ReportRow({ report: r }: { report: Report }) {
       </span>
       <span className="report-action">
         {r.status === 'ready' ? (
-          <a
+          <button
+            type="button"
             className="btn btn-sm"
-            href={`/api/v1/reports/${r.id}/download`}
-            // Prefetching on hover would download it twice — the metadata
-            // is already loaded, only the bytes are the actual download.
-            download
+            onClick={() => download.mutate()}
+            disabled={download.isPending}
           >
-            Download{size ? ` (${size})` : ''}
-          </a>
+            {download.isPending ? 'Downloading…' : `Download${size ? ` (${size})` : ''}`}
+          </button>
         ) : r.status === 'failed' ? (
           <span className="report-failed">
             <StatusPill status={r.status} />
@@ -411,6 +424,11 @@ function ReportRow({ report: r }: { report: Report }) {
           </span>
         ) : (
           <StatusPill status={r.status} />
+        )}
+        {download.isError && (
+          <span className="report-download-error" role="alert">
+            Couldn&apos;t download: {download.error.message}
+          </span>
         )}
       </span>
       <Link className="report-detail-link" to={`/reports/${r.id}`}>

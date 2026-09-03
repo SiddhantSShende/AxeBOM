@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/axebom/axebom/services/webrecon/internal/fingerprint"
@@ -123,5 +124,76 @@ func TestFetchAndFingerprintReturnsNoLibrariesForOrdinaryContent(t *testing.T) {
 	result := fingerprint.FetchAndFingerprint(srv.Client(), testMatcher(t), srv.URL)
 	if len(result.Libraries) != 0 {
 		t.Errorf("libraries = %+v, want none", result.Libraries)
+	}
+}
+
+// TestFetchAndFingerprintDetectsAModulepreloadedScript is the regression test
+// for the real bug behind a live zero-findings report on a Vite/Rollup SPA:
+// its dependency bundles are referenced only via
+// <link rel="modulepreload" href="...">, never a <script src>, so a scanner
+// that only walks <script> tags never fetches or matches them at all — a
+// real, fixable detection gap, not an honest zero.
+func TestFetchAndFingerprintDetectsAModulepreloadedScript(t *testing.T) {
+	var mux http.ServeMux
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`<html><head>
+			<script type="module" src="/assets/entry.js"></script>
+			<link rel="modulepreload" href="/assets/vendor.js">
+			</head></html>`))
+	})
+	mux.HandleFunc("/assets/entry.js", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`console.log("entry")`))
+	})
+	mux.HandleFunc("/assets/vendor.js", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`/*! jQuery v3.5.1 */`))
+	})
+	srv := httptest.NewServer(&mux)
+	defer srv.Close()
+
+	result := fingerprint.FetchAndFingerprint(srv.Client(), testMatcher(t), srv.URL)
+	if len(result.Libraries) != 1 || result.Libraries[0].Library != "jquery" || result.Libraries[0].Version != "3.5.1" {
+		t.Fatalf("libraries = %+v, want exactly [jquery@3.5.1] found via the modulepreload link", result.Libraries)
+	}
+
+	var sawVendor bool
+	for _, s := range result.Scripts {
+		if strings.Contains(s.Src, "vendor.js") {
+			sawVendor = true
+			if s.Skipped {
+				t.Error("the same-host modulepreload script was recorded as skipped")
+			}
+		}
+	}
+	if !sawVendor {
+		t.Errorf("scripts = %+v, want the modulepreload href recorded", result.Scripts)
+	}
+}
+
+// The same-origin/CDN-allowlist guard must apply identically to a
+// modulepreload href as it does to a <script src> — this is not a new,
+// separately-trusted fetch path.
+func TestFetchAndFingerprintSkipsAnUnallowlistedModulepreloadHost(t *testing.T) {
+	fetched := false
+	evil := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fetched = true
+		_, _ = w.Write([]byte(`/*! jQuery v3.5.1 */`))
+	}))
+	defer evil.Close()
+
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprintf(w,
+			`<html><head><link rel="modulepreload" href="%s/vendor.js"></head></html>`, evil.URL)
+	}))
+	defer page.Close()
+
+	result := fingerprint.FetchAndFingerprint(page.Client(), testMatcher(t), page.URL)
+	if fetched {
+		t.Error("a modulepreload href on a non-allowlisted external host was fetched")
+	}
+	if len(result.Scripts) != 1 || !result.Scripts[0].Skipped {
+		t.Errorf("scripts = %+v, want the external modulepreload href recorded as skipped, not silently dropped", result.Scripts)
+	}
+	if len(result.Libraries) != 0 {
+		t.Errorf("libraries = %+v, want none (nothing here was actually fetched)", result.Libraries)
 	}
 }

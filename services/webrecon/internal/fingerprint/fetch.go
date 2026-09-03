@@ -183,10 +183,20 @@ type rawScript struct {
 	Inline string
 }
 
-// extractScripts walks the HTML token stream for every <script> element.
-// Malformed HTML degrades gracefully — html.Tokenizer never errors on bad
-// markup, it just stops, and whatever was found before that point is still
-// returned.
+// extractScripts walks the HTML token stream for every <script> element, and
+// every <link rel="modulepreload"> element.
+//
+// ⚠ WHY modulepreload MATTERS. A Vite/Rollup-bundled SPA's HTML typically has
+// exactly one tiny <script src> — its module entry chunk — and references
+// every real dependency bundle (react, lodash, whatever the build pulled in)
+// only via <link rel="modulepreload" href="...">, standard code-splitting
+// markup. This is static, unexecuted HTML; no JavaScript needs to run for a
+// scanner to see these tags, so treating them identically to <script src> is
+// not the headless-browser-rendering case this product's honest labels
+// disclaim (see CLAUDE.md, webrecon's own doc comments) — it is simply a
+// second, equally-static place a script URL can be spelled. Missing it read
+// as an "honest zero" on a page that in fact names its bundles right there in
+// the HTML.
 func extractScripts(body string) []rawScript {
 	tokenizer := html.NewTokenizer(strings.NewReader(body))
 	var out []rawScript
@@ -196,28 +206,44 @@ func extractScripts(body string) []rawScript {
 		if tt == html.ErrorToken {
 			return out
 		}
-		if tt != html.StartTagToken {
+		if tt != html.StartTagToken && tt != html.SelfClosingTagToken {
 			continue
 		}
 		token := tokenizer.Token()
-		if token.Data != "script" {
-			continue
-		}
 
-		var src string
-		for _, attr := range token.Attr {
-			if attr.Key == "src" {
-				src = attr.Val
+		switch token.Data {
+		case "script":
+			var src string
+			for _, attr := range token.Attr {
+				if attr.Key == "src" {
+					src = attr.Val
+				}
 			}
-		}
-		if src != "" {
-			out = append(out, rawScript{Src: src})
-			continue
-		}
+			if src != "" {
+				out = append(out, rawScript{Src: src})
+				continue
+			}
 
-		// An inline script's text is the NEXT token, not an attribute.
-		if next := tokenizer.Next(); next == html.TextToken {
-			out = append(out, rawScript{Inline: tokenizer.Token().Data})
+			// An inline script's text is the NEXT token, not an attribute —
+			// only true for <script>, never for the self-closing <link>
+			// below.
+			if next := tokenizer.Next(); next == html.TextToken {
+				out = append(out, rawScript{Inline: tokenizer.Token().Data})
+			}
+
+		case "link":
+			var rel, href string
+			for _, attr := range token.Attr {
+				switch attr.Key {
+				case "rel":
+					rel = attr.Val
+				case "href":
+					href = attr.Val
+				}
+			}
+			if strings.EqualFold(rel, "modulepreload") && href != "" {
+				out = append(out, rawScript{Src: href})
+			}
 		}
 	}
 }

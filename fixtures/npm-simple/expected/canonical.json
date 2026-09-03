@@ -31,6 +31,7 @@
           "native_id": "fd71c2238fc07657"
         }
       ],
+      "patch_status": "",
       "purl": "",
       "scope": "excluded",
       "version_raw": ""
@@ -56,6 +57,7 @@
           "native_id": "617d25e0-7994-4533-bc06-ecabf3e41b56"
         }
       ],
+      "patch_status": "",
       "purl": "",
       "scope": "required",
       "version_raw": ""
@@ -146,6 +148,7 @@
           "native_id": "pkg:npm/express@4.18.2"
         }
       ],
+      "patch_status": "patch-available",
       "purl": "pkg:npm/express@4.18.2",
       "scope": "required",
       "version_raw": "4.18.2"
@@ -242,6 +245,7 @@
           "native_id": "pkg:npm/lodash@4.17.21"
         }
       ],
+      "patch_status": "patch-available",
       "purl": "pkg:npm/lodash@4.17.21",
       "scope": "required",
       "version_raw": "4.17.21"
@@ -322,16 +326,17 @@
           "native_id": "SPDXRef-Package-npm-npm-simple-d0178b486261c877"
         }
       ],
+      "patch_status": "",
       "purl": "pkg:npm/npm-simple@1.0.0",
       "scope": "required",
       "version_raw": "1.0.0"
     }
   ],
   "coverage": {
-    "completeness_numerator": 21,
-    "completeness_pct": 8.94,
-    "declaration_numerator": 30,
-    "declaration_pct": 12.77,
+    "completeness_numerator": 27,
+    "completeness_pct": 11.49,
+    "declaration_numerator": 36,
+    "declaration_pct": 15.32,
     "denominator": 235,
     "field_count": 21,
     "fields": [
@@ -416,12 +421,12 @@
         "weight": 3
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 50.0,
+        "declaration_pct": 50.0,
+        "declared": 2,
         "field_id": "certin.sbom.09.patch_status",
         "name": "Patch Status",
-        "present": 0,
+        "present": 2,
         "total": 4,
         "weight": 3
       },

@@ -27,6 +27,7 @@
           "native_id": "b2c3d4e5f6a7b8c9"
         }
       ],
+      "patch_status": "",
       "purl": "",
       "scope": "excluded",
       "version_raw": ""
@@ -58,6 +59,7 @@
           "native_id": "pkg:maven/com.example/log4shell-java@1.0.0?package-id=7e1c2b3a4d5e6f70"
         }
       ],
+      "patch_status": "",
       "purl": "pkg:maven/com.example/log4shell-java@1.0.0",
       "scope": "required",
       "version_raw": "1.0.0"
@@ -113,16 +115,17 @@
           "native_id": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1?package-id=9f1c2b3a4d5e6f70"
         }
       ],
+      "patch_status": "patch-available",
       "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1",
       "scope": "required",
       "version_raw": "2.14.1"
     }
   ],
   "coverage": {
-    "completeness_numerator": 12,
-    "completeness_pct": 8.51,
-    "declaration_numerator": 12,
-    "declaration_pct": 8.51,
+    "completeness_numerator": 15,
+    "completeness_pct": 10.64,
+    "declaration_numerator": 15,
+    "declaration_pct": 10.64,
     "denominator": 141,
     "field_count": 21,
     "fields": [
@@ -207,12 +210,12 @@
         "weight": 3
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 50.0,
+        "declaration_pct": 50.0,
+        "declared": 1,
         "field_id": "certin.sbom.09.patch_status",
         "name": "Patch Status",
-        "present": 0,
+        "present": 1,
         "total": 2,
         "weight": 3
       },

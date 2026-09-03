@@ -28,6 +28,7 @@
           "native_id": "pkg:npm/alias-overmerge@1.0.0?package-id=1e2f3a4b5c6d7e8f"
         }
       ],
+      "patch_status": "",
       "purl": "pkg:npm/alias-overmerge@1.0.0",
       "scope": "required",
       "version_raw": "1.0.0"
@@ -76,16 +77,17 @@
           "native_id": "pkg:npm/batch-pkg@1.0.0?package-id=2f3a4b5c6d7e8f90"
         }
       ],
+      "patch_status": "patch-available",
       "purl": "pkg:npm/batch-pkg@1.0.0",
       "scope": "required",
       "version_raw": "1.0.0"
     }
   ],
   "coverage": {
-    "completeness_numerator": 12,
-    "completeness_pct": 12.77,
-    "declaration_numerator": 12,
-    "declaration_pct": 12.77,
+    "completeness_numerator": 15,
+    "completeness_pct": 15.96,
+    "declaration_numerator": 15,
+    "declaration_pct": 15.96,
     "denominator": 94,
     "field_count": 21,
     "fields": [
@@ -170,12 +172,12 @@
         "weight": 3
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 50.0,
+        "declaration_pct": 50.0,
+        "declared": 1,
         "field_id": "certin.sbom.09.patch_status",
         "name": "Patch Status",
-        "present": 0,
+        "present": 1,
         "total": 2,
         "weight": 3
       },

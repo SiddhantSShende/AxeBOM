@@ -256,6 +256,86 @@ async function sendUpload<T>(path: string, form: FormData): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** A downloaded file, ready to hand to the browser. */
+export interface DownloadedFile {
+  blob: Blob;
+  /** From the server's own Content-Disposition header — never guessed
+   *  client-side, so it always matches what the server actually named the
+   *  artifact (services/report/internal/handler/handler.go's filename()). */
+  filename: string;
+}
+
+/**
+ * downloadFile fetches a binary response with the same auth `request` uses.
+ *
+ * ⚠ WHY THIS EXISTS, SEPARATE FROM request<T>. A plain `<a href="/api/...">`
+ * cannot download an authenticated resource here: the access token lives in
+ * memory only (this file's own note on `accessToken` — never a cookie, so a
+ * bare browser navigation carries no Authorization header at all), and
+ * `send()` always calls `res.json()`, which would corrupt a binary body even
+ * if auth were not the problem. This is what ReportRow/DownloadMenu actually
+ * need to call — fetch the bytes through the authenticated client, THEN hand
+ * the browser a same-origin blob: URL to save, which needs no header of its
+ * own because the authenticated part already happened.
+ */
+export async function downloadFile(path: string): Promise<DownloadedFile> {
+  try {
+    return await sendDownload(path);
+  } catch (err) {
+    if (!(err instanceof ApiError) || err.status !== 401) throw err;
+    const fresh = await renew();
+    if (!fresh) throw err;
+    return await sendDownload(path);
+  }
+}
+
+async function sendDownload(path: string): Promise<DownloadedFile> {
+  const res = await fetch(`/api${path}`, {
+    headers: identityHeaders(),
+    credentials: 'same-origin',
+    signal: AbortSignal.timeout(120_000), // a Complete BOM's PDF can be large
+  });
+
+  if (!res.ok) {
+    let body: ApiErrorBody | null = null;
+    try {
+      body = (await res.json()) as ApiErrorBody;
+    } catch {
+      /* see send()'s identical fallback */
+    }
+    throw new ApiError(res.status, body, `download failed with ${res.status}`);
+  }
+
+  return { blob: await res.blob(), filename: filenameFromResponse(res) };
+}
+
+/** filenameFromResponse reads Content-Disposition, never guesses one. */
+function filenameFromResponse(res: Response): string {
+  const disposition = res.headers.get('Content-Disposition') ?? '';
+  const match = /filename="?([^";]+)"?/.exec(disposition);
+  return match?.[1] ?? 'download';
+}
+
+/**
+ * triggerSave hands the browser a downloaded file to save, via a same-origin
+ * blob: URL a synthetic anchor click opens and immediately revokes.
+ *
+ * ⚠ REVOKED AFTER A TICK, NOT IMMEDIATELY. Revoking inside the same task as
+ * the click can race the browser's own read of the URL in some engines; a
+ * macrotask delay costs nothing a user would ever notice and removes the
+ * race entirely.
+ */
+export function triggerSave(file: DownloadedFile): void {
+  const url = URL.createObjectURL(file.blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = file.filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 /**
  * A small verb-shaped surface over `request`.
  *

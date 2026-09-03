@@ -717,6 +717,13 @@ code {
   border-color: var(--down);
   color: var(--down);
 }
+/* Advisory, never blocking — see the Stepper's own comment on why this is
+ * NOT the same red as data-invalid. A step whose only errors are advisory
+ * (e.g. "Complete + PDF may truncate") does not disable Run. */
+.step-pip[data-note='true'] {
+  border-color: var(--warn);
+  color: var(--warn);
+}
 .step-pip:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -734,6 +741,9 @@ code {
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+.step-flag-note {
+  color: var(--warn);
 }
 
 .option-grid {
@@ -1361,6 +1371,10 @@ fieldset legend {
   flex: none;
   font-size: 0.82rem;
 }
+.report-download-error {
+  font-size: 0.78rem;
+  color: var(--warn);
+}
 
 /* --- Dependencies -------------------------------------------------------- */
 .filters {
@@ -1676,6 +1690,21 @@ fieldset legend {
   background: var(--surface-sunken);
 }
 .menu-item-disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+/* .menu-item is also a real <button> now (DownloadLink actually fetches and
+ * saves the file — see its own doc comment for why an <a href> cannot), so
+ * it needs the usual button-chrome reset an anchor never carried. */
+button.menu-item {
+  width: 100%;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+button.menu-item:disabled {
   color: var(--text-faint);
   cursor: not-allowed;
 }

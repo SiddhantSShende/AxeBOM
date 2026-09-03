@@ -99,7 +99,23 @@ escape suite asserts that no credential-shaped variable reaches one.
    |---|---|
    | Application name | `AxeBOM (local)` |
    | Homepage URL | `http://localhost:5173` |
-   | Authorization callback URL | `http://localhost:5173/auth/github/callback` |
+   | Authorization callback URL | `http://localhost:5173/api/v1/auth/github/` |
+
+   ⚠ **The path must start with `/api/v1`, not `/auth/github/...` directly.**
+   Only nginx's (and the Vite dev proxy's) `/api/` prefix location routes to
+   the gateway — a bare `/auth/github/...` path has no proxy rule anywhere
+   and falls through to the SPA's own router, which 404s it before the
+   backend ever sees the OAuth code. This callback URL is also the PARENT of
+   both real callback paths (`/api/v1/auth/github/callback` for sign-in,
+   `/api/v1/auth/github/connect/callback` for the project wizard's repo
+   picker) — one OAuth App backs both flows, and a classic GitHub OAuth App
+   registers exactly one "Authorization callback URL". After creating the
+   app, find the **wildcard matching** checkbox on its settings page
+   (enabled by default for apps created from 2026-08-03 onward) and make
+   sure it's on — that's what lets a subdirectory of the registered URL,
+   like the two real callback paths above, count as a match. With wildcard
+   matching off, GitHub requires an exact match and only one of the two
+   flows can ever work.
 
 3. **Register application**, then **Generate a new client secret**. Copy it
    immediately — GitHub shows it once.
@@ -110,14 +126,18 @@ escape suite asserts that no credential-shaped variable reaches one.
 # .env
 GITHUB_CLIENT_ID=Iv1.xxxxxxxxxxxxxxxx
 GITHUB_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-GITHUB_REDIRECT_URL=http://localhost:5173/auth/github/callback
+GITHUB_REDIRECT_URL=http://localhost:5173/api/v1/auth/github/callback
+GITHUB_CONNECT_REDIRECT_URL=http://localhost:5173/api/v1/auth/github/connect/callback
 ```
 
-> The callback URL must match **exactly**, including scheme, port and path.
-> A mismatch produces GitHub's own `redirect_uri_mismatch` error page rather
-> than anything AxeBOM logs.
+> Both callback URLs must be subdirectories of whatever you registered above
+> (see the wildcard-matching note in step 2) or GitHub's own
+> `redirect_uri_mismatch` error page appears instead of anything AxeBOM logs.
 >
-> Note the variable is `GITHUB_REDIRECT_URL`. Earlier templates called it
+> Note the variables are `GITHUB_REDIRECT_URL` (sign-in) and
+> `GITHUB_CONNECT_REDIRECT_URL` (the project wizard's "Connect GitHub" repo
+> picker, scope `repo` — a separate consent from sign-in, deliberately never
+> requested by the sign-in flow). Earlier templates called the first one
 > `GITHUB_CALLBACK_URL`, which no code ever read.
 
 ### Scopes
