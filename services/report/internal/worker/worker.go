@@ -719,6 +719,32 @@ func hardwareProperties(h render.HardwareComponent) []export.Property {
 	// host inventory are different kinds of claim.
 	add("axebom:hbom:source_engine", h.SourceEngine)
 
+	// --- CERT-In element 24, and the status that keeps it readable ---
+	//
+	// ⚠ THE STATUS IS EMITTED EVEN WHEN IT IS `not-attempted`, WHICH IS THE
+	// ONE EXCEPTION TO THE "omit absent values" RULE ABOVE. Everywhere else an
+	// omitted property means "we have no value and the coverage numbers say
+	// so". Here, omitting it would leave a hardware component with no
+	// vulnerability properties at all — which a downstream consumer reads as
+	// "no known vulnerabilities", the single most dangerous wrong inference
+	// this export can invite. The status is what makes the absence legible.
+	out = append(out, export.Property{
+		Name:  "axebom:hbom:vuln_match_status",
+		Value: firstNonEmpty(h.VulnMatchStatus, "not-attempted"),
+	})
+	for _, cpe := range h.CPE23Candidates {
+		add("axebom:hbom:cpe23", cpe)
+	}
+	for _, f := range h.Vulnerabilities {
+		// ⚠ THE BASIS AND CONFIDENCE RIDE WITH THE CVE, on exactly the
+		// reasoning the alternates above follow: a bare CVE id in a standards
+		// document is an assertion that this part is affected. It is not one —
+		// it is a string match against NVD's vocabulary — and the qualifier has
+		// to be inseparable from the claim or it will be dropped by the first
+		// consumer that splits on the property name.
+		add("certin:hbom:vulnerability", f.CVEID+" ("+f.MatchBasis+", "+f.MatchConfidence+" confidence, advisory)")
+	}
+
 	// ⚠ THE ASSEMBLY RELATIONSHIP, STATED EXPLICITLY, BECAUSE CycloneDX LOSES
 	// IT. SPDX carries a real `CONTAINS` relationship; CycloneDX flattens the
 	// same edge to `dependencies[].dependsOn`, which asserts that a gateway

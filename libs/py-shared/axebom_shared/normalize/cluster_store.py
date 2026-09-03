@@ -495,3 +495,53 @@ def _write_forwarding_row(
         "VALUES (%s, %s, %s)",
         (from_id, into_id, evidence_edge_id),
     )
+
+
+def ensure_clusters_for_ids(conn: Connection, display_ids: list[str]) -> dict[str, str]:
+    """Resolve or mint a durable cluster id for each plain vulnerability id.
+
+    ⚠ THE LIGHT PATH, FOR SOURCES THAT CARRY NO ALIASES. `persist_clusters`
+    exists because SBOM scanners report the same vulnerability under several
+    ids (CVE, GHSA, OSV) and the alias graph has to be closed, merged and
+    guarded. NVD's hardware answer is CVE ids and nothing else — there is no
+    second id to alias to, so there is no graph, no merge, and none of
+    ADR-0005's three guards have anything to fire on.
+
+    ⚠ THE SAME GLOBAL CLUSTER NAMESPACE, THOUGH, AND THAT IS DELIBERATE.
+    CVE-2021-1472 affecting a router and CVE-2021-1472 affecting a library are
+    ONE vulnerability. Minting a hardware-private cluster for it would make the
+    two look unrelated in every future query, which is precisely the mistake
+    ADR-0005 was written to prevent.
+
+    ⚠ EXISTING CLUSTER AGGREGATES ARE READ, NEVER REWRITTEN. A hardware match
+    contributes no new member id to a cluster the SBOM path already built, so
+    recomputing `member_count` from this partial view could only regress a
+    stored aggregate downward — the exact failure `_resolved_members` exists to
+    avoid on the other path.
+    """
+    wanted = [d for d in dict.fromkeys(display_ids) if d]
+    if not wanted:
+        return {}
+
+    out: dict[str, str] = {}
+    with conn.transaction():
+        cur = conn.cursor()
+        existing = _load_existing_clusters(cur, set(wanted))
+        for display_id in wanted:
+            found = existing.get(display_id)
+            if found:
+                # Forward through any prior merge, so a hardware finding never
+                # points at a superseded cluster.
+                out[display_id] = _resolve_cluster(cur, found)
+                continue
+            cluster_id = uuid7()
+            _insert_cluster(
+                cur,
+                cluster_id,
+                display_id=display_id,
+                member_count=1,
+                flagged_for_review=False,
+            )
+            _attach_members(cur, cluster_id, [display_id])
+            out[display_id] = cluster_id
+    return out

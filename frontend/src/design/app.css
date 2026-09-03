@@ -2490,3 +2490,52 @@ button.menu-item:disabled {
   font-size: 0.88rem;
   color: var(--text-muted);
 }
+
+/* ---------------------------------------------------------------------------
+ * Alternates editor
+ * ------------------------------------------------------------------------ */
+
+.field-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  margin: var(--space-5) 0;
+}
+
+.field-group > legend {
+  padding: 0 var(--space-2);
+  font-weight: 600;
+  color: var(--text);
+}
+
+/*
+ * Each alternate is visually one object. Without the boundary, a six-field
+ * block repeated three times reads as eighteen loose fields, and somebody
+ * edits the manufacturer of one row and the part number of the next.
+ */
+.alternate-row {
+  border-left: 3px solid var(--border);
+  padding-left: var(--space-4);
+  margin: var(--space-4) 0;
+}
+
+/*
+ * ⚠ NOT SIGNALLED BY COLOUR ALONE, for the reason .field-error states: the
+ * border and the weight carry the warning too. Here it matters more than
+ * usual — the warning is that a populated Alternates column is not the
+ * reassurance it looks like, and a reader who cannot see the colour is exactly
+ * the reader who would take the row at face value.
+ */
+.field-warning {
+  color: var(--warn);
+  border-left: 3px solid var(--warn);
+  padding-left: var(--space-3);
+  font-weight: 500;
+  margin: var(--space-2) 0;
+}
+
+.empty-hint {
+  color: var(--text-muted);
+  font-style: italic;
+  margin: var(--space-2) 0;
+}

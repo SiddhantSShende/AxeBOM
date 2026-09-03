@@ -134,6 +134,12 @@ Both emit CycloneDX 1.6, so merging is clean.
 
 Part enrichment sits behind a `PartDataProvider` interface: `nexar` (Octopart's current API, Altium), `mouser`, `manual`. **`manual` is the default**, so no paid quota-limited API is ever a hard dependency.
 
+**Hardware vulnerability matching (CERT-In element 24) is a lookup, not an engine.** `workers/hbom/vulnmatch.py` builds CPE candidates from a component's manufacturer and part number (`cpe.py`) and searches NVD's CVE API 2.0. It runs in the normalize consumer, never in the sandbox, and dispatches no container — there is nothing to execute.
+
+> ⚠ **Every match is a string comparison between two vocabularies nobody reconciled**, so each finding stores the CPE it was searched with, the basis it matched on, and a confidence that is never above `medium`. A component's `vuln_match_status` records which of four things happened — `matched`, `no-match`, `no-cpe`, `not-attempted` — because an empty findings list cannot otherwise be told from a search that never ran. **`NVD_API_KEY` is required and set in no environment today**, so the shipping state is `not-attempted` everywhere, reported in words. `configured()` returning False when the key is absent follows the `nexar`/`mouser` rule above: an unconfigured provider is skipped cleanly, never called with an empty credential.
+>
+> A key is required rather than optional even though NVD serves anonymous traffic: keyless access is 5 requests per 30 seconds shared across the egress IP, so one 200-line parts list would take twenty minutes and rate-limit every other tenant scanning at the same time. See `docs/LIMITATIONS.md`.
+
 ### Libraries, not engines
 
 | Tool | Where it belongs |
@@ -272,7 +278,7 @@ CycloneDX ML-BOM `modelCard`, `component.properties`, and `data` components; plu
 
 ### Hardware (CERT-In Table 11 + §10.4.1.4)
 
-CSV/form fields plus optional `PartDataProvider` enrichment (manufacturer, MPN, lifecycle, compliance attributes). Recursion via `parent_id`, depth-capped at 10 with a diagnostic.
+CSV/form fields plus optional `PartDataProvider` enrichment (manufacturer, MPN, lifecycle, compliance attributes). Recursion via `parent_id`, depth-capped at 10 with a diagnostic. Element 24's vulnerabilities come from the advisory NVD lookup above, stored in `normalize.hardware_findings` — **never merged into the software finding counts**, which are exact where these are inferred.
 
 ---
 

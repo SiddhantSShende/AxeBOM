@@ -22,11 +22,29 @@ from .normalize_runner import normalize_fixture
 
 FIXTURES = Path("fixtures")
 
-#: Fixtures with committed raw artifacts.
+#: SBOM fixtures with committed raw artifacts.
 #:
 #: Discovered rather than listed, so a fixture added without its raw/ directory
 #: is simply not tested instead of failing the suite for the wrong reason.
-AVAILABLE = sorted(p.parent.name for p in FIXTURES.glob("*/raw") if any(p.glob("*.json")))
+#:
+#: ⚠ `expected/canonical.json` IS WHAT MAKES A FIXTURE AN SBOM GOLDEN, and
+#: requiring it here fixes a genuinely red build.
+#:
+#: This used to glob every `fixtures/*/raw` holding JSON, which swept in
+#: `crypto-mixed` — a CBOM fixture whose raw artifacts are cbomkit-theia
+#: output. Run through the SBOM normalizer it yields zero components, so
+#: `coverage["denominator"]` is 0 and this suite failed on a fixture it was
+#: never meant to cover. The failure said "the coverage numbers are wrong" when
+#: the truth was "this is not an SBOM".
+#:
+#: ⚠ THIS DOES NOT GIVE crypto-mixed A GOLDEN — it still has no CBOM harness,
+#: which its own README and docs/09-GOLDEN-CORPUS.md both record. It stops the
+#: SBOM suite from claiming a fixture it cannot normalize.
+AVAILABLE = sorted(
+    p.parent.name
+    for p in FIXTURES.glob("*/raw")
+    if any(p.glob("*.json")) and (p.parent / "expected" / "canonical.json").exists()
+)
 
 
 def canonical(name: str) -> dict:

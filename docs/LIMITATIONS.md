@@ -49,6 +49,41 @@ A hardware BOM now reaches AxeBOM three ways, and every one of them is a documen
 If you need the physical hardware inspected rather than its documents read, this product cannot do it,
 and neither can any of the alternatives claiming to.
 
+## Hardware vulnerability matching is advisory
+
+CERT-In §10.4.1.4 element 24 asks a hardware BOM to carry vulnerability
+information, and AxeBOM matches components against NVD to populate it. **Every
+match is a guess, and the report says so beside each one.**
+
+A software finding is keyed on a purl the ecosystem itself minted: `lodash@4.17.20`
+is not an inference, it is the package's own name. A hardware component has no
+such identifier. It has a manufacturer string somebody typed and a model number
+off a datasheet, and NVD maintains its own vendor and product vocabulary that
+was never reconciled with either — "STMicroelectronics", "ST Microelectronics"
+and "stmicroelectronics" are one company and three CPE vendors. So each match is
+a string comparison between two independently maintained naming schemes, and
+every finding carries the CPE it was searched with, the basis it matched on, and
+a confidence that is never higher than `medium`.
+
+> ⚠ **`not-attempted` is not `no-match`.** An empty vulnerability column means
+> nothing without the status beside it. Four outcomes are recorded and never
+> collapsed — `matched`, `no-match` (searched and clear, the only reassuring
+> one), `no-cpe` (the component states too little to look up) and
+> `not-attempted` (no source configured, nobody looked). **No environment has an
+> NVD key today, so the shipping state is `not-attempted` for every component**,
+> and the report says that in words rather than leaving a blank cell to be read
+> as a clean result.
+
+**Element 24's score is counter-intuitive, because the guideline's field is.** It
+asks whether the BOM *declares* vulnerability information, not whether a check
+was run — so a component searched and found clean scores the same **zero** as one
+nobody looked at, and a vulnerable component scores full marks. The report states
+this next to the number rather than quietly "fixing" the arithmetic.
+
+**These severities are never added to the counts a software report quotes.** One
+blended figure, part fact and part guess, with nothing saying which, would be
+worse than two honest numbers.
+
 ## QBOM is largely a derivation
 
 Cryptographic assets come from CBOM discovery with quantum-vulnerability rules
@@ -153,7 +188,7 @@ it is updated every session and this summary is not.
 | Integration | **Nothing has been run against the full stack.** Every phase from 9 onward has a database, HTTP or container surface that has never executed. |
 | CBOM | `cbomkit-theia` has never been run; its adapter is tested against hand-built output. |
 | AIBOM | Both adapters are written and parse-tested, never executed. |
-| HBOM | The Go import port does not yet know the manufacturing columns, so `/v1/hbom/*` drops designators, prices, SKUs and lifecycle that a **scan** of the same file keeps. The two paths accept different column sets until the API work lands. |
+| HBOM | **Hardware vulnerability matching (element 24) has never run against the live NVD API.** It requires `NVD_API_KEY`, which is set in no environment today, so every component reports `not-attempted` — see "Hardware vulnerability matching is advisory" above. Parsing is tested against hand-built responses, per the `providers/nexar.py` precedent. |
 | Notifications | Templates and signing exist; no SMTP client, and no worker drains the delivery queue. |
 | Reports | No CycloneDX ML-BOM export. **HBOM export (§10.4.1.6) now exists** — SPDX 2.3 validates clean against `spdx-tools` with real `CONTAINS` relationships and `primaryPackagePurpose: DEVICE`/`FIRMWARE`; CycloneDX 1.6 emits `type: device`. ⚠ One honest limit: CycloneDX flattens containment to `dependsOn`, because protobom's serializer ignores the edge type and CycloneDX 1.6's dependency graph has no containment relationship. The fact is preserved as an explicit `axebom:hbom:parent` property. |
 | Enterprise | No SAML/OIDC SSO, no SCIM, no API keys, no audit-log export. |

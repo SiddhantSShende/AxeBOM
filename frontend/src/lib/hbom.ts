@@ -636,3 +636,76 @@ function csvCell(value: string): string {
   const guarded = DANGEROUS_PREFIX.test(value) ? `'${value}` : value;
   return /[",\r\n]/.test(guarded) ? `"${guarded.replace(/"/g, '""')}"` : guarded;
 }
+
+// ---------------------------------------------------------------------------
+// Editing alternates
+// ---------------------------------------------------------------------------
+
+/**
+ * blankAlternate is a new, empty second source.
+ *
+ * ⚠ `unverified` IS THE STARTING VALUE AND IT IS NEVER INFERRED UPWARD.
+ *
+ * A row somebody adds and does not finish is a part nobody has checked. If the
+ * editor opened on "drop-in", the default state of an unfinished edit would be
+ * an approved substitution — and the whole reason `equivalence` exists is to
+ * separate a decision somebody made from one nobody has.
+ */
+export function blankAlternate(ordinal: number): HardwareAlternate {
+  return {
+    ordinal,
+    manufacturer_name: '',
+    model_number: '',
+    supplier_info: '',
+    supplier_sku: '',
+    lifecycle_status: '',
+    equivalence: 'unverified',
+    approval_note: '',
+  };
+}
+
+/**
+ * isAlternateIdentifiable mirrors the `hardware_alternate_identifiable` CHECK.
+ *
+ * An alternate with no manufacturer, no part number and no SKU names nothing —
+ * it is a blank row, not a second source. The server skips these rather than
+ * failing the save, so the editor filters them for the same reason: one
+ * half-finished row must not block a save of the others.
+ */
+export function isAlternateIdentifiable(alternate: HardwareAlternate): boolean {
+  return Boolean(
+    alternate.manufacturer_name.trim() ||
+      alternate.model_number.trim() ||
+      alternate.supplier_sku.trim(),
+  );
+}
+
+/**
+ * normalizeAlternates prepares an edited list for the API.
+ *
+ * Drops rows that name nothing and renumbers the survivors, so `ordinal` stays
+ * the position a reader sees rather than a gap left by a deleted row.
+ */
+export function normalizeAlternates(alternates: HardwareAlternate[]): HardwareAlternate[] {
+  return alternates
+    .filter(isAlternateIdentifiable)
+    .map((a, index) => ({ ...a, ordinal: index }));
+}
+
+/**
+ * alternateWarning names what is wrong with a second source, or ''.
+ *
+ * ⚠ IT WARNS ABOUT THE ALTERNATE THAT CANNOT DO ITS JOB. A second source
+ * recorded against an obsolete part is the reason the field exists; a second
+ * source that is ITSELF obsolete is a false reassurance, and it is exactly the
+ * row a reader skims past because the column is populated.
+ */
+export function alternateWarning(alternate: HardwareAlternate): string {
+  if (alternate.lifecycle_status === 'obsolete' || alternate.lifecycle_status === 'eol') {
+    return 'This alternate is itself obsolete — it cannot be a second source.';
+  }
+  if (alternate.equivalence === 'unverified') {
+    return 'Nobody has verified this is equivalent. It is a candidate, not an approved substitution.';
+  }
+  return '';
+}

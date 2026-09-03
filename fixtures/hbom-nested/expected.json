@@ -19,11 +19,14 @@
   "max_depth": 3,
   "rows": [
     {
+      "_cpe23_candidates": [],
       "_depth": 0,
       "_enriched_fields": {},
       "_local_id": "row-2",
       "_parent_local_id": null,
       "_source_engine": "",
+      "_vuln_findings": [],
+      "_vuln_match_status": "not-attempted",
       "hardware_component.alternates": "not-provided",
       "hardware_component.assembly_type": "not-provided",
       "hardware_component.children[]": 3,
@@ -64,11 +67,14 @@
       "hardware_component.warranty_amc": "not-provided"
     },
     {
+      "_cpe23_candidates": [],
       "_depth": 1,
       "_enriched_fields": {},
       "_local_id": "row-3",
       "_parent_local_id": "row-2",
       "_source_engine": "",
+      "_vuln_findings": [],
+      "_vuln_match_status": "not-attempted",
       "hardware_component.alternates": "not-provided",
       "hardware_component.assembly_type": "not-provided",
       "hardware_component.children[]": 3,
@@ -108,11 +114,14 @@
       "hardware_component.warranty_amc": "not-provided"
     },
     {
+      "_cpe23_candidates": [],
       "_depth": 2,
       "_enriched_fields": {},
       "_local_id": "row-4",
       "_parent_local_id": "row-3",
       "_source_engine": "",
+      "_vuln_findings": [],
+      "_vuln_match_status": "not-attempted",
       "hardware_component.alternates": "not-provided",
       "hardware_component.assembly_type": "not-provided",
       "hardware_component.children[]": "not-provided",
@@ -153,11 +162,14 @@
       "hardware_component.warranty_amc": "not-provided"
     },
     {
+      "_cpe23_candidates": [],
       "_depth": 2,
       "_enriched_fields": {},
       "_local_id": "row-5",
       "_parent_local_id": "row-3",
       "_source_engine": "",
+      "_vuln_findings": [],
+      "_vuln_match_status": "not-attempted",
       "hardware_component.alternates": "not-provided",
       "hardware_component.assembly_type": "not-provided",
       "hardware_component.children[]": 1,
@@ -197,11 +209,14 @@
       "hardware_component.warranty_amc": "not-provided"
     },
     {
+      "_cpe23_candidates": [],
       "_depth": 3,
       "_enriched_fields": {},
       "_local_id": "row-6",
       "_parent_local_id": "row-5",
       "_source_engine": "",
+      "_vuln_findings": [],
+      "_vuln_match_status": "not-attempted",
       "hardware_component.alternates": "not-provided",
       "hardware_component.assembly_type": "not-provided",
       "hardware_component.children[]": "not-provided",
@@ -239,11 +254,14 @@
       "hardware_component.warranty_amc": "not-provided"
     },
     {
+      "_cpe23_candidates": [],
       "_depth": 2,
       "_enriched_fields": {},
       "_local_id": "row-7",
       "_parent_local_id": "row-3",
       "_source_engine": "",
+      "_vuln_findings": [],
+      "_vuln_match_status": "not-attempted",
       "hardware_component.alternates": "not-provided",
       "hardware_component.assembly_type": "not-provided",
       "hardware_component.children[]": "not-provided",
@@ -283,11 +301,14 @@
       "hardware_component.warranty_amc": "not-provided"
     },
     {
+      "_cpe23_candidates": [],
       "_depth": 1,
       "_enriched_fields": {},
       "_local_id": "row-8",
       "_parent_local_id": "row-2",
       "_source_engine": "",
+      "_vuln_findings": [],
+      "_vuln_match_status": "not-attempted",
       "hardware_component.alternates": "not-provided",
       "hardware_component.assembly_type": "not-provided",
       "hardware_component.children[]": 1,
@@ -328,11 +349,14 @@
       "hardware_component.warranty_amc": "not-provided"
     },
     {
+      "_cpe23_candidates": [],
       "_depth": 2,
       "_enriched_fields": {},
       "_local_id": "row-9",
       "_parent_local_id": "row-8",
       "_source_engine": "",
+      "_vuln_findings": [],
+      "_vuln_match_status": "not-attempted",
       "hardware_component.alternates": "not-provided",
       "hardware_component.assembly_type": "not-provided",
       "hardware_component.children[]": "not-provided",
@@ -372,11 +396,14 @@
       "hardware_component.warranty_amc": "not-provided"
     },
     {
+      "_cpe23_candidates": [],
       "_depth": 1,
       "_enriched_fields": {},
       "_local_id": "row-10",
       "_parent_local_id": "row-2",
       "_source_engine": "",
+      "_vuln_findings": [],
+      "_vuln_match_status": "not-attempted",
       "hardware_component.alternates": "not-provided",
       "hardware_component.assembly_type": "not-provided",
       "hardware_component.children[]": "not-provided",

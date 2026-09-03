@@ -101,7 +101,7 @@ tasks:
     cmds:
       - cmd: gofmt -l cmd libs services tools
         silent: true
-      - cmd: '{{.PY}} -m ruff format --check libs/py-shared'
+      - cmd: '{{.PY}} -m ruff format --check libs/py-shared workers'
         ignore_error: true
 
   lint:
@@ -116,7 +116,7 @@ tasks:
       # Forward slashes deliberately: task's embedded shell accepts them on
       # Windows, and backslashes from `go env GOPATH` would be eaten as escapes.
       - '"$(go env GOPATH)/bin/golangci-lint" run ./...'
-      - cmd: '{{.PY}} -m ruff check libs/py-shared'
+      - cmd: '{{.PY}} -m ruff check libs/py-shared workers'
         ignore_error: true
       - cmd: npm --prefix frontend run lint
         ignore_error: true
@@ -139,7 +139,7 @@ tasks:
     # nobody ever runs it; failing on Windows would block local development.
     cmds:
       - task: test:go
-      - cmd: '{{.PY}} -m pytest libs/py-shared -q'
+      - cmd: '{{.PY}} -m pytest libs/py-shared workers -q'
         ignore_error: true
 
   test:go:

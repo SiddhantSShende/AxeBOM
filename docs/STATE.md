@@ -7,8 +7,8 @@ A session that writes code but does not update this file has failed — the next
 ---
 
 **Last updated:** 2026-09-03
-**Current phase:** Enterprise HBOM — 🟢 **ALL SIX MILESTONES DONE AND COMMITTED** (`87a45e7`), plus the CBOM/AIBOM half of the approved OSINT scope. 🟢 **ALL FOUR SCANNABLE FAMILIES NOW NORMALIZE AUTOMATICALLY.** SBOM already did; HBOM, CBOM and AIBOM now do too, each proven by a real scan through NATS writing real rows — CBOM found 7 crypto assets including a certificate and an RSA-2048 key from a generated fixture, AIBOM wrote 3 model rows, HBOM 5 hardware components. `task verify` exits 0.
-**Next action:** Nothing is queued — read this file fresh and take a new instruction. The two real HBOM gaps if asked to extend it: `hardware_findings` (CERT-In element 24 is unpopulated, so that element scores zero for every component) and the alternates editor (alternates are read, rendered, exported and round-tripped, but arrive only by import). 🟡 Carried forward, none a regression: `component_provenance` is written by nothing, so per-component engine attribution is empty; `axebom toolctl pin` has never existed, which is why every `image_digest` but cdxgen's is null; `workers/cbom` and `workers/aibom` runners still carry the namespace-package relative import that breaks under pytest collection (latent — no test imports them; their new CONSUMERS use absolute imports); the ZITADEL http/https redirect still blocks Playwright; and the `crypto-mixed` golden failure is pre-existing. ⚠ `cdxgen`'s image is 15.5 GB and pulling it filled this machine's disk — 40 GB of build cache had to be reclaimed. Size any deployment for it.
+**Current phase:** Enterprise HBOM — 🟢 **COMPLETE.** All six milestones, the CBOM/AIBOM OSINT scope, and now both remaining gaps: **CERT-In element 24** (advisory NVD matching, with a four-value status so an empty column can never read as "clear") and the **alternates editor** (which also uncovered that `services/project` never read or wrote the alternates table at all, and that editing any manufacturing field was a silent no-op). 🟢 **ALL FOUR SCANNABLE FAMILIES NORMALIZE AUTOMATICALLY.** `task verify` exits 0; `pytest libs/py-shared workers` is 815 green, up from 2 failing that the local gate never ran.
+**Next action:** Nothing is queued — read this file fresh and take a new instruction. ⚠ **`NVD_API_KEY` is set in no environment, so hardware vulnerability matching reports `not-attempted` for every component and element 24 scores zero.** That is the honest shipping state and the report says so in words; setting a key is the one step that turns element 24 on. The NVD adapter has never run against the live API — same standing caveat as `providers/nexar.py`. 🟡 Carried forward, none a regression: `component_provenance` is written by nothing, so per-component engine attribution is empty; `axebom toolctl pin` has never existed, which is why every `image_digest` but cdxgen's is null; `workers/cbom` and `workers/aibom` runners still carry the namespace-package relative import that breaks under pytest collection (latent — no test imports them; their CONSUMERS use absolute imports); the ZITADEL http/https redirect still blocks Playwright; and `crypto-mixed` still has no CBOM golden harness (the SBOM suite no longer falsely claims it — that red build is fixed). ⚠ `cdxgen`'s image is 15.5 GB and pulling it filled this machine's disk — 40 GB of build cache had to be reclaimed. Size any deployment for it.
 
 > 🟢 **A REAL SCAN NOW NORMALIZES, LIVE, WITH NO MANUAL TRIGGER — THE
 > NORMALIZER'S DEPLOYED BOUNDARY FROM (e)/(k)/(l) IS CLOSED FOR SBOM.**
@@ -2265,6 +2265,116 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-09-03 (h) — HBOM completed: CERT-In element 24, the alternates editor, and two silent data-loss bugs
+
+**Both remaining HBOM gaps are closed**, and closing them surfaced three defects
+that had nothing to do with either.
+
+**CERT-In element 24 — advisory CVE matching, end to end.** Migration
+`normalize/0013_hardware_findings.sql` adds `normalize.hardware_findings` plus
+`vuln_match_status`, `cpe23_candidates` and `vuln_matched_at` on
+`hardware_components`. New `workers/hbom/cpe.py` builds CPE candidates from a
+manufacturer and part number; new `workers/hbom/vulnmatch.py` searches NVD and
+annotates the tree. The result flows through `build_canonical_hbom` → `bulk.py`
+→ the report's new Vulnerabilities sheet → both standards exports.
+
+> ⚠ **THE STATUS IS THE FEATURE, NOT THE FINDINGS.** Four outcomes are recorded
+> and never collapsed: `matched`, `no-match` (searched and clear), `no-cpe` (too
+> little detail to look up) and `not-attempted` (no source configured). An empty
+> findings list is ambiguous in the one direction that hurts — `not-attempted`
+> rendered as "no known vulnerabilities" is a false negative a customer acts on.
+> **No environment has `NVD_API_KEY`, so the shipping state is `not-attempted`
+> for every component**, and the sheet says "NOT SEARCHED — no vulnerability
+> source configured" in words rather than leaving a blank cell.
+
+> ⚠ **ELEMENT 24's SCORING IS BACKWARDS AND WE DID NOT "FIX" IT.** It is a
+> `ref_list`, so `is_substantive([])` is `False` — a component with **no** known
+> vulnerability scores zero while a vulnerable one scores full marks. Widening
+> `is_substantive` would change what `not-provided` means for every BOM type at
+> once and churn every golden. The arithmetic stays honest and
+> `render.vulnerabilityNote` states it beside the number.
+
+`cluster_id` reuses the same global clusters SBOM findings point at (ADR-0005) —
+one CVE affecting a router and a library is one vulnerability. New
+`cluster_store.ensure_clusters_for_ids` is the light path for a source that
+carries no aliases; NVD returns CVE ids only, so there is no graph to close.
+`annotate` runs in the consumer, **not** inside `build_canonical_hbom`, because
+that function is pure by contract and NVD's answer changes daily — a lookup
+inside it would silently break invariant 10's replay.
+
+**The alternates editor — and the reason it could never have worked.**
+`componentDTO` has mapped `alternates` in **both** directions since the
+manufacturing fields landed, and `services/project` touched
+`normalize.hardware_component_alternates` in **neither**. So the API returned
+200 OK and discarded them, and every read returned `[]`. Only the *report*
+service read that table and only the *normalize* pipeline filled it — which is
+why a **scanned** hardware BOM had alternates and an **edited** one silently did
+not. New `replaceAlternates` (delete-then-insert, because removing a second
+source must actually remove it) and `attachAlternates` on the read side, plus the
+`AlternatesEditor` component and its helpers in `frontend/src/lib/hbom.ts`.
+
+**A second silent data-loss bug found next to it:** `updateHardwareNode`'s
+`UPDATE` set only the CERT-In columns while the `INSERT` beside it wrote eleven
+more. Quantity, designators, footprint, SKU, supplier, price, currency, DNP,
+assembly type, lifecycle and datasheet were writable on **create** and silently
+unwritable on **edit** — 200 OK, stored value unchanged, nothing said so.
+
+#### Three defects found by running what had never run
+
+- 🔴 **`task verify` checked less than CI did.** The local gate ran
+  `pytest libs/py-shared`; CI runs `pytest libs/py-shared workers`. So every
+  worker test — every OSINT adapter — could fail CI while `task verify` passed.
+  The Taskfile's three Python steps now name the same paths CI does. This is
+  what surfaced the next two.
+- 🔴 **The SBOM golden suite was claiming a CBOM fixture, and the build was red.**
+  `AVAILABLE` globbed every `fixtures/*/raw` holding JSON, sweeping in
+  `crypto-mixed` — cbomkit-theia output, which yields zero components through the
+  SBOM normalizer, so `denominator` was 0. Pre-existing at HEAD (confirmed in a
+  clean worktree) and recorded here as "pre-existing" for two sessions.
+  `expected/canonical.json` is now what makes a fixture an SBOM golden. This does
+  **not** give `crypto-mixed` a golden — it still has no CBOM harness.
+- 🟡 **The image-pinning guard fired correctly** and had to be updated rather than
+  silenced: it asserted "every engine is unpinned", and `cdxgen` was pinned by
+  digest last session. It now names the pinned set, so an engine *losing* its
+  digest is also a failure.
+
+#### A bug in my own code, caught by its first test
+
+`normalize_vendor` stripped "microelectronics", "semiconductor", "electronics"
+and "technologies" as corporate suffixes, folding **"ST Microelectronics" → `st`**
+— not a CPE vendor, matching nothing, silently. Those words are descriptive, not
+legal forms, and they carry the company's identity far more often than they are
+noise. The list is now legal forms only, and the rule is written on it: strip
+what names an *incorporation*, never what names the *company*.
+
+#### Verification
+
+- `task verify` exits 0. `pytest libs/py-shared workers` — **815 passed**
+  (was 2 failing, unrun locally). Frontend — 125 passed. Go — all packages.
+- **A live hardware write round-trip now exists** (`test_writer.py`). No hardware
+  batch had ever been executed against the real schema: migration 0011's
+  manufacturing columns, the alternates table and now `hardware_findings` were
+  all planned and never COPYed. It asserts `extended_price` is computed by
+  Postgres and that the child references its parent within one COPY.
+- The report store's static `TestEveryColumnThisPackageQueriesExists` covers the
+  new `hardware_findings` query — mutation-verified (`match_basis` →
+  `match_bassis` fails it).
+- Mutation-verified: `not-attempted`→`no-match` collapse, dedupe removal,
+  firmware CPE part `o`→`h`, alternates write no-op, and the `UPDATE`'s
+  manufacturing columns.
+- Live: `normalize-consumer`, `report`, `project` and `frontend` images rebuilt
+  and recreated; the HBOM consumer is subscribed to `scan.normalize.hbom` with
+  the new modules and reports `not-attempted` for an unconfigured lookup.
+
+#### Owed
+
+- **The NVD path has never run against the live API** (`providers/nexar.py`
+  precedent). Parsing is tested against hand-built responses shaped from NVD's
+  published 2.0 schema. `configured()` returning False is the honest state.
+- `workers/hbom/test_vulnmatch.py` covers the four statuses, CVSS version
+  preference, dedup and the tree pass; the paging cursor is untested because
+  nothing has paged.
 
 ### 2026-09-03 (g) — CBOM and AIBOM normalize automatically, closing the approved scope
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -149,4 +150,60 @@ func TestLoadNormalizedBOM(t *testing.T) {
 			t.Errorf("err = %v, want context.Canceled", err)
 		}
 	})
+}
+
+func TestTheVulnMatchStatusIsExportedEvenWhenNothingWasSearched(t *testing.T) {
+	// ⚠ THE ONE PROPERTY THAT MUST NOT BE OMITTED WHEN EMPTY.
+	//
+	// Every other absent value is omitted, because the coverage numbers report
+	// the gap. If the status were omitted too, a hardware component would reach
+	// SPDX and CycloneDX with no vulnerability properties at all — which every
+	// downstream consumer reads as "no known vulnerabilities". That is the most
+	// dangerous wrong inference this export can invite, and it is invited by
+	// silence rather than by a wrong value.
+	props := hardwareProperties(render.HardwareComponent{Name: "Resistor"})
+
+	var status string
+	for _, p := range props {
+		if p.Name == "axebom:hbom:vuln_match_status" {
+			status = p.Value
+		}
+	}
+	if status != "not-attempted" {
+		t.Fatalf("an unsearched component exports status %q, want %q", status, "not-attempted")
+	}
+}
+
+func TestAnExportedHardwareCVENeverAppearsWithoutItsQualifier(t *testing.T) {
+	// A bare CVE id in a standards document asserts the part is affected. It is
+	// a string match against NVD's vocabulary, and the qualifier has to be
+	// inseparable from the claim.
+	props := hardwareProperties(render.HardwareComponent{
+		Name:            "MCU",
+		VulnMatchStatus: "matched",
+		Vulnerabilities: []render.HardwareFinding{{
+			CVEID:           "CVE-2021-1472",
+			MatchBasis:      "vendor+product",
+			MatchConfidence: "low",
+		}},
+	})
+
+	var found bool
+	for _, p := range props {
+		if p.Name != "certin:hbom:vulnerability" {
+			continue
+		}
+		found = true
+		if p.Value == "CVE-2021-1472" {
+			t.Errorf("the CVE is exported bare, with no advisory qualifier: %q", p.Value)
+		}
+		for _, want := range []string{"CVE-2021-1472", "vendor+product", "low", "advisory"} {
+			if !strings.Contains(p.Value, want) {
+				t.Errorf("the exported value %q omits %q", p.Value, want)
+			}
+		}
+	}
+	if !found {
+		t.Error("no vulnerability property was exported for a matched component")
+	}
 }

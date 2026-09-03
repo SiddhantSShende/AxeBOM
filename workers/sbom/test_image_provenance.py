@@ -186,11 +186,27 @@ def test_the_manifest_pinning_state_is_visible() -> None:
     ]
     assert containers, "no container engines in the manifest"
 
+    pinned = sorted(name for name, digest in containers if digest)
+
+    # ⚠ THE PINNED SET IS NAMED, NOT COUNTED, AND THIS TEST FIRED THE MOMENT IT
+    # CHANGED — which is what it was written for.
+    #
+    # Every engine was unpinned when this was written. `cdxgen` was pulled and
+    # pinned by digest in the session that added it as an SBOM engine, and this
+    # assertion failed rather than letting the roster drift quietly. Partial
+    # pinning is the state that misleads: a reader who knows "some engines are
+    # pinned" and not WHICH will assume the one they care about is.
+    #
+    # Adding a name here is a deliberate act. Removing one means an engine lost
+    # its digest and started running tag-addressed again, which is the
+    # regression this guards.
+    assert pinned == ["cdxgen"], (
+        f"the digest-pinned engine set changed to {pinned}: update this test "
+        f"and docs/STATE.md — partial pinning is the state that quietly misleads"
+    )
+
     unpinned = [name for name, digest in containers if not digest]
-    # Every engine is unpinned today. If that changes, this test names which
-    # ones moved rather than passing silently either way.
-    assert len(unpinned) == len(containers), (
-        f"{len(containers) - len(unpinned)} engine(s) are now digest-pinned: "
-        f"update this test and docs/STATE.md — partial pinning is the state "
-        f"that quietly misleads"
+    assert unpinned, (
+        "every engine is now digest-pinned — delete this test's unpinned branch "
+        "and the ENGINE_IMAGE_NOT_PINNED diagnostic's 'expected' framing"
     )

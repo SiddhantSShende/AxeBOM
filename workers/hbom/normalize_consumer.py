@@ -35,12 +35,13 @@ from pathlib import Path
 from typing import Any
 
 from axebom_shared.logging import get_logger
-from axebom_shared.normalize import writer
+from axebom_shared.normalize import cluster_store, writer
 from axebom_shared.normalize.consumer_runtime import Retry, run_consumer
 
 from .ingest import ingest
 from .model import HardwareComponent
 from .normalize import build_canonical_hbom
+from .vulnmatch import annotate
 
 log = get_logger("hbom-normalize-consumer")
 
@@ -228,8 +229,53 @@ async def handle_trigger(
         )
         return
 
+    # ⚠ THE MATCH RUNS HERE, NOT INSIDE build_canonical_hbom. That function is
+    # a pure function of its input by contract, which is what makes invariant
+    # 10's replay meaningful — re-normalizing a stored artifact must reproduce
+    # the document the customer was shown. NVD's answer changes daily, so a
+    # lookup inside it would quietly break that. The verdict is matched once,
+    # on the way in, and stored as part of the artifact.
+    #
+    # ⚠ OFF THE EVENT LOOP. `annotate` is paced against NVD's rate limit and
+    # will block for seconds on a large parts list; this loop has to keep
+    # answering NATS pings throughout.
+    match_diagnostics = await asyncio.to_thread(annotate, roots)
+    for message in match_diagnostics:
+        diagnostics.append(
+            {
+                # `info`, not `warn`. An unconfigured NVD key is a deployment
+                # choice, not a fault — but it is recorded on every document it
+                # affects, because the alternative is a report that shows no
+                # hardware vulnerabilities without saying it never looked.
+                "severity": "info",
+                "code": "HBOM_VULN_MATCH_SKIPPED",
+                "message": message,
+            }
+        )
+
+    # ⚠ RESOLVED BEFORE NORMALIZATION, EXACTLY AS THE SBOM PATH DOES IT.
+    # `normalize.hardware_findings.cluster_id` is NOT NULL with a real foreign
+    # key (migration 0013, closing the same hole 0007 closed for findings), so
+    # a durable cluster has to exist before the COPY runs. These are the SAME
+    # global clusters SBOM findings point at: one CVE affecting both a router
+    # and a library is one vulnerability, not two.
+    cve_ids = sorted(
+        {
+            f.cve_id
+            for root in roots
+            for _d, node in root.walk()
+            for f in node.vuln_findings
+            if f.cve_id
+        }
+    )
+    cluster_ids = (
+        await asyncio.to_thread(cluster_store.ensure_clusters_for_ids, conn, cve_ids)
+        if cve_ids
+        else {}
+    )
+
     def _do_write() -> writer.WriteResult:
-        canonical = build_canonical_hbom(roots, project_id=project_id)
+        canonical = build_canonical_hbom(roots, project_id=project_id, cluster_ids=cluster_ids)
         canonical["diagnostics"] = [*canonical.get("diagnostics", []), *diagnostics]
         return writer.write_bom_document(
             conn,

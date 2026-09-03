@@ -20,6 +20,7 @@ import {
   SUPPLIER_FORMATS,
   bySupplier,
   describeAlternate,
+  type HardwareAlternate,
   describeProvenance,
   flatten,
   rollUp,
@@ -29,6 +30,11 @@ import {
   usePartLookup,
   usePartProvider,
   useSaveComponent,
+  blankAlternate,
+  normalizeAlternates,
+  alternateWarning,
+  EQUIVALENCE_VALUES,
+  LIFECYCLE_VALUES,
   type HardwareComponent,
   type SupplierFormat,
 } from '../../lib/hbom';
@@ -319,7 +325,10 @@ function ComponentForm({
       className="panel"
       onSubmit={(e) => {
         e.preventDefault();
-        save.mutate(draft, { onSuccess: onDone });
+        save.mutate(
+          { ...draft, alternates: normalizeAlternates(draft.alternates) },
+          { onSuccess: onDone },
+        );
       }}
     >
       <h2>{component.product_name}</h2>
@@ -398,6 +407,11 @@ function ComponentForm({
           — CERT-In Table 11 records both.
         </p>
       </div>
+
+      <AlternatesEditor
+        alternates={draft.alternates}
+        onChange={(alternates) => set('alternates', alternates)}
+      />
 
       <div className="wizard-actions">
         <button type="submit" className="btn btn-primary" disabled={save.isPending}>
@@ -606,5 +620,156 @@ function SupplierExport({ roots }: { roots: HardwareComponent[] }) {
         ))}
       </div>
     </aside>
+  );
+}
+
+/**
+ * AlternatesEditor manages a component's approved second sources.
+ *
+ * ⚠ THIS IS THE FIELD THAT DECIDES WHETHER AN OBSOLETE PART DELAYS A BUILD OR
+ * STOPS IT, and until now it could only arrive by import — the API mapped it in
+ * both directions and the store persisted it in neither, so anything typed here
+ * would have been accepted and discarded.
+ *
+ * ⚠ EVERY ROW SHOWS ITS EQUIVALENCE, AND THE DEFAULT IS `unverified`. A part
+ * number alone reads as an approved substitution. The single most damaging
+ * thing this editor could do is let somebody record a candidate and have a
+ * later reader treat it as a decision, so the qualifier is never optional and
+ * never starts anywhere but the weakest value.
+ */
+function AlternatesEditor({
+  alternates,
+  onChange,
+}: {
+  alternates: HardwareAlternate[];
+  onChange: (alternates: HardwareAlternate[]) => void;
+}) {
+  function update(index: number, patch: Partial<HardwareAlternate>) {
+    onChange(alternates.map((a, i) => (i === index ? { ...a, ...patch } : a)));
+  }
+
+  return (
+    <fieldset className="field-group">
+      <legend>Approved alternates</legend>
+      <p className="field-hint">
+        Second sources for this part. A component that is obsolete with no alternate recorded will
+        stop a build when remaining stock runs out.
+      </p>
+
+      {alternates.length === 0 && (
+        <p className="empty-hint">No alternate recorded for this part.</p>
+      )}
+
+      {alternates.map((alternate, index) => {
+        const warning = alternateWarning(alternate);
+        return (
+          <div key={index} className="alternate-row">
+            <div className="field-row">
+              <label htmlFor={`alt-mfr-${index}`}>Manufacturer</label>
+              <input
+                id={`alt-mfr-${index}`}
+                value={alternate.manufacturer_name}
+                onChange={(e) => update(index, { manufacturer_name: e.target.value })}
+              />
+            </div>
+
+            <div className="field-row">
+              <label htmlFor={`alt-mpn-${index}`}>Part number</label>
+              <input
+                id={`alt-mpn-${index}`}
+                value={alternate.model_number}
+                onChange={(e) => update(index, { model_number: e.target.value })}
+              />
+            </div>
+
+            <div className="field-row">
+              <label htmlFor={`alt-sku-${index}`}>Supplier SKU</label>
+              <input
+                id={`alt-sku-${index}`}
+                value={alternate.supplier_sku}
+                onChange={(e) => update(index, { supplier_sku: e.target.value })}
+              />
+            </div>
+
+            <div className="field-row">
+              <label htmlFor={`alt-sup-${index}`}>Supplier</label>
+              <input
+                id={`alt-sup-${index}`}
+                value={alternate.supplier_info}
+                onChange={(e) => update(index, { supplier_info: e.target.value })}
+              />
+            </div>
+
+            <div className="field-row">
+              <label htmlFor={`alt-equiv-${index}`}>Equivalence</label>
+              <select
+                id={`alt-equiv-${index}`}
+                value={alternate.equivalence}
+                onChange={(e) =>
+                  update(index, {
+                    equivalence: e.target.value as HardwareAlternate['equivalence'],
+                  })
+                }
+              >
+                {EQUIVALENCE_VALUES.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+              <p className="field-hint">
+                <code>drop-in</code> replaces the part with no change.{' '}
+                <code>functional</code> needs a design or firmware change.{' '}
+                <code>unverified</code> means nobody has checked.
+              </p>
+            </div>
+
+            <div className="field-row">
+              <label htmlFor={`alt-life-${index}`}>Lifecycle</label>
+              <select
+                id={`alt-life-${index}`}
+                value={alternate.lifecycle_status}
+                onChange={(e) => update(index, { lifecycle_status: e.target.value })}
+              >
+                <option value="">not-provided</option>
+                {LIFECYCLE_VALUES.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field-row">
+              <label htmlFor={`alt-note-${index}`}>Approval note</label>
+              <input
+                id={`alt-note-${index}`}
+                value={alternate.approval_note}
+                onChange={(e) => update(index, { approval_note: e.target.value })}
+              />
+              <p className="field-hint">Who approved it, and against what.</p>
+            </div>
+
+            {warning && <p className="field-warning">{warning}</p>}
+
+            <button
+              type="button"
+              className="btn btn-quiet"
+              onClick={() => onChange(alternates.filter((_, i) => i !== index))}
+            >
+              Remove this alternate
+            </button>
+          </div>
+        );
+      })}
+
+      <button
+        type="button"
+        className="btn"
+        onClick={() => onChange([...alternates, blankAlternate(alternates.length)])}
+      >
+        Add an alternate
+      </button>
+    </fieldset>
   );
 }

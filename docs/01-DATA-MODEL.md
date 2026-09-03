@@ -460,6 +460,24 @@ Approved second sources — the supply-chain field that decides whether an obsol
 
 `CONSTRAINT hardware_alternate_identifiable` — an alternate naming no manufacturer, no MPN and no SKU is not an alternate.
 
+### `normalize.hardware_findings`  ← CERT-In §10.4.1.4 element 24 (p.62)
+
+`(id, tenant_id, bom_document_id, hardware_component_id, cluster_id, display_id, cpe23, match_basis, match_confidence, severity, cvss_score NUMERIC(3,1), cvss_vector, description, source, source_version, first_seen_at)`
+
+Plus three columns on `hardware_components`: `vuln_match_status`, `cpe23_candidates TEXT[]`, `vuln_matched_at`.
+
+**Not `normalize.findings`, and the reason is a silent false negative.** That table's only reader — `services/report/internal/store/bomsource.go`'s `loadFindings` — is an `INNER JOIN` against `normalize.components`. A row whose `component_id` points at a hardware component matches nothing and disappears from the report with no error anywhere, which is exactly what invariant 12 exists to prevent. Making it a `UNION` would also make an SBOM hot path (50k components, 200k findings, 16 hash partitions) pay for a hardware feature. **Not JSONB on `hardware_components` either** — that re-opens the dangling-cluster hole migration `0007` closed, because a JSONB array carries no foreign key.
+
+**`cluster_id` is the same global cluster an SBOM finding points at** (ADR-0005). CVE-2021-1472 affecting a router and CVE-2021-1472 affecting a library are one vulnerability; a hardware-private cluster would make them look unrelated in every future query.
+
+> ⚠ **`vuln_match_status` is what makes an empty `findings` list readable, and without it the column is dangerous.** Four values — `matched`, `no-match`, `no-cpe`, `not-attempted` — and collapsing any two loses the distinction that matters: *"we searched and found nothing"* and *"no vulnerability source is configured"* are the same empty list, and only one of them is reassuring. `not-attempted` rendered as "no known vulnerabilities" is a false negative a customer would act on.
+
+**`match_basis` and `match_confidence` are columns, not a footnote.** An SBOM finding is keyed on a purl the ecosystem itself minted; this one is keyed on a CPE assembled from a manufacturer string somebody typed and a model number off a datasheet, matched against NVD's own vocabulary that was never reconciled with either. `match_confidence` defaults to `low` — a default that flatters a guess is how an advisory becomes a claim somebody acts on — and the matcher never emits `high` at all.
+
+> ⚠ **Element 24 scores "a vulnerability reference is present", not "we checked", and the arithmetic is counter-intuitive because the guideline's field is.** It is a `ref_list`, and `coverage.is_substantive([])` is `False` — so a component with **no** known vulnerability scores **zero** on element 24 while a vulnerable one scores full marks. Widening `is_substantive` is *not* the fix: it is the most sensitive function in the codebase and would change what `not-provided` means for every BOM type at once. The arithmetic stays honest and **the report says so in words**, beside the number (`render.vulnerabilityNote`).
+
+**These severities are never summed into the counts an SBOM report quotes.** One blended figure, part fact and part guess, with nothing saying which, is worse than two honest numbers.
+
 ---
 
 ## 7. Vulnerability disclosure — schema `normalize`

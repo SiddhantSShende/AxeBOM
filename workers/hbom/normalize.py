@@ -122,6 +122,15 @@ def flatten(roots: list[HardwareComponent]) -> list[dict[str, Any]]:
             row["_depth"] = depth
             row["_enriched_fields"] = dict(node.enriched_fields)
             row["_source_engine"] = node.source_engine
+
+            # ⚠ HOW ELEMENT 24 WAS ARRIVED AT, CARRIED BESIDE ITS VALUE.
+            # `findings` above is scored by the profile; without the status the
+            # reader cannot tell an empty list that means "we searched and found
+            # nothing" from one that means "we never searched". See
+            # `workers/hbom/vulnmatch.py`.
+            row["_vuln_match_status"] = node.vuln_match_status
+            row["_cpe23_candidates"] = list(node.cpe23_candidates)
+            row["_vuln_findings"] = [f.to_dict() for f in node.vuln_findings]
             rows.append(row)
 
     return rows
@@ -287,6 +296,7 @@ def build_canonical_hbom(
     roots: list[HardwareComponent],
     *,
     project_id: str | None = None,
+    cluster_ids: dict[str, str] | None = None,
     ruleset_version: str = RULESET_VERSION,
 ) -> dict[str, Any]:
     """Turn parsed hardware trees into a document `writer.write_bom_document`
@@ -306,6 +316,18 @@ def build_canonical_hbom(
     (invariant 10).
     """
     result = normalize_bom(roots)
+
+    # ⚠ CLUSTER IDS ARE AN ARGUMENT, NOT A LOOKUP, AND THAT IS WHAT KEEPS THIS
+    # FUNCTION PURE. Resolving them needs a database round-trip; doing it here
+    # would make the same stored artifact normalize differently depending on
+    # what else the database had seen, which is exactly the replayability
+    # invariant 10 buys. The consumer resolves them and passes them in — the
+    # same shape `pipeline.normalize()` takes `existing_clusters` in.
+    resolved = cluster_ids or {}
+    for row in result.rows:
+        for finding in row.get("_vuln_findings") or []:
+            finding["cluster_id"] = resolved.get(finding.get("cve_id", ""), "")
+
     coverage, manufacturing = result.coverage, result.manufacturing
     if coverage is None or manufacturing is None:  # pragma: no cover
         # normalize_bom always sets both; this narrows the Optionals without an

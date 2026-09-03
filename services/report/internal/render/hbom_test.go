@@ -266,9 +266,15 @@ func TestAnHBOMWithNoCriticalityIsToldWhy(t *testing.T) {
 }
 
 func TestAPopulatedHBOMDoesNotRaiseTheCriticalityNote(t *testing.T) {
+	// ⚠ ASSERTS THE ABSENCE OF ONE NOTE, NOT A TOTAL COUNT. This test used to
+	// require exactly one note, which made it fail the moment ANY unrelated
+	// note was added — element 24's vulnerability caveat, here. A count is a
+	// proxy for the property; the property is that a BOM which DOES declare
+	// criticality is not told it does not.
 	notes := HBOMNotes(hardware())
-	if len(notes) != 1 {
-		t.Errorf("a populated BOM raised %d notes: %v", len(notes), notes)
+	joined := strings.Join(notes, " ")
+	if strings.Contains(joined, "No component declares a criticality rating") {
+		t.Errorf("a populated BOM raised the criticality note: %v", notes)
 	}
 }
 
@@ -519,5 +525,151 @@ func TestAnAlternateAlwaysCarriesItsEquivalence(t *testing.T) {
 	}
 	if !strings.Contains(got, "ALT-2 (drop-in)") {
 		t.Errorf("a stated equivalence must survive: %q", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// CERT-In element 24 — advisory matching, and the blank cell that must not
+// read as "clear"
+// ---------------------------------------------------------------------------
+
+func TestVulnerabilitySheetListsEveryComponentNotOnlyTheMatchedOnes(t *testing.T) {
+	// ⚠ THE FAILURE THIS PREVENTS: a sheet listing only matches renders EMPTY
+	// when nothing was searched, which is indistinguishable from a clean bill
+	// of health.
+	components := []HardwareComponent{
+		{Name: "Mainboard", VulnMatchStatus: "not-attempted"},
+		{Name: "Resistor", VulnMatchStatus: "no-match"},
+		{Name: "MCU", VulnMatchStatus: "matched", Vulnerabilities: []HardwareFinding{
+			{CVEID: "CVE-2021-1472", MatchBasis: "vendor+product", MatchConfidence: "low"},
+		}},
+	}
+
+	rows := rowsOf(t, hardwareVulnerabilitySheet(components))
+	if len(rows) != 3 {
+		t.Fatalf("expected one row per component, got %d", len(rows))
+	}
+	for _, name := range []string{"Mainboard", "Resistor", "MCU"} {
+		var found bool
+		for _, row := range rows {
+			if row[0] == name {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%s is missing from the Vulnerabilities sheet", name)
+		}
+	}
+}
+
+func TestAnUnsearchedComponentSaysSoInWordsNotInACode(t *testing.T) {
+	// ⚠ "not-attempted" IN A CELL NEXT TO AN EMPTY CVE COLUMN IS READ AS
+	// "nothing found" BY ANYBODY SKIMMING.
+	for _, status := range []string{"not-attempted", "", "no-cpe"} {
+		label := vulnStatusLabel(status)
+		if !strings.Contains(label, "NOT SEARCHED") {
+			t.Errorf("status %q renders as %q, which does not say nobody looked", status, label)
+		}
+	}
+	if strings.Contains(vulnStatusLabel("no-match"), "NOT SEARCHED") {
+		t.Error("a real negative must not be labelled as unsearched")
+	}
+	if !strings.Contains(vulnStatusLabel("matched"), "advisory") {
+		t.Error("a match must be labelled advisory")
+	}
+}
+
+func TestTheNoteWarnsWhenNothingWasSearchedAtAll(t *testing.T) {
+	note := vulnerabilityNote([]HardwareComponent{
+		{Name: "a", VulnMatchStatus: "not-attempted"},
+		{Name: "b", VulnMatchStatus: "no-cpe"},
+	})
+	lower := strings.ToLower(note)
+	for _, want := range []string{"no vulnerability lookup was performed", "not that nothing was found"} {
+		if !strings.Contains(lower, want) {
+			t.Errorf("the note does not contain %q: %s", want, note)
+		}
+	}
+}
+
+func TestTheNoteExplainsThatCleanScoresZeroOnElement24(t *testing.T) {
+	// ⚠ THE SCORING IS COUNTERINTUITIVE AND THE REPORT HAS TO SAY SO. A part
+	// with no known vulnerability scores zero on element 24 while a vulnerable
+	// one scores full marks. A reader who does not know that will read the
+	// percentage as a security signal, which it is not.
+	note := vulnerabilityNote([]HardwareComponent{
+		{Name: "a", VulnMatchStatus: "matched", Vulnerabilities: []HardwareFinding{{CVEID: "CVE-1"}}},
+		{Name: "b", VulnMatchStatus: "no-match"},
+	})
+	lower := strings.ToLower(note)
+	if !strings.Contains(lower, "declares") {
+		t.Errorf("the note does not say the element scores declaration: %s", note)
+	}
+	if !strings.Contains(lower, "advisory") {
+		t.Errorf("the note does not label the matching advisory: %s", note)
+	}
+	if !strings.Contains(lower, "found clean scores the same zero") {
+		t.Errorf("the note does not state the inversion: %s", note)
+	}
+}
+
+func TestTheNoteCountsTheUnsearchedComponentsWhenSomeWereSearched(t *testing.T) {
+	note := vulnerabilityNote([]HardwareComponent{
+		{Name: "a", VulnMatchStatus: "matched", Vulnerabilities: []HardwareFinding{{CVEID: "CVE-1"}}},
+		{Name: "b", VulnMatchStatus: "no-cpe"},
+		{Name: "c", VulnMatchStatus: "not-attempted"},
+	})
+	if !strings.Contains(note, "2 of 3") {
+		t.Errorf("the note does not count the unsearched components: %s", note)
+	}
+}
+
+func TestHBOMNotesCarriesTheVulnerabilityCaveat(t *testing.T) {
+	// The Phase 15 bug was HBOMNotes being written and wired to nothing.
+	notes := HBOMNotes([]HardwareComponent{{Name: "a", VulnMatchStatus: "not-attempted"}})
+	var found bool
+	for _, n := range notes {
+		if strings.Contains(strings.ToLower(n), "no vulnerability lookup was performed") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("the vulnerability caveat never reaches HBOMNotes: %v", notes)
+	}
+}
+
+func TestTheSheetRendersTheSearchedCPESoAMatchIsAuditable(t *testing.T) {
+	// ⚠ AN ADVISORY MATCH THAT DOES NOT SAY WHAT IT SEARCHED WITH CANNOT BE
+	// CHECKED BY THE READER, which is the only thing that makes "advisory"
+	// meaningful rather than a disclaimer.
+	components := []HardwareComponent{{
+		Name:            "MCU",
+		VulnMatchStatus: "matched",
+		Vulnerabilities: []HardwareFinding{{
+			CVEID:           "CVE-2021-1472",
+			CPE23:           "cpe:2.3:h:cisco:rv340:*:*:*:*:*:*:*:*",
+			MatchBasis:      "vendor+product",
+			MatchConfidence: "low",
+		}},
+	}}
+	row := rowsOf(t, hardwareVulnerabilitySheet(components))[0]
+	joined := strings.Join(row, "|")
+	for _, want := range []string{"cpe:2.3:h:cisco:rv340", "vendor+product", "low"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("the row omits %q, so the match cannot be audited: %v", want, row)
+		}
+	}
+}
+
+func TestAnUnsearchedComponentStillShowsTheCPEsThatWouldHaveBeenUsed(t *testing.T) {
+	// So a customer with no NVD key can see exactly what enabling one buys.
+	components := []HardwareComponent{{
+		Name:            "MCU",
+		VulnMatchStatus: "not-attempted",
+		CPE23Candidates: []string{"cpe:2.3:h:st:stm32h753zi:*:*:*:*:*:*:*:*"},
+	}}
+	row := rowsOf(t, hardwareVulnerabilitySheet(components))[0]
+	if !strings.Contains(strings.Join(row, "|"), "stm32h753zi") {
+		t.Errorf("the candidate CPE is not rendered: %v", row)
 	}
 }

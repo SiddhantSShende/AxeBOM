@@ -251,6 +251,11 @@ def plan(
             )
         )
         out.batches.append(_hardware_alternates_batch(hardware_components, tenant_id, hardware_ids))
+        findings_batch, findings_diagnostics = _hardware_findings_batch(
+            hardware_components, tenant_id, bom_document_id, hardware_ids
+        )
+        out.batches.append(findings_batch)
+        out.diagnostics.extend(findings_diagnostics)
 
     # ⚠ MINTED FOR THE SAME REASON AS component_ids: `_ai_datasets_batch` and
     # `_ai_model_dependencies_batch` below need to reference the parent AI
@@ -1230,6 +1235,10 @@ _HARDWARE_COLUMNS: tuple[str, ...] = (
     "field_status",
     "manufacturing_field_status",
     "source_engine",
+    # ⚠ HOW ELEMENT 24 WAS ARRIVED AT. Without these two, an empty findings
+    # list cannot be told from a search that never ran. See migration 0013.
+    "vuln_match_status",
+    "cpe23_candidates",
 )
 
 
@@ -1282,6 +1291,16 @@ def _hardware_value(component: dict[str, Any], column: str) -> Any:
         return json.dumps(raw if isinstance(raw, dict) else {})
     if column == "source_engine":
         return _text(component.get("_source_engine")) or None
+    if column == "vuln_match_status":
+        # ⚠ DEFAULTS TO `not-attempted`, NEVER TO NULL OR `no-match`. A row
+        # written before this column existed, or by a path that does not match,
+        # genuinely has not been searched — and `no-match` would render as
+        # "clear" in a compliance document.
+        status = _text(component.get("_vuln_match_status"))
+        return status or "not-attempted"
+    if column == "cpe23_candidates":
+        raw = component.get("_cpe23_candidates")
+        return [_text(v) for v in raw if _text(v)] if isinstance(raw, list) else []
 
     value = _hardware_lookup(component, column)
 
@@ -1537,3 +1556,128 @@ def _hardware_alternates_batch(
             )
 
     return batch
+
+
+def _hardware_findings_batch(
+    components: Sequence[dict[str, Any]],
+    tenant_id: str,
+    bom_document_id: str,
+    hardware_ids: dict[str, str],
+) -> tuple[CopyBatch, list[dict[str, Any]]]:
+    """Plan the `normalize.hardware_findings` batch — CERT-In element 24.
+
+    ⚠ EVERY ROW HERE IS ADVISORY, AND THE COLUMNS SAY SO RATHER THAN A
+    FOOTNOTE SAYING SO. `match_basis` and `match_confidence` travel with the
+    finding all the way to the report, because a CVE reached through a
+    wildcarded vendor is weaker evidence than one reached through all three
+    parts, and a reader shown only a severity cannot tell them apart.
+
+    ⚠ SEVERITIES HERE ARE NEVER SUMMED INTO THE COUNTS AN SBOM REPORT QUOTES.
+    An SBOM finding is keyed on a purl the ecosystem minted; this one is keyed
+    on a CPE built from a manufacturer string somebody typed. Blending them
+    would give a single "3 critical" figure of which some part is a fact and
+    some part is a guess, with nothing saying which.
+    """
+    batch = CopyBatch(
+        table="normalize.hardware_findings",
+        columns=(
+            "tenant_id",
+            "bom_document_id",
+            "hardware_component_id",
+            "cluster_id",
+            "display_id",
+            "cpe23",
+            "match_basis",
+            "match_confidence",
+            "severity",
+            "cvss_score",
+            "cvss_vector",
+            "description",
+            "source",
+            "source_version",
+        ),
+    )
+    diagnostics: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    unresolved = 0
+
+    for component in components:
+        findings = component.get("_vuln_findings")
+        if not isinstance(findings, list):
+            continue
+        component_id = hardware_ids[_text(component.get("_local_id"))]
+        for finding in findings:
+            if not isinstance(finding, dict):
+                continue
+            cluster_id = _text(finding.get("cluster_id"))
+            cve_id = _text(finding.get("cve_id"))
+            cpe23 = _text(finding.get("cpe23"))
+            if not (cve_id and cpe23):
+                continue
+            if not _is_uuid(cluster_id):
+                # ⚠ SKIPPED AND COUNTED, NEVER SKIPPED SILENTLY. cluster_id is
+                # NOT NULL with a foreign key; a row without one would abort
+                # the whole COPY and take the entire hardware BOM with it.
+                # Dropping it quietly would instead under-report element 24 —
+                # so the document carries a diagnostic saying how many.
+                unresolved += 1
+                continue
+
+            # Mirrors UNIQUE (hardware_component_id, cluster_id, cpe23). COPY
+            # has no ON CONFLICT, so a duplicate inside one batch aborts it.
+            key = (component_id, cluster_id, cpe23)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            batch.rows.append(
+                (
+                    tenant_id,
+                    bom_document_id,
+                    component_id,
+                    cluster_id,
+                    cve_id,
+                    cpe23,
+                    _text(finding.get("match_basis")) or "vendor+product",
+                    # ⚠ FLOORS AT `low`, THE SAME DEFAULT THE COLUMN CARRIES.
+                    # A default that flatters a guess is how an advisory
+                    # becomes a claim somebody acts on.
+                    _text(finding.get("match_confidence")) or "low",
+                    _hardware_severity(finding.get("severity")),
+                    _numeric_or_none(finding.get("cvss_score")),
+                    _text(finding.get("cvss_vector")) or None,
+                    _text(finding.get("description")) or None,
+                    _text(finding.get("source")) or "nvd",
+                    _text(finding.get("source_version")) or None,
+                )
+            )
+
+    if unresolved:
+        diagnostics.append(
+            {
+                "severity": "warn",
+                "code": "NORMALIZE_HARDWARE_FINDING_UNCLUSTERED",
+                "message": (
+                    f"{unresolved} hardware vulnerability match(es) had no resolved cluster id "
+                    "and were not stored; element 24 under-reports for this document"
+                ),
+            }
+        )
+
+    return batch, diagnostics
+
+
+#: The severities `normalize.hardware_findings.severity` accepts.
+_HARDWARE_SEVERITIES = frozenset({"critical", "high", "medium", "low", "none", "unknown"})
+
+
+def _hardware_severity(value: Any) -> str | None:
+    """Fold a source's severity label to the column's CHECK, or NULL.
+
+    ⚠ AN UNRECOGNIZED SEVERITY BECOMES NULL, NOT `unknown` AND NOT `low`.
+    NULL means "the source did not give us one we understand"; `unknown` is a
+    value a source can itself assert. Collapsing them would make a parsing gap
+    indistinguishable from NVD's own uncertainty.
+    """
+    text = _text(value).lower()
+    return text if text in _HARDWARE_SEVERITIES else None

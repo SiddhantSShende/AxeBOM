@@ -281,14 +281,73 @@ func loadHardwareNodes(ctx context.Context, tx db.Tx, docID string) ([]*hbom.Com
 	defer rows.Close()
 
 	var out []*hbom.Component
+	index := map[string]*hbom.Component{}
 	for rows.Next() {
 		c, err := scanHardwareNode(rows)
 		if err != nil {
 			return nil, err
 		}
+		index[c.ID] = c
 		out = append(out, c)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// ⚠ rows MUST BE DRAINED BEFORE THE NEXT QUERY ON THE SAME Tx. pgx holds
+	// one connection per transaction, and issuing a second query while the
+	// first result set is still open fails with "conn busy". The explicit
+	// rows.Err() above plus the deferred Close is what makes that safe.
+	if err := attachAlternates(ctx, tx, docID, index); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// attachAlternates loads each component's approved second sources.
+//
+// ⚠ THIS READ DID NOT EXIST, SO GET ALWAYS RETURNED `alternates: []`. The
+// handler mapped the field in both directions and the store touched the table
+// in neither — see replaceAlternates for the write half of the same hole.
+//
+// A separate query, not a join: an alternate is 1:N against a component, and
+// joining would multiply every component row by its alternate count for the
+// scan loop to de-duplicate — the shape that silently doubles a part count.
+func attachAlternates(
+	ctx context.Context, tx db.Tx, docID string, index map[string]*hbom.Component,
+) error {
+	if len(index) == 0 {
+		return nil
+	}
+	rows, err := tx.Query(ctx, `
+		SELECT a.hardware_component_id, a.ordinal,
+		       COALESCE(a.manufacturer_name,''), COALESCE(a.model_number,''),
+		       COALESCE(a.supplier_info,''), COALESCE(a.supplier_sku,''),
+		       COALESCE(a.lifecycle_status,''), a.equivalence,
+		       COALESCE(a.approval_note,'')
+		  FROM normalize.hardware_component_alternates a
+		  JOIN normalize.hardware_components h ON h.id = a.hardware_component_id
+		 WHERE h.bom_document_id = $1
+		 ORDER BY a.hardware_component_id, a.ordinal`, docID)
+	if err != nil {
+		return fmt.Errorf("load hardware alternates: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			componentID string
+			a           hbom.Alternate
+		)
+		if err := rows.Scan(&componentID, &a.Ordinal,
+			&a.ManufacturerName, &a.ModelNumber, &a.SupplierInfo, &a.SupplierSKU,
+			&a.LifecycleStatus, &a.Equivalence, &a.ApprovalNote); err != nil {
+			return fmt.Errorf("scan hardware alternate: %w", err)
+		}
+		if c, ok := index[componentID]; ok {
+			c.Alternates = append(c.Alternates, a)
+		}
+	}
+	return rows.Err()
 }
 
 func scanHardwareNode(row pgx.Row) (*hbom.Component, error) {
@@ -422,14 +481,87 @@ func insertHardwareNode(ctx context.Context, tx db.Tx, tenantID, docID, parentID
 	if err != nil {
 		return "", fmt.Errorf("insert hardware component: %w", err)
 	}
+	if err := replaceAlternates(ctx, tx, tenantID, id, c.Alternates); err != nil {
+		return "", err
+	}
 	return id, nil
+}
+
+// replaceAlternates rewrites one component's approved second sources.
+//
+// ⚠ NOTHING IN THIS SERVICE WROTE THIS TABLE, AND THE API PRETENDED OTHERWISE.
+//
+// componentDTO has carried `alternates` in BOTH directions since the
+// manufacturing fields landed — toAlternateDTOs on the way out,
+// fromAlternateDTOs on the way in — and the store never touched
+// normalize.hardware_component_alternates at all. So a client that sent
+// alternates got 200 OK and silent discard, and a client that read them back
+// always got `[]`. Only the report service ever read the table, and only the
+// normalize pipeline ever filled it, which is why this looked like it worked:
+// a SCANNED hardware BOM had alternates and an EDITED one lost them.
+//
+// ⚠ DELETE-THEN-INSERT, NOT AN UPSERT, and the whole point is the delete.
+// Alternates are an ordered set belonging to one component, not independent
+// rows with their own identity: removing a second source in the editor has to
+// remove it from the database, and an upsert-only path silently keeps every
+// alternate ever added. Both statements run inside the caller's transaction.
+func replaceAlternates(
+	ctx context.Context, tx db.Tx, tenantID, componentID string, alternates []hbom.Alternate,
+) error {
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM normalize.hardware_component_alternates WHERE hardware_component_id = $1`,
+		componentID,
+	); err != nil {
+		return fmt.Errorf("clear hardware alternates: %w", err)
+	}
+
+	for i, a := range alternates {
+		// Mirrors the hardware_alternate_identifiable CHECK. Skipped rather
+		// than sent, so one blank row in the editor cannot fail the save.
+		if a.ManufacturerName == "" && a.ModelNumber == "" && a.SupplierSKU == "" {
+			continue
+		}
+		equivalence := a.Equivalence
+		if equivalence == "" {
+			// ⚠ `unverified` IS THE FLOOR, AND IT IS NEVER INFERRED UPWARD. An
+			// alternate whose equivalence nobody stated is one nobody checked;
+			// defaulting it to anything stronger would turn a blank field in a
+			// spreadsheet into an approved substitution.
+			equivalence = "unverified"
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO normalize.hardware_component_alternates
+				(tenant_id, hardware_component_id, ordinal,
+				 manufacturer_name, model_number, supplier_info, supplier_sku,
+				 lifecycle_status, equivalence, approval_note)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+			tenantID, componentID, i,
+			nullIfEmpty(a.ManufacturerName), nullIfEmpty(a.ModelNumber),
+			nullIfEmpty(a.SupplierInfo), nullIfEmpty(a.SupplierSKU),
+			nullIfEmpty(a.LifecycleStatus), equivalence, nullIfEmpty(a.ApprovalNote),
+		); err != nil {
+			return fmt.Errorf("insert hardware alternate: %w", err)
+		}
+	}
+	return nil
 }
 
 // updateHardwareNode writes an existing node, scoped to the CALLER'S
 // document — the WHERE clause is what stops a copied id from another
 // project (same tenant, so RLS alone would not catch it) from redirecting
 // the write.
-func updateHardwareNode(ctx context.Context, tx db.Tx, docID, id string, c *hbom.Component) error {
+func updateHardwareNode(
+	ctx context.Context, tx db.Tx, tenantID, docID, id string, c *hbom.Component,
+) error {
+	// ⚠ THIS UPDATE SET ONLY THE CERT-In COLUMNS, AND THE INSERT NEXT TO IT
+	// WROTE ELEVEN MORE.
+	//
+	// Quantity, designators, footprint, SKU, supplier, price, currency, DNP,
+	// assembly type, lifecycle and datasheet were all writable on CREATE and
+	// silently unwritable on EDIT — the API took them, returned 200, and left
+	// the stored value exactly as it was. Nothing failed and nothing said so;
+	// the user simply watched their change not happen. Every column the insert
+	// writes, the update writes.
 	tag, err := tx.Exec(ctx, `
 		UPDATE normalize.hardware_components SET
 			product_name = $3, product_version = $4, product_details = $5, warranty_amc = $6,
@@ -437,7 +569,13 @@ func updateHardwareNode(ctx context.Context, tx db.Tx, docID, id string, c *hbom
 			supplier_info = $10, supplier_location = $11, model_number = $12, serial_number = $13,
 			technical_specification = $14, component_supplier_info = $15, component_supplier_location = $16,
 			technology_node = $17, compliance = $18, power_supply = $19, license_info = $20,
-			test_result = $21, firmware_version = $22, origin = $23, criticality = $24
+			test_result = $21, firmware_version = $22, origin = $23, criticality = $24,
+			-- Manufacturing and procurement. ⚠ extended_price stays absent: it
+			-- is GENERATED ALWAYS and Postgres rejects an UPDATE naming it, the
+			-- same reason the INSERT omits it.
+			quantity = $25, designators = $26, package_footprint = $27, supplier_sku = $28,
+			preferred_supplier = $29, unit_price = $30, currency = $31, do_not_populate = $32,
+			assembly_type = $33, lifecycle_status = $34, datasheet_url = $35
 		 WHERE id = $1 AND bom_document_id = $2`,
 		id, docID,
 		c.ProductName, nullIfEmpty(c.ProductVersion), nullIfEmpty(c.ProductDetails), nullIfEmpty(c.WarrantyAMC),
@@ -446,6 +584,11 @@ func updateHardwareNode(ctx context.Context, tx db.Tx, docID, id string, c *hbom
 		nullIfEmpty(c.TechnicalSpecification), nullIfEmpty(c.ComponentSupplierInfo), nullIfEmpty(c.ComponentSupplierLocation),
 		nullIfEmpty(c.TechnologyNode), textArrayOrNil(c.Compliance), nullIfEmpty(c.PowerSupply), nullIfEmpty(c.LicenseInfo),
 		nullIfEmpty(c.TestResult), nullIfEmpty(c.FirmwareVersion), nullIfEmpty(c.Origin), nullIfEmpty(c.Criticality),
+		quantityOrOne(c.Quantity), textArrayOrEmpty(c.Designators), nullIfEmpty(c.PackageFootprint),
+		nullIfEmpty(c.SupplierSKU), nullIfEmpty(c.PreferredSupplier),
+		// A STRING for Postgres to cast into numeric(18,6) — see the insert.
+		nullIfEmpty(c.UnitPrice), nullIfEmpty(c.Currency), c.DoNotPopulate,
+		nullIfEmpty(c.AssemblyType), nullIfEmpty(c.LifecycleStatus), nullIfEmpty(c.DatasheetURL),
 	)
 	if err != nil {
 		return fmt.Errorf("update hardware component: %w", err)
@@ -453,7 +596,7 @@ func updateHardwareNode(ctx context.Context, tx db.Tx, docID, id string, c *hbom
 	if tag.RowsAffected() == 0 {
 		return ErrComponentNotFound
 	}
-	return nil
+	return replaceAlternates(ctx, tx, tenantID, id, c.Alternates)
 }
 
 // upsertNodeRecursive writes node (update if it carries an id, insert
@@ -462,7 +605,7 @@ func updateHardwareNode(ctx context.Context, tx db.Tx, docID, id string, c *hbom
 // existing node still links up correctly.
 func upsertNodeRecursive(ctx context.Context, tx db.Tx, tenantID, docID string, node *hbom.Component, parentID string) error {
 	if node.ID != "" {
-		if err := updateHardwareNode(ctx, tx, docID, node.ID, node); err != nil {
+		if err := updateHardwareNode(ctx, tx, tenantID, docID, node.ID, node); err != nil {
 			return err
 		}
 	} else {

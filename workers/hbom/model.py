@@ -28,6 +28,8 @@ from typing import Any
 
 from axebom_shared.model.generated_certin import HBOM_FIELDS
 
+from .vulnmatch import HardwareFinding
+
 NOT_PROVIDED = "not-provided"
 
 #: How deep a subcomponent tree may go before the importer stops descending.
@@ -175,8 +177,28 @@ class HardwareComponent:
     firmware_version: str = ""
     origin: str = ""
     criticality: str = ""
-    #: Vulnerability cluster ids. Populated by matching, not by import.
+    #: CERT-In element 24. The CVE ids matched against this component —
+    #: DERIVED from `vuln_findings`, never set independently, so the scored
+    #: element and the rendered detail can never disagree.
     findings: list[str] = field(default_factory=list)
+
+    #: How element 24 was arrived at: matched | no-match | no-cpe |
+    #: not-attempted.
+    #:
+    #: ⚠ WITHOUT THIS, AN EMPTY `findings` IS AMBIGUOUS AND DANGEROUSLY SO.
+    #: "we searched and found nothing" and "we never searched" are the same
+    #: empty list, and only one of them is reassuring. Defaults to
+    #: `not-attempted`, which is the truthful state for a component nobody has
+    #: run a matcher over.
+    vuln_match_status: str = "not-attempted"
+
+    #: The CPEs the matcher searched, or would have searched. Kept even when
+    #: the lookup did not run, so a report can show what enabling a key buys.
+    cpe23_candidates: list[str] = field(default_factory=list)
+
+    #: The full advisory matches. See `workers/hbom/vulnmatch.py` for why every
+    #: one of these carries its basis and confidence rather than a bare CVE.
+    vuln_findings: list[HardwareFinding] = field(default_factory=list)
 
     # --- manufacturing and procurement -------------------------------------
     #
@@ -445,12 +467,13 @@ def to_dict(component: HardwareComponent) -> dict[str, Any]:
     """
     out: dict[str, Any] = {}
     for name in HardwareComponent.__dataclass_fields__:
-        if name in ("children", "alternates"):
+        if name in ("children", "alternates", "vuln_findings"):
             continue
         out[name] = getattr(component, name)
     out["alternates"] = [
         {n: getattr(a, n) for n in Alternate.__dataclass_fields__} for a in component.alternates
     ]
+    out["vuln_findings"] = [f.to_dict() for f in component.vuln_findings]
     out["children"] = [to_dict(child) for child in component.children]
     return out
 
@@ -465,8 +488,18 @@ def from_dict(payload: Mapping[str, Any]) -> HardwareComponent:
     """
     known = HardwareComponent.__dataclass_fields__
     component = HardwareComponent(
-        **{k: v for k, v in payload.items() if k in known and k not in ("children", "alternates")}
+        **{
+            k: v
+            for k, v in payload.items()
+            if k in known and k not in ("children", "alternates", "vuln_findings")
+        }
     )
+    finding_fields = HardwareFinding.__dataclass_fields__
+    component.vuln_findings = [
+        HardwareFinding(**{k: v for k, v in f.items() if k in finding_fields})
+        for f in payload.get("vuln_findings") or []
+        if isinstance(f, Mapping)
+    ]
     alt_fields = Alternate.__dataclass_fields__
     component.alternates = [
         Alternate(**{k: v for k, v in a.items() if k in alt_fields})

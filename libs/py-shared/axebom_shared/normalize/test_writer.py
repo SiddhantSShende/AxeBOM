@@ -40,6 +40,15 @@ _CHILD_TABLES = (
     "normalize.findings",
     "normalize.components",
     "normalize.crypto_assets",
+    # ⚠ ORDER MATTERS: hardware_findings references hardware_components, so it
+    # goes first even though both also cascade from bom_documents.
+    #
+    # hardware_component_alternates is DELIBERATELY ABSENT — it has no
+    # `bom_document_id` column (it hangs off the component, not the document),
+    # so the DELETE below would fail on it. It cascades from
+    # hardware_components, which is here.
+    "normalize.hardware_findings",
+    "normalize.hardware_components",
 )
 
 
@@ -561,3 +570,231 @@ def test_alias_snapshot_id_may_be_absent_but_a_bad_value_still_fails() -> None:
     assert _optional_uuid(None, field_name=field) is None
     with pytest.raises(ValueError, match="alias_snapshot_id"):
         _optional_uuid("", field_name=field)
+
+
+# --------------------------------------------------------------------------
+# Hardware — the batches that had never been executed against a real schema
+# --------------------------------------------------------------------------
+
+#: A fixed cluster for the hardware finding, on the same reasoning as
+#: _TEST_CLUSTER_ID: vuln_clusters is global reference data.
+_TEST_HW_CLUSTER_ID = "01900000-0000-7000-8000-0000000000c2"
+
+
+@pytest.fixture
+def ensure_test_hw_cluster(pg_conn):
+    cur = pg_conn.cursor()
+    cur.execute(
+        "INSERT INTO normalize.vuln_clusters (id, display_id) VALUES (%s, %s) "
+        "ON CONFLICT (id) DO NOTHING",
+        (_TEST_HW_CLUSTER_ID, "CVE-2021-1472"),
+    )
+
+
+def hardware_canonical() -> dict:
+    """A two-level hardware BOM with an alternate and an advisory finding.
+
+    Small, but it exercises every hardware batch: the recursive parent_id
+    within one COPY, the alternates child table, and hardware_findings.
+    """
+    return {
+        "hardware_components": [
+            {
+                "_local_id": "1",
+                "_parent_local_id": None,
+                "_depth": 0,
+                "_enriched_fields": {},
+                "_source_engine": "hbom-ecad",
+                "_vuln_match_status": "matched",
+                "_cpe23_candidates": ["cpe:2.3:h:cisco:rv340:*:*:*:*:*:*:*:*"],
+                "_vuln_findings": [
+                    {
+                        "cve_id": "CVE-2021-1472",
+                        "cluster_id": _TEST_HW_CLUSTER_ID,
+                        "cpe23": "cpe:2.3:h:cisco:rv340:*:*:*:*:*:*:*:*",
+                        "match_basis": "vendor+product",
+                        "match_confidence": "low",
+                        "severity": "critical",
+                        "cvss_score": 9.8,
+                        "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                        "description": "Command injection.",
+                        "source": "nvd",
+                        "source_version": "2.0",
+                    }
+                ],
+                "hardware_component.product_name": "Mainboard",
+                "hardware_component.manufacturer_name": "Cisco",
+                "hardware_component.model_number": "RV340",
+                "hardware_component.compliance[]": ["RoHS"],
+                "hardware_component.quantity": 1,
+                "hardware_component.alternates": "not-provided",
+            },
+            {
+                "_local_id": "1.1",
+                "_parent_local_id": "1",
+                "_depth": 1,
+                "_enriched_fields": {"datasheet_url": "nexar"},
+                "_source_engine": "hbom-ecad",
+                "_vuln_match_status": "no-match",
+                "_cpe23_candidates": ["cpe:2.3:h:yageo:rc0402fr-0710kl:*:*:*:*:*:*:*:*"],
+                "_vuln_findings": [],
+                "hardware_component.product_name": "Resistor 10k",
+                "hardware_component.manufacturer_name": "Yageo",
+                "hardware_component.model_number": "RC0402FR-0710KL",
+                "hardware_component.quantity": 12,
+                "hardware_component.designators": ["R1", "R4", "R17"],
+                "hardware_component.unit_price": "0.0034",
+                "hardware_component.currency": "USD",
+                "hardware_component.do_not_populate": False,
+                "hardware_component.assembly_type": "smt",
+                "hardware_component.lifecycle_status": "active",
+                "hardware_component.alternates": [
+                    {
+                        "ordinal": 0,
+                        "manufacturer_name": "Panasonic",
+                        "model_number": "ERJ-2RKF1002X",
+                        "supplier_info": "Digi-Key",
+                        "supplier_sku": "P10.0KDACT-ND",
+                        "lifecycle_status": "active",
+                        "equivalence": "unverified",
+                        "approval_note": "",
+                    }
+                ],
+            },
+        ],
+        "coverage": {"completeness_pct": 30.0, "declaration_pct": 100.0},
+        "supplementary_coverage": {},
+        "ruleset_version": "test-ruleset-1",
+        "spdx_license_list_version": "",
+        "unidentified_count": 0,
+        "project_id": None,
+        "provenance": {"alias_snapshot_id": None},
+        "diagnostics": [],
+    }
+
+
+def test_a_live_hardware_write_round_trips(pg_conn, written, ensure_test_hw_cluster) -> None:
+    """⚠ NO HARDWARE BATCH HAD EVER BEEN EXECUTED AGAINST THE REAL SCHEMA.
+
+    The SBOM path has had this check since the session that found three
+    renamed columns by running it. Hardware gained a manufacturing column set
+    (migration 0011), an alternates table, and now hardware_findings (0013) —
+    all planned, none ever COPYed. This is the same mechanical check, and it
+    is the one that catches a column that exists in bulk.py and not in
+    Postgres.
+    """
+    tenant_id = str(uuid.uuid4())
+    canonical = hardware_canonical()
+
+    result = write_bom_document(
+        pg_conn,
+        tenant_id=tenant_id,
+        scan_id=str(uuid.uuid4()),
+        bom_type="HBOM",
+        normalization_version=1,
+        canonical=canonical,
+    )
+    written.append((tenant_id, result.bom_document_id))
+
+    cur = pg_conn.cursor()
+    # ⚠ SESSION scope (false), not transaction-local — the reason the SBOM
+    # round-trip above gives: these are bare statements on an autocommit
+    # connection, so an is_local setting reverts before the next one and every
+    # read below would fail RLS's uuid cast on an empty string.
+    cur.execute("SELECT set_config('app.current_tenant_id', %s, false)", (tenant_id,))
+
+    cur.execute(
+        "SELECT product_name, quantity, designators, unit_price, extended_price, "
+        "       vuln_match_status, cpe23_candidates, parent_id IS NOT NULL "
+        "FROM normalize.hardware_components WHERE bom_document_id = %s "
+        "ORDER BY product_name",
+        (result.bom_document_id,),
+    )
+    rows = cur.fetchall()
+    assert len(rows) == 2
+
+    board = rows[0]
+    assert board[0] == "Mainboard"
+    assert board[5] == "matched"
+    assert board[6] == ["cpe:2.3:h:cisco:rv340:*:*:*:*:*:*:*:*"]
+    assert board[7] is False, "the root has no parent"
+
+    resistor = rows[1]
+    assert resistor[1] == 12
+    assert resistor[2] == ["R1", "R4", "R17"]
+    # ⚠ extended_price IS GENERATED ALWAYS. Asserting it here is what proves
+    # the column is computed by Postgres and never written by us — a stored
+    # total that drifts from its own inputs is worse than an absent one.
+    #
+    # ⚠ COMPARED AS Decimal, NOT float. This assertion was written with
+    # `float()` first and failed: 0.0034 * 12 is 0.040800000000000006 in binary
+    # floating point, not 0.0408. That is the exact reason unit_price is
+    # numeric(18,6) and is carried as a STRING all the way to the writer — a
+    # test that reaches for float here is reintroducing the bug the column
+    # design exists to prevent.
+    assert resistor[4] == resistor[3] * 12
+    assert resistor[5] == "no-match", "searched and clear is not the same as never searched"
+    assert resistor[7] is True, "the child references its parent within the same COPY"
+
+    cur.execute(
+        "SELECT a.manufacturer_name, a.model_number, a.supplier_sku, a.equivalence "
+        "FROM normalize.hardware_component_alternates a "
+        "JOIN normalize.hardware_components c ON c.id = a.hardware_component_id "
+        "WHERE c.bom_document_id = %s",
+        (result.bom_document_id,),
+    )
+    assert cur.fetchall() == [("Panasonic", "ERJ-2RKF1002X", "P10.0KDACT-ND", "unverified")]
+
+    cur.execute(
+        "SELECT display_id, cpe23, match_basis, match_confidence, severity, cvss_score, source "
+        "FROM normalize.hardware_findings WHERE bom_document_id = %s",
+        (result.bom_document_id,),
+    )
+    findings = cur.fetchall()
+    assert len(findings) == 1
+    assert findings[0][0] == "CVE-2021-1472"
+    assert findings[0][2] == "vendor+product"
+    assert findings[0][3] == "low", "an advisory match never defaults to a confidence it lacks"
+    assert float(findings[0][5]) == 9.8
+
+
+def test_every_planned_hardware_column_exists_in_the_live_schema(
+    pg_conn, written, ensure_test_hw_cluster
+) -> None:
+    """The hardware twin of the schema-agreement test above."""
+    tenant_id = str(uuid.uuid4())
+    canonical = hardware_canonical()
+
+    result = write_bom_document(
+        pg_conn,
+        tenant_id=tenant_id,
+        scan_id=str(uuid.uuid4()),
+        bom_type="HBOM",
+        normalization_version=1,
+        canonical=canonical,
+    )
+    written.append((tenant_id, result.bom_document_id))
+
+    from . import bulk
+
+    plan = bulk.plan(canonical, tenant_id=tenant_id, bom_document_id=result.bom_document_id)
+    assert not plan.refused
+
+    hardware_batches = [b for b in plan.batches if "hardware" in b.table]
+    assert len(hardware_batches) == 3, "components, alternates and findings"
+
+    cur = pg_conn.cursor()
+    for batch in hardware_batches:
+        assert batch.rows, f"{batch.table} has no rows in this fixture; nothing would be checked"
+        schema, table = batch.table.split(".")
+        cur.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = %s AND table_name = %s",
+            (schema, table),
+        )
+        live_columns = {row[0] for row in cur.fetchall()}
+        missing = set(batch.columns) - live_columns
+        assert not missing, (
+            f"{batch.table} declares columns {sorted(missing)} that do not exist in the "
+            f"live schema — live columns are {sorted(live_columns)}"
+        )

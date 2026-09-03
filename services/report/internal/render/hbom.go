@@ -76,6 +76,25 @@ type HardwareComponent struct {
 	// imported — §10.4.1.4's fourth addition.
 	Findings []string
 
+	// VulnMatchStatus says HOW Findings came to be what it is:
+	// matched | no-match | no-cpe | not-attempted.
+	//
+	// ⚠ WITHOUT THIS, AN EMPTY Findings IS AMBIGUOUS IN THE ONE DIRECTION
+	// THAT HURTS. "We searched and found nothing" and "no vulnerability
+	// source is configured" render identically as a blank cell, and a reader
+	// takes the blank as reassurance. The Vulnerabilities sheet prints this
+	// for every component precisely so the blank cannot be misread.
+	VulnMatchStatus string
+
+	// CPE23Candidates are the CPEs the matcher searched, or would have
+	// searched. Rendered so an advisory match is auditable rather than magic,
+	// and so a customer with no NVD key can see what enabling one would buy.
+	CPE23Candidates []string
+
+	// Vulnerabilities is the detail behind Findings — one row per advisory
+	// match, each carrying the basis and confidence it was found on.
+	Vulnerabilities []HardwareFinding
+
 	// EnrichedFields maps an attribute to the provider that supplied it, so a
 	// reader can tell a distributor's claim from the customer's own record.
 	EnrichedFields map[string]string
@@ -114,6 +133,34 @@ type HardwareComponent struct {
 }
 
 // HardwareAlternate is one approved second source for a part.
+// HardwareFinding is one ADVISORY CVE match against a hardware component.
+//
+// ⚠ EVERY FIELD AFTER CVEID EXISTS TO STOP THIS BEING READ AS AN SBOM FINDING.
+//
+// An SBOM finding is keyed on a purl the ecosystem itself minted, and saying
+// "this build contains CVE-X" is a fact. This one is keyed on a CPE assembled
+// from a manufacturer string somebody typed into a spreadsheet and a model
+// number off a datasheet, matched against NVD's own vocabulary that was never
+// reconciled with either. MatchBasis and MatchConfidence travel with it all
+// the way to the rendered cell, because a reader shown only a severity cannot
+// tell a match on all three parts from one on a wildcarded vendor.
+type HardwareFinding struct {
+	CVEID string
+	// CPE23 is what was actually searched with.
+	CPE23 string
+	// MatchBasis is vendor+product+version | vendor+product | firmware-version.
+	MatchBasis string
+	// MatchConfidence is medium or low. There is no high-confidence hardware
+	// CPE match, and the schema does not offer one here by accident.
+	MatchConfidence string
+
+	Severity    string
+	CVSSScore   string
+	CVSSVector  string
+	Description string
+	Source      string
+}
+
 type HardwareAlternate struct {
 	Ordinal          int
 	ManufacturerName string
@@ -152,6 +199,88 @@ func HBOMSheets(components []HardwareComponent) []Sheet {
 		hardwareEngineeringSheet(components),
 		hardwareProcurementSheet(components),
 		hardwareLifecycleSheet(components),
+		hardwareVulnerabilitySheet(components),
+	}
+}
+
+// hardwareVulnerabilitySheet is CERT-In element 24 — and the sheet whose
+// hardest job is making sure a BLANK ROW IS NOT READ AS "CLEAR".
+//
+// ⚠ EVERY COMPONENT APPEARS, INCLUDING THE ONES WITH NO MATCHES. A sheet
+// listing only the parts that matched something would be a list of found
+// vulnerabilities with no way to tell how many parts were actually searched —
+// so a report generated with no NVD credential would render an empty
+// Vulnerabilities sheet that reads exactly like a clean bill of health. Every
+// component gets a row, and the row states which of the four things happened.
+//
+// ⚠ AND THE MATCH IS ADVISORY, SAID IN THE COLUMNS RATHER THAN A FOOTNOTE.
+// Basis and Confidence sit beside the CVE because a match on a wildcarded
+// vendor and a match on all three parts are different claims, and a reader
+// shown only "CVE-2021-1472 / critical" cannot tell them apart.
+func hardwareVulnerabilitySheet(components []HardwareComponent) Sheet {
+	header := []string{
+		"Component", "Part Number", "Manufacturer", "Status",
+		"CVE", "Severity", "CVSS", "Match Basis", "Confidence", "Searched CPE", "Description",
+	}
+
+	rows := RowSource(func(emit func([]string) error) error {
+		for _, c := range components {
+			if len(c.Vulnerabilities) == 0 {
+				if err := emit([]string{
+					orNotProvided(c.Name),
+					orNotProvided(c.ModelNumber),
+					orNotProvided(c.ManufacturerName),
+					vulnStatusLabel(c.VulnMatchStatus),
+					"", "", "", "", "",
+					joinList(c.CPE23Candidates),
+					"",
+				}); err != nil {
+					return err
+				}
+				continue
+			}
+			for _, f := range c.Vulnerabilities {
+				if err := emit([]string{
+					orNotProvided(c.Name),
+					orNotProvided(c.ModelNumber),
+					orNotProvided(c.ManufacturerName),
+					vulnStatusLabel(c.VulnMatchStatus),
+					f.CVEID,
+					orNotProvided(f.Severity),
+					f.CVSSScore,
+					f.MatchBasis,
+					f.MatchConfidence,
+					f.CPE23,
+					f.Description,
+				}); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+
+	return Sheet{Name: "Vulnerabilities", Header: header, Rows: rows, Width: 22}
+}
+
+// vulnStatusLabel turns a status code into a sentence a reader cannot
+// misinterpret.
+//
+// ⚠ THE `not-attempted` WORDING IS THE WHOLE REASON THIS FUNCTION EXISTS. A
+// cell reading "not-attempted" next to an empty CVE column is read as "nothing
+// found" by anybody skimming. It has to say, in words, that nobody looked.
+func vulnStatusLabel(status string) string {
+	switch status {
+	case "matched":
+		return "Matched — advisory, confirm before acting"
+	case "no-match":
+		return "Searched, no match"
+	case "no-cpe":
+		return "NOT SEARCHED — too little detail to identify this part"
+	case "not-attempted", "":
+		return "NOT SEARCHED — no vulnerability source configured"
+	default:
+		return status
 	}
 }
 
@@ -644,7 +773,78 @@ func HBOMNotes(components []HardwareComponent) []string {
 			"Lifecycle sheet.")
 	}
 
+	if note := vulnerabilityNote(components); note != "" {
+		notes = append(notes, note)
+	}
+
 	return notes
+}
+
+// vulnerabilityNote states what CERT-In element 24 actually scores.
+//
+// ⚠ THE ELEMENT SCORES "A VULNERABILITY REFERENCE IS PRESENT", NOT "WE
+// CHECKED", AND THE SCORING IS BACKWARDS IF YOU DO NOT KNOW THAT.
+//
+// Element 24 is a ref_list, and coverage scoring treats an empty list as
+// absent. So a component with NO known vulnerability scores ZERO on element 24
+// while a component with three scores full marks — a part that is clean drags
+// the compliance percentage DOWN. That is genuinely how the guideline's field
+// is defined (it asks whether the BOM DECLARES vulnerability information), and
+// it is not something the coverage code should quietly "fix": widening
+// is_substantive to count an empty list as present would change what
+// `not-provided` means for every BOM type at once.
+//
+// So the arithmetic stays honest and the report explains it, in the same place
+// the reader sees the number.
+func vulnerabilityNote(components []HardwareComponent) string {
+	if len(components) == 0 {
+		return ""
+	}
+
+	counts := map[string]int{}
+	for _, c := range components {
+		status := c.VulnMatchStatus
+		if status == "" {
+			status = "not-attempted"
+		}
+		counts[status]++
+	}
+
+	// ⚠ THE UNSEARCHED CASE COMES FIRST AND SAYS SO IN THE FIRST CLAUSE. If
+	// every part went unsearched, an empty Vulnerabilities column is the ONLY
+	// thing the reader sees, and it reads as a clean result.
+	unsearched := counts["not-attempted"] + counts["no-cpe"]
+	if unsearched == len(components) {
+		return "NO VULNERABILITY LOOKUP WAS PERFORMED for any component in this " +
+			"document, so the absence of CVEs below means nothing was checked — not " +
+			"that nothing was found. CERT-In element 24 therefore scores zero for " +
+			"every component. Note that the element scores whether the BOM DECLARES " +
+			"vulnerability information, not whether a check was run: a part with no " +
+			"known vulnerability scores the same zero as one nobody looked at. The " +
+			"Vulnerabilities sheet states which of the two applies per component."
+	}
+
+	parts := []string{
+		"Hardware vulnerability matching is ADVISORY. A hardware component has no " +
+			"package identifier, so each match is a string comparison between the " +
+			"manufacturer and part number you supplied and NVD's own vendor and " +
+			"product vocabulary, which was never reconciled with either. Confirm " +
+			"every match against the manufacturer's own advisory before acting on it.",
+		"CERT-In element 24 scores whether a component DECLARES vulnerability " +
+			"information, not whether a check was run — so a component searched and " +
+			"found clean scores the same zero as one nobody looked at. The " +
+			"Vulnerabilities sheet distinguishes the two per component; the " +
+			"percentage cannot.",
+	}
+
+	if unsearched > 0 {
+		parts = append(parts, strconv.Itoa(unsearched)+" of "+
+			strconv.Itoa(len(components))+" component(s) were NOT searched at all — "+
+			"either no vulnerability source is configured, or the component states "+
+			"too little to identify. Their empty rows are not a clean result.")
+	}
+
+	return strings.Join(parts, " ")
 }
 
 // ---------------------------------------------------------------------------

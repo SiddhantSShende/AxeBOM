@@ -287,3 +287,171 @@ func equalStrings(a, b []string) bool {
 	}
 	return true
 }
+
+// TestAlternatesRoundTripThroughSaveAndGet.
+//
+// ⚠ THE API CARRIED THIS FIELD IN BOTH DIRECTIONS AND THE STORE IN NEITHER.
+//
+// componentDTO has mapped `alternates` out (toAlternateDTOs) and in
+// (fromAlternateDTOs) since the manufacturing fields landed, and
+// normalize.hardware_component_alternates was written only by the Python
+// normalize pipeline and read only by the report service. So a SCANNED
+// hardware BOM had alternates and an EDITED one silently did not: the save
+// returned 200 and discarded them, and every read returned `[]`.
+func TestAlternatesRoundTripThroughSaveAndGet(t *testing.T) {
+	pool := openPool(t)
+	st := store.New(pool)
+	projectID := createTestProject(t, st, tenantA)
+	cleanupHBOMDocuments(t, pool, tenantA, projectID)
+
+	root := &hbom.Component{ProductName: "Gateway", ModelNumber: "GW-1"}
+	if _, err := st.ReplaceHardwareTree(t.Context(), tenantA, projectID, []*hbom.Component{root}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	roots, err := st.GetHardwareTree(t.Context(), tenantA, projectID)
+	if err != nil {
+		t.Fatalf("GetHardwareTree: %v", err)
+	}
+
+	saved := roots[0]
+	saved.Alternates = []hbom.Alternate{
+		{ManufacturerName: "Panasonic", ModelNumber: "ERJ-2RKF1002X", SupplierSKU: "P10.0KDACT-ND", Equivalence: "drop-in"},
+		{ManufacturerName: "Vishay", ModelNumber: "CRCW040210K0FKED"},
+	}
+	if _, err := st.SaveHardwareComponent(t.Context(), tenantA, projectID, saved); err != nil {
+		t.Fatalf("SaveHardwareComponent: %v", err)
+	}
+
+	roots, err = st.GetHardwareTree(t.Context(), tenantA, projectID)
+	if err != nil {
+		t.Fatalf("GetHardwareTree: %v", err)
+	}
+	got := roots[0].Alternates
+	if len(got) != 2 {
+		t.Fatalf("alternates did not round-trip: got %d, want 2 (%+v)", len(got), got)
+	}
+	if got[0].ModelNumber != "ERJ-2RKF1002X" || got[0].Equivalence != "drop-in" {
+		t.Errorf("first alternate is wrong: %+v", got[0])
+	}
+	// ⚠ AN ALTERNATE WITH NO STATED EQUIVALENCE IS `unverified`, NEVER
+	// SOMETHING STRONGER. A blank field in a spreadsheet must not become an
+	// approved substitution.
+	if got[1].Equivalence != "unverified" {
+		t.Errorf("an unstated equivalence became %q, want %q", got[1].Equivalence, "unverified")
+	}
+	if got[0].Ordinal != 0 || got[1].Ordinal != 1 {
+		t.Errorf("ordinals were not preserved: %d, %d", got[0].Ordinal, got[1].Ordinal)
+	}
+}
+
+// TestRemovingAnAlternateActuallyRemovesIt.
+//
+// ⚠ AN UPSERT-ONLY WRITE PATH WOULD PASS THE ROUND-TRIP TEST ABOVE AND FAIL
+// THIS ONE. Alternates are an ordered set belonging to one component, so
+// deleting a second source in the editor has to delete the row — otherwise
+// every alternate ever added accumulates and an obsolete part looks
+// second-sourced when it is not.
+func TestRemovingAnAlternateActuallyRemovesIt(t *testing.T) {
+	pool := openPool(t)
+	st := store.New(pool)
+	projectID := createTestProject(t, st, tenantA)
+	cleanupHBOMDocuments(t, pool, tenantA, projectID)
+
+	root := &hbom.Component{
+		ProductName: "Gateway",
+		Alternates: []hbom.Alternate{
+			{ManufacturerName: "Panasonic", ModelNumber: "A"},
+			{ManufacturerName: "Vishay", ModelNumber: "B"},
+		},
+	}
+	if _, err := st.ReplaceHardwareTree(t.Context(), tenantA, projectID, []*hbom.Component{root}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	roots, err := st.GetHardwareTree(t.Context(), tenantA, projectID)
+	if err != nil {
+		t.Fatalf("GetHardwareTree: %v", err)
+	}
+	if len(roots[0].Alternates) != 2 {
+		t.Fatalf("import did not store both alternates: %+v", roots[0].Alternates)
+	}
+
+	saved := roots[0]
+	saved.Alternates = saved.Alternates[:1]
+	if _, err := st.SaveHardwareComponent(t.Context(), tenantA, projectID, saved); err != nil {
+		t.Fatalf("SaveHardwareComponent: %v", err)
+	}
+
+	roots, err = st.GetHardwareTree(t.Context(), tenantA, projectID)
+	if err != nil {
+		t.Fatalf("GetHardwareTree: %v", err)
+	}
+	if len(roots[0].Alternates) != 1 {
+		t.Fatalf("removing an alternate left %d behind: %+v", len(roots[0].Alternates), roots[0].Alternates)
+	}
+	if roots[0].Alternates[0].ModelNumber != "A" {
+		t.Errorf("the wrong alternate survived: %+v", roots[0].Alternates[0])
+	}
+}
+
+// TestEditingManufacturingFieldsActuallyPersists.
+//
+// ⚠ THE UPDATE STATEMENT SET ONLY THE CERT-In COLUMNS. Quantity, designators,
+// footprint, SKU, supplier, price, currency, DNP, assembly type, lifecycle and
+// datasheet were writable on CREATE and silently unwritable on EDIT: the API
+// accepted them, returned 200, and left the stored value untouched. Nothing
+// failed and nothing said so.
+func TestEditingManufacturingFieldsActuallyPersists(t *testing.T) {
+	pool := openPool(t)
+	st := store.New(pool)
+	projectID := createTestProject(t, st, tenantA)
+	cleanupHBOMDocuments(t, pool, tenantA, projectID)
+
+	root := &hbom.Component{ProductName: "Resistor", Quantity: 1}
+	if _, err := st.ReplaceHardwareTree(t.Context(), tenantA, projectID, []*hbom.Component{root}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	roots, err := st.GetHardwareTree(t.Context(), tenantA, projectID)
+	if err != nil {
+		t.Fatalf("GetHardwareTree: %v", err)
+	}
+
+	saved := roots[0]
+	saved.Quantity = 12
+	saved.Designators = []string{"R1", "R4", "R17"}
+	saved.PackageFootprint = "0402"
+	saved.SupplierSKU = "311-10.0KLRCT-ND"
+	saved.PreferredSupplier = "Digi-Key"
+	saved.UnitPrice = "0.003400"
+	saved.Currency = "USD"
+	saved.AssemblyType = "smt"
+	saved.LifecycleStatus = "active"
+	saved.DoNotPopulate = true
+
+	if _, err := st.SaveHardwareComponent(t.Context(), tenantA, projectID, saved); err != nil {
+		t.Fatalf("SaveHardwareComponent: %v", err)
+	}
+
+	roots, err = st.GetHardwareTree(t.Context(), tenantA, projectID)
+	if err != nil {
+		t.Fatalf("GetHardwareTree: %v", err)
+	}
+	got := roots[0]
+	if got.Quantity != 12 {
+		t.Errorf("quantity did not persist: got %d, want 12", got.Quantity)
+	}
+	if strings.Join(got.Designators, ",") != "R1,R4,R17" {
+		t.Errorf("designators did not persist: %v", got.Designators)
+	}
+	if got.PackageFootprint != "0402" || got.SupplierSKU != "311-10.0KLRCT-ND" {
+		t.Errorf("procurement fields did not persist: %+v", got)
+	}
+	if got.UnitPrice != "0.003400" {
+		t.Errorf("unit price did not persist exactly: got %q, want %q", got.UnitPrice, "0.003400")
+	}
+	if !got.DoNotPopulate {
+		t.Error("the do-not-populate flag did not persist")
+	}
+	if got.AssemblyType != "smt" || got.LifecycleStatus != "active" {
+		t.Errorf("assembly/lifecycle did not persist: %+v", got)
+	}
+}

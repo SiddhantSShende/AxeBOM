@@ -1332,7 +1332,8 @@ func loadHardware(ctx context.Context, tx db.Tx, docID string, out *render.BOM) 
 		       COALESCE(h.extended_price::text,''),
 		       h.do_not_populate, COALESCE(h.assembly_type,''), COALESCE(h.lifecycle_status,''),
 		       COALESCE(h.datasheet_url,''), COALESCE(h.technical_specification,''),
-		       COALESCE(h.source_engine,''), h.enriched_fields
+		       COALESCE(h.source_engine,''), h.enriched_fields,
+		       COALESCE(h.vuln_match_status,'not-attempted'), h.cpe23_candidates
 		  FROM tree t
 		  JOIN normalize.hardware_components h ON h.id = t.id
 		 ORDER BY t.path`, docID)
@@ -1348,6 +1349,7 @@ func loadHardware(ctx context.Context, tx db.Tx, docID string, out *render.BOM) 
 			enriched    []byte
 			designators []string
 			compliance  []string
+			candidates  []string
 		)
 		if err := rows.Scan(
 			&c.ID, &c.ParentID, &c.Depth,
@@ -1362,11 +1364,13 @@ func loadHardware(ctx context.Context, tx db.Tx, docID string, out *render.BOM) 
 			&c.DoNotPopulate, &c.AssemblyType, &c.LifecycleStatus,
 			&c.DatasheetURL, &c.TechnicalSpecification,
 			&c.SourceEngine, &enriched,
+			&c.VulnMatchStatus, &candidates,
 		); err != nil {
 			return fmt.Errorf("scan hardware component: %w", err)
 		}
 		c.Compliance = compliance
 		c.Designators = designators
+		c.CPE23Candidates = candidates
 		c.EnrichedFields = decodeStringMap(enriched)
 		index[c.ID] = len(out.Hardware)
 		out.Hardware = append(out.Hardware, c)
@@ -1375,7 +1379,65 @@ func loadHardware(ctx context.Context, tx db.Tx, docID string, out *render.BOM) 
 		return fmt.Errorf("iterate hardware components: %w", err)
 	}
 
-	return loadHardwareAlternates(ctx, tx, docID, out, index)
+	if err := loadHardwareAlternates(ctx, tx, docID, out, index); err != nil {
+		return err
+	}
+	return loadHardwareFindings(ctx, tx, docID, out, index)
+}
+
+// loadHardwareFindings attaches CERT-In element 24's advisory matches.
+//
+// ⚠ A SEPARATE TABLE AND A SEPARATE LOADER FROM loadFindings, AND THAT IS THE
+// POINT. loadFindings is an INNER JOIN against normalize.components; a hardware
+// finding routed through it would match nothing and vanish from the report with
+// no error anywhere — the silent false negative invariant 12 exists to prevent.
+// Migration 0013 records the same reasoning on the schema side.
+//
+// ⚠ THESE SEVERITIES ARE NEVER ADDED TO out.Findings. The software counts a
+// report quotes are exact; these are advisory. One blended "3 critical" figure
+// of which part is a fact and part is a guess, with nothing saying which, is
+// worse than two honest numbers.
+func loadHardwareFindings(
+	ctx context.Context, tx db.Tx, docID string, out *render.BOM, index map[string]int,
+) error {
+	if len(index) == 0 {
+		return nil
+	}
+	rows, err := tx.Query(ctx, `
+		SELECT f.hardware_component_id, f.display_id, f.cpe23,
+		       f.match_basis, f.match_confidence,
+		       COALESCE(f.severity,''), COALESCE(f.cvss_score::text,''),
+		       COALESCE(f.cvss_vector,''), COALESCE(f.description,''),
+		       f.source
+		  FROM normalize.hardware_findings f
+		 WHERE f.bom_document_id = $1
+		 ORDER BY f.hardware_component_id, f.cvss_score DESC NULLS LAST, f.display_id`, docID)
+	if err != nil {
+		return fmt.Errorf("load hardware findings: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			componentID string
+			f           render.HardwareFinding
+		)
+		if err := rows.Scan(&componentID, &f.CVEID, &f.CPE23,
+			&f.MatchBasis, &f.MatchConfidence,
+			&f.Severity, &f.CVSSScore, &f.CVSSVector, &f.Description, &f.Source); err != nil {
+			return fmt.Errorf("scan hardware finding: %w", err)
+		}
+		at, ok := index[componentID]
+		if !ok {
+			continue
+		}
+		out.Hardware[at].Vulnerabilities = append(out.Hardware[at].Vulnerabilities, f)
+		// ⚠ Findings IS DERIVED HERE, not loaded separately. It is what the
+		// CERT-In element 24 column renders and what the export emits; two
+		// independent reads of the same rows would eventually disagree.
+		out.Hardware[at].Findings = append(out.Hardware[at].Findings, f.CVEID)
+	}
+	return rows.Err()
 }
 
 // loadHardwareAlternates attaches second sources to the parts they belong to.

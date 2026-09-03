@@ -3,7 +3,11 @@ import {
   CANONICAL_COLUMNS,
   CRITICALITY_VALUES,
   JUDGEMENT_FIELDS,
+  alternateWarning,
+  blankAlternate,
   bySupplier,
+  isAlternateIdentifiable,
+  normalizeAlternates,
   countComponents,
   describeAlternate,
   describeProvenance,
@@ -459,5 +463,77 @@ describe('per-supplier export', () => {
       expect(/^[=+\-@]/.test(value), `unescaped: ${value}`).toBe(false);
     }
     expect(csv).toContain("'=cmd");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Editing alternates
+// ---------------------------------------------------------------------------
+
+describe('alternate editing', () => {
+  it('starts a new alternate at unverified, never at an approved value', () => {
+    // ⚠ THE DEFAULT STATE OF AN UNFINISHED EDIT MUST NOT BE AN APPROVED
+    // SUBSTITUTION. If the editor opened on "drop-in", a row somebody added and
+    // walked away from would read as a decision nobody made — which is the exact
+    // thing the equivalence field exists to prevent.
+    expect(blankAlternate(0).equivalence).toBe('unverified');
+    expect(blankAlternate(3).ordinal).toBe(3);
+  });
+
+  it('treats a row that names nothing as not identifiable', () => {
+    // Mirrors the hardware_alternate_identifiable CHECK.
+    expect(isAlternateIdentifiable(blankAlternate(0))).toBe(false);
+    expect(
+      isAlternateIdentifiable({ ...blankAlternate(0), manufacturer_name: 'Panasonic' }),
+    ).toBe(true);
+    expect(isAlternateIdentifiable({ ...blankAlternate(0), supplier_sku: 'P10-ND' })).toBe(true);
+    // Whitespace is not an identifier.
+    expect(isAlternateIdentifiable({ ...blankAlternate(0), model_number: '   ' })).toBe(false);
+  });
+
+  it('drops blank rows and renumbers the survivors', () => {
+    const normalized = normalizeAlternates([
+      { ...blankAlternate(0), model_number: 'A' },
+      blankAlternate(1),
+      { ...blankAlternate(2), model_number: 'C' },
+    ]);
+    expect(normalized.map((a) => a.model_number)).toEqual(['A', 'C']);
+    // ⚠ RENUMBERED, so ordinal stays the position a reader sees rather than a
+    // gap left by a deleted row.
+    expect(normalized.map((a) => a.ordinal)).toEqual([0, 1]);
+  });
+
+  it('warns that an obsolete alternate is not a second source', () => {
+    // ⚠ THE MOST MISLEADING ROW IN A HARDWARE BOM: a populated Alternates
+    // column against a part whose alternate is itself unbuyable. A reader skims
+    // past it precisely because the column is not empty.
+    for (const status of ['obsolete', 'eol']) {
+      const warning = alternateWarning({ ...blankAlternate(0), lifecycle_status: status });
+      expect(warning).toContain('itself obsolete');
+    }
+  });
+
+  it('warns that an unverified alternate is a candidate, not an approval', () => {
+    const warning = alternateWarning(blankAlternate(0));
+    expect(warning).toContain('candidate');
+    expect(warning).not.toBe('');
+  });
+
+  it('does not warn about a verified, active alternate', () => {
+    expect(
+      alternateWarning({
+        ...blankAlternate(0),
+        equivalence: 'drop-in',
+        lifecycle_status: 'active',
+      }),
+    ).toBe('');
+  });
+
+  it('never lets a part number reach the UI without its equivalence', () => {
+    // describeAlternate is what the read-only tree renders. The editor and the
+    // table have to agree that the qualifier is inseparable from the identifier.
+    const described = describeAlternate({ ...blankAlternate(0), model_number: 'ERJ-2RKF1002X' });
+    expect(described).toContain('ERJ-2RKF1002X');
+    expect(described).toContain('unverified');
   });
 });
