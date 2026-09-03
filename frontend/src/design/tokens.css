@@ -32,6 +32,11 @@
   --surface-sunken: #f4f4f7;
   --border: #e3e3e8;
   --border-strong: #c9c9d2;
+  /* ⚠ LIGHTER THAN --border, AND IT HAS TO BE. This separates ROWS inside one
+   * surface — a key/value list, a gaps list — where --border is the line that
+   * separates one surface from the page. Reusing --border for both made a
+   * six-row field list read as six stacked boxes. */
+  --hairline: rgb(15 23 42 / 0.07);
 
   /* --- Text -------------------------------------------------------------- */
   --text: #16161a;
@@ -220,6 +225,7 @@
     --surface-sunken: #101014;
     --border: #2a2a33;
     --border-strong: #3d3d49;
+    --hairline: rgb(255 255 255 / 0.08);
 
     --text: #ececf1;
     --text-muted: #a6a6b2;
@@ -304,6 +310,7 @@
   --surface-sunken: #101014;
   --border: #2a2a33;
   --border-strong: #3d3d49;
+  --hairline: rgb(255 255 255 / 0.08);
 
   --text: #ececf1;
   --text-muted: #a6a6b2;

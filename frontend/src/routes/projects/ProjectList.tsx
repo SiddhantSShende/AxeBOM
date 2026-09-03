@@ -92,40 +92,43 @@ function ProjectCard({ project, index }: { project: Project; index: number }) {
         ease: [0.16, 1, 0.3, 1],
       }}
     >
-      <h2>
-        <Link to={`/projects/${project.id}`}>{project.name}</Link>
-      </h2>
+      {/*
+        ⚠ THE WHOLE ROW IS THE TARGET, VIA ONE STRETCHED LINK.
+        A card whose only clickable region was its title asked the user to hit
+        a 14px word in a 280px box. `.card-link::after` covers the card, so the
+        hit area is the card while the accessible name stays the project name
+        and nothing nests inside the anchor.
+      */}
+      <div className="card-row">
+        <h2>
+          <Link className="card-link" to={`/projects/${project.id}`}>
+            {project.name}
+          </Link>
+        </h2>
+        <ul className="chips">
+          {project.classifications.map((c) => (
+            <li key={c} className="chip" data-bom={c.toLowerCase()}>
+              {c}
+            </li>
+          ))}
+        </ul>
+      </div>
 
-      <ul className="chips">
-        {project.classifications.map((c) => (
-          <li key={c} className="chip" data-bom={c.toLowerCase()}>
-            {c}
-          </li>
-        ))}
-      </ul>
-
-      <dl className="meta">
-        <div>
-          <dt>Source</dt>
-          <dd>{project.source_type}</dd>
-        </div>
-        <div>
-          <dt>Stage</dt>
-          <dd>{project.sdlc_stage}</dd>
-        </div>
-        {project.owner.name && (
-          <div>
-            <dt>Owner</dt>
-            <dd>{project.owner.name}</dd>
-          </div>
-        )}
-        {project.validity_end && (
-          <div>
-            <dt>Valid until</dt>
-            <dd>{project.validity_end}</dd>
-          </div>
-        )}
-      </dl>
+      {/*
+        ⚠ INLINE METADATA, NOT FOUR LABELLED ROWS.
+        This was a `<dl>` of uppercase label over value — four stacked pairs
+        that took roughly 200px to carry four short words, gave every fact
+        equal weight, and made the card three times taller than its content.
+        The facts are secondary to the name, so they read as one muted line
+        under it, with the label only where the value would be ambiguous
+        alone. `github` and `source` need no caption; a date does.
+      */}
+      <p className="card-meta">
+        <span>{project.source_type}</span>
+        <span>{project.sdlc_stage}</span>
+        {project.owner.name && <span>{project.owner.name}</span>}
+        {project.validity_end && <span>valid until {project.validity_end}</span>}
+      </p>
 
       {warning && (
         // role="status", not an alert: it is important, not an interruption.

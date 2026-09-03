@@ -137,14 +137,13 @@ export function HardwareTree() {
         lenses mean two people looking at "Procurement" are looking at the same
         thing.
       */}
-      <div className="chips" role="tablist" aria-label="Hardware views">
+      <div className="segmented" role="tablist" aria-label="Hardware views">
         {VIEWS.map((v) => (
           <button
             key={v.id}
             type="button"
             role="tab"
             aria-selected={view === v.id}
-            className={view === v.id ? 'btn btn-sm' : 'btn btn-sm btn-quiet'}
             title={v.hint}
             onClick={() => setView(v.id)}
           >
@@ -155,109 +154,115 @@ export function HardwareTree() {
 
       {view === 'procurement' && <SupplierExport roots={roots} />}
 
-      <table className="table">
-        <caption className="sr-only">Hardware component tree</caption>
-        <thead>
-          <tr>
-            <th scope="col">Component</th>
-            <th scope="col">Part number</th>
-            <th scope="col">Qty</th>
-            {view === 'compliance' && (
-              <>
-                <th scope="col">Manufacturer</th>
-                <th scope="col">Origin</th>
-                <th scope="col">Criticality</th>
-                <th scope="col">Provenance</th>
-              </>
-            )}
-            {view === 'engineering' && (
-              <>
-                <th scope="col">Designators</th>
-                <th scope="col">Footprint</th>
-                <th scope="col">Assembly</th>
-                <th scope="col">Fitted</th>
-              </>
-            )}
-            {view === 'procurement' && (
-              <>
-                <th scope="col">Supplier SKU</th>
-                <th scope="col">Supplier</th>
-                <th scope="col">Unit</th>
-                <th scope="col">Extended</th>
-                <th scope="col">Lifecycle</th>
-                <th scope="col">Alternates</th>
-              </>
-            )}
-            <th scope="col">
-              <span className="sr-only">Actions</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(({ component, depth }) => (
-            <tr key={component.id}>
-              <th scope="row">
-                <span aria-hidden="true" className="muted">
-                  {'· '.repeat(depth)}
-                </span>
-                {component.product_name}
-              </th>
-              <td>{component.model_number || <NotProvided />}</td>
-              <td>{component.quantity}</td>
+      <div className="table-wrap">
+        <table className="table">
+          <caption className="sr-only">Hardware component tree</caption>
+          <thead>
+            <tr>
+              <th scope="col">Component</th>
+              <th scope="col">Part number</th>
+              <th scope="col">Qty</th>
               {view === 'compliance' && (
                 <>
-                  <td>{component.manufacturer_name || <NotProvided />}</td>
-                  <td>{component.origin || <NotProvided />}</td>
-                  <td>{component.criticality || <NotProvided />}</td>
-                  <td className="muted">{describeProvenance(component)}</td>
+                  <th scope="col">Manufacturer</th>
+                  <th scope="col">Origin</th>
+                  <th scope="col">Criticality</th>
+                  <th scope="col">Provenance</th>
                 </>
               )}
               {view === 'engineering' && (
                 <>
-                  <td>
-                    {component.designators.length > 0 ? (
-                      component.designators.join(', ')
-                    ) : (
-                      <NotProvided />
-                    )}
-                  </td>
-                  <td>{component.package_footprint || <NotProvided />}</td>
-                  <td>{component.assembly_type || <NotProvided />}</td>
-                  {/*
-                    ⚠ "Fitted", NOT "DNP". A column headed with an initialism is
-                    what a reader gets backwards, and backwards here means a
-                    factory omitting a part the design needs.
-                  */}
-                  <td>{component.do_not_populate ? 'No — do not populate' : 'Yes'}</td>
+                  <th scope="col">Designators</th>
+                  <th scope="col">Footprint</th>
+                  <th scope="col">Assembly</th>
+                  <th scope="col">Fitted</th>
                 </>
               )}
               {view === 'procurement' && (
                 <>
-                  <td>{component.supplier_sku || <NotProvided />}</td>
-                  <td>{component.preferred_supplier || <NotProvided />}</td>
-                  <td>{component.unit_price || <NotProvided />}</td>
-                  <td>{component.extended_price || <NotProvided />}</td>
-                  <td>
-                    <LifecycleBadge status={component.lifecycle_status} />
-                  </td>
-                  <td>
-                    {component.alternates.length > 0 ? (
-                      component.alternates.map(describeAlternate).join('; ')
-                    ) : (
-                      <NotProvided />
-                    )}
-                  </td>
+                  <th scope="col">Supplier SKU</th>
+                  <th scope="col">Supplier</th>
+                  <th scope="col">Unit</th>
+                  <th scope="col">Extended</th>
+                  <th scope="col">Lifecycle</th>
+                  <th scope="col">Alternates</th>
                 </>
               )}
-              <td>
-                <button type="button" className="btn btn-sm" onClick={() => setEditing(component)}>
-                  Complete
-                </button>
-              </td>
+              <th scope="col">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map(({ component, depth }) => (
+              <tr key={component.id}>
+                <th scope="row">
+                  <span aria-hidden="true" className="muted">
+                    {'· '.repeat(depth)}
+                  </span>
+                  {component.product_name}
+                </th>
+                <td>{component.model_number || <NotProvided />}</td>
+                <td>{component.quantity}</td>
+                {view === 'compliance' && (
+                  <>
+                    <td>{component.manufacturer_name || <NotProvided />}</td>
+                    <td>{component.origin || <NotProvided />}</td>
+                    <td>{component.criticality || <NotProvided />}</td>
+                    <td className="muted">{describeProvenance(component)}</td>
+                  </>
+                )}
+                {view === 'engineering' && (
+                  <>
+                    <td>
+                      {component.designators.length > 0 ? (
+                        component.designators.join(', ')
+                      ) : (
+                        <NotProvided />
+                      )}
+                    </td>
+                    <td>{component.package_footprint || <NotProvided />}</td>
+                    <td>{component.assembly_type || <NotProvided />}</td>
+                    {/*
+                    ⚠ "Fitted", NOT "DNP". A column headed with an initialism is
+                    what a reader gets backwards, and backwards here means a
+                    factory omitting a part the design needs.
+                  */}
+                    <td>{component.do_not_populate ? 'No — do not populate' : 'Yes'}</td>
+                  </>
+                )}
+                {view === 'procurement' && (
+                  <>
+                    <td>{component.supplier_sku || <NotProvided />}</td>
+                    <td>{component.preferred_supplier || <NotProvided />}</td>
+                    <td>{component.unit_price || <NotProvided />}</td>
+                    <td>{component.extended_price || <NotProvided />}</td>
+                    <td>
+                      <LifecycleBadge status={component.lifecycle_status} />
+                    </td>
+                    <td>
+                      {component.alternates.length > 0 ? (
+                        component.alternates.map(describeAlternate).join('; ')
+                      ) : (
+                        <NotProvided />
+                      )}
+                    </td>
+                  </>
+                )}
+                <td>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => setEditing(component)}
+                  >
+                    Complete
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {editing && (
         <ComponentForm projectId={projectId} component={editing} onDone={() => setEditing(null)} />
@@ -429,7 +434,6 @@ function NotProvided() {
   return <span className="not-provided">not-provided</span>;
 }
 
-
 /**
  * LifecycleBadge renders availability, and says what it means.
  *
@@ -554,7 +558,6 @@ function CostSummary({ roots }: { roots: HardwareComponent[] }) {
     </aside>
   );
 }
-
 
 /**
  * SupplierExport writes one order file per supplier.
@@ -718,9 +721,8 @@ function AlternatesEditor({
                 ))}
               </select>
               <p className="field-hint">
-                <code>drop-in</code> replaces the part with no change.{' '}
-                <code>functional</code> needs a design or firmware change.{' '}
-                <code>unverified</code> means nobody has checked.
+                <code>drop-in</code> replaces the part with no change. <code>functional</code> needs
+                a design or firmware change. <code>unverified</code> means nobody has checked.
               </p>
             </div>
 

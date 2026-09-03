@@ -7,8 +7,8 @@ A session that writes code but does not update this file has failed — the next
 ---
 
 **Last updated:** 2026-09-03
-**Current phase:** Enterprise HBOM — 🟢 **COMPLETE.** All six milestones, the CBOM/AIBOM OSINT scope, and now both remaining gaps: **CERT-In element 24** (advisory NVD matching, with a four-value status so an empty column can never read as "clear") and the **alternates editor** (which also uncovered that `services/project` never read or wrote the alternates table at all, and that editing any manufacturing field was a silent no-op). 🟢 **ALL FOUR SCANNABLE FAMILIES NORMALIZE AUTOMATICALLY.** `task verify` exits 0; `pytest libs/py-shared workers` is 815 green, up from 2 failing that the local gate never ran.
-**Next action:** Nothing is queued — read this file fresh and take a new instruction. ⚠ **`NVD_API_KEY` is set in no environment, so hardware vulnerability matching reports `not-attempted` for every component and element 24 scores zero.** That is the honest shipping state and the report says so in words; setting a key is the one step that turns element 24 on. The NVD adapter has never run against the live API — same standing caveat as `providers/nexar.py`. 🟡 Carried forward, none a regression: `component_provenance` is written by nothing, so per-component engine attribution is empty; `axebom toolctl pin` has never existed, which is why every `image_digest` but cdxgen's is null; `workers/cbom` and `workers/aibom` runners still carry the namespace-package relative import that breaks under pytest collection (latent — no test imports them; their CONSUMERS use absolute imports); the ZITADEL http/https redirect still blocks Playwright; and `crypto-mixed` still has no CBOM golden harness (the SBOM suite no longer falsely claims it — that red build is fixed). ⚠ `cdxgen`'s image is 15.5 GB and pulling it filled this machine's disk — 40 GB of build cache had to be reclaimed. Size any deployment for it.
+**Current phase:** Frontend modernization — 🟢 **DONE** (shared layer + Projects, project detail, HBOM). Before that, Enterprise HBOM — 🟢 **COMPLETE.** All six milestones, the CBOM/AIBOM OSINT scope, and now both remaining gaps: **CERT-In element 24** (advisory NVD matching, with a four-value status so an empty column can never read as "clear") and the **alternates editor** (which also uncovered that `services/project` never read or wrote the alternates table at all, and that editing any manufacturing field was a silent no-op). 🟢 **ALL FOUR SCANNABLE FAMILIES NORMALIZE AUTOMATICALLY.** `task verify` exits 0; `pytest libs/py-shared workers` is 815 green, up from 2 failing that the local gate never ran.
+**Next action:** Nothing is queued — read this file fresh and take a new instruction. ⚠ **`NVD_API_KEY` is set in no environment, so hardware vulnerability matching reports `not-attempted` for every component and element 24 scores zero.** That is the honest shipping state and the report says so in words; setting a key is the one step that turns element 24 on. The NVD adapter has never run against the live API — same standing caveat as `providers/nexar.py`. 🟡 Carried forward, none a regression: `component_provenance` is written by nothing, so per-component engine attribution is empty; `axebom toolctl pin` has never existed, which is why every `image_digest` but cdxgen's is null; `workers/cbom` and `workers/aibom` runners still carry the namespace-package relative import that breaks under pytest collection (latent — no test imports them; their CONSUMERS use absolute imports); and `crypto-mixed` still has no CBOM golden harness (the SBOM suite no longer falsely claims it — that red build is fixed). ⚠ `cdxgen`'s image is 15.5 GB and pulling it filled this machine's disk — 40 GB of build cache had to be reclaimed. Size any deployment for it.
 
 > 🟢 **A REAL SCAN NOW NORMALIZES, LIVE, WITH NO MANUAL TRIGGER — THE
 > NORMALIZER'S DEPLOYED BOUNDARY FROM (e)/(k)/(l) IS CLOSED FOR SBOM.**
@@ -2265,6 +2265,95 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-09-03 (i) — The UI stops looking like a 2012 admin panel
+
+The stack was already current (React 19, Vite 6, Motion, a variable Inter, a
+glass/ambient token layer with three theme states). **The dated part was how
+those tokens were applied**, and it came down to two rules.
+
+`h2` was globally an uppercase, letterspaced, 0.75 rem, muted eyebrow, and
+`.meta dt` was the same treatment one level down. Every screen therefore
+rendered as a wall of shouting micro-labels — `CLASSIFICATION`, `OWNER AND
+VALIDITY`, `NAME`, `FREQUENCY` — in which the least important text on the page
+was the most visually distinctive. Overrides existed in four places purely to
+UNDO the eyebrow (`.card h2`, `.empty h2`), which is the tell.
+
+**Direction chosen with the user: dense pro-tool** (Linear/Stripe-shaped), on
+the reasoning the tokens themselves already state — "enterprise-dense but
+legible". Scope: the shared layer plus the key screens.
+
+#### The shared layer
+
+- **Headings are headings.** Sentence case, larger than body, weighted not
+  coloured. `.eyebrow` survives for the one honest use — a caption under a big
+  number. A table's column header keeps its uppercase and is the one place that
+  should: there it separates a header from a body of identical size directly
+  beneath it.
+- **`.meta` puts the key beside the value**, two-column with hairline rules
+  (used on six screens, so this landed everywhere at once). First cut sized the
+  key column at 12ch and "Accommodation of mistakes" wrapped to two lines,
+  making alternate rows different heights — 22ch single-column, 12ch when
+  two-up.
+- **New `.surface` primitive** (head / body / foot). Detail pages had no
+  containers at all: content floated on the ambient gradient and sections were
+  separated by a gap.
+- **New `--hairline` token**, lighter than `--border`. Row separation inside a
+  surface is a different job from dividing a surface from the page; `--border`
+  between table rows drew a forty-row table as forty boxes.
+- **Sidebar**: visible group labels (they existed, `.sr-only` — assistive
+  technology was getting the better interface), 2 rem rows, an active state
+  carrying a shape as well as a colour, and a collapsed rail where the group
+  labels become 1px rules rather than vanishing.
+- **Top bar**: an avatar with initials. Sign out stays a directly visible
+  button — `e2e/auth.spec.ts` asserts it by role, and TopBar's own comment is
+  right that leaving should not need a discovery step.
+- **New `.segmented` control** for the HBOM view tabs, which were three loose
+  `.btn`s that read as independent actions rather than alternatives.
+- Buttons on a fixed 2 rem height; tables on hairlines with a `.num` column
+  variant.
+
+#### The screens
+
+- **Projects list**: cards went from ~280 px carrying four short facts in four
+  labelled rows, to ~110 px with the name and its chips on one line and the
+  facts as one muted dot-separated line. Four across instead of three. The
+  whole card is now the click target via a stretched link.
+- **Project detail**: three surfaces; `Classification` folded into the header
+  (it was a titled section containing one chip). **The duplicate `Gaps` list is
+  gone** — six fields reading "Not recorded" followed by the same six as
+  bullets, so the emptier a project was, the more page it filled.
+- **HBOM tree**: segmented control, table on a surface.
+
+#### Two real bugs the screenshots caught
+
+- 🔴 **A stale honest label.** `/hbom`'s subtitle still read "IMPORTED, not
+  discovered … no scanner produces it" — false since `hbom-ecad` shipped, and
+  the engine table rendered *directly beneath it* listed that engine. Rewritten
+  to say what AxeBOM reads while keeping the claim the label exists for
+  ("Nothing here examined physical hardware").
+  **The discovery guard in `hbom.test.ts` did not cover `BOM_TYPES` summaries**
+  — the largest piece of HBOM prose in the UI was unwatched, which is exactly
+  how it went stale. Guard extended, plus an assertion that the denial is still
+  present (the regex alone would pass on silence). Both mutation-verified.
+- 🟡 The signed-out wordmark rendered **underlined** — `.auth-mark` set a colour
+  and never cleared the UA decoration, so the first thing a visitor saw was the
+  product name styled as a raw hyperlink. Also: `import only` ran straight into
+  the engine id ("hbom-cdxgen-hostimport only"), and a `<caption>` inside the
+  now-bordered `.table-wrap` rendered on its top edge.
+
+#### Verification
+
+`task verify` exits 0. Frontend 126 tests (was 125 — one added), tsc and eslint
+clean, prettier clean on every touched file. Verified visually at 1600×1000 in
+**both themes** against the live stack.
+
+⚠ **Playwright is no longer blocked by the ZITADEL http/https redirect** —
+launching Chromium with `--ignore-certificate-errors` plus
+`ignoreHTTPSErrors` signs in against the LAN-IP self-signed cert and reaches
+`/projects`. That carried-forward blocker can come off the list. The token is
+in-memory, so `storageState` does not persist a session: navigate within one
+signed-in page rather than reusing state.
 
 ### 2026-09-03 (h) — HBOM completed: CERT-In element 24, the alternates editor, and two silent data-loss bugs
 

@@ -131,19 +131,20 @@ export function Sidebar() {
             to guess which one holds Projects; one landmark with an internal
             heading keeps a single, ordered nav region while still giving the
             five BOM-type items a name of their own.
+
+            ⚠ AND IT IS DRAWN NOW, NOT `.sr-only`. The nav has three groups
+            and a sighted user could see none of them — eleven identical rows
+            in one flat column, while a screen reader got the structured
+            version. That is assistive technology receiving the better
+            interface, which is backwards.
           */}
-          <h3 className="sr-only" id="bom-nav-heading">
+          <h3 className="nav-group-label" id="bom-nav-heading">
             BOM types
           </h3>
           <ul aria-labelledby="bom-nav-heading">
             {BOM_NAV.map(({ to, label, glyph, token }) => (
               <li key={to}>
-                <NavLink
-                  to={to}
-                  title={label}
-                  data-bom={token}
-                  onClick={() => setNavOpen(false)}
-                >
+                <NavLink to={to} title={label} data-bom={token} onClick={() => setNavOpen(false)}>
                   <span className="nav-icon" aria-hidden="true">
                     {glyph}
                   </span>
@@ -153,7 +154,10 @@ export function Sidebar() {
             ))}
           </ul>
 
-          <ul>
+          <h3 className="nav-group-label" id="workspace-nav-heading">
+            Workspace
+          </h3>
+          <ul aria-labelledby="workspace-nav-heading">
             {NAV_BOTTOM.map(({ to, label, Icon }) => (
               <li key={to}>
                 <NavLink to={to} title={label} onClick={() => setNavOpen(false)}>

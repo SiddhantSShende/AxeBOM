@@ -79,9 +79,26 @@ export const BOM_TYPES: readonly BomTypeMeta[] = [
     glyph: '▤',
     label: 'HBOM',
     token: 'hbom',
+    /*
+     * ⚠ THIS SUMMARY WENT STALE AND CONTRADICTED THE TABLE UNDER IT.
+     *
+     * It read "IMPORTED, not discovered … no scanner produces it", which was
+     * the whole truth while a CSV and a form were the only ways in. It is not
+     * any more — `hbom-ecad` parses committed KiCad schematics, netlists and
+     * BOM exports, which is a scan in exactly the sense that parsing a
+     * lockfile is — and the engine table rendered directly beneath this
+     * sentence listed that engine with no "import only" tag, flatly
+     * contradicting it.
+     *
+     * ⚠ WHAT DOES NOT CHANGE IS THE CLAIM THE LABEL EXISTS TO PREVENT: that
+     * anything here examined physical hardware. Widened to say what AxeBOM
+     * reads, and still explicit that it never looked at a device. Kept in step
+     * with CLAUDE.md's honest-labels section and docs/LIMITATIONS.md.
+     */
     summary:
-      'IMPORTED, not discovered. Hardware inventory comes from a CSV or a ' +
-      'form you fill in; no scanner produces it.',
+      'Parsed from hardware design files you commit or upload, or imported ' +
+      'from a parts list or a host inventory your own machine reported. ' +
+      'Nothing here examined physical hardware.',
   },
 ] as const;
 

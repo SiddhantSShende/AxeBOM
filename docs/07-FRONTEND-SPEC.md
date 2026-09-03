@@ -46,6 +46,29 @@ Target **WCAG 2.2 AA**: 4.5:1 body contrast, 3:1 for UI components, visible focu
 
 Enterprise-dense but legible. Tables carry a lot; give them 32 px rows, sticky headers, column visibility controls, and a per-row expand rather than shrinking type. Optimize for **scannability of status** — a user opens this to answer "what changed and what is broken," not to read prose.
 
+### Labels and hierarchy
+
+> ⚠ **A section heading is a heading. The uppercase eyebrow is not a section heading.**
+>
+> `h2` was globally an uppercase, letterspaced, 0.75 rem, muted eyebrow, and `.meta dt` was the same treatment one level down. Together they were the dominant visual texture of the product: every screen rendered as a wall of shouting micro-labels — `CLASSIFICATION`, `OWNER AND VALIDITY`, `NAME`, `FREQUENCY` — in which the *least* important text on the page was the most visually distinctive, and six empty fields took roughly 300 px to say "nothing is filled in".
+>
+> The rules now:
+>
+> - **Section headings are sentence case**, larger than body text, weighted rather than coloured.
+> - **A key sits beside its value**, not above it — `.meta` is a two-column grid with hairline row rules, so reading a row is one saccade rather than two.
+> - **`.eyebrow` still exists and is used sparingly**: a caption *under* a large number, where the figure is the content and the label is its annotation.
+> - **A table's column header keeps its uppercase**, and is the one place that should. There the treatment does real work — separating a header from a body of identical size and alignment directly beneath it, in a strip with no room for a larger heading.
+>
+> **Never render the same fact twice.** The project detail page listed six practice fields reading "Not recorded" and then repeated all six verbatim as a `Gaps` bullet list, so the emptier a project was, the more of the page it filled.
+
+### Surfaces
+
+Detail screens are built from `.surface` — a bordered, rounded container with a `.surface-head` (title plus the count or status that belongs to it), a `.surface-body`, and an optional `.surface-foot` for a caveat. Content must not float directly on the ambient wash: without containers, sections are separated by nothing but a gap and a page reads as one undifferentiated column.
+
+Rows *inside* a surface separate with `--hairline`, never `--border`. `--border` is the weight that divides a surface from the page; using it between rows draws a forty-row table as forty stacked boxes.
+
+An empty or error state nested inside a `.surface` or `.panel` drops its own border, background and shadow — it is already in a card, and two cards deep is more chrome than message.
+
 ---
 
 ## 3. Routes

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { BOM_TYPES } from '../design/theme';
 import {
   CANONICAL_COLUMNS,
   CRITICALITY_VALUES,
@@ -96,11 +97,30 @@ describe('the honest label', () => {
       ...JUDGEMENT_FIELDS.map((f) => f.label),
       describeProvenance(component()),
       describeProvenance(component({ enriched_fields: { origin: 'nexar' } })),
+      // ⚠ THE BOM-TYPE SUMMARY WAS NOT GUARDED, AND THAT IS EXACTLY HOW IT
+      // WENT STALE.
+      //
+      // It is the largest piece of prose about HBOM anywhere in the UI — the
+      // subtitle of the /hbom page — and it still read "IMPORTED, not
+      // discovered … no scanner produces it" long after hbom-ecad shipped,
+      // while the engine table rendered directly beneath it listed that
+      // engine. Every guard in this file watched a different string.
+      ...BOM_TYPES.map((b) => b.summary),
     ];
 
     for (const text of strings) {
       expect(flagged(text), `reads as a discovery claim: ${text}`).toBe(false);
     }
+  });
+
+  it('the HBOM summary still denies examining hardware', () => {
+    // ⚠ THE DISCOVERY GUARD ALONE WOULD PASS ON SILENCE. A summary that simply
+    // stopped mentioning hardware provenance would clear every regex above
+    // while dropping the one claim CLAUDE.md requires this product to keep
+    // making — that it never looked at a device.
+    const hbom = BOM_TYPES.find((b) => b.type === 'HBOM');
+    expect(hbom).toBeDefined();
+    expect(hbom!.summary).toMatch(/\bnothing here examined physical hardware\b/i);
   });
 
   it('would actually catch a claim', () => {
@@ -280,10 +300,12 @@ describe('describeProvenance', () => {
   });
 });
 
-
 describe('cost roll-up', () => {
-  const part = (over: Partial<HardwareComponent> = {}): HardwareComponent =>
-    ({ ...component(), children: [], ...over });
+  const part = (over: Partial<HardwareComponent> = {}): HardwareComponent => ({
+    ...component(),
+    children: [],
+    ...over,
+  });
 
   it('never sums across currencies', () => {
     // ⚠ 4.10 USD + 3.20 EUR IS NOT A NUMBER. There is no exchange rate in this
@@ -334,8 +356,12 @@ describe('cost roll-up', () => {
 });
 
 describe('stranded parts', () => {
-  const part = (over: Partial<HardwareComponent> = {}): HardwareComponent =>
-    ({ ...component(), children: [], alternates: [], ...over });
+  const part = (over: Partial<HardwareComponent> = {}): HardwareComponent => ({
+    ...component(),
+    children: [],
+    alternates: [],
+    ...over,
+  });
 
   it('is an obsolete part with no approved alternate', () => {
     // ⚠ THE MOST ACTIONABLE FACT IN A HARDWARE BOM. Each of these stops a build
@@ -392,10 +418,13 @@ describe('describeAlternate', () => {
   });
 });
 
-
 describe('per-supplier export', () => {
-  const part = (over: Partial<HardwareComponent> = {}): HardwareComponent =>
-    ({ ...component(), children: [], alternates: [], ...over });
+  const part = (over: Partial<HardwareComponent> = {}): HardwareComponent => ({
+    ...component(),
+    children: [],
+    alternates: [],
+    ...over,
+  });
 
   const parts = [
     part({
@@ -483,9 +512,9 @@ describe('alternate editing', () => {
   it('treats a row that names nothing as not identifiable', () => {
     // Mirrors the hardware_alternate_identifiable CHECK.
     expect(isAlternateIdentifiable(blankAlternate(0))).toBe(false);
-    expect(
-      isAlternateIdentifiable({ ...blankAlternate(0), manufacturer_name: 'Panasonic' }),
-    ).toBe(true);
+    expect(isAlternateIdentifiable({ ...blankAlternate(0), manufacturer_name: 'Panasonic' })).toBe(
+      true,
+    );
     expect(isAlternateIdentifiable({ ...blankAlternate(0), supplier_sku: 'P10-ND' })).toBe(true);
     // Whitespace is not an identifier.
     expect(isAlternateIdentifiable({ ...blankAlternate(0), model_number: '   ' })).toBe(false);

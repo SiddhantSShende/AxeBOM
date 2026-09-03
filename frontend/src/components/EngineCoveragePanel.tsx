@@ -34,7 +34,13 @@ export function EngineCoveragePanel({ family, projectId }: EngineCoveragePanelPr
   return (
     <section aria-labelledby={`engine-coverage-${meta.token}`} className="card">
       <h3 id={`engine-coverage-${meta.token}`}>Engine coverage</h3>
-      <p className="step-hint">{meta.summary}</p>
+      {/*
+        ⚠ THE BOM-TYPE SUMMARY IS NOT REPEATED HERE. Every screen that mounts
+        this panel already prints `meta.summary` as its page tagline, so the
+        same two-line paragraph appeared twice within one viewport. What this
+        panel owes the reader is what the TABLE means, which the caption below
+        says.
+      */}
 
       <div className="table-wrap">
         <table className="table">
@@ -77,7 +83,10 @@ function EngineRow({ engine, showLastRun }: { engine: EngineInfo; showLastRun: b
           {engine.last_run ? (
             <StatusPill status={engine.last_run.status} />
           ) : (
-            <span className="not-provided" title="No scan has invoked this engine for this project yet.">
+            <span
+              className="not-provided"
+              title="No scan has invoked this engine for this project yet."
+            >
               never run
             </span>
           )}

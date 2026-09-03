@@ -109,29 +109,56 @@ a {
   color: var(--primary);
 }
 
-/* Page titles and the uppercase section eyebrow used throughout — "Owner and
- * validity", "Practices and processes" — are the two headings every screen
- * reaches for, so they are defined once here rather than per route. */
+/* Page and section headings.
+ *
+ * ⚠ `h2` USED TO BE AN UPPERCASE 0.75rem EYEBROW, AND THAT ONE RULE WAS THE
+ * DOMINANT VISUAL TEXTURE OF THE WHOLE PRODUCT.
+ *
+ * Every section on every screen rendered as CLASSIFICATION, OWNER AND
+ * VALIDITY, PRACTICES AND PROCESSES — letterspaced, muted, and smaller than
+ * the body text underneath it. Stacked with `.meta dt`, which was the same
+ * treatment again one level down, it gave a compliance tool the texture of a
+ * 2012 admin panel: a wall of shouting micro-labels with no hierarchy, where
+ * the least important text on the page was the most visually distinctive.
+ *
+ * A section heading is now a real heading — sentence case, larger than the
+ * body, weighted rather than coloured. The eyebrow still exists as `.eyebrow`
+ * for the two places it is genuinely wanted (a stat's caption, where the
+ * NUMBER is the content and the label is the annotation).
+ *
+ * Every override that existed only to UNDO the eyebrow — `.card h2`,
+ * `.empty h2` — is gone with it. */
 h1 {
   margin: 0;
-  font-size: 1.7rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: 1.55rem;
+  font-weight: 680;
+  letter-spacing: -0.021em;
 }
 
 h2 {
-  margin: var(--space-6) 0 var(--space-2);
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
+  margin: 0 0 var(--space-3);
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.011em;
+  color: var(--text);
 }
 
 h3 {
   margin: var(--space-4) 0 var(--space-2);
-  font-size: 0.95rem;
-  font-weight: 650;
+  font-size: 0.9rem;
+  font-weight: 620;
+  letter-spacing: -0.006em;
+}
+
+/* The eyebrow, kept deliberately and used sparingly: a caption UNDER a large
+ * number, where the figure is the content and this is its annotation. Never a
+ * section heading — that is the pattern this replaced. */
+.eyebrow {
+  font-size: 0.72rem;
+  font-weight: 620;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
 }
 
 p {
@@ -350,9 +377,13 @@ code {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
+  /* A fixed control height rather than symmetric padding: a button holding an
+   * icon, a button holding text, and a `.btn`-styled <Link> otherwise end up
+   * three different heights on the same row. */
+  padding: 0 var(--space-3);
+  min-height: 2rem;
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
   /* ⚠ `.btn` IS APPLIED TO <Link> AS OFTEN AS <button>. Without this, every
@@ -361,8 +392,9 @@ code {
    * proof this class had never been used on an anchor before now. */
   text-decoration: none;
   font: inherit;
-  font-size: 0.88rem;
-  font-weight: 600;
+  font-size: 0.85rem;
+  font-weight: 550;
+  white-space: nowrap;
   cursor: pointer;
   box-shadow: var(--shadow-xs);
   transition:
@@ -552,6 +584,54 @@ code {
   color: var(--down);
 }
 
+/* --- Segmented control -----------------------------------------------------
+ *
+ * A small set of mutually exclusive lenses over the same data — the HBOM
+ * table's Compliance / Engineering / Procurement views, and anywhere else a
+ * `role="tablist"` picks one of three.
+ *
+ * ⚠ ONE TRACK, NOT THREE LOOSE BUTTONS. As separate `.btn`s the options read
+ * as three independent actions with no indication they were alternatives, and
+ * the unselected two looked disabled rather than available. A shared track
+ * with a moving selection says "pick one of these" without a label.
+ */
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--radius);
+  background: var(--glass-row-alt);
+}
+.segmented button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0 var(--space-3);
+  min-height: 1.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.segmented button:hover {
+  color: var(--text);
+}
+/* ⚠ SELECTION IS A RAISED SURFACE, NOT ONLY A COLOUR (WCAG 1.4.1) — the fill
+ * and shadow survive greyscale, and aria-selected carries it to assistive
+ * technology independently of both. */
+.segmented button[aria-selected='true'] {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: var(--shadow-xs);
+}
+
 /* --- Tables -------------------------------------------------------------- */
 
 .table {
@@ -562,20 +642,44 @@ code {
 .table th,
 .table td {
   text-align: left;
-  padding: var(--space-1) var(--space-3);
-  border-bottom: 1px solid var(--border);
+  padding: var(--space-2) var(--space-3);
+  /* ⚠ --hairline, NOT --border. --border is the weight that separates a
+   * surface from the page; using it between every row drew a 40-row table as
+   * 40 stacked boxes. A row rule only has to be strong enough to track along. */
+  border-bottom: 1px solid var(--hairline);
   height: var(--row-height);
   vertical-align: middle;
+}
+/* The last row's rule is the container's own border, drawn twice. */
+.table tbody tr:last-child > * {
+  border-bottom: 0;
 }
 .table thead th {
   position: sticky;
   top: 0;
   z-index: 1;
   background: var(--glass-head-bg);
-  font-size: 0.72rem;
+  /* ⚠ THE COLUMN HEADER KEEPS ITS UPPERCASE, AND IT IS THE ONE PLACE THAT
+   * SHOULD. Here the treatment is doing real work: it separates the header
+   * from a body of the same size and alignment directly beneath it, in a
+   * region with no room for a larger heading. That is the opposite of the
+   * section eyebrow this design removed, which shouted a label nobody needed
+   * to distinguish from anything. */
+  font-size: 0.7rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.06em;
   color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+/* Numeric columns line up on the decimal, which is the whole reason a price
+ * or a CVSS score belongs in a table rather than a card. */
+.table .num,
+.table td.num,
+.table th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .table-caption,
 .section-note,
@@ -586,6 +690,14 @@ code {
   font-size: 0.82rem;
   color: var(--text-muted);
   margin: 0 0 var(--space-2);
+}
+/* ⚠ A <caption> IS PART OF THE TABLE BOX, so inside `.table-wrap` — which now
+ * carries the border, radius and background — it rendered ON the top edge,
+ * clipped by the radius. Given padding and a rule it becomes the wrapper's
+ * header strip instead of debris on its border. */
+.table-wrap > .table > .table-caption {
+  margin: 0;
+  padding: var(--space-3) var(--space-3) var(--space-2);
 }
 .table-compact th,
 .table-compact td {
@@ -854,14 +966,95 @@ code {
   justify-content: space-between;
   gap: var(--space-4);
   flex-wrap: wrap;
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--hairline);
+}
+/* ⚠ THE TITLE BLOCK IS BOUNDED SO THE ACTIONS STAY ON THE HEADER ROW. A long
+ * tagline — the BOM-type summaries run to two lines — otherwise consumed the
+ * full width and pushed the primary button onto a line of its own, where it
+ * read as page content rather than a header action. */
+.page-header > :first-child {
+  flex: 1 1 24rem;
+  min-width: 0;
+  max-width: 68ch;
+}
+.page-header > .page-actions,
+.page-header > .btn {
+  flex: none;
 }
 .page-header h1 {
   margin: 0;
 }
+/* The actions cluster, so a page can carry a primary and a secondary without
+ * them drifting apart at different widths. */
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
 .tagline {
   margin: var(--space-1) 0 0;
   color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* --- Surfaces --------------------------------------------------------------
+ *
+ * ⚠ THE DETAIL PAGES HAD NO CONTAINERS AT ALL. Content sat directly on the
+ * ambient gradient, and sections were separated by nothing but a gap — so a
+ * project page read as one undifferentiated column of labels with no sense of
+ * where one group of facts ended and the next began. A section is now a real
+ * surface with a head and a body, which is also what lets the key/value rows
+ * inside it use hairlines instead of boxes.
+ */
+.surface {
+  position: relative;
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg-strong);
+  box-shadow: var(--glass-shadow);
+  margin-bottom: var(--space-5);
+}
+.surface-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-5);
+  min-height: 3rem;
+  border-bottom: 1px solid var(--hairline);
+}
+.surface-head > h2,
+.surface-head > h3 {
+  margin: 0;
+}
+/* The count / status that belongs to a section, sitting with its heading
+ * rather than in a separate line below it. */
+.surface-head-aside {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.surface-body {
+  padding: var(--space-2) var(--space-5) var(--space-4);
+}
+/* For a body whose only child is a table or a list that draws its own edges. */
+.surface-body-flush {
+  padding: 0;
+}
+/* A subdued strip at the foot of a surface — a note, a caveat, a link out. */
+.surface-foot {
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--hairline);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  background: var(--glass-row-alt);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
 .cards {
@@ -870,15 +1063,18 @@ code {
   margin: 0;
   display: grid;
   gap: var(--space-4);
-  grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
 }
 
 .card {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
   border: 1px solid var(--glass-border-strong);
   border-radius: var(--radius-lg);
   background: var(--glass-bg-strong);
-  padding: var(--space-5);
+  padding: var(--space-4);
   box-shadow: var(--glass-shadow);
   transition:
     box-shadow var(--dur-base) var(--ease-out),
@@ -890,7 +1086,7 @@ code {
  * child inside a card would land in the accessibility tree and, in a chip,
  * would break the `container.querySelector('[aria-hidden="true"]')` assertion
  * in Chips.test.tsx. */
-:is(.card, .panel, .state, .tabs)::before {
+:is(.card, .panel, .state, .tabs, .surface)::before {
   content: '';
   position: absolute;
   inset: 0 0 auto;
@@ -903,62 +1099,208 @@ code {
  * should feel liftable before the click, not just clickable after it. Cards
  * that are purely informational (none currently) simply omit :has(a) support
  * and stay flat; this degrades gracefully where :has is unsupported. */
-.card:has(a:hover) {
+/* ⚠ KEYED ON THE CARD, NOT ON `:has(a:hover)`. With the stretched link the
+ * two are nearly equivalent, but `:hover` needs no `:has` support and lifts
+ * on the whole surface the user is actually pointing at. A card with no link
+ * simply never receives it. */
+.card:has(.card-link):hover {
   border-color: var(--border-strong);
   box-shadow: var(--shadow-card-hover);
   transform: translateY(-2px);
 }
+/* The name and its BOM chips share a baseline — one identifying line, rather
+ * than a title with a separate row of chips floating under it. */
+.card-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
 .card h2 {
-  margin: 0 0 var(--space-3);
-  text-transform: none;
-  letter-spacing: normal;
-  font-size: 1.05rem;
-  font-weight: 650;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 620;
+  letter-spacing: -0.008em;
   color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .card h2 a {
   color: inherit;
   text-decoration: none;
 }
-.card h2 a:hover {
+.card:hover h2 a {
   color: var(--primary);
 }
+/* The stretched link: the anchor keeps the project name as its accessible
+ * name while its ::after covers the card, so the click target is the card. */
+.card-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+/* Chips must stay clickable-through — they are inside the stretched region. */
+.card .chips {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+  flex: none;
+}
 
+/* One muted line of secondary facts, dot-separated. */
+.card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  font-size: 0.83rem;
+  color: var(--text-muted);
+}
+/* ⚠ THE SEPARATOR TRAILS ITS ITEM RATHER THAN LEADING THE NEXT ONE.
+ * As `span + span::before` the dot belonged to the FOLLOWING item, so when
+ * the line wrapped the new line began with an orphaned "· valid until …".
+ * CSS cannot see line breaks; attaching the dot to the end of the preceding
+ * item means it wraps away with it and a line never starts with punctuation. */
+.card-meta > span:not(:last-child)::after {
+  content: '·';
+  margin-left: var(--space-3);
+  color: var(--text-faint);
+}
+
+/* --- Key/value metadata ----------------------------------------------------
+ *
+ * ⚠ THE KEY SITS BESIDE THE VALUE, NOT SHOUTING ABOVE IT.
+ *
+ * This was an uppercase letterspaced label stacked over its value, repeated
+ * across a grid — so six empty practice fields occupied roughly 300px of
+ * vertical space to say "nothing is filled in", and the labels drew more
+ * attention than the data they described. Reading a row now takes one
+ * saccade instead of two, and the value is the thing with visual weight.
+ *
+ * The key column is `ch`-based rather than `rem`: these are labels, so their
+ * width should track the text they hold, and a 12ch column keeps "Known
+ * unknowns" and "Valid until" aligned without stranding "Name" in whitespace.
+ */
 .meta {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
-  gap: var(--space-3) var(--space-4);
-  margin: var(--space-4) 0 0;
+  gap: 0;
+  margin: 0;
+  font-size: 0.885rem;
 }
-.meta-stacked {
-  grid-template-columns: 1fr;
+.meta > div {
+  display: grid;
+  /* ⚠ SIZED TO THE LONGEST LABEL, NOT TO A ROUND NUMBER. At 12ch
+   * "Accommodation of mistakes", "Distribution and delivery" and "Known
+   * unknowns" all wrapped to two lines, which made alternating rows different
+   * heights and undid the scannability the hairlines are there to create.
+   * 22ch clears the longest practice label in one line; `minmax` lets it
+   * shrink on a narrow viewport rather than forcing a scrollbar. */
+  grid-template-columns: minmax(6rem, 22ch) 1fr;
+  gap: var(--space-4);
+  align-items: baseline;
+  padding: var(--space-2) 0;
+  min-height: var(--row-height);
+}
+/* Below the two-column breakpoint the label stacks over its value: a 22ch
+ * column plus a value does not fit a phone, and squeezing it reintroduces the
+ * wrapping this rule exists to prevent. */
+@media (max-width: 40rem) {
+  .meta > div {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
+/* A hairline between rows, never after the last one. It is what makes a long
+ * list of fields scannable without boxing each one. */
+.meta > div + div {
+  border-top: 1px solid var(--hairline);
 }
 .meta dt {
   color: var(--text-muted);
-  font-size: 0.72rem;
-  font-weight: 650;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-weight: 500;
 }
 .meta dd {
-  margin: 0.2rem 0 0;
-  font-size: 0.92rem;
-}
-/* An absent value is stated, never left blank: a blank is indistinguishable
-   from a rendering bug, and this product's whole argument is that an unknown
-   must be visible rather than omitted. */
-.meta dd.unset {
-  color: var(--text-faint);
-  font-style: italic;
+  margin: 0;
+  color: var(--text);
+  font-weight: 500;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
+/* Two or three columns of pairs for short values, on wide screens only.
+ * Below that it collapses to the single stack above rather than squeezing a
+ * 12ch label column into a phone. */
+.meta-cols {
+  grid-template-columns: 1fr;
+}
+@media (min-width: 60rem) {
+  .meta-cols {
+    grid-template-columns: repeat(2, 1fr);
+    column-gap: var(--space-7);
+  }
+  /* Two-up pairs carry short labels — Name, Email, Source, Valid until — so
+   * the 22ch column sized for "Accommodation of mistakes" only strands them
+   * in whitespace here. */
+  .meta-cols > div {
+    grid-template-columns: minmax(5rem, 12ch) 1fr;
+  }
+  /* With two columns the top border must not appear on the first row of the
+   * SECOND column, which `div + div` alone would draw. */
+  .meta-cols > div:nth-child(2) {
+    border-top: 0;
+  }
+}
+
+/* An absent value is stated, never left blank: a blank is indistinguishable
+   from a rendering bug, and this product's whole argument is that an unknown
+   must be visible rather than omitted.
+
+   ⚠ NO LONGER ITALIC. Italic in a UI font reads as emphasis, which is the
+   opposite of what an absent value deserves — it was drawing the eye to the
+   six things nobody had filled in. Muted and upright states the same fact
+   quietly. */
+.meta dd.unset {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+/* A reason that says more than "not recorded" — rendered under the value it
+ * qualifies rather than in a second list that repeated every label. */
+.field-gap {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* --- Gaps list -------------------------------------------------------------
+ * Browser bullets at a browser indent, which is what this was, is the single
+ * most "unstyled document" thing a UI can render. */
 .gaps {
-  margin: var(--space-2) 0 0;
-  padding-left: 1.1rem;
-  font-size: 0.92rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.885rem;
 }
 .gaps li {
-  margin: var(--space-1) 0;
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-2) 0;
+  color: var(--text-muted);
+}
+.gaps li + li {
+  border-top: 1px solid var(--hairline);
+}
+.gaps li strong {
+  flex: none;
+  min-width: 12ch;
+  color: var(--text);
+  font-weight: 550;
 }
 
 .chips-selectable .chip {
@@ -969,10 +1311,25 @@ code {
   outline: 2px solid currentColor;
   outline-offset: 1px;
 }
+/* ⚠ USED IN TWO PLACES WITH DIFFERENT NEEDS. Inside a chip it is a trailing
+ * qualifier; in the engine table it follows an engine id in a table cell,
+ * where it rendered as "hbom-cdxgen-hostimport only" — no separation at all,
+ * because the span had no margin and inline elements do not add one. */
 .chip-note {
   font-weight: 400;
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+.table .chip-note {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0 0.4em;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--glass-row-alt);
+  font-size: 0.7rem;
+  white-space: nowrap;
+  vertical-align: 1px;
 }
 
 .note {
@@ -1024,12 +1381,23 @@ code {
   text-align: center;
 }
 .empty h2 {
-  margin-top: 0;
-  color: var(--text);
+  margin: 0 0 var(--space-3);
   font-size: 1.05rem;
-  text-transform: none;
-  letter-spacing: normal;
-  font-weight: 650;
+}
+/* ⚠ AN EMPTY STATE INSIDE A SURFACE IS ALREADY IN A CARD. Rendering its own
+ * border, radius, background and shadow inside one made "no projects yet" two
+ * cards deep — more chrome than message. Nested, it is just centred text.
+ *
+ * `.state` as well as `.empty`: EmptyState in components/States.tsx renders
+ * `.state.state-empty`, which is the one this was actually failing on. */
+:is(.surface, .surface-body, .panel) :is(.empty, .state) {
+  border: 0;
+  background: none;
+  box-shadow: none;
+  padding: var(--space-6) var(--space-4);
+}
+:is(.surface, .surface-body, .panel) :is(.empty, .state)::before {
+  content: none;
 }
 
 /* --- A simple numbered stepper ---------------------------------------------
@@ -1613,12 +1981,11 @@ fieldset legend {
 .engine-coverage {
   margin: var(--space-6) 0;
 }
+/* These re-declared the old uppercase eyebrow on top of the global h2. With
+ * h2 now a real heading they only need their margin reset — a coverage
+ * panel's title is a section heading like any other. */
 .coverage h2,
 .engine-coverage h2 {
-  font-size: 0.82rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
   margin: 0 0 var(--space-3);
 }
 .coverage-numbers {
@@ -1914,23 +2281,52 @@ button.menu-item:disabled {
   white-space: nowrap;
 }
 
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  overflow-y: auto;
+}
 .sidebar-nav ul {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
+
+/* ⚠ THE GROUP LABEL IS NOW VISIBLE, NOT `.sr-only`.
+ *
+ * The nav has three groups — Projects, the five BOM lenses, then the
+ * cross-cutting destinations — and a sighted user could not see any of that:
+ * eleven identical rows in one flat column. The heading existed already and
+ * was announced to screen readers only, which is the rare case of assistive
+ * technology getting the BETTER version of the interface. It is drawn now,
+ * and the `.sr-only` variant stays for the two groups with no visible name. */
+.nav-group-label {
+  margin: 0 0 var(--space-1);
+  padding: 0 var(--space-3);
+  font-size: 0.68rem;
+  font-weight: 620;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
 .sidebar-nav a {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius);
+  padding: 0 var(--space-3);
+  min-height: 2rem;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
-  font-size: 0.885rem;
-  font-weight: 550;
+  font-size: 0.86rem;
+  font-weight: 500;
   text-decoration: none;
   white-space: nowrap;
   transition:
@@ -1951,10 +2347,24 @@ button.menu-item:disabled {
  * keying off the same `data-bom` token BomTypeChip uses, so a CBOM link
  * active in the sidebar and a CBOM chip in a table read as the same colour.
  */
+/* ⚠ THE ACTIVE ITEM CARRIES A SHAPE, NOT ONLY A COLOUR (WCAG 1.4.1). The
+ * rail is what makes "where am I" survive a colour-blind reading and a
+ * greyscale screenshot; the tint and weight reinforce it. */
 .sidebar-nav a.active {
   background: var(--glass-row-hover);
   color: var(--primary);
-  font-weight: 650;
+  font-weight: 600;
+}
+.sidebar-nav a.active::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--space-3) * -1 + 2px);
+  top: 50%;
+  translate: 0 -50%;
+  width: 2px;
+  height: 1.05rem;
+  border-radius: 1px;
+  background: currentColor;
 }
 .sidebar-nav a[data-bom='sbom'].active {
   background: var(--sbom-bg);
@@ -2035,6 +2445,31 @@ button.menu-item:disabled {
 :root[data-sidebar='collapsed'] .sidebar-brand {
   justify-content: center;
 }
+/* ⚠ THE GROUP LABEL COLLAPSES TO A RULE, NOT TO NOTHING. Hiding it outright
+ * would make the collapsed rail one undivided run of eleven icons; a 1px
+ * separator keeps the three groups legible with no text. It stays in the
+ * accessibility tree for the same reason .nav-label does — `height: 0` and
+ * `overflow: hidden`, never `display: none`. */
+:root[data-sidebar='collapsed'] .nav-group-label {
+  height: 0;
+  margin: var(--space-2) var(--space-2) calc(var(--space-2) + 1px);
+  padding: 0;
+  border-bottom: 1px solid var(--hairline);
+  opacity: 0;
+}
+/* The first group has no label above it, so nothing needs separating. */
+:root[data-sidebar='collapsed'] .sidebar-nav > .nav-group-label:first-child {
+  display: none;
+}
+/* Left rail would sit outside the icon-only row; centre it under instead. */
+:root[data-sidebar='collapsed'] .sidebar-nav a.active::before {
+  left: 50%;
+  top: auto;
+  bottom: 2px;
+  translate: -50% 0;
+  width: 1rem;
+  height: 2px;
+}
 
 /* --- Top bar ---------------------------------------------------------------
  * Tier A glass, and sticky, so it also overlaps scrolling content.
@@ -2064,15 +2499,44 @@ button.menu-item:disabled {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--hairline);
+}
+/* ⚠ AN AVATAR, NOT A DROPDOWN. TopBar.tsx's own comment is right that Sign
+ * out must stay a directly visible button — e2e/auth.spec.ts asserts it by
+ * role, and "how do I get out of this" should not need a discovery step. The
+ * avatar adds the identity a bare grey name never carried, without hiding
+ * anything behind it. */
+.avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--primary-text);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  user-select: none;
 }
 .session-name {
-  font-size: 0.85rem;
-  color: var(--text-muted);
+  font-size: 0.83rem;
+  font-weight: 500;
+  color: var(--text);
   /* A long email must not push Sign out off the bar on a narrow window. */
   max-width: 18ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Below the BOM-type breakpoint the name is the first thing to go: the avatar
+ * still says who is signed in, and Sign out still says how to leave. */
+@media (max-width: 48rem) {
+  .session-name {
+    display: none;
+  }
 }
 .org-switcher select {
   font: inherit;
@@ -2435,9 +2899,19 @@ button.menu-item:disabled {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-weight: 750;
+  font-weight: 700;
   font-size: 1.05rem;
+  letter-spacing: -0.02em;
   color: var(--text);
+  /* ⚠ THE WORDMARK WAS RENDERING UNDERLINED. It is an <a>, and this rule set
+   * a colour but never cleared the UA decoration — so the first thing a
+   * signed-out visitor saw was the product name styled like a raw hyperlink.
+   * `.brand` in the sidebar has always cleared it; this is the same fix one
+   * shell over. */
+  text-decoration: none;
+}
+.auth-mark:hover {
+  color: var(--primary);
 }
 .auth-card {
   position: relative;
