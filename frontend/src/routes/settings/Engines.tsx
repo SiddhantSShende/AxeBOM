@@ -61,9 +61,7 @@ export function Engines() {
           key={b.type}
           family={b.type}
           canEdit={canEdit}
-          current={policies.data?.engine_policies.find(
-            (p) => p.family.toUpperCase() === b.type,
-          )}
+          current={policies.data?.engine_policies.find((p) => p.family.toUpperCase() === b.type)}
         />
       ))}
     </div>
@@ -123,7 +121,7 @@ function EnginePolicyCard({
   };
 
   return (
-    <section className="card" aria-labelledby={`engine-policy-${meta.token}`}>
+    <section className="panel" aria-labelledby={`engine-policy-${meta.token}`}>
       <h2 id={`engine-policy-${meta.token}`} data-bom={meta.token}>
         <span aria-hidden="true">{meta.glyph}</span> {meta.label}
       </h2>
@@ -141,7 +139,10 @@ function EnginePolicyCard({
       {isPending && <SkeletonRows rows={2} columns={1} />}
       {isError && <ErrorState error={error} action="load engines for this BOM type" />}
       {!isPending && !isError && (engines ?? []).length === 0 && (
-        <EmptyState title="No engines registered" guidance="This BOM type has no engines in the registry." />
+        <EmptyState
+          title="No engines registered"
+          guidance="This BOM type has no engines in the registry."
+        />
       )}
 
       {!isPending && (engines ?? []).length > 0 && (
@@ -160,7 +161,14 @@ function EnginePolicyCard({
 
           {canEdit && (
             <>
-              <label className="field-inline">
+              {/*
+                ⚠ THE MASTER SWITCH SITS ABOVE THE ACTION ROW, NOT INSIDE IT.
+                It changes what the whole section means — an unchecked box
+                makes every engine toggle above it moot — so it reads as the
+                last thing you decide, and Save reads as the thing that commits
+                all of it.
+              */}
+              <label className="field-inline engine-master">
                 <input
                   type="checkbox"
                   checked={isEnabled}
@@ -169,14 +177,16 @@ function EnginePolicyCard({
                 <span>Run this BOM type at all</span>
               </label>
 
-              <div className="step-actions">
+              {upsert.isError && <p className="status status-down">{upsert.error.message}</p>}
+
+              <div className="panel-actions">
                 <button
                   type="button"
                   className="btn btn-primary"
                   onClick={save}
                   disabled={!dirty || upsert.isPending}
                 >
-                  Save
+                  {upsert.isPending ? 'Saving…' : 'Save'}
                 </button>
                 {current && (
                   <button
@@ -188,8 +198,12 @@ function EnginePolicyCard({
                     Revert to default
                   </button>
                 )}
+                {/* Says why Save is inert rather than leaving a greyed button
+                    with no explanation — the commonest state on this screen. */}
+                {!dirty && !upsert.isPending && (
+                  <span className="toolbar-spacer text-faint">No unsaved changes</span>
+                )}
               </div>
-              {upsert.isError && <p className="status status-down">{upsert.error.message}</p>}
             </>
           )}
         </>
@@ -211,7 +225,10 @@ function EngineOption({
 }) {
   return (
     <li>
-      <label className="chip" data-selected={checked}>
+      {/* `.toggle-chip`, not `.chip` — see the CSS: `.chip` is a badge that
+          says what something IS, and reusing it here made a static BOM-type
+          badge and a clickable engine switch render identically. */}
+      <label className="toggle-chip" data-selected={checked}>
         <input type="checkbox" checked={checked} disabled={disabled} onChange={onToggle} />
         <span>{engine.engine_id}</span>
         {engine.requires_import && <span className="chip-note">import only</span>}

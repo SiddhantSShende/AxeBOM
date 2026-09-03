@@ -32,7 +32,7 @@ export function EngineCoveragePanel({ family, projectId }: EngineCoveragePanelPr
   const meta = bomMeta(family);
 
   return (
-    <section aria-labelledby={`engine-coverage-${meta.token}`} className="card">
+    <section aria-labelledby={`engine-coverage-${meta.token}`} className="panel">
       <h3 id={`engine-coverage-${meta.token}`}>Engine coverage</h3>
       {/*
         ⚠ THE BOM-TYPE SUMMARY IS NOT REPEATED HERE. Every screen that mounts

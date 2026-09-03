@@ -20,7 +20,6 @@ import { ErrorState, SkeletonRows } from '../../components/States';
 import {
   humanizeEnum,
   usePractices,
-  useProject,
   useProjectOptions,
   useSetPractices,
   type PracticesInput,
@@ -30,7 +29,6 @@ const EMPTY: PracticesInput = {};
 
 export function ProjectPractices() {
   const { id = '' } = useParams();
-  const project = useProject(id);
   const practices = usePractices(id);
   const options = useProjectOptions();
   const save = useSetPractices();
@@ -69,7 +67,8 @@ export function ProjectPractices() {
       <header className="page-header">
         <div>
           <h1>Practices and processes</h1>
-          <p className="tagline">{project.data?.name ?? 'Project'}</p>
+          {/* The project name is carried by the crumb above the tabs (App.tsx's
+              ProjectCrumb); repeating it here printed it twice in one header. */}
         </div>
       </header>
 

@@ -73,7 +73,8 @@ export function ProjectSettings() {
       <header className="page-header">
         <div>
           <h1>Project settings</h1>
-          <p className="tagline">{project.data?.name}</p>
+          {/* The project name is carried by the crumb above the tabs (App.tsx's
+              ProjectCrumb); repeating it here printed it twice in one header. */}
         </div>
       </header>
 
@@ -192,7 +193,9 @@ export function ProjectSettings() {
 
         {save.error != null && <ErrorState error={save.error} action="save this project" />}
 
-        <div className="wizard-actions">
+        {/* A footer, not a loose button: the strip separates what you edit
+            from the control that commits it. */}
+        <div className="panel-actions">
           <button type="submit" className="btn btn-primary" disabled={save.isPending}>
             {save.isPending ? 'Saving…' : 'Save changes'}
           </button>
@@ -204,11 +207,13 @@ export function ProjectSettings() {
         </div>
       </form>
 
-      <section aria-labelledby="source-heading">
+      <section className="panel" aria-labelledby="source-heading">
         <h2 id="source-heading">Source</h2>
         <dl className="meta">
-          <dt>Source type</dt>
-          <dd>{humanizeEnum(project.data?.source_type ?? '')}</dd>
+          <div>
+            <dt>Source type</dt>
+            <dd>{humanizeEnum(project.data?.source_type ?? '')}</dd>
+          </div>
         </dl>
         {/* Not a disabled input. A control that cannot be used should not be
             drawn as one — say why instead. */}
@@ -219,7 +224,7 @@ export function ProjectSettings() {
         </p>
       </section>
 
-      <section aria-labelledby="practices-link-heading">
+      <section className="panel" aria-labelledby="practices-link-heading">
         <h2 id="practices-link-heading">Practices and processes</h2>
         <p className="field-hint">
           The six CERT-In practice fields are a minimum element, not a setting, and live on their

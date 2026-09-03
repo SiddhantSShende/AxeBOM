@@ -69,6 +69,23 @@ Rows *inside* a surface separate with `--hairline`, never `--border`. `--border`
 
 An empty or error state nested inside a `.surface` or `.panel` drops its own border, background and shadow — it is already in a card, and two cards deep is more chrome than message.
 
+### Form controls
+
+Native `select`, `checkbox` and `radio` are styled centrally, never per screen. A `select` matches `.btn` geometry (2 rem tall, `--radius`) and carries an inline SVG chevron, so it needs no asset request and survives a strict CSP; checkboxes use `accent-color` rather than a rebuilt control, which keeps the indeterminate state, OS high-contrast themes and native focus behaviour. `fieldset`/`legend` are restyled away from the UA's inset groove.
+
+- **`.field-inline`** — a checkbox or radio with its label on one line.
+- **`.toggle-chip`** — a checkbox that reads as a selectable pill. **Not `.chip`**: `.chip` is a *badge* that says what something IS, and reusing it for a control made a static BOM-type badge and a clickable engine switch render identically.
+- **`.toolbar` / `.filters`** — the row above a table. Labels sit *beside* their controls; `.toolbar-spacer` pushes a result count to the right.
+- **`.panel-actions`** — the footer strip that separates what you edit from the control that commits it.
+
+### The page header is not inside a branch
+
+> ⚠ **Loading and error states must not replace the page header.**
+>
+> Several screens returned a bare `SkeletonRows` or `ErrorState` before rendering their header, so a slow request looked like a different screen and a failed one looked like the app had navigated somewhere unnamed. The Scheduled-scans page had no title at all when empty — the only top-level page in the product that did. The header is the page; only the body varies.
+
+Every tabbed project sub-screen renders `ProjectCrumb` (App.tsx) above the tab bar. Before it existed, Dependencies, Findings, Scans, Crypto, Quantum, AI Models, Hardware, Practices and Settings all showed a tab bar and data with **nothing naming which project they belonged to**.
+
 ---
 
 ## 3. Routes

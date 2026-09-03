@@ -146,20 +146,30 @@ function NewSubscription() {
         */}
         <p className="field-hint">Leave all unchecked to receive every event.</p>
         {events.isPending && <span className="muted">Loading events…</span>}
-        {events.data?.map((id) => (
-          <label key={id} className="checkbox">
-            <input
-              type="checkbox"
-              checked={selected.includes(id)}
-              onChange={() =>
-                setSelected(
-                  selected.includes(id) ? selected.filter((e) => e !== id) : [...selected, id],
-                )
-              }
-            />
-            {describeEvent(id)}
-          </label>
-        ))}
+        {/*
+          ⚠ A FLEX ROW, BECAUSE THE LABELS HAD NO SEPARATION AT ALL.
+          As bare siblings in the fieldset they rendered as one run-on string —
+          "Scan completedNew critical findingsScheduled scan failedReport
+          ready" — which is not a list of options, it is a sentence nobody can
+          parse. `.checkbox` sets the gap between a box and ITS label; nothing
+          set the gap between one option and the next.
+        */}
+        <div className="checkbox-group">
+          {events.data?.map((id) => (
+            <label key={id} className="checkbox">
+              <input
+                type="checkbox"
+                checked={selected.includes(id)}
+                onChange={() =>
+                  setSelected(
+                    selected.includes(id) ? selected.filter((e) => e !== id) : [...selected, id],
+                  )
+                }
+              />
+              {describeEvent(id)}
+            </label>
+          ))}
+        </div>
       </fieldset>
 
       <button type="submit" className="btn btn-primary" disabled={create.isPending}>

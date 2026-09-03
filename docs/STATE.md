@@ -7,7 +7,7 @@ A session that writes code but does not update this file has failed — the next
 ---
 
 **Last updated:** 2026-09-03
-**Current phase:** Frontend modernization — 🟢 **DONE** (shared layer + Projects, project detail, HBOM). Before that, Enterprise HBOM — 🟢 **COMPLETE.** All six milestones, the CBOM/AIBOM OSINT scope, and now both remaining gaps: **CERT-In element 24** (advisory NVD matching, with a four-value status so an empty column can never read as "clear") and the **alternates editor** (which also uncovered that `services/project` never read or wrote the alternates table at all, and that editing any manufacturing field was a silent no-op). 🟢 **ALL FOUR SCANNABLE FAMILIES NORMALIZE AUTOMATICALLY.** `task verify` exits 0; `pytest libs/py-shared workers` is 815 green, up from 2 failing that the local gate never ran.
+**Current phase:** Frontend modernization — 🟢 **DONE, all screens.** (i) did the shared layer plus Projects/detail/HBOM; (j) did the remaining eleven route groups, whose systemic cause was unstyled native form controls. Before that, Enterprise HBOM — 🟢 **COMPLETE.** All six milestones, the CBOM/AIBOM OSINT scope, and now both remaining gaps: **CERT-In element 24** (advisory NVD matching, with a four-value status so an empty column can never read as "clear") and the **alternates editor** (which also uncovered that `services/project` never read or wrote the alternates table at all, and that editing any manufacturing field was a silent no-op). 🟢 **ALL FOUR SCANNABLE FAMILIES NORMALIZE AUTOMATICALLY.** `task verify` exits 0; `pytest libs/py-shared workers` is 815 green, up from 2 failing that the local gate never ran.
 **Next action:** Nothing is queued — read this file fresh and take a new instruction. ⚠ **`NVD_API_KEY` is set in no environment, so hardware vulnerability matching reports `not-attempted` for every component and element 24 scores zero.** That is the honest shipping state and the report says so in words; setting a key is the one step that turns element 24 on. The NVD adapter has never run against the live API — same standing caveat as `providers/nexar.py`. 🟡 Carried forward, none a regression: `component_provenance` is written by nothing, so per-component engine attribution is empty; `axebom toolctl pin` has never existed, which is why every `image_digest` but cdxgen's is null; `workers/cbom` and `workers/aibom` runners still carry the namespace-package relative import that breaks under pytest collection (latent — no test imports them; their CONSUMERS use absolute imports); and `crypto-mixed` still has no CBOM golden harness (the SBOM suite no longer falsely claims it — that red build is fixed). ⚠ `cdxgen`'s image is 15.5 GB and pulling it filled this machine's disk — 40 GB of build cache had to be reclaimed. Size any deployment for it.
 
 > 🟢 **A REAL SCAN NOW NORMALIZES, LIVE, WITH NO MANUAL TRIGGER — THE
@@ -2265,6 +2265,80 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-09-03 (j) — The remaining screens, and five bugs the screenshots found
+
+Second half of the frontend pass: everything the (i) session's scope
+deliberately left alone — Reports, Campaigns, Settings, Engines,
+Notifications, Dependencies, Findings, Scans, project settings and the BOM
+inventories.
+
+#### The systemic cause, again
+
+Where (i) was two heading rules, this one was **native form controls**. Every
+`select` and `checkbox` in the product rendered as a browser default: a
+bevelled grey dropdown with an OS arrow, and the default blue checkbox. Beside
+a designed button, chip and table they were the loudest remaining "unstyled
+document" signal. Styled centrally rather than per screen — a control that
+looks different on Reports and on Engines is worse than one that looks default
+on both.
+
+New shared primitives: `.toggle-chip` (a checkbox that reads as a pill —
+**not** `.chip`, which is a badge; reusing it made a static BOM-type badge and
+a clickable engine switch identical), `.toolbar`/`.toolbar-spacer`,
+`.panel-actions`, `.field-inline`, plus `select`, `checkbox`, `radio`,
+`fieldset` and `legend`. `.panel` was aligned to `.surface` rather than
+migrated — twenty call sites, and the risk is drift, not duplication.
+
+#### Five real bugs
+
+- 🔴 **A regression I introduced in (i).** `.meta`'s row layout lives on
+  `.meta > div`, so the two callers writing the obvious bare
+  `<dl><dt>…</dt><dd>…</dd></dl>` — Settings' Account block, project settings'
+  Source type — lost their grid entirely and rendered as a four-line stack.
+  Both callers fixed, and `.meta` now declares the same columns on itself so
+  the simpler markup works too.
+- 🔴 **No tabbed project screen said which project it was.** Dependencies,
+  Findings, Scans, Crypto, Quantum, AI Models, Hardware, Practices and
+  Settings all rendered the tab bar as the first element under the top bar,
+  with the name nowhere on the page. Arriving from a bookmark or a
+  notification you saw 44 components with no way to tell whose. New
+  `ProjectCrumb` in App.tsx; six screens then had the name twice, so their
+  taglines were dropped and five now-dead `useProject` calls removed with
+  them.
+- 🔴 **Scheduled scans had no page header when empty** — the loading, error and
+  empty branches each returned a bare component, so the only state most
+  customers see had no title, no tagline and nothing naming the screen. Fixed
+  there and on Reports; the tabbed screens keep the crumb, so they still have
+  context.
+- 🟡 **Notification event checkboxes had no separation** and rendered as one
+  run-on string: "Scan completedNew critical findingsScheduled scan
+  failedReport ready". `.checkbox` set the gap between a box and ITS label;
+  nothing set the gap between one option and the next.
+- 🟡 **`.deps-count { margin: 0 }` silently killed `.toolbar-spacer`.** Declared
+  later in the file, the shorthand reset the utility's `margin-left: auto`, so
+  the Reports result count stayed jammed against the last filter. Now
+  `margin-block`.
+
+#### Also
+
+`not-provided` is quieter — still visible, still hoverable, still explicitly
+rendered (invariant 3), but no longer monospaced with a strong dotted rule
+under all forty instances on a dependency table, where it drew more attention
+than the data that IS present. Table links are no longer bright underlined
+blue; a link in a data table is a row label, not prose.
+
+#### Verification
+
+`task verify` exits 0. Frontend 126 tests, tsc/eslint/prettier clean. Verified
+visually at 1600×1000 across Reports, Campaigns, Settings, Engines,
+Notifications, Dependencies, Findings, Scans and project settings, in **both
+themes**.
+
+⚠ One caution for a future session: a "line" I saw under a `.field-hint` in a
+screenshot turned out to be a PNG artefact, not a style — the DOM had
+`text-decoration: none`. Probe computed styles before chasing something only a
+screenshot shows.
 
 ### 2026-09-03 (i) — The UI stops looking like a 2012 admin panel
 

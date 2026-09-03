@@ -16,12 +16,10 @@
 import { Link, useParams } from 'react-router';
 import { StatusPill } from '../../components/Chips';
 import { EmptyState, ErrorState, SkeletonRows } from '../../components/States';
-import { useProject } from '../../lib/projects';
 import { isTerminal, useCancelScan, useScans, type ScanListItem } from '../../lib/scans';
 
 export function ProjectScans() {
   const { id = '' } = useParams();
-  const project = useProject(id);
   const scans = useScans(id);
   const cancel = useCancelScan(id);
 
@@ -35,7 +33,8 @@ export function ProjectScans() {
       <header className="page-header">
         <div>
           <h1>Scans</h1>
-          <p className="tagline">{project.data?.name ?? 'Project'}</p>
+          {/* The project name is carried by the crumb above the tabs (App.tsx's
+              ProjectCrumb); repeating it here printed it twice in one header. */}
         </div>
         <Link className="btn btn-primary" to="/generate">
           Run a scan

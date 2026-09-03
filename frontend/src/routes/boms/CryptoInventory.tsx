@@ -12,7 +12,6 @@
 
 import { useParams } from 'react-router';
 import { EmptyState, ErrorState, SkeletonRows } from '../../components/States';
-import { useProject } from '../../lib/projects';
 import {
   CRYPTO_ASSET_TYPES,
   readinessLabel,
@@ -29,7 +28,6 @@ const TYPE_LABELS: Record<(typeof CRYPTO_ASSET_TYPES)[number], string> = {
 
 export function CryptoInventory() {
   const { id = '' } = useParams();
-  const project = useProject(id);
   const { data, isPending, isError, error } = useCryptoAssets(id);
 
   if (isPending) return <SkeletonRows rows={8} columns={4} />;
@@ -42,7 +40,8 @@ export function CryptoInventory() {
       <header className="page-header">
         <div>
           <h1>Crypto inventory</h1>
-          <p className="tagline">{project.data?.name ?? 'Project'}</p>
+          {/* The project name is carried by the crumb above the tabs (App.tsx's
+              ProjectCrumb); repeating it here printed it twice in one header. */}
         </div>
       </header>
 
@@ -165,7 +164,9 @@ function typeColumns(type: (typeof CRYPTO_ASSET_TYPES)[number]): Column[] {
   }
 }
 
-function readinessTone(group: CryptoAsset['quantum_readiness_group']): 'ok' | 'warn' | 'down' | 'info' {
+function readinessTone(
+  group: CryptoAsset['quantum_readiness_group'],
+): 'ok' | 'warn' | 'down' | 'info' {
   switch (group) {
     case 'post_quantum':
       return 'ok';

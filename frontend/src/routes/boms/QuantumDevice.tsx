@@ -13,7 +13,6 @@
 import { useParams } from 'react-router';
 import { useState } from 'react';
 import { ErrorState, SkeletonRows } from '../../components/States';
-import { useProject } from '../../lib/projects';
 import { readinessLabel, useCryptoAssets, type CryptoAsset } from '../../lib/crypto';
 import {
   useQBOMForm,
@@ -31,7 +30,6 @@ const READINESS_ORDER: NonNullable<CryptoAsset['quantum_readiness_group']>[] = [
 
 export function QuantumDevice() {
   const { id = '' } = useParams();
-  const project = useProject(id);
   const cryptoAssets = useCryptoAssets(id);
 
   return (
@@ -39,7 +37,8 @@ export function QuantumDevice() {
       <header className="page-header">
         <div>
           <h1>QBOM</h1>
-          <p className="tagline">{project.data?.name ?? 'Project'}</p>
+          {/* The project name is carried by the crumb above the tabs (App.tsx's
+              ProjectCrumb); repeating it here printed it twice in one header. */}
         </div>
       </header>
 
@@ -49,9 +48,7 @@ export function QuantumDevice() {
         {cryptoAssets.isError && (
           <ErrorState error={cryptoAssets.error} action="load quantum readiness" />
         )}
-        {cryptoAssets.data && (
-          <ReadinessSummary assets={cryptoAssets.data.crypto_assets} />
-        )}
+        {cryptoAssets.data && <ReadinessSummary assets={cryptoAssets.data.crypto_assets} />}
       </section>
 
       <DeviceForm projectId={id} />
@@ -64,8 +61,8 @@ function ReadinessSummary({ assets }: { assets: CryptoAsset[] }) {
     return (
       <p className="field-hint">
         No cryptographic assets were discovered, so nothing could be assessed for quantum
-        vulnerability. That is not the same as having no quantum-vulnerable cryptography —
-        check the CBOM Engine Coverage panel for whether a CBOM engine has run at all.
+        vulnerability. That is not the same as having no quantum-vulnerable cryptography — check the
+        CBOM Engine Coverage panel for whether a CBOM engine has run at all.
       </p>
     );
   }
@@ -85,7 +82,8 @@ function ReadinessSummary({ assets }: { assets: CryptoAsset[] }) {
           <div key={group}>
             <dt>{readinessLabel(group)}</dt>
             <dd>
-              {rows.length} asset{rows.length === 1 ? '' : 's'} — {rows.map((r) => r.name).join(', ')}
+              {rows.length} asset{rows.length === 1 ? '' : 's'} —{' '}
+              {rows.map((r) => r.name).join(', ')}
             </dd>
           </div>
         );
@@ -185,8 +183,8 @@ function DeviceForm({ projectId }: { projectId: string }) {
           {/* ⚠ RENDERED FROM THE PROFILE, NEVER THE LITERAL 11. CLAUDE.md
               invariant 2 — a CERT-In revision changes form.data.fields.length
               on its own; a hardcoded count would silently stop matching it. */}
-          <strong>{device.data.gaps.length}</strong> of {form.data?.fields.length ?? '?'}{' '}
-          elements not recorded:
+          <strong>{device.data.gaps.length}</strong> of {form.data?.fields.length ?? '?'} elements
+          not recorded:
           <ul>
             {device.data.gaps.map((g) => (
               <li key={g.field_id}>

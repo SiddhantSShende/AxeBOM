@@ -32,10 +32,14 @@ export function SettingsIndex() {
       <section className="panel" aria-labelledby="account-heading">
         <h2 id="account-heading">Account</h2>
         <dl className="meta">
-          <dt>Name</dt>
-          <dd>{name}</dd>
-          <dt>Signed in as</dt>
-          <dd>{user?.profile.email ?? <span className="not-provided">not-provided</span>}</dd>
+          <div>
+            <dt>Name</dt>
+            <dd>{name}</dd>
+          </div>
+          <div>
+            <dt>Signed in as</dt>
+            <dd>{user?.profile.email ?? <span className="not-provided">not-provided</span>}</dd>
+          </div>
         </dl>
       </section>
 
@@ -111,8 +115,8 @@ export function SettingsIndex() {
       <section className="panel" aria-labelledby="engines-heading">
         <h2 id="engines-heading">Engines</h2>
         <p className="field-hint">
-          Which OSINT engines run for each BOM type. Viewable by anyone; changing it needs the
-          Admin role.
+          Which OSINT engines run for each BOM type. Viewable by anyone; changing it needs the Admin
+          role.
         </p>
         <Link className="btn" to="/settings/engines">
           Manage engines

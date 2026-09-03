@@ -30,9 +30,13 @@ export function ReportList() {
   const bomTypes = useMemo(() => [...new Set(rows.map((r) => r.bom_type))].sort(), [rows]);
   const statuses = useMemo(() => [...new Set(rows.map((r) => r.status))].sort(), [rows]);
 
-  if (isPending) return <SkeletonRows rows={8} columns={6} />;
-  if (isError) return <ErrorState error={error} action="load reports" />;
-
+  /*
+   * ⚠ THE HEADER IS NOT INSIDE A BRANCH. Returning the skeleton or the error
+   * before it meant the page lost its title, its tagline and its Generate
+   * button while loading and again on failure — so a slow request looked like
+   * a different screen, and a failed one looked like the app had navigated
+   * somewhere unnamed. What varies is the body; the page is the page.
+   */
   return (
     <div className="page">
       <header className="page-header">
@@ -45,7 +49,10 @@ export function ReportList() {
         </Link>
       </header>
 
-      {rows.length === 0 ? (
+      {isPending && <SkeletonRows rows={8} columns={6} />}
+      {isError && <ErrorState error={error} action="load reports" />}
+
+      {isPending || isError ? null : rows.length === 0 ? (
         <EmptyState
           title="No reports yet"
           guidance="A report is rendered from a completed scan. Run the generate flow to produce one."
@@ -80,7 +87,9 @@ export function ReportList() {
                 ))}
               </select>
             </label>
-            <p className="deps-count" role="status">
+            {/* Right-aligned, so the count reads as the RESULT of the filters
+                beside it rather than as a third filter. */}
+            <p className="deps-count toolbar-spacer" role="status">
               {filtered.length} of {rows.length}
             </p>
           </div>

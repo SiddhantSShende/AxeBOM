@@ -26,59 +26,77 @@ import {
 
 export function CampaignList() {
   const { data: campaigns, isPending, error, refetch } = useCampaigns();
+  const empty = !isPending && !error && (!campaigns || campaigns.length === 0);
 
-  if (isPending) return <SkeletonRows rows={5} columns={5} />;
-  if (error) {
-    return <ErrorState error={error} action="load your campaigns" onRetry={() => void refetch()} />;
-  }
-
-  if (!campaigns || campaigns.length === 0) {
-    return (
-      <EmptyState
-        title="No scheduled scans yet"
-        guidance={
-          'A campaign runs scans on a schedule and generates the reports you choose. ' +
-          'It is how the CERT-In "Frequency" practice a project declares actually happens ' +
-          'rather than being an intention.'
-        }
-        action={
+  /*
+   * ⚠ THE PAGE HEADER RENDERS IN EVERY STATE, INCLUDING THE EMPTY ONE.
+   *
+   * The loading, error and empty branches each returned their own bare
+   * component, so a customer with no campaigns landed on a screen with no
+   * title, no tagline and nothing naming where they were — the only top-level
+   * page in the product that did that. The header is the page; what changes is
+   * only what sits under it.
+   */
+  return (
+    <section className="page">
+      <header className="page-header">
+        <div>
+          <h1>Scheduled scans</h1>
+          <p className="tagline">Scans that run on a schedule, and the reports they produce</p>
+        </div>
+        {!empty && (
           <Link className="btn btn-primary" to="/campaigns/new">
             Schedule a scan
           </Link>
-        }
-      />
-    );
-  }
-
-  return (
-    <section>
-      <header className="page-header">
-        <h1>Scheduled scans</h1>
-        <Link className="btn btn-primary" to="/campaigns/new">
-          Schedule a scan
-        </Link>
+        )}
       </header>
 
-      <table className="table">
-        <caption className="sr-only">Scheduled scan campaigns</caption>
-        <thead>
-          <tr>
-            <th scope="col">Name</th>
-            <th scope="col">Schedule</th>
-            <th scope="col">Next run</th>
-            <th scope="col">Projects</th>
-            <th scope="col">Status</th>
-            <th scope="col">
-              <span className="sr-only">Actions</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {campaigns.map((c) => (
-            <CampaignRow key={c.id} campaign={c} />
-          ))}
-        </tbody>
-      </table>
+      {isPending && <SkeletonRows rows={5} columns={5} />}
+
+      {error && (
+        <ErrorState error={error} action="load your campaigns" onRetry={() => void refetch()} />
+      )}
+
+      {empty && (
+        <EmptyState
+          title="No scheduled scans yet"
+          guidance={
+            'A campaign runs scans on a schedule and generates the reports you choose. ' +
+            'It is how the CERT-In "Frequency" practice a project declares actually happens ' +
+            'rather than being an intention.'
+          }
+          action={
+            <Link className="btn btn-primary" to="/campaigns/new">
+              Schedule a scan
+            </Link>
+          }
+        />
+      )}
+
+      {!isPending && !error && campaigns && campaigns.length > 0 && (
+        <div className="table-wrap">
+          <table className="table">
+            <caption className="sr-only">Scheduled scan campaigns</caption>
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Schedule</th>
+                <th scope="col">Next run</th>
+                <th scope="col">Projects</th>
+                <th scope="col">Status</th>
+                <th scope="col">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {campaigns.map((c) => (
+                <CampaignRow key={c.id} campaign={c} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }

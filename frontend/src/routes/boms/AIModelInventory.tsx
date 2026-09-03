@@ -14,7 +14,6 @@
 import { useParams } from 'react-router';
 import { useState } from 'react';
 import { EmptyState, ErrorState, SkeletonRows } from '../../components/States';
-import { useProject } from '../../lib/projects';
 import {
   useAIModelForm,
   useAIModels,
@@ -25,7 +24,6 @@ import {
 
 export function AIModelInventory() {
   const { id = '' } = useParams();
-  const project = useProject(id);
   const { data, isPending, isError, error } = useAIModels(id);
   const form = useAIModelForm(id);
 
@@ -39,7 +37,8 @@ export function AIModelInventory() {
       <header className="page-header">
         <div>
           <h1>AIBOM</h1>
-          <p className="tagline">{project.data?.name ?? 'Project'}</p>
+          {/* The project name is carried by the crumb above the tabs (App.tsx's
+              ProjectCrumb); repeating it here printed it twice in one header. */}
         </div>
       </header>
 

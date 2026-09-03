@@ -359,11 +359,18 @@ code {
 /* `not-provided` is a first-class value, styled to read as a statement rather
  * than as an absence. Italic-grey would say "nothing here"; this says
  * "recorded as unknown". */
+/* ⚠ STILL VISIBLE, STILL HOVERABLE, NO LONGER SHOUTING.
+ *
+ * `not-provided` is load-bearing compliance information (CLAUDE.md invariant
+ * 3) and must never be silently omitted — but a dependency table renders it
+ * forty times on one screen, and in mono with a dotted rule under every
+ * instance it drew more attention than the data that IS present. The dotted
+ * underline is what marks it as explained-on-hover, so that stays; the
+ * monospace face and the strong border colour go. Contrast is unchanged. */
 .not-provided {
-  font-family: var(--mono);
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--text-faint);
-  border-bottom: 1px dotted var(--border-strong);
+  border-bottom: 1px dotted var(--hairline);
   cursor: help;
 }
 
@@ -584,6 +591,205 @@ code {
   color: var(--down);
 }
 
+/* --- Toggle chip -----------------------------------------------------------
+ *
+ * A checkbox that reads as a selectable pill — the Engines policy screen's
+ * per-engine switches.
+ *
+ * ⚠ IT IS NOT `.chip`, WHICH IS WHAT IT USED TO BORROW. `.chip` is a BADGE:
+ * a left-accented, colour-coded, non-interactive label that says what
+ * something IS. Reusing it for a control meant a static SBOM badge and a
+ * clickable engine toggle rendered identically, so nothing on the screen
+ * distinguished what could be pressed from what could not — and the toggle
+ * inherited a 3px accent rail that had no meaning here.
+ *
+ * ⚠ SELECTION IS NOT COLOUR ALONE (WCAG 1.4.1): the checkbox itself is the
+ * primary indicator and stays visible at all times, with the fill and border
+ * as reinforcement rather than as the only signal.
+ */
+.toggle-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  min-height: 1.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.83rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.toggle-chip:hover:not(:has(input:disabled)) {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.toggle-chip[data-selected='true'] {
+  border-color: var(--primary);
+  background: var(--sbom-bg);
+  color: var(--text);
+  font-weight: 550;
+}
+.toggle-chip:has(input:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.toggle-chip .chip-note {
+  padding: 0 0.35em;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--glass-row-alt);
+  font-size: 0.7rem;
+}
+
+/* --- Native form controls --------------------------------------------------
+ *
+ * ⚠ EVERY SELECT AND CHECKBOX IN THE PRODUCT WAS BROWSER-DEFAULT.
+ *
+ * The Reports filter bar, the Engines policy screen, the Findings and
+ * Dependencies toolbars and both wizards all rendered raw UA widgets — a grey
+ * bevelled `<select>` with an OS dropdown arrow, and the default blue
+ * checkbox. Alongside a designed button, chip and table they were the single
+ * loudest "unstyled document" signal left on those screens.
+ *
+ * Styled here rather than per screen, because a control that looks different
+ * on Reports and on Engines is worse than one that looks default on both.
+ */
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0 calc(var(--space-6) + 2px) 0 var(--space-3);
+  min-height: 2rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background-color: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: var(--shadow-xs);
+  /* The chevron, inline so it needs no asset request and inherits nothing that
+   * could fail under a strict CSP. `stroke` is a literal because a data: URI
+   * cannot read a custom property; it is the muted grey of both themes, which
+   * reads correctly on either surface. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%236b6b75' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--space-3) center;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+select:hover:not(:disabled) {
+  border-color: var(--text-faint);
+}
+select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* The options themselves are painted by the OS; only the colours are ours, and
+ * they matter in dark mode where an unset background renders white-on-white. */
+select option {
+  background: var(--surface);
+  color: var(--text);
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  /* ⚠ accent-color RATHER THAN A REBUILT CONTROL. A hand-rolled checkbox costs
+   * the indeterminate state, the OS high-contrast themes and the native focus
+   * behaviour, all of which this one keeps. */
+  accent-color: var(--primary);
+  width: 0.95rem;
+  height: 0.95rem;
+  margin: 0;
+  flex: none;
+  cursor: pointer;
+}
+input[type='checkbox']:disabled,
+input[type='radio']:disabled {
+  cursor: not-allowed;
+}
+
+/* A checkbox or radio with its label on one line — the shape almost every
+ * settings toggle in the product wants and none of them had. */
+.field-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.87rem;
+  cursor: pointer;
+}
+.field-inline:has(input:disabled) {
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+/* --- Toolbar ---------------------------------------------------------------
+ * The filter row above a table. Was a bare flex of stacked label/select pairs
+ * with a floating count beside them.
+ */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg-strong);
+}
+/* Pushes everything after it to the right — a count, a result total, an
+ * action. */
+.toolbar-spacer {
+  margin-left: auto;
+}
+
+/* --- Project crumb ---------------------------------------------------------
+ * The name of the project a tabbed sub-screen belongs to, plus the way back.
+ */
+.project-crumb {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+  min-height: 2rem;
+}
+.project-crumb h1 {
+  font-size: 1.25rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-crumb-back {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+.project-crumb-back:hover {
+  color: var(--primary);
+  text-decoration: underline;
+}
+.project-crumb-sep {
+  color: var(--text-faint);
+  font-size: 0.9rem;
+}
+/* The chips ride on the heading's baseline; they are identity, not content. */
+.project-crumb .chip {
+  align-self: center;
+}
+
 /* --- Segmented control -----------------------------------------------------
  *
  * A small set of mutually exclusive lenses over the same data — the HBOM
@@ -768,6 +974,22 @@ code {
 }
 .table tbody tr:hover {
   background: var(--glass-row-hover);
+}
+/* ⚠ A LINK IN A DATA TABLE IS A ROW LABEL, NOT PROSE. Sixteen underlined
+ * bright-blue timestamps down the first column of the Reports table read as a
+ * page of hyperlinks rather than as a list of reports. Underline on hover
+ * keeps the affordance where it is needed — under the pointer — and `:focus`
+ * keeps it for the keyboard, which is the case that must never be traded away.
+ */
+.table tbody a {
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 550;
+}
+.table tbody a:hover,
+.table tbody a:focus-visible {
+  color: var(--primary);
+  text-decoration: underline;
 }
 .table-virtual tbody {
   display: block;
@@ -1220,6 +1442,30 @@ code {
 .meta > div + div {
   border-top: 1px solid var(--hairline);
 }
+/* ⚠ A BARE dt/dd PAIR STILL RENDERS AS A ROW, NOT AS A BROKEN STACK.
+ *
+ * The row layout lives on `.meta > div`, so a caller writing the simpler
+ * `<dl class="meta"><dt>…</dt><dd>…</dd></dl>` got no grid at all — four lines
+ * stacked full width, which is how the Settings page's Account block broke.
+ * That markup is the obvious thing to write, so it has to work: the same
+ * columns are declared on `.meta` itself, and a direct dt/dd pair falls into
+ * them. The wrapped form is still preferred — it is what carries the row
+ * hairline — and `display: contents` is deliberately NOT used to unify them,
+ * because a contents box cannot draw that border. */
+.meta {
+  grid-template-columns: minmax(6rem, 22ch) 1fr;
+  column-gap: var(--space-4);
+  align-items: baseline;
+}
+.meta > dt,
+.meta > dd {
+  padding: var(--space-2) 0;
+}
+.meta > div {
+  /* The wrapper re-declares its own columns; it is a grid item spanning both. */
+  grid-column: 1 / -1;
+}
+
 .meta dt {
   color: var(--text-muted);
   font-weight: 500;
@@ -1747,28 +1993,47 @@ fieldset legend {
 /* --- Dependencies -------------------------------------------------------- */
 .filters {
   display: flex;
+  align-items: center;
   gap: var(--space-3);
   flex-wrap: wrap;
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg-strong);
 }
+/* ⚠ THE LABEL SITS BESIDE ITS CONTROL, NOT STACKED ABOVE IT — the same change
+ * `.meta` got, for the same reason. A caption over a 2rem select made every
+ * filter a two-line block and the whole bar twice as tall as the controls in
+ * it. */
 .filter {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  font-size: 0.78rem;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.82rem;
   color: var(--text-muted);
+  white-space: nowrap;
 }
-.filter input,
-.filter select {
-  padding: var(--space-1) var(--space-2);
+.filter input {
+  padding: 0 var(--space-3);
+  min-height: 2rem;
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
   font: inherit;
   font-size: 0.85rem;
 }
 .deps-count {
+  /* ⚠ `margin-block`, NOT the `margin` SHORTHAND. `.deps-count` is declared
+   * after `.toolbar-spacer`, so `margin: 0` silently reset that rule's
+   * `margin-left: auto` and the result count stayed jammed against the last
+   * filter instead of moving to the right of the bar. A shorthand that resets
+   * a longhand another class owns is the quiet way utility classes stop
+   * working. */
+  margin-block: 0;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
   font-size: 0.85rem;
   color: var(--text-muted);
 }
@@ -2713,17 +2978,52 @@ button.menu-item:disabled {
   font-size: 0.875rem;
 }
 
+/* `.panel` is `.surface` without the head/body split — a section whose content
+ * is prose or controls rather than rows. Twenty call sites use it, so it is
+ * kept and aligned rather than migrated: the two must not drift into "the same
+ * box at two different paddings on adjacent screens". */
 .panel {
   position: relative;
   border: 1px solid var(--glass-border-strong);
   border-radius: var(--radius-lg);
   background: var(--glass-bg-strong);
   box-shadow: var(--glass-shadow);
-  padding: var(--space-5);
-  margin-bottom: var(--space-6);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  margin-bottom: var(--space-5);
 }
-.panel h2 {
+.panel > h2:first-child,
+.panel > h3:first-child {
   margin-top: 0;
+}
+/* A group heading INSIDE a panel or surface body — "Classification", "Owner
+ * and validity" within one settings form. It must step down from the panel's
+ * own heading, or the form reads as several unrelated panels crammed into
+ * one. */
+.panel h2:not(:first-child),
+.surface-body h2:not(:first-child) {
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--hairline);
+  font-size: 0.92rem;
+}
+
+/* The action row at the foot of a panel — a Save, a Cancel. Was a bare button
+ * sitting directly under the last control with nothing separating the thing
+ * you edit from the thing that commits it. */
+.engine-master {
+  display: flex;
+  margin-top: var(--space-4);
+}
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin: var(--space-4) calc(var(--space-5) * -1) calc(var(--space-5) * -1);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--hairline);
+  background: var(--glass-row-alt);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
 .field-row {
@@ -2737,6 +3037,13 @@ button.menu-item:disabled {
   color: var(--text-muted);
   font-size: 0.875rem;
   margin: var(--space-1) 0 0;
+}
+/* A hint used as a standalone paragraph between the page header and the first
+ * panel — a privacy note, a caveat. Its default top-only margin left it
+ * crowding the panel below it. */
+.page > .field-hint {
+  margin: 0 0 var(--space-4);
+  max-width: 78ch;
 }
 
 /*
@@ -2821,7 +3128,33 @@ button.menu-item:disabled {
 .checkbox {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
+  font-size: 0.87rem;
+  cursor: pointer;
+}
+.checkbox-group:last-child {
+  margin-bottom: 0;
+}
+
+/* ⚠ THE BROWSER FIELDSET IS THE MOST DATED CONTROL LEFT IN ANY UA STYLESHEET
+ * — a 2px inset groove border with the legend notched into it, unchanged since
+ * Netscape. Every other grouping in this product is a surface with a heading;
+ * a fieldset should look like one too while keeping the semantics that make it
+ * worth using. */
+fieldset {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--glass-row-alt);
+  min-width: 0;
+}
+legend {
+  padding: 0 var(--space-2);
+  margin-left: calc(var(--space-2) * -1);
+  font-size: 0.87rem;
+  font-weight: 600;
+  color: var(--text);
 }
 
 .summary {

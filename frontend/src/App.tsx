@@ -19,6 +19,7 @@ import { useAuth } from './lib/useAuth';
 import { AuthCallback, NoAccess, SignIn, SilentCallback } from './routes/auth/AuthRoutes';
 import { SignupPage } from './routes/auth/SignupPage';
 import { ProjectList } from './routes/projects/ProjectList';
+import { useProject } from './lib/projects';
 import { ProjectWizard } from './routes/projects/ProjectWizard';
 import { GitHubConnectCallback } from './routes/projects/GitHubConnectCallback';
 import { ProjectDetail } from './routes/projects/ProjectDetail';
@@ -330,6 +331,16 @@ function ProjectTabs({ children }: { children: ReactNode }) {
   const { id = '' } = useParams();
   return (
     <>
+      {/*
+        ⚠ WHICH PROJECT THIS IS WAS NOWHERE ON THE PAGE.
+        Every tabbed sub-screen — Dependencies, Findings, Scans, Crypto,
+        Quantum, AI Models, Hardware, Practices, Settings — rendered the tab
+        bar as the first thing under the top bar and no name anywhere. Arriving
+        from a bookmark, a shared link or a notification, you saw 44 components
+        with no way to tell whose they were. The heading is the context the
+        tabs imply and never stated.
+      */}
+      <ProjectCrumb id={id} />
       <nav className="tabs" aria-label="Project sections">
         <NavLink to={`/projects/${id}`} end>
           Overview
@@ -355,6 +366,34 @@ function ProjectTabs({ children }: { children: ReactNode }) {
       </nav>
       {children}
     </>
+  );
+}
+
+/**
+ * ProjectCrumb names the project every tabbed sub-screen belongs to.
+ *
+ * Renders the id-shaped placeholder while loading rather than collapsing to
+ * nothing: a heading that appears a beat after the tabs shifts the whole page
+ * down under the reader, and this sits above a table they are already
+ * scanning.
+ */
+function ProjectCrumb({ id }: { id: string }) {
+  const project = useProject(id);
+  return (
+    <div className="project-crumb">
+      <Link to="/projects" className="project-crumb-back">
+        Projects
+      </Link>
+      <span aria-hidden="true" className="project-crumb-sep">
+        /
+      </span>
+      <h1>{project.data?.name ?? '\u00a0'}</h1>
+      {project.data?.classifications.map((c) => (
+        <span key={c} className="chip" data-bom={c.toLowerCase()}>
+          {c}
+        </span>
+      ))}
+    </div>
   );
 }
 
