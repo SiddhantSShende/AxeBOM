@@ -26,6 +26,15 @@ import json
 from pathlib import Path
 from typing import Any
 
+# ⚠ ABSOLUTE, NOT `from ...sbom.adapters.common`. `workers` has no
+# __init__.py — it is a namespace package — so a three-level relative import
+# resolves at runtime (the image sets WORKDIR /app) and raises
+# "attempted relative import beyond top-level package" under pytest's
+# rootdir-based collection. An import that works in production and breaks in
+# the test runner is the worst of both: the tests that would catch a bug here
+# cannot even be collected.
+from workers.sbom.adapters.common import ArtifactWriter
+
 from axebom_shared.adapters.base import (
     Availability,
     Capabilities,
@@ -38,14 +47,6 @@ from axebom_shared.adapters.base import (
 )
 from axebom_shared.adapters.summary import summarize
 
-# ⚠ ABSOLUTE, NOT `from ...sbom.adapters.common`. `workers` has no
-# __init__.py — it is a namespace package — so a three-level relative import
-# resolves at runtime (the image sets WORKDIR /app) and raises
-# "attempted relative import beyond top-level package" under pytest's
-# rootdir-based collection. An import that works in production and breaks in
-# the test runner is the worst of both: the tests that would catch a bug here
-# cannot even be collected.
-from workers.sbom.adapters.common import ArtifactWriter
 from ..model import HardwareComponent, normalize
 from . import discovery
 

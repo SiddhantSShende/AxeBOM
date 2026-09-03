@@ -57,12 +57,14 @@ import (
 // The entry and the compose service are two halves of one fact. Adding either
 // without the other is the bug.
 //
-// CBOM and AIBOM are NOT here yet: both have a build_canonical_* function and
-// both already have their bulk.py writers, so each is one consumer module away
-// — see docs/STATE.md.
+// QBOM is the one family that will never be here: it is DERIVED from CBOM
+// crypto assets rather than scanned, so it has no scan.job of its own and
+// therefore no result to trigger on.
 var normalizedFamilies = map[events.Family]bool{
-	events.FamilySBOM: true,
-	events.FamilyHBOM: true,
+	events.FamilySBOM:  true,
+	events.FamilyHBOM:  true,
+	events.FamilyCBOM:  true,
+	events.FamilyAIBOM: true,
 }
 
 func (o *Orchestrator) maybeTriggerNormalize(ctx context.Context, result events.ScanResultV1) {

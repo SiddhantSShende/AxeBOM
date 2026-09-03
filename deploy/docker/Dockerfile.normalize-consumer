@@ -49,6 +49,10 @@ COPY workers/sbom ./workers/sbom
 # consumer reuses the shared consume loop. Copying hbom alone would fail at
 # import time inside the container, not at build time.
 COPY workers/hbom ./workers/hbom
+# The CBOM and AIBOM consumers reuse this same image with an entrypoint
+# override; their adapters and pipelines have to be present for that to work.
+COPY workers/cbom ./workers/cbom
+COPY workers/aibom ./workers/aibom
 COPY docs/reference/certin-v2.0.yaml ./docs/reference/certin-v2.0.yaml
 # ⚠ MANDATORY FOR THE HBOM CONSUMER, NOT OPTIONAL. workers/hbom/profile.py
 # reads this file AT RUNTIME to score the manufacturing number, exactly the way

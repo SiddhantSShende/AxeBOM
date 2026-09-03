@@ -31,9 +31,6 @@ is the normalizer's job — see `workers/hbom/normalize.py` and
 
 from __future__ import annotations
 
-from axebom_shared.logging import get_logger
-from axebom_shared.worker_runtime import run_worker
-
 # ⚠ ABSOLUTE, FOR THE SAME REASON THE ADAPTERS ARE — see ecad.py's import.
 # `workers` is a namespace package, so a relative import that crosses out of
 # `workers.hbom` resolves at runtime and fails under pytest collection.
@@ -43,6 +40,10 @@ from axebom_shared.worker_runtime import run_worker
 # has never surfaced there because no test imports either module. Left alone
 # rather than changed unasked — recorded in docs/STATE.md.
 from workers.sbom.runner import SBOMWorker
+
+from axebom_shared.logging import get_logger
+from axebom_shared.worker_runtime import run_worker
+
 from .adapters import CdxgenHostHBOMAdapter, ECADAdapter
 
 log = get_logger("hbom-worker")

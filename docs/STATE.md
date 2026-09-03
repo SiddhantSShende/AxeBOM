@@ -7,8 +7,8 @@ A session that writes code but does not update this file has failed — the next
 ---
 
 **Last updated:** 2026-09-03
-**Current phase:** Enterprise HBOM (6-milestone plan, `~/.claude/plans/now-create-me-hbom-vast-firefly.md`) — 🟢 **ALL SIX MILESTONES DONE.** **AN HBOM SCAN NOW RUNS END TO END THROUGH REAL NATS WITH NO MANUAL STEP**: `POST /v1/scans` → fetcher → `scan.job.hbom` → `hbom-ecad` parses a KiCad schematic → `NormalizeTriggerV1` → the new HBOM consumer → 5 rows in `normalize.hardware_components`, correctly grouped (R1+R4 → one line, qty 2), then rendered into 14 sheets with a populated 24-field coverage table. `cdxgen` is a working second SBOM generator (2 components against syft's 4, merged by the normalizer). `task verify` exits 0.
-**Next action:** Nothing is queued for this initiative — read this file fresh and take a new instruction. If asked to extend HBOM, the two real gaps are `hardware_findings` (CERT-In element 24 is unpopulated, so the Vulnerabilities column is always empty and that element scores zero for every component — its migration was deliberately deferred so the columns are designed against a real matcher) and the alternates editor (alternates are read, rendered, exported and round-tripped, but arrive only by import). 🟡 Carried forward, none of it a regression from this work: CBOM and AIBOM still have no normalize consumer — each is genuinely ONE module away, since both already have `build_canonical_*` and their `bulk.py` writers, and `normalizedFamilies` in `normalize_trigger.go` is the one-line gate; `component_provenance` is written by nothing, so per-component engine attribution is empty; `axebom toolctl pin` has never existed, which is why every `image_digest` but cdxgen's is null; `workers/cbom` and `workers/aibom` carry the same namespace-package relative import that breaks under pytest collection (latent — no test imports them); the ZITADEL http/https redirect still blocks Playwright; and the `crypto-mixed` golden failure is pre-existing.
+**Current phase:** Enterprise HBOM — 🟢 **ALL SIX MILESTONES DONE AND COMMITTED** (`87a45e7`), plus the CBOM/AIBOM half of the approved OSINT scope. 🟢 **ALL FOUR SCANNABLE FAMILIES NOW NORMALIZE AUTOMATICALLY.** SBOM already did; HBOM, CBOM and AIBOM now do too, each proven by a real scan through NATS writing real rows — CBOM found 7 crypto assets including a certificate and an RSA-2048 key from a generated fixture, AIBOM wrote 3 model rows, HBOM 5 hardware components. `task verify` exits 0.
+**Next action:** Nothing is queued — read this file fresh and take a new instruction. The two real HBOM gaps if asked to extend it: `hardware_findings` (CERT-In element 24 is unpopulated, so that element scores zero for every component) and the alternates editor (alternates are read, rendered, exported and round-tripped, but arrive only by import). 🟡 Carried forward, none a regression: `component_provenance` is written by nothing, so per-component engine attribution is empty; `axebom toolctl pin` has never existed, which is why every `image_digest` but cdxgen's is null; `workers/cbom` and `workers/aibom` runners still carry the namespace-package relative import that breaks under pytest collection (latent — no test imports them; their new CONSUMERS use absolute imports); the ZITADEL http/https redirect still blocks Playwright; and the `crypto-mixed` golden failure is pre-existing. ⚠ `cdxgen`'s image is 15.5 GB and pulling it filled this machine's disk — 40 GB of build cache had to be reclaimed. Size any deployment for it.
 
 > 🟢 **A REAL SCAN NOW NORMALIZES, LIVE, WITH NO MANUAL TRIGGER — THE
 > NORMALIZER'S DEPLOYED BOUNDARY FROM (e)/(k)/(l) IS CLOSED FOR SBOM.**
@@ -2265,6 +2265,55 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-09-03 (g) — CBOM and AIBOM normalize automatically, closing the approved scope
+
+**Goal:** finish the OSINT scope agreed at planning time. The question asked was whether to close the normalize-trigger gap for HBOM *alone* or for **HBOM and CBOM/AIBOM**; the answer was the full pass, and milestones 1–6 delivered only HBOM. This is the rest.
+
+#### What was actually broken
+
+Both engines had discovered and stored raw output for a long time, and `build_canonical_cbom` / `build_canonical_aibom` had produced writable documents for just as long. Nothing consumed the trigger. So a CBOM scan reported `completed`, the Engine Coverage panel showed a green engine, and `normalize.crypto_assets` stayed empty — with no error anywhere. `docs/STATE.md` had recorded it empirically: zero cbom/aibom rows in `scan.normalize_triggers` against any real scan, ever.
+
+STATE's own estimate — "each is genuinely ONE module away" — held. Both consumers are the shared `consumer_runtime` loop plus a handler.
+
+#### Proven with real material, not an empty tree
+
+The first run was honest but uninformative: an npm lockfile has no cryptography and no AI, so both consumers correctly logged "nothing to normalize" with a diagnostic and wrote nothing. That is the designed path, and it proves the chain but not the write.
+
+So the fixture was replaced with a source archive containing a real OpenSSL-generated certificate and RSA key, Python using `cryptography`, and a `transformers` model load. Result:
+
+- **CBOM: 7 crypto assets, 60.14% coverage** — RSA, SHA256 and SHA256-RSA algorithms, an `RSA-2048` key, and the certificate `axebom-m7-fixture`. cbomkit-theia genuinely found the key and certificate that had just been generated.
+- **AIBOM: 3 model rows, 5.88% coverage.**
+
+All four scannable families now normalize with no manual step.
+
+#### Two judgement calls worth recording
+
+**`cards` is empty in the AIBOM consumer, deliberately.** Model cards come from `aibom-generator`, which calls the Hugging Face API and is not live-wired — `workers/aibom/runner.py` records three unresolved design questions about when enrichment runs, whether the HF response must become a stored artifact under ADR-0003, and how a rate limit interacts with redelivery. Passing an empty mapping leaves the enrichment-only Table 10 fields `not-provided`: reported, never guessed. Wiring enrichment into a live scan path is a separate decision, not a side effect of adding a consumer.
+
+**The AIBOM consumer merges every artifact into ONE discovery rather than normalizing each.** `frameworks` is a scan-wide list, and `build_canonical_aibom` joins it onto every model to work out which framework usages the SBOM already catalogues. Per-artifact normalization would give each model only the frameworks that happened to be in its own file.
+
+#### The same deployment mistake, twice
+
+Both times a family's trigger failed to fire, the cause was recreating `scan-orchestrator` without rebuilding it — `docker compose up -d --force-recreate` restarts the old image. Worth knowing before debugging a gate that is already correct in the source. `normalizedFamilies` and the compose services remain two halves of one fact: adding either without the other loses messages silently for seven days, since NORMALIZE_JOBS is a WorkQueue stream.
+
+#### Verification actually performed
+
+| Check | Result |
+|---|---|
+| `task verify` | ✅ exit 0 |
+| CBOM through real NATS | ✅ trigger fired, 7 crypto assets written, 60.14% coverage |
+| AIBOM through real NATS | ✅ trigger fired, 3 model rows written |
+| The empty-source path | ✅ both log "nothing to normalize" with a diagnostic and write nothing |
+| `task test:golden` | ✅ 85 passed; `crypto-mixed` remains pre-existing |
+
+#### What is still not done
+
+- **QBOM will never be here**, and that is correct: it is derived from CBOM crypto assets rather than scanned, so it has no job of its own and no result to trigger on.
+- **`aibom-generator` still reports `skipped`** on every AIBOM scan — it is an enrichment fetcher with no adapter in the worker's dispatch map, by the design decision above.
+- **cbomkit-theia's own output shape was `ENGINE_OUTPUT_UNEXPECTED`** on the lockfile-only run before the fixture was replaced. Worth a look if a customer reports an empty CBOM from a source that plainly has cryptography.
+
+---
 
 ### 2026-09-03 (f) — Milestone 6: the live OSINT pass, and three bugs only running it could find
 
