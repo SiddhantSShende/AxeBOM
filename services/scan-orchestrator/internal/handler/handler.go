@@ -504,6 +504,12 @@ func (h *Handler) Engines(w http.ResponseWriter, r *http.Request) {
 			"requires_import": e.RequiresImport,
 			"is_derived":      e.Derived,
 		}
+		if e.OperatorAction != "" {
+			// What a person must DO for this engine to have anything to read.
+			// Absent for engines that just run, so the UI can show an
+			// instruction only where one exists.
+			row["operator_action"] = e.OperatorAction
+		}
 		if run, ok := latest[e.ID]; ok {
 			row["last_run"] = map[string]any{
 				"scan_id":     run.ScanID,

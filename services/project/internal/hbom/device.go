@@ -187,3 +187,100 @@ func ValidateDevice(d *Device) error {
 	}
 	return nil
 }
+
+// ---------------------------------------------------------------------------
+// The component edit form
+// ---------------------------------------------------------------------------
+
+// ComponentFormField is one input on the per-component editor.
+type ComponentFormField struct {
+	// Attr is the JSON field on componentDTO — and, because the profile's
+	// CanonicalPath is `hardware_component.<attr>`, it is derived rather than
+	// transcribed. A CERT-In revision that renames an element renames the
+	// column, the DTO field and this input together or not at all.
+	Attr       string   `json:"attr"`
+	FieldID    string   `json:"field_id"`
+	Name       string   `json:"name"`
+	SourcePage int      `json:"source_page,omitempty"`
+	Multiline  bool     `json:"multiline,omitempty"`
+	Values     []string `json:"values,omitempty"`
+	// List marks an element that holds several values — Table 11's
+	// `compliance` (RoHS, CE, …). Rendered as one comma-separated input,
+	// because that is how every CAD and ERP export writes it.
+	List bool `json:"list,omitempty"`
+	// Hint is the one thing here that is prose rather than data: two Table 11
+	// elements are routinely confused for each other, and a form that does not
+	// say which is which collects the wrong answer.
+	Hint string `json:"hint,omitempty"`
+}
+
+// canonicalPathPrefix is what every Table 11 element's path begins with.
+const canonicalPathPrefix = "hardware_component."
+
+// componentFieldHints disambiguates the elements people fill in wrongly.
+//
+// ⚠ THE TWO SUPPLIER RELATIONSHIPS ARE THE WHOLE REASON THIS MAP EXISTS.
+// "Supplier" alone is the field somebody fills in with whichever company comes
+// to mind, and Table 11 means two different things by them.
+var componentFieldHints = map[string]string{
+	"supplier_info":           "Who sold YOU this product.",
+	"component_supplier_info": "Who supplied the part to whoever built the product.",
+	"criticality":             "Required by §10.4.1.4 for government and public-sector supply.",
+	"license_info":            "IP licences or usage terms, particularly for firmware.",
+	"origin":                  "Country or region of manufacture.",
+}
+
+// ComponentFormFields is every editable Table 11 element, generated.
+//
+// ⚠ THE EDITOR EXPOSED SIX OF THESE AND ROUND-TRIPPED THE REST UNTOUCHED.
+// Every other element was fetched, held in component state, and written back
+// unchanged — so a customer could SEE a `not-provided` manufacturer on the
+// component sheet and had no way to fix it. The coverage number then stayed low
+// for a reason nothing on screen explained, which is the failure
+// MissingJudgements was written to prevent for four fields and nobody extended
+// to the rest.
+//
+// Generated from model.HBOMFields, so a CERT-In revision that adds an element
+// adds an input (invariant 2). No count is written anywhere.
+func ComponentFormFields() []ComponentFormField {
+	out := make([]ComponentFormField, 0, len(model.HBOMFields))
+	for _, f := range model.HBOMFields {
+		attr, ok := strings.CutPrefix(f.CanonicalPath, canonicalPathPrefix)
+		if !ok || attr == "" {
+			continue
+		}
+		// ⚠ A `[]` SUFFIX MEANS A COLLECTION, NOT A FIELD — and the prefix check
+		// above does NOT exclude them, which the test caught on its first run.
+		//
+		// Element 20's path is `hardware_component.children[]` and element 24's
+		// is `hardware_component.findings[]`. Both start with the prefix, so an
+		// earlier version of this generated a text input asking a customer to
+		// type their sub-component tree into a box.
+		//
+		// ⚠ NOT EVERY COLLECTION IS DERIVED, AND THE DIFFERENCE DECIDES THIS.
+		// `children[]` is the tree, edited by adding a row. `findings[]` comes
+		// from CPE matching, so asking for it would ask somebody to duplicate a
+		// lookup the product already does. `compliance[]` is neither — RoHS and
+		// CE are facts a person types, and dropping it would leave a scored
+		// element permanently `not-provided` with nowhere to fix it.
+		list := strings.HasSuffix(attr, "[]")
+		attr = strings.TrimSuffix(attr, "[]")
+		if list && attr != "compliance" {
+			continue
+		}
+		field := ComponentFormField{
+			Attr:       attr,
+			FieldID:    f.ID,
+			Name:       f.Name,
+			SourcePage: f.SourcePage,
+			Multiline:  f.Type == "text",
+			List:       list,
+			Hint:       componentFieldHints[attr],
+		}
+		if attr == "criticality" {
+			field.Values = Criticalities
+		}
+		out = append(out, field)
+	}
+	return out
+}

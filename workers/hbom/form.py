@@ -1,18 +1,19 @@
-"""Structured manual entry.
+"""The structured-entry form — the SPECIFICATION, not the live implementation.
 
-⚠ THE FORM IS A FIRST-CLASS INPUT, NOT A FALLBACK FOR A FAILED IMPORT.
+⚠ NOTHING IN PRODUCTION IMPORTS THIS MODULE, AND THAT IS NOT A BUG.
 
-Four §10.4.1.4 and Table 11 elements — warranty, licence terms, test result and
-criticality — appear in no parts list ever exported by a CAD or ERP system.
-They are judgements the customer makes about their own hardware. If the only
-way in is a CSV, those four are permanently `not-provided` and the coverage
-number is permanently and unnecessarily low.
+Structured hardware entry is an interactive REST path
+(`POST /v1/hbom/{projectId}/components`), which is Go: the live validator is
+`services/project/internal/service/hbom.go`'s `validateHardwareComponent`, whose
+own comment says it "matches the assertions workers/hbom/form.py's
+from_payload() makes". This module is that reference — the same relationship
+`hbom-csv` has to the REST import path.
 
-⚠ IT VALIDATES THE SAME WAY THE IMPORTER DOES, THROUGH THE SAME CODE.
-
-A form that accepted a criticality of "urgent" while the importer dropped it
-would give the same BOM two different shapes depending on how it was entered —
-and the discrepancy would only surface in a report, months later.
+⚠ THE TESTS USED TO BE ATTACHED ONLY TO THIS COPY. Thirteen assertions here, and
+none on the Go function that actually runs — so the two could drift with both
+suites green, and the API would keep accepting what the specification had
+started rejecting. `hbom_validate_test.go` now covers the live path; keep the
+two in step, or delete this and move the rules wholesale.
 """
 
 from __future__ import annotations

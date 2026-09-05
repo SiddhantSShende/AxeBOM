@@ -23,6 +23,7 @@ import {
   flatten,
   useConfirmImport,
   usePreviewImport,
+  useReadHeaders,
 } from '../../lib/hbom';
 
 export function HardwareImport() {
@@ -36,6 +37,11 @@ export function HardwareImport() {
   const confirm = useConfirmImport(projectId);
 
   const [headerError, setHeaderError] = useState<string | null>(null);
+  // How the server actually read the file, and which sheets a workbook holds.
+  // Shown rather than inferred: a parts list on the second tab of a workbook is
+  // otherwise an empty import with no explanation.
+  const [fileMeta, setFileMeta] = useState<{ format: string; sheets: string[] } | null>(null);
+  const headerReader = useReadHeaders();
 
   // ⚠ WRAPPED, NOT PASSED DIRECTLY. `onChange={handleFile}` on an async function
   // hands React a promise it does not await, so a rejection becomes an
@@ -58,21 +64,26 @@ export function HardwareImport() {
       return;
     }
 
-    // Only the header row is read here. The file is parsed server-side, where
-    // the level-sequence validation lives — one implementation of that rule,
-    // in the place that owns it.
-    const text = await chosen.slice(0, 64 * 1024).text();
-    const firstLine = text.split(/\r?\n/)[0] ?? '';
-    const found = firstLine
-      // U+FEFF, written as an escape: Excel prefixes a UTF-8 BOM, and as a
-      // literal it is invisible in an editor and indistinguishable from a typo.
-      .replace(/^\uFEFF/, '')
-      .split(',')
-      .map((h) => h.trim().replace(/^"|"$/g, ''))
-      .filter(Boolean);
-
-    setHeaders(found);
-    setMapping(suggest(found));
+    // ⚠ THE SERVER READS THE HEADER ROW, NOT THIS FUNCTION.
+    //
+    // This used to slice the first 64 KiB and split on commas, which works for
+    // a CSV and for nothing else — a spreadsheet is a zip archive, so the
+    // mapping screen below would have offered binary as the customer's column
+    // names. The parser already lives on the server, next to the level-sequence
+    // rule, for exactly the same reason: one implementation, in the place that
+    // owns it.
+    try {
+      const meta = await headerReader.mutateAsync(chosen);
+      setHeaders(meta.headers);
+      setMapping(suggest(meta.headers));
+      setFileMeta({ format: meta.format, sheets: meta.sheets });
+    } catch (err) {
+      setHeaders([]);
+      setFileMeta(null);
+      setHeaderError(
+        err instanceof Error ? err.message : 'this file could not be read as a parts list',
+      );
+    }
   }
 
   const mappedTargets = new Set(Object.values(mapping).filter(Boolean));
@@ -87,26 +98,55 @@ export function HardwareImport() {
             ⚠ THE HONEST LABEL, AT THE TOP OF THE SCREEN THAT DOES THE WORK.
             Not buried in a tooltip, and not only in the generated report.
           */}
+          {/* ⚠ THIS READ "Hardware is not discoverable by any scanner", which
+              is the same under-claim the registration wizard carried: it reads
+              as "AxeBOM cannot do hardware", and a design-file scan has existed
+              since hbom-ecad shipped. The denial that must survive is narrower —
+              nothing examines a PHYSICAL DEVICE. */}
           <p className="muted">
-            Hardware is not discoverable by any scanner — this reads a parts list you already have.
-            Anything it cannot find, you can add by hand afterwards.
+            Nothing here examined physical hardware — this reads a parts list you already have. A
+            scan can also read design files you commit, or a report a collector produced on the
+            device itself. Anything none of them covers, you can add by hand.
           </p>
         </div>
       </header>
 
       <div className="panel">
         <div className="field-row">
-          <label htmlFor="hbom-file">Parts list (CSV)</label>
-          <input id="hbom-file" type="file" accept=".csv,text/csv" onChange={handleFile} />
+          <label htmlFor="hbom-file">Parts list</label>
+          {/* ⚠ THIS ACCEPTED `.csv` AND NOTHING ELSE, which meant telling a
+              customer to open their spreadsheet and re-save it before AxeBOM
+              would read it — by hand, using a library already in the binary. */}
+          <input
+            id="hbom-file"
+            type="file"
+            accept=".csv,.tsv,.tab,.xlsx,.xlsm,text/csv,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            onChange={handleFile}
+          />
           {headerError && (
             <p className="field-error" role="alert">
               {headerError}
             </p>
           )}
           <p className="field-hint">
-            Your own export works as it is — the next step maps your column names. Do not edit the
-            file to match ours; an edited export no longer matches your source of truth.
+            CSV, TSV or Excel. Your own export works as it is — the next step maps your column
+            names. Do not edit the file to match ours; an edited export no longer matches your
+            source of truth.
           </p>
+          {fileMeta && (
+            <p className="field-hint">
+              Read as <strong>{fileMeta.format.toUpperCase()}</strong>
+              {fileMeta.sheets.length > 1 && (
+                <>
+                  {' '}
+                  — from the first sheet, <strong>{fileMeta.sheets[0]}</strong>. The others (
+                  {fileMeta.sheets.slice(1).join(', ')}) were not read; move your parts list to the
+                  first sheet if it is on one of them.
+                </>
+              )}
+              .
+            </p>
+          )}
         </div>
       </div>
 

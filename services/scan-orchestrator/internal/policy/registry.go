@@ -71,6 +71,23 @@ type Engine struct {
 	//
 	// RequiresImport: there is no HBOM scanner. It is a CSV/form import.
 	RequiresImport bool `json:"requires_import,omitempty"`
+
+	// OperatorAction is what a PERSON has to do for this engine to have
+	// anything to read. Empty for every engine that just runs.
+	//
+	// ⚠ IT EXISTS BECAUSE THE INSTRUCTION REACHED NOBODY. `hbom-cdxgen-host`
+	// and `hbom-host-report` parse a file the customer produces on the device
+	// they want documented — and the only place that was written down was
+	// OSINT/tools.manifest.yaml (which no browser reads) and an adapter's
+	// ENGINE_INPUT_MISSING hint, which appears AFTER a scan has already run and
+	// found nothing. A customer had no way to learn the feature existed, let
+	// alone how to use it.
+	//
+	// Deliberately not a general `notes` field: a free-form notes column
+	// becomes a dumping ground and then nothing renders it. This one answers a
+	// single question — "what do I do?" — so the UI can show it as an
+	// instruction next to the engine it belongs to.
+	OperatorAction string `json:"operator_action,omitempty"`
 	// Derived: QBOM crypto assets come from CBOM discovery with
 	// quantum-vulnerability rules applied. There is no quantum-hardware
 	// scanner.
@@ -461,8 +478,12 @@ func DefaultRegistry() *Registry {
 			// RequiresImport says all of that as data — the same claim
 			// github-dependency-graph-sbom makes about GitHub's published
 			// SBOM, and like that engine this one IS dispatched.
-			ID:             "hbom-cdxgen-host",
-			Mode:           "internal",
+			ID:   "hbom-cdxgen-host",
+			Mode: "internal",
+			OperatorAction: "Run `cdxgen -t hbom -o hbom.json` on the device you want " +
+				"documented, then upload that file to the project. AxeBOM never runs it " +
+				"— run inside our sandbox it would inventory our own container host and " +
+				"present that as your hardware.",
 			Families:       []events.Family{events.FamilyHBOM},
 			SourceKinds:    []events.SourceKind{events.SourceUpload},
 			Ecosystems:     []string{"hardware"},
@@ -488,8 +509,13 @@ func DefaultRegistry() *Registry {
 			// reading as four broken things rather than one working one.
 			// workers/hbom/adapters/hostreport.py dispatches internally and
 			// records which parser matched.
-			ID:             "hbom-host-report",
-			Mode:           "internal",
+			ID:   "hbom-host-report",
+			Mode: "internal",
+			OperatorAction: "Run one of these ON the machine you want documented and upload " +
+				"the output: `axebom collect hardware` (ours, needs nothing installed), " +
+				"`lshw -json`, `dmidecode`, `fwupdmgr get-devices --json`, PowerShell's " +
+				"Get-CimInstance, or a Redfish export. AxeBOM runs none of them; it " +
+				"cannot reach your machine.",
 			Families:       []events.Family{events.FamilyHBOM},
 			SourceKinds:    []events.SourceKind{events.SourceUpload},
 			Ecosystems:     []string{"hardware"},

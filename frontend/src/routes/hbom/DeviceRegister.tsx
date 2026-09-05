@@ -18,6 +18,7 @@
 import { useState } from 'react';
 
 import { EmptyState, ErrorState, SkeletonRows } from '../../components/States';
+import { useEngines } from '../../lib/engines';
 import {
   EMPTY_DEVICE,
   describeParts,
@@ -140,6 +141,8 @@ export function DeviceRegister({ projectId }: { projectId: string }) {
           }
         />
       )}
+
+      <CollectorInstructions />
 
       {devices.length > 0 && (
         <div className="table-wrap">
@@ -336,5 +339,46 @@ function Field({
       )}
       {field.source_page ? <small>CERT-In p.{field.source_page}</small> : null}
     </label>
+  );
+}
+
+/**
+ * CollectorInstructions tells somebody how to get parts off a device.
+ *
+ * ⚠ NOTHING IN THE PRODUCT SAID THIS. `hbom-cdxgen-host` and
+ * `hbom-host-report` parse a report the customer generates on the machine they
+ * want documented — and the only written explanation was in
+ * OSINT/tools.manifest.yaml, which no browser reads, plus an adapter hint that
+ * appears AFTER a scan has already run and found nothing. A customer could not
+ * discover the feature, let alone use it.
+ *
+ * Rendered from the engine registry rather than written here, so an engine that
+ * gains or loses an operator action changes this panel without a frontend
+ * release — and so the instruction cannot drift from the engine that needs it.
+ */
+function CollectorInstructions() {
+  const { engines } = useEngines(undefined, 'HBOM');
+  const withAction = (engines ?? []).filter((e) => e.operator_action);
+
+  if (withAction.length === 0) return null;
+
+  return (
+    <details className="panel">
+      <summary>
+        <strong>Getting parts off a device you have</strong>
+      </summary>
+      <p className="field-hint">
+        AxeBOM cannot reach your device, so these are things you run yourself and upload. Attach the
+        result to this project as an upload, then run a scan.
+      </p>
+      <dl className="meta">
+        {withAction.map((e) => (
+          <div key={e.engine_id}>
+            <dt>{e.engine_id}</dt>
+            <dd>{e.operator_action}</dd>
+          </div>
+        ))}
+      </dl>
+    </details>
   );
 }

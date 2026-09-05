@@ -380,6 +380,7 @@ GET    /comments?report_id=:id       POST /comments
 PUT    /comments/:id                 DELETE /comments/:id
 
 GET    /hbom/:projectId              POST /hbom/:projectId/components
+POST   /hbom/headers                 GET  /hbom/component-form
 POST   /hbom/preview                 POST /hbom/:projectId/import    # and /hbom/import (compat)
 GET    /hbom/:projectId/devices      POST /hbom/:projectId/devices
 GET    /hbom/:projectId/devices/:deviceId

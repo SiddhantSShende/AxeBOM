@@ -264,6 +264,13 @@ type importPreviewDTO struct {
 	MaxDepth        int            `json:"max_depth"`
 	UnmappedHeaders []string       `json:"unmapped_headers"`
 	Warnings        []string       `json:"warnings"`
+	// Format is how the file was actually read — "csv", "tsv" or "xlsx".
+	// Surfaced so the preview can say it, rather than leaving a customer to
+	// infer it from whether the columns came out right.
+	Format string `json:"format"`
+	// Sheets are a workbook's tabs. Only the first is read; naming the rest is
+	// what stops a parts list on sheet two reading as an empty import.
+	Sheets []string `json:"sheets"`
 }
 
 func toImportPreviewDTO(r *hbom.ImportResult) importPreviewDTO {
@@ -273,6 +280,8 @@ func toImportPreviewDTO(r *hbom.ImportResult) importPreviewDTO {
 		MaxDepth:        r.MaxDepthReached(),
 		UnmappedHeaders: emptyIfNil(r.UnmappedHeaders),
 		Warnings:        emptyIfNil(r.Warnings),
+		Format:          r.Format,
+		Sheets:          emptyIfNil(r.Sheets),
 	}
 }
 
@@ -323,18 +332,60 @@ func (h *Handler) PreviewHBOMImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, mapping, err := readHBOMUpload(w, r)
+	data, mapping, filename, err := readHBOMUpload(w, r)
 	if err != nil {
 		errs.Write(w, r, err)
 		return
 	}
 
-	result, err := h.svc.PreviewHBOMImport(data, mapping)
+	result, err := h.svc.PreviewHBOMImport(data, mapping, filename)
 	if err != nil {
 		errs.Write(w, r, err)
 		return
 	}
 	errs.WriteJSON(w, http.StatusOK, toImportPreviewDTO(result))
+}
+
+// ComponentForm handles GET /v1/hbom/component-form.
+//
+// The editable Table 11 elements, generated from the compliance profile, so the
+// per-component editor renders inputs from data rather than hardcoding a field
+// list that drifts from the guideline.
+func (h *Handler) ComponentForm(w http.ResponseWriter, r *http.Request) {
+	if _, err := auth.RequireTenant(r.Context()); err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	errs.WriteJSON(w, http.StatusOK, map[string]any{"fields": hbom.ComponentFormFields()})
+}
+
+// ReadImportHeaders handles POST /v1/hbom/headers.
+//
+// Returns the column names, the format the file was recognised as, and a
+// workbook's sheet list. Stores nothing — the same "look before you commit"
+// split the preview step already makes.
+func (h *Handler) ReadImportHeaders(w http.ResponseWriter, r *http.Request) {
+	if _, err := auth.RequireTenant(r.Context()); err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+
+	data, _, filename, err := readHBOMUpload(w, r)
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+
+	headers, format, sheets, err := h.svc.ReadImportHeaders(data, filename)
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	errs.WriteJSON(w, http.StatusOK, map[string]any{
+		"headers": emptyIfNil(headers),
+		"format":  format,
+		"sheets":  emptyIfNil(sheets),
+	})
 }
 
 // ConfirmHBOMImport handles POST /v1/hbom/{projectId}/import.
@@ -345,7 +396,7 @@ func (h *Handler) ConfirmHBOMImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, mapping, err := readHBOMUpload(w, r)
+	data, mapping, filename, err := readHBOMUpload(w, r)
 	if err != nil {
 		errs.Write(w, r, err)
 		return
@@ -370,7 +421,7 @@ func (h *Handler) ConfirmHBOMImport(w http.ResponseWriter, r *http.Request) {
 		projectID = r.FormValue("project_id")
 	}
 
-	docID, err := h.svc.ImportHBOM(r.Context(), tenantID, projectID, data, mapping)
+	docID, err := h.svc.ImportHBOM(r.Context(), tenantID, projectID, data, mapping, filename)
 	if err != nil {
 		errs.Write(w, r, err)
 		return
@@ -381,12 +432,12 @@ func (h *Handler) ConfirmHBOMImport(w http.ResponseWriter, r *http.Request) {
 // readHBOMUpload parses the multipart body every HBOM file endpoint shares:
 // a `file` field and a `mapping` field holding a JSON object of
 // header -> canonical column id.
-func readHBOMUpload(w http.ResponseWriter, r *http.Request) ([]byte, map[string]string, error) {
+func readHBOMUpload(w http.ResponseWriter, r *http.Request) ([]byte, map[string]string, string, error) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxHBOMFileBytes+(1<<20))
 
 	//nolint:gosec // G120: the body is already bounded by the MaxBytesReader above.
 	if err := r.ParseMultipartForm(8 << 20); err != nil {
-		return nil, nil, errs.Wrap(err, errs.ValidationBodyMalformed,
+		return nil, nil, "", errs.Wrap(err, errs.ValidationBodyMalformed,
 			"could not read the upload; it may exceed the size limit")
 	}
 	defer func() {
@@ -395,27 +446,31 @@ func readHBOMUpload(w http.ResponseWriter, r *http.Request) ([]byte, map[string]
 		}
 	}()
 
-	file, _, err := r.FormFile("file")
+	file, fileHeader, err := r.FormFile("file")
 	if err != nil {
-		return nil, nil, errs.New(errs.ValidationFieldRequired,
+		return nil, nil, "", errs.New(errs.ValidationFieldRequired,
 			"attach the file in a form field named 'file'")
 	}
 	defer func() { _ = file.Close() }()
 
 	data, err := io.ReadAll(io.LimitReader(file, maxHBOMFileBytes))
 	if err != nil {
-		return nil, nil, errs.Wrap(err, errs.ValidationBodyMalformed, "could not read the uploaded file")
+		return nil, nil, "", errs.Wrap(err, errs.ValidationBodyMalformed, "could not read the uploaded file")
 	}
 
 	mapping := map[string]string{}
 	if raw := strings.TrimSpace(r.FormValue("mapping")); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &mapping); err != nil {
-			return nil, nil, errs.Wrap(err, errs.ValidationBodyMalformed,
+			return nil, nil, "", errs.Wrap(err, errs.ValidationBodyMalformed,
 				"the 'mapping' field is not valid JSON")
 		}
 	}
 
-	return data, mapping, nil
+	filename := ""
+	if fileHeader != nil {
+		filename = fileHeader.Filename
+	}
+	return data, mapping, filename, nil
 }
 
 // LookupParts handles POST /v1/hbom/lookup.

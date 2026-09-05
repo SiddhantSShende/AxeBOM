@@ -71,12 +71,53 @@ func validateHardwareComponent(c *hbom.Component, path string) error {
 	return nil
 }
 
-// PreviewHBOMImport parses a CSV WITHOUT storing anything.
-func (s *Service) PreviewHBOMImport(csvBytes []byte, mapping map[string]string) (*hbom.ImportResult, error) {
-	result, err := hbom.Parse(csvBytes, mapping)
+// ReadImportHeaders returns just the column names of an uploaded parts list.
+//
+// ⚠ THE HEADER ROW USED TO BE PARSED IN THE BROWSER, by slicing the first 64 KiB
+// and splitting on commas. That works for a CSV and for nothing else: a
+// spreadsheet is a zip archive, so the mapping screen would have shown a row of
+// binary garbage as the customer's column names.
+//
+// Reading it here is the same argument the level-sequence rule already makes in
+// this file — one implementation, in the place that owns it. It also means the
+// browser needs no spreadsheet library, and every format the importer learns
+// next is supported by the mapping screen for free.
+func (s *Service) ReadImportHeaders(data []byte, filename string) (headers []string, format string, sheets []string, err error) {
+	f := hbom.DetectFormat(filename, data)
+	head, _, rerr := hbom.ReadTable(data, f)
+	if rerr != nil {
+		return nil, "", nil, importErrToAPIError(rerr)
+	}
+
+	out := make([]string, 0, len(head))
+	for _, h := range head {
+		if trimmed := strings.TrimSpace(h); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out, string(f), hbom.SheetNames(data, f), nil
+}
+
+// PreviewHBOMImport parses a parts list WITHOUT storing anything.
+//
+// ⚠ THE FORMAT IS DETECTED, NOT ASSUMED. This screen accepted `.csv` alone
+// until now, which meant telling a customer to open their `.xlsx` and re-save
+// it before AxeBOM would read it — by hand, using a library already in this
+// binary. `filename` is the human's own statement about the file they just
+// picked; DetectFormat checks the magic bytes anyway, because a workbook
+// renamed to `.csv` is the case that actually happens.
+func (s *Service) PreviewHBOMImport(data []byte, mapping map[string]string, filename string) (*hbom.ImportResult, error) {
+	format := hbom.DetectFormat(filename, data)
+	result, err := hbom.ParseFormat(data, mapping, format)
 	if err != nil {
 		return nil, importErrToAPIError(err)
 	}
+	result.Format = string(format)
+	// ⚠ NAMED, NOT SILENTLY SKIPPED. A parts-list workbook routinely carries a
+	// "Notes" or "Revisions" tab. Only the first sheet is read, and a reader
+	// who cannot see which one was used has no way to notice the BOM was on
+	// the second.
+	result.Sheets = hbom.SheetNames(data, format)
 	return result, nil
 }
 
@@ -84,8 +125,8 @@ func (s *Service) PreviewHBOMImport(csvBytes []byte, mapping map[string]string) 
 // version — never mutating a previous import's rows (CLAUDE.md invariant 10,
 // applied to a full re-import rather than a scanner re-run; see
 // store.ReplaceHardwareTree).
-func (s *Service) ImportHBOM(ctx context.Context, tenantID, projectID string, csvBytes []byte, mapping map[string]string) (string, error) {
-	result, err := hbom.Parse(csvBytes, mapping)
+func (s *Service) ImportHBOM(ctx context.Context, tenantID, projectID string, data []byte, mapping map[string]string, filename string) (string, error) {
+	result, err := hbom.ParseFormat(data, mapping, hbom.DetectFormat(filename, data))
 	if err != nil {
 		return "", importErrToAPIError(err)
 	}

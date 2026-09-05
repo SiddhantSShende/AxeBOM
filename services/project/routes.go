@@ -121,10 +121,19 @@ func registerRoutes(mux *http.ServeMux, d *deps) {
 	// /v1/hbom/provider are not scoped to a project and Go's ServeMux would
 	// resolve them correctly either way, but declaring them first keeps that
 	// obvious to a reader.
+	// Reads the column names out of an uploaded parts list and stores nothing.
+	// Guarded at hardware:create like preview below: it parses a file the caller
+	// uploaded, which is the same act.
+	mux.Handle("POST /v1/hbom/headers",
+		guard(authz.ResourceHardware, authz.ActionCreate, h.ReadImportHeaders))
 	mux.Handle("POST /v1/hbom/preview",
 		guard(authz.ResourceHardware, authz.ActionCreate, h.PreviewHBOMImport))
 	mux.Handle("POST /v1/hbom/lookup",
 		guard(authz.ResourceHardware, authz.ActionCreate, h.LookupParts))
+	// The editable Table 11 elements, generated from the profile. A read: it
+	// describes the form, not anybody's data.
+	mux.Handle("GET /v1/hbom/component-form",
+		guard(authz.ResourceHardware, authz.ActionRead, h.ComponentForm))
 	mux.Handle("GET /v1/hbom/provider",
 		guard(authz.ResourceHardware, authz.ActionRead, h.PartProvider))
 

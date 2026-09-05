@@ -16,7 +16,6 @@ import { Link, useParams } from 'react-router';
 import { DeviceRegister } from './DeviceRegister';
 import { EmptyState, ErrorState, SkeletonRows } from '../../components/States';
 import {
-  CRITICALITY_VALUES,
   JUDGEMENT_FIELDS,
   SUPPLIER_FORMATS,
   bySupplier,
@@ -30,8 +29,11 @@ import {
   useHardwareTree,
   usePartLookup,
   usePartProvider,
+  useComponentForm,
   useSaveComponent,
+  type ComponentFormField,
   blankAlternate,
+  blankComponent,
   normalizeAlternates,
   alternateWarning,
   EQUIVALENCE_VALUES,
@@ -77,6 +79,17 @@ export function HardwareTree() {
     return (
       <>
         <DeviceRegister projectId={projectId} />
+        {/* ⚠ THE FORM HAS TO RENDER IN THIS BRANCH TOO. The empty state's own
+            "Add a component" button sets `editing` — and this branch returns
+            before the editor further down is ever reached, so without this the
+            button appeared to do nothing at all. */}
+        {editing && (
+          <ComponentForm
+            projectId={projectId}
+            component={editing}
+            onDone={() => setEditing(null)}
+          />
+        )}
         <EmptyState
           title="No parts recorded yet"
           /* ⚠ THIS USED TO SAY "Hardware is not discoverable by any scanner",
@@ -91,9 +104,14 @@ export function HardwareTree() {
             'list, upload what a collector on the device reported, or add components by hand.'
           }
           action={
-            <Link className="btn btn-primary" to={`/projects/${projectId}/hardware/import`}>
-              Import a parts list
-            </Link>
+            <>
+              <Link className="btn btn-primary" to={`/projects/${projectId}/hardware/import`}>
+                Import a parts list
+              </Link>{' '}
+              <button type="button" className="btn" onClick={() => setEditing(blankComponent())}>
+                Add a component
+              </button>
+            </>
           }
         />
       </>
@@ -135,6 +153,14 @@ export function HardwareTree() {
           because requiring a commercial parts database would make HBOM unusable
           for somebody recording hardware they already own.
         */}
+        {/* ⚠ THERE WAS NO WAY TO ADD A PART IN THE UI AT ALL. The API has
+            always inserted when the id is empty — only the button was missing —
+            so a customer whose parts list was not in an exportable file had no
+            path into the product. */}
+        <button type="button" className="btn" onClick={() => setEditing(blankComponent())}>
+          Add a component
+        </button>
+
         {provider.data?.configured && (
           <button
             type="button"
@@ -341,10 +367,30 @@ function ComponentForm({
   onDone: () => void;
 }) {
   const save = useSaveComponent(projectId);
+  const form = useComponentForm();
   const [draft, setDraft] = useState(component);
 
   function set<K extends keyof HardwareComponent>(key: K, value: HardwareComponent[K]) {
     setDraft({ ...draft, [key]: value });
+  }
+
+  /**
+   * setField writes one generated field back onto the draft.
+   *
+   * ⚠ A LIST ELEMENT IS SPLIT BACK INTO AN ARRAY. The column is `text[]`, so
+   * storing the raw "RoHS, CE" string would put one entry containing a comma
+   * into it — which reads back as a single meaningless certification.
+   */
+  function setField(field: ComponentFormField, value: string) {
+    if (field.list) {
+      const parts = value
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean);
+      setDraft({ ...draft, [field.attr]: parts });
+      return;
+    }
+    setDraft({ ...draft, [field.attr]: value });
   }
 
   return (
@@ -358,81 +404,34 @@ function ComponentForm({
         );
       }}
     >
-      <h2>{component.product_name}</h2>
+      {/* ⚠ A NEW COMPONENT HAS NO NAME YET, and rendering `product_name` blindly
+          gave the create form an empty heading — a panel that appeared out of
+          nowhere with no title. Caught by looking at it. */}
+      <h2>{component.id === '' ? 'New component' : component.product_name}</h2>
 
       {save.error && <ErrorState error={save.error} action="save this component" />}
 
-      <div className="field-row">
-        <label htmlFor="crit">Criticality</label>
-        <select
-          id="crit"
-          value={draft.criticality}
-          onChange={(e) => set('criticality', e.target.value as HardwareComponent['criticality'])}
-        >
-          <option value="">not-provided</option>
-          {CRITICALITY_VALUES.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
-        </select>
-        <p className="field-hint">Required by §10.4.1.4 for government and public-sector supply.</p>
-      </div>
+      {/* ⚠ SIX INPUTS USED TO BE HARDCODED HERE AND THE REST ROUND-TRIPPED
+          UNTOUCHED — fetched, held in state, written back unchanged. A customer
+          could see a `not-provided` manufacturer on the component sheet and had
+          nowhere to fix it, and the coverage number stayed low for a reason
+          nothing on screen explained. That is the failure MissingJudgements was
+          written to prevent for four fields and nobody extended to the rest.
 
-      <div className="field-row">
-        <label htmlFor="warranty">Warranty / AMC</label>
-        <input
-          id="warranty"
-          value={draft.warranty_amc}
-          onChange={(e) => set('warranty_amc', e.target.value)}
-        />
-      </div>
+          The list now comes from the compliance profile, so a CERT-In revision
+          adds an input without a frontend release (invariant 2). */}
+      {form.isPending && <p className="field-hint">Loading the field list…</p>}
+      {form.isError && <ErrorState error={form.error} action="load the field list" />}
 
-      <div className="field-row">
-        <label htmlFor="licence">Licence terms</label>
-        <input
-          id="licence"
-          value={draft.license_info}
-          onChange={(e) => set('license_info', e.target.value)}
-        />
-        <p className="field-hint">IP licences or usage terms, particularly for firmware.</p>
-      </div>
-
-      <div className="field-row">
-        <label htmlFor="test">Test result</label>
-        <input
-          id="test"
-          value={draft.test_result}
-          onChange={(e) => set('test_result', e.target.value)}
-        />
-      </div>
-
-      {/*
-        ⚠ THE TWO SUPPLIER RELATIONSHIPS ARE LABELLED, NOT LEFT TO GUESSWORK.
-        "Supplier" alone is the field somebody fills in with whichever company
-        comes to mind, and the two mean different things in Table 11.
-      */}
-      <div className="field-row">
-        <label htmlFor="prod-sup">Product supplier</label>
-        <input
-          id="prod-sup"
-          value={draft.supplier_info}
-          onChange={(e) => set('supplier_info', e.target.value)}
-        />
-        <p className="field-hint">Who sold YOU this product.</p>
-      </div>
-
-      <div className="field-row">
-        <label htmlFor="comp-sup">Component supplier</label>
-        <input
-          id="comp-sup"
-          value={draft.component_supplier_info}
-          onChange={(e) => set('component_supplier_info', e.target.value)}
-        />
-        <p className="field-hint">
-          Who supplied this part to the manufacturer of the larger product. A different relationship
-          — CERT-In Table 11 records both.
-        </p>
+      <div className="field-grid">
+        {(form.data ?? []).map((field) => (
+          <ComponentField
+            key={field.attr}
+            field={field}
+            value={valueOf(draft, field)}
+            onChange={(value) => setField(field, value)}
+          />
+        ))}
       </div>
 
       <AlternatesEditor
@@ -449,6 +448,58 @@ function ComponentForm({
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * valueOf reads a form field's current value off the draft.
+ *
+ * ⚠ A LIST ELEMENT IS JOINED, NOT STRINGIFIED. Table 11's `compliance` holds
+ * ["RoHS","CE"]; `String(...)` would render it as `RoHS,CE` by accident and
+ * `[object Object]` the moment the shape changed.
+ */
+function valueOf(draft: HardwareComponent, field: ComponentFormField): string {
+  const raw = (draft as unknown as Record<string, unknown>)[field.attr];
+  if (Array.isArray(raw)) return raw.join(', ');
+  return typeof raw === 'string' ? raw : '';
+}
+
+/** ComponentField renders one input described by the server. */
+function ComponentField({
+  field,
+  value,
+  onChange,
+}: {
+  field: ComponentFormField;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const cite = field.source_page ? <small>CERT-In p.{field.source_page}</small> : null;
+
+  return (
+    <label className="field">
+      <span>{field.name}</span>
+      {field.values ? (
+        <select value={value} onChange={(e) => onChange(e.target.value)}>
+          <option value="">not-provided</option>
+          {field.values.map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
+      ) : field.multiline ? (
+        <textarea rows={3} value={value} onChange={(e) => onChange(e.target.value)} />
+      ) : (
+        <input
+          value={value}
+          placeholder={field.list ? 'RoHS, CE' : undefined}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
+      {field.hint && <small>{field.hint}</small>}
+      {cite}
+    </label>
   );
 }
 

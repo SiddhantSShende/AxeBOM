@@ -156,6 +156,36 @@ Three steps: **source** (GitHub repo picker with search, or upload archive/manif
 
 The practices step is not optional and is not buried in settings. Its six fields are a minimum element (`06-COMPLIANCE-PROFILES.md §6`), and a project without them cannot produce a complete compliance report — the UI should say that plainly at the point of entry rather than surfacing it as a coverage gap weeks later.
 
+### Hardware
+
+Three panels, in the order the facts exist in: the **device register** (what you
+have), the **collector instructions** (how to get its parts), then the **parts
+tree**.
+
+⚠ **The component editor renders from the compliance profile, not from a
+hardcoded field list.** It exposed six of Table 11's elements and round-tripped
+the rest untouched — fetched, held in state, written back unchanged — so a
+customer could see a `not-provided` manufacturer on the sheet and had nowhere to
+fix it, and the coverage number stayed low for a reason nothing on screen
+explained. `GET /v1/hbom/component-form` serves the inputs, each with its
+element id and page citation, so a CERT-In revision adds an input without a
+frontend release (invariant 2).
+
+⚠ **The collector instructions come from the engine registry's
+`operator_action`**, not from prose here. `hbom-cdxgen-host` and
+`hbom-host-report` parse a report the customer generates on the device they want
+documented — and that instruction previously existed only in a YAML file no
+browser reads and in an adapter hint shown *after* a scan had already found
+nothing. An engine that gains or loses an operator action changes this panel on
+its own.
+
+⚠ **The import screen accepts CSV, TSV and Excel, and the SERVER reads the
+header row.** The browser used to slice 64 KiB and split on commas, which works
+for a CSV and for nothing else — a spreadsheet is a zip archive, so the mapping
+step would have offered binary as the customer's column names. One parser, in
+the place that owns it, and the preview states which format was read and which
+workbook sheet.
+
 ### Dependencies
 The densest screen. Virtualized table over potentially 50k rows: name, version, ecosystem, license, direct/transitive, criticality, severity summary, **discovered-by** (engine provenance chips).
 

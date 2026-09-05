@@ -103,6 +103,12 @@ describe('the honest label', () => {
     /HBOM is (imported|import), not scanned/i,
     /hardware is not scannable/i,
     /cannot (be )?scan(ned)? .{0,20}\bhardware\b/i,
+    // ⚠ THE THIRD SENTENCE OF THIS SHAPE FOUND IN THREE SESSIONS. "Hardware is
+    // not discoverable by any scanner" read as "AxeBOM cannot do hardware" on
+    // the import screen, long after hbom-ecad shipped. The honest denial is
+    // narrower and must stay sayable: nothing examines a PHYSICAL DEVICE.
+    /hardware is not discoverable by (any|a) scanner/i,
+    /no scanner (can|will) (read|produce|find)/i,
   ];
 
   const flagged = (text: string) => claims.some((c) => c.test(text)) && !negations.test(text);

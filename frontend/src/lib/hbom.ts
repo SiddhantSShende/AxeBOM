@@ -207,7 +207,12 @@ export const CANONICAL_COLUMNS = [
     // column to store it in — and it is not any more.
     hint: 'Stored and reported. Not a CERT-In element, so it is scored separately.',
   },
-  { id: 'currency', label: 'Currency', required: false, hint: 'ISO 4217, e.g. USD. Never guessed.' },
+  {
+    id: 'currency',
+    label: 'Currency',
+    required: false,
+    hint: 'ISO 4217, e.g. USD. Never guessed.',
+  },
   {
     id: 'designator',
     label: 'Designators',
@@ -215,7 +220,12 @@ export const CANONICAL_COLUMNS = [
     hint: 'R1, C4, U2 — one line item can cover several placements.',
   },
   { id: 'footprint', label: 'Footprint / package', required: false, hint: '0402, QFN-48…' },
-  { id: 'supplier_sku', label: 'Supplier SKU', required: false, hint: "The distributor's own order code." },
+  {
+    id: 'supplier_sku',
+    label: 'Supplier SKU',
+    required: false,
+    hint: "The distributor's own order code.",
+  },
   { id: 'preferred_supplier', label: 'Preferred supplier', required: false, hint: '' },
   {
     id: 'dni',
@@ -264,6 +274,66 @@ export const CRITICALITY_VALUES = ['critical', 'high', 'medium', 'low'] as const
 // ---------------------------------------------------------------------------
 // Queries
 // ---------------------------------------------------------------------------
+
+/**
+ * ComponentFormField is one input on the per-component editor, described by the
+ * server.
+ *
+ * ⚠ THE EDITOR EXPOSED SIX FIELDS AND ROUND-TRIPPED THE REST UNTOUCHED. Every
+ * other Table 11 element was fetched, held in component state and written back
+ * unchanged — so a customer could SEE a `not-provided` manufacturer on the
+ * component sheet and had no way to fix it, and the coverage number stayed low
+ * for a reason nothing on screen explained.
+ *
+ * The field list comes from `docs/reference/certin-v2.0.yaml` via the profile,
+ * so a guideline revision adds an input without a frontend release
+ * (CLAUDE.md invariant 2) — and no count is written anywhere.
+ */
+export interface ComponentFormField {
+  attr: string;
+  field_id: string;
+  name: string;
+  source_page?: number;
+  multiline?: boolean;
+  /** A comma-separated list — Table 11's `compliance` (RoHS, CE, …). */
+  list?: boolean;
+  values?: string[];
+  hint?: string;
+}
+
+export function useComponentForm() {
+  return useQuery({
+    queryKey: ['hbom', 'component-form'],
+    queryFn: ({ signal }) =>
+      request<{ fields: ComponentFormField[] }>('/v1/hbom/component-form', { signal }),
+    select: (d) => d.fields,
+    // The profile changes on deploy, not during a session.
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
+/**
+ * useReadHeaders asks the server for a parts list's column names.
+ *
+ * ⚠ THE BROWSER USED TO DO THIS BY SLICING 64 KiB AND SPLITTING ON COMMAS.
+ * That works for a CSV and for nothing else — a spreadsheet is a zip archive,
+ * so the mapping screen would have offered binary garbage as the customer's
+ * column names. The server already owns the parser; asking it means every
+ * format the importer learns next works here for free, and the browser needs no
+ * spreadsheet library.
+ */
+export function useReadHeaders() {
+  return useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return upload<{ headers: string[]; format: string; sheets: string[] }>(
+        '/v1/hbom/headers',
+        form,
+      );
+    },
+  });
+}
 
 /** previewImport parses a file WITHOUT storing anything. */
 export function usePreviewImport() {
@@ -382,7 +452,6 @@ export function describeProvenance(component: HardwareComponent): string {
   return `Some values from ${[...sources].sort().join(', ')}`;
 }
 
-
 // ---------------------------------------------------------------------------
 // Cost
 // ---------------------------------------------------------------------------
@@ -492,7 +561,6 @@ export function describeAlternate(alternate: HardwareAlternate): string {
     alternate.model_number || alternate.supplier_sku || alternate.manufacturer_name || 'unnamed';
   return `${id} (${alternate.equivalence || 'unverified'})`;
 }
-
 
 // ---------------------------------------------------------------------------
 // Per-supplier export
@@ -642,6 +710,64 @@ function csvCell(value: string): string {
 // ---------------------------------------------------------------------------
 
 /**
+ * blankComponent is a new part, ready to be filled in.
+ *
+ * ⚠ THE UI HAD NO WAY TO CREATE ONE AT ALL. `store.SaveHardwareComponent`
+ * inserts when the id is empty and has since it was written — so the capability
+ * existed and only the button was missing. A customer whose parts list was not
+ * in a file they could export had no path into the product.
+ *
+ * Every field starts empty rather than guessed. A default manufacturer or a
+ * placeholder part number would be recorded as a fact about somebody's
+ * hardware; `not-provided` is the honest starting state and scores zero, which
+ * is exactly right (invariant 3).
+ */
+export function blankComponent(parentId?: string): HardwareComponent {
+  return {
+    id: '',
+    parent_id: parentId ?? null,
+    depth: parentId ? 1 : 0,
+    quantity: 1,
+    product_name: '',
+    product_version: '',
+    model_number: '',
+    serial_number: '',
+    manufacturer_name: '',
+    manufacturer_location: '',
+    origin: '',
+    supplier_info: '',
+    supplier_location: '',
+    component_supplier_info: '',
+    component_supplier_location: '',
+    firmware_version: '',
+    criticality: '',
+    technology_node: '',
+    compliance: [],
+    power_supply: '',
+    technical_specification: '',
+    warranty_amc: '',
+    license_info: '',
+    test_result: '',
+    product_details: '',
+    manufacturing_date: '',
+    findings: [],
+    enriched_fields: {},
+    designators: [],
+    package_footprint: '',
+    supplier_sku: '',
+    preferred_supplier: '',
+    unit_price: '',
+    currency: '',
+    do_not_populate: false,
+    assembly_type: '',
+    lifecycle_status: '',
+    datasheet_url: '',
+    alternates: [],
+    children: [],
+  };
+}
+
+/**
  * blankAlternate is a new, empty second source.
  *
  * ⚠ `unverified` IS THE STARTING VALUE AND IT IS NEVER INFERRED UPWARD.
@@ -675,8 +801,8 @@ export function blankAlternate(ordinal: number): HardwareAlternate {
 export function isAlternateIdentifiable(alternate: HardwareAlternate): boolean {
   return Boolean(
     alternate.manufacturer_name.trim() ||
-      alternate.model_number.trim() ||
-      alternate.supplier_sku.trim(),
+    alternate.model_number.trim() ||
+    alternate.supplier_sku.trim(),
   );
 }
 
@@ -687,9 +813,7 @@ export function isAlternateIdentifiable(alternate: HardwareAlternate): boolean {
  * the position a reader sees rather than a gap left by a deleted row.
  */
 export function normalizeAlternates(alternates: HardwareAlternate[]): HardwareAlternate[] {
-  return alternates
-    .filter(isAlternateIdentifiable)
-    .map((a, index) => ({ ...a, ordinal: index }));
+  return alternates.filter(isAlternateIdentifiable).map((a, index) => ({ ...a, ordinal: index }));
 }
 
 /**

@@ -1,9 +1,7 @@
 package hbom
 
 import (
-	"encoding/csv"
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 )
@@ -104,6 +102,14 @@ func importErr(row int, format string, args ...any) *ImportError {
 // ImportResult is what an import produced, and what it could not. Mirrors
 // workers/hbom/csv_import.py's ImportResult.
 type ImportResult struct {
+	// Format is the shape the file was read as — "csv", "tsv" or "xlsx".
+	// Reported so a preview can say how the file was interpreted rather than
+	// leaving a customer to infer it from whether the columns look right.
+	Format string
+	// Sheets lists a workbook's tabs. Only the first is read; the rest are
+	// named so a BOM on the second sheet is a visible fact, not a silent zero.
+	Sheets []string
+
 	Roots []*Component
 
 	// Rows that were read but carried nothing beyond an (absent) level.
@@ -148,18 +154,20 @@ func (r *ImportResult) MaxDepthReached() int {
 //
 // `mapping` is header -> canonical column id (e.g. "Qty" -> "quantity").
 func Parse(data []byte, mapping map[string]string) (*ImportResult, error) {
-	text := strings.TrimPrefix(string(data), "\uFEFF")
+	return ParseFormat(data, mapping, FormatCSV)
+}
 
-	reader := csv.NewReader(strings.NewReader(text))
-	// Rows with a different field count than the header are tolerated, like
-	// Python's csv.DictReader — a truncated last line or a stray trailing
-	// comma is a real-world export artifact, not a reason to reject the
-	// whole file.
-	reader.FieldsPerRecord = -1
-
-	header, err := reader.Read()
+// ParseFormat turns a parts list in any supported shape into a component tree.
+//
+// ⚠ ONE TREE BUILDER, THREE FORMATS. Everything below this point works on a
+// header and rows and has no idea which file shape produced them, so the level
+// sequencing, the depth cap and every diagnostic behave identically for a CSV,
+// a TSV and a spreadsheet. A second parser with its own tree builder is how two
+// formats start disagreeing about what a level means.
+func ParseFormat(data []byte, mapping map[string]string, format Format) (*ImportResult, error) {
+	header, records, err := ReadTable(data, format)
 	if err != nil {
-		return nil, &ImportError{Message: "the file has no header row"}
+		return nil, err
 	}
 	for i := range header {
 		header[i] = strings.TrimSpace(header[i])
@@ -194,18 +202,11 @@ func Parse(data []byte, mapping map[string]string) (*ImportResult, error) {
 	havePrevious := false
 	rowNumber := 1 // the header
 
-	for {
-		record, rerr := reader.Read()
-		if rerr == io.EOF {
-			break
-		}
+	for _, record := range records {
 		rowNumber++
 		if rowNumber-1 > MaxRows {
 			return nil, importErr(0, "the file exceeds %d rows. A parts list that long is "+
 				"almost certainly an export mistake; split it or raise the cap deliberately.", MaxRows)
-		}
-		if rerr != nil {
-			return nil, importErr(rowNumber, "row %d: could not be parsed as CSV: %v", rowNumber, rerr)
 		}
 
 		values := canonicalizeRow(header, record, mapping)

@@ -7,8 +7,8 @@ A session that writes code but does not update this file has failed — the next
 ---
 
 **Last updated:** 2026-09-05
-**Current phase:** *Hardware as a first-class thing, and making every artifact actually contain its data*. 🟢 Track A rendering matrix (b); 🟢 B3 device register (c); 🟢 B1 collector formats + B2 `axebom collect hardware` (d); 🟢 **scans actually run** (e). Not started: most of B4 (upload formats, the component form, the collector affordance in the UI), A6 (writerless tables), A7 (ecosystem coverage).
-**Next action:** B4. ⚠ **A real scan completes end to end for the first time on this stack**: cdxgen, syft, syft-spdx and grype all succeed in ~2s on `expressjs/express`. Three things had to be fixed to get there — **cdxgen was running `npm install` inside the sandbox** (forbidden by invariant 7, impossible under `--network=none`, and it stalled every scan for 10+ minutes), **nothing had ever pulled the fetcher's `alpine/git` clone image** (so every repository scan failed at step one), and **every seeded project was unscannable** with two of them asserting a `github` source that had no connection row. ⚠ **732 scans stuck in `queued` were a test leak, not a product bug** — 12 rows per run of the project store tests, from a cleanup that had been silently aborting its own transaction since it was written; fixed at source and the residue cleared. ⚠ **`NVD_API_KEY` is still set in no environment.** 🟡 Carried forward: `mock-engine` is dispatchable with no adapter; `alpine/git` is tag-pinned and `toolctl pin` does not exist; nothing checks project classification; five `normalize` tables have no writer; ecosystem coverage is npm/golang/pypi/github only.
+**Current phase:** *Hardware as a first-class thing, and making every artifact actually contain its data*. 🟢 Track A rendering matrix (b); 🟢 B3 device register (c); 🟢 B1+B2 collectors and `axebom collect hardware` (d); 🟢 scans actually run (e); 🟢 **B4 the hardware screens** (f). **Track B is complete.** Not started: A6 (writerless tables), A7 (ecosystem coverage).
+**Next action:** A6 or A7 — or the earlier plan's module seam, which is what would stop a device being registered against an SBOM-only project. ⚠ **The hardware screens are usable end to end now**: import accepts CSV/TSV/Excel through one tree builder, the component editor renders all of Table 11 from the profile instead of six hardcoded fields, a component can be created in the UI at all, and the Hardware tab tells you how to get parts off a device you have. ⚠ **The validation rules had been tested only on `workers/hbom/form.py`, which production never runs** — the live Go validator had no tests; it does now. 🟡 Carried forward: the interactive import has no path for CycloneDX or collector JSON (structured, not tabular — they reach the product through upload + scan); the manufacturing fields are not in the generated form because their profile is not loaded in Go; nothing checks project classification; `mock-engine` leaves a permanent `skipped` row on every SBOM scan; `alpine/git` is tag-pinned and `toolctl pin` does not exist; five `normalize` tables have no writer; ecosystem coverage is npm/golang/pypi/github only. ⚠ **`NVD_API_KEY` is still set in no environment.**
 
 > 🟢 **A REAL SCAN NOW NORMALIZES, LIVE, WITH NO MANUAL TRIGGER — THE
 > NORMALIZER'S DEPLOYED BOUNDARY FROM (e)/(k)/(l) IS CLOSED FOR SBOM.**
@@ -2265,6 +2265,118 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-09-05 (f) — Track B4: the hardware screens stop being a dead end
+
+#### The import screen accepted `.csv` and nothing else
+
+The single most common form of a parts list is an `.xlsx`, and the product told
+customers to open theirs and re-save it — by hand, using a library
+(`excelize`) already linked into the binary for the report writer.
+
+CSV, TSV and Excel now, and ⚠ **through ONE tree builder**: `ReadTable` produces
+a header and rows, `Parse` builds the tree from them exactly as before, so level
+sequencing, the depth cap and every diagnostic behave identically whatever the
+file was. A second parser with its own tree builder is how two formats start
+disagreeing about what a level means — the test asserts the three produce the
+**identical** tree, not merely that each works.
+
+⚠ **Detection checks the magic bytes, not just the extension.** A workbook
+renamed to `.csv` is the case that actually happens, and handing a zip to a CSV
+reader reports "the file has no header row" — a message about the wrong thing
+entirely.
+
+⚠ **The BROWSER used to read the header row**, by slicing 64 KiB and splitting
+on commas. That works for a CSV and for nothing else. New `POST
+/v1/hbom/headers` does it server-side — the same argument the level-sequence
+rule already makes: one implementation, in the place that owns it. The preview
+now states which format was read and, for a workbook, **which sheet** — a parts
+list on the second tab was otherwise an empty import with no explanation.
+
+#### The component editor exposed 6 of ~22 elements
+
+Every other Table 11 element was fetched, held in component state and written
+back untouched. So a customer could **see** a `not-provided` manufacturer on the
+component sheet and had nowhere to fix it, and the coverage number stayed low
+for a reason nothing on screen explained — the exact failure `MissingJudgements`
+was written to prevent for four fields and nobody extended to the rest.
+
+`GET /v1/hbom/component-form` generates the inputs from `model.HBOMFields`. The
+attribute name is **derived** from the profile's `CanonicalPath`
+(`hardware_component.<attr>`), not transcribed, so an element cannot be renamed
+in the guideline without the column, the DTO field and the input moving together.
+
+⚠ **The test caught my own comment being false on its first run.** I claimed the
+prefix check excluded elements 20 and 24; their paths are
+`hardware_component.children[]` and `...findings[]`, which start with the prefix
+— so the form generated a text input asking a customer to type their
+sub-component tree into a box. The rule is now the `[]` suffix, with a real
+distinction inside it: `children[]` is the tree and `findings[]` is derived, but
+**`compliance[]` is a list a person types** and dropping it would leave a scored
+element permanently `not-provided` with nowhere to fix it.
+
+#### Nothing in the product said the collectors existed
+
+`hbom-cdxgen-host` and `hbom-host-report` parse a report the customer generates
+on the device they want documented. That instruction lived in
+`OSINT/tools.manifest.yaml` — which no browser reads — and in an adapter's
+`ENGINE_INPUT_MISSING` hint, which appears **after** a scan has already run and
+found nothing. A customer could not discover the feature, let alone use it.
+
+New `Engine.OperatorAction`, served by `GET /v1/scans/engines` and rendered on
+the Hardware tab. ⚠ **Deliberately not a general `notes` field**: a free-form
+notes column becomes a dumping ground and then nothing renders it. This one
+answers a single question — "what do I do?" — so an engine that gains or loses
+an operator action changes the panel on its own.
+
+#### A component could not be created in the UI at all
+
+`store.SaveHardwareComponent` inserts when the id is empty and always has, so
+the capability existed and only the button was missing — a customer whose parts
+list was not in an exportable file had no path into the product. ⚠ The empty
+state's button also had to render the editor **in that branch**, which returns
+before the one further down is reached; without it the button did nothing.
+Caught by looking at the screen, along with a create form whose heading was
+blank because a new component has no `product_name`.
+
+#### ⚠ The validation rules were tested only on the copy production never runs
+
+`workers/hbom/form.py` carries thirteen assertions, and
+`service/hbom.go`'s `validateHardwareComponent` — the one that actually runs —
+had **none**. Two implementations of one rule with the tests attached to the
+wrong one is how they drift: the Python side could be tightened, both suites stay
+green, and the API keeps accepting what the specification now rejects.
+
+`hbom_validate_test.go` covers the live path (an internal test, because the
+function is unexported and exporting it to test it would widen the service's
+surface to satisfy a runner). `form.py`'s docstring now states what it is — the
+specification the Go side mirrors — rather than leaving it looking abandoned.
+
+#### One more stale honest label, and the guard widened again
+
+The import screen read "Hardware is not discoverable by any scanner" — the third
+sentence of that shape found in three sessions, and the denial guard's
+hand-listed set missed it. It now matches the **shape**.
+
+#### Verification
+
+`task verify` exits 0. Playwright **9/9** against the live stack. Screenshotted
+and read back: the generated form renders all of Table 11 with page citations,
+both supplier fields disambiguated, `compliance` with a `RoHS, CE` placeholder
+and criticality as a select; the collector panel renders both engines' actions.
+
+#### Owed
+
+- The interactive import still has no path for **CycloneDX or collector JSON** —
+  those are structured, not tabular, so they do not fit the column-mapping flow.
+  They reach the product through upload + scan, which the collector panel now
+  points at, but there is no preview for them.
+- The manufacturing fields (designators, footprint, supplier SKU, price) are not
+  in the generated form — they live in a second profile
+  (`hbom-manufacturing-v1.yaml`) that Go does not load.
+- ⚠ Nothing checks project classification; `mock-engine` still leaves a
+  permanent `skipped` row; `alpine/git` is tag-pinned and `toolctl pin` does not
+  exist; A6/A7 unchanged; `NVD_API_KEY` set in no environment.
 
 ### 2026-09-05 (e) — Why no scan had ever really run: cdxgen was running `npm install` in a network-less sandbox
 
