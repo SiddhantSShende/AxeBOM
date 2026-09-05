@@ -141,11 +141,23 @@ func (s *Store) SaveQuantumDevice(ctx context.Context, tenantID, projectID strin
 		// FK, that id would now be rejected. NULL is also the honest answer:
 		// it declines to assert, where a fabricated id asserted something
 		// false to anyone joining bom_documents -> alias_snapshot.
+		//
+		// ⚠ project_id AND scan_id BOTH CARRY THE PROJECT ID, AND THAT IS NOT
+		// REDUNDANCY. scan_id is borrowed — a device form has no scan to point
+		// at, and the column has no FK precisely so it could be borrowed. It
+		// stays populated because resolveQBOMDocument below and every QBOM row
+		// written before migration 0014 read it.
+		//
+		// project_id is the real lineage key, and writing it is what makes a
+		// QBOM report resolvable at all: services/report resolves documents by
+		// the REPORT's scan id, which is a genuine scan id and therefore never
+		// equal to this. Before this line every QBOM report failed with
+		// NOTFOUND_RESOURCE. See migrations/normalize/0014.
 		if err := tx.QueryRow(ctx, `
 			INSERT INTO normalize.bom_documents
-				(tenant_id, scan_id, bom_type, normalization_version,
+				(tenant_id, scan_id, project_id, bom_type, normalization_version,
 				 ruleset_version, alias_snapshot_id, spdx_license_list_version)
-			VALUES ($1, $2, 'QBOM', $3, '', NULL, '')
+			VALUES ($1, $2, $2, 'QBOM', $3, '', NULL, '')
 			RETURNING id`, tenantID, projectID, version).Scan(&docID); err != nil {
 			return fmt.Errorf("create qbom document: %w", err)
 		}

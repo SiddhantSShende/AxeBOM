@@ -35,44 +35,44 @@ import (
 // Adding to this list is a security decision. Keep the reason with the entry so
 // the next reader does not have to reconstruct it.
 var publicRoutes = map[string]string{
-	"POST /v1/auth/register":                "creating the first account cannot require an account",
-	"POST /v1/auth/login":                   "the endpoint that issues tokens cannot demand one",
-	"POST /v1/auth/refresh":                 "authenticates with the refresh cookie, not a bearer token",
-	"GET /v1/auth/github/authorize":         "starts sign-in; no identity exists yet",
-	"GET /v1/auth/github/callback":          "authenticated by the OAuth state cookie + code",
-	"GET /v1/auth/github/connect/authorize": "a browser redirect cannot carry a bearer token; the OAuth state cookie is this flow's CSRF defense, same as login, and it mints no AxeBOM session",
+	"GET /v1/auth/github/connect/authorize": "a browser redirect cannot carry a bearer token; the OAuth state cookie is this flow's CSRF defense, and it mints no AxeBOM session",
 	"GET /v1/auth/github/connect/callback":  "same reason as connect/authorize — the redirect back from github.com carries no bearer token either",
-	"POST /v1/auth/invitations/accept":      "the invitee has no account yet; the invite token is the credential",
 }
 
 func registerRoutes(mux *http.ServeMux, d *deps) {
 	// Health endpoints (/healthz, /readyz) are mounted separately in main.go.
-	h, issuer := d.handler, d.issuer
+	h := d.handler
 
-	// --- Public -------------------------------------------------------------
-	mux.HandleFunc("POST /v1/auth/register", h.Register)
-	mux.HandleFunc("POST /v1/auth/login", h.Login)
-	mux.HandleFunc("POST /v1/auth/refresh", h.Refresh)
-	mux.HandleFunc("GET /v1/auth/github/authorize", h.GitHubAuthorize)
-	mux.HandleFunc("GET /v1/auth/github/callback", h.GitHubCallback)
+	// --- Public: the GitHub REPOSITORY-CONNECT flow, and nothing else --------
+	//
+	// ⚠ THIS SECTION USED TO MOUNT THE WHOLE LOCAL-JWT AUTH SURFACE, AND IT WAS
+	// STILL UNAUTHENTICATED AND STILL PROXIED BY THE GATEWAY.
+	//
+	// register / login / refresh / logout / me / invitations / invitations
+	// -accept / github-authorize / github-callback were the pre-ZITADEL
+	// identity system. Every product service now verifies ZITADEL tokens
+	// (see each service's deps.go), so the tokens these minted opened nothing
+	// — but that is not the same as being harmless:
+	//
+	//   * `POST /v1/auth/register` was an UNAUTHENTICATED account-creation and
+	//     user-enumeration surface, running in parallel to the sanctioned
+	//     `POST /v1/auth/signup` on the gateway, which creates the organisation
+	//     and its Owner grant properly. Two ways to make an account, one of
+	//     which produced accounts that could not sign in.
+	//   * logout / me / invitations were wrapped in `auth.Authenticate(issuer)`
+	//     — the LOCAL issuer — so no ZITADEL-authenticated browser could ever
+	//     reach them. Permanently 401, for every real user.
+	//
+	// CLAUDE.md's standing rule is that the hand-rolled auth is deleted once the
+	// frontend is on ZITADEL. It is (docs/STATE.md, 2026-08-23 (k) and 08-24).
+	// The ROUTES go here; the handlers and the issuer stay for now because the
+	// api-keys path below still shares this service's plumbing.
+	//
+	// What is genuinely still used is the repo-connect pair: a browser redirect
+	// to github.com cannot carry a bearer token, and these mint no AxeBOM
+	// session — they hand a repo-scoped token straight to Vault.
 	mux.HandleFunc("GET /v1/auth/github/connect/authorize", h.GitHubConnectAuthorize)
 	mux.HandleFunc("GET /v1/auth/github/connect/callback", h.GitHubConnectCallback)
-	mux.HandleFunc("POST /v1/auth/invitations/accept", h.AcceptInvite)
-
-	// --- Authenticated ------------------------------------------------------
-	authenticated := auth.Authenticate(issuer, nil)
-
-	// Logout and /me need identity but no permission: every authenticated
-	// caller may end their own session and read their own claims.
-	mux.Handle("POST /v1/auth/logout", authenticated(http.HandlerFunc(h.Logout)))
-	mux.Handle("GET /v1/auth/me", authenticated(http.HandlerFunc(h.Me)))
-
-	// Inviting is a member:create action. The handler additionally refuses to
-	// invite ABOVE the actor's own role — the matrix says "may invite", it
-	// cannot say "may invite to which role".
-	mux.Handle("POST /v1/auth/invitations", authenticated(
-		auth.Authorize(authz.ResourceMember, authz.ActionCreate)(
-			http.HandlerFunc(h.CreateInvite))))
 
 	// --- API keys (Phase 16) ---
 	//

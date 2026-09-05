@@ -6,9 +6,9 @@ A session that writes code but does not update this file has failed — the next
 
 ---
 
-**Last updated:** 2026-09-03
-**Current phase:** Frontend modernization — 🟢 **DONE, all screens.** (i) did the shared layer plus Projects/detail/HBOM; (j) did the remaining eleven route groups, whose systemic cause was unstyled native form controls. Before that, Enterprise HBOM — 🟢 **COMPLETE.** All six milestones, the CBOM/AIBOM OSINT scope, and now both remaining gaps: **CERT-In element 24** (advisory NVD matching, with a four-value status so an empty column can never read as "clear") and the **alternates editor** (which also uncovered that `services/project` never read or wrote the alternates table at all, and that editing any manufacturing field was a silent no-op). 🟢 **ALL FOUR SCANNABLE FAMILIES NORMALIZE AUTOMATICALLY.** `task verify` exits 0; `pytest libs/py-shared workers` is 815 green, up from 2 failing that the local gate never ran.
-**Next action:** Nothing is queued — read this file fresh and take a new instruction. ⚠ **`NVD_API_KEY` is set in no environment, so hardware vulnerability matching reports `not-attempted` for every component and element 24 scores zero.** That is the honest shipping state and the report says so in words; setting a key is the one step that turns element 24 on. The NVD adapter has never run against the live API — same standing caveat as `providers/nexar.py`. 🟡 Carried forward, none a regression: `component_provenance` is written by nothing, so per-component engine attribution is empty; `axebom toolctl pin` has never existed, which is why every `image_digest` but cdxgen's is null; `workers/cbom` and `workers/aibom` runners still carry the namespace-package relative import that breaks under pytest collection (latent — no test imports them; their CONSUMERS use absolute imports); and `crypto-mixed` still has no CBOM golden harness (the SBOM suite no longer falsely claims it — that red build is fixed). ⚠ `cdxgen`'s image is 15.5 GB and pulling it filled this machine's disk — 40 GB of build cache had to be reclaimed. Size any deployment for it.
+**Last updated:** 2026-09-05
+**Current phase:** A new 6-milestone plan — *BOM-type-first registration, the HBOM engine roster, and a defect sweep*. 🟢 **MILESTONE 1 of 6 DONE** (the defect sweep). Milestones 2–6 not started: the BOM module seam in `services/project`, registration rebuilt around the BOM type (type first, then only that type's inputs; GitHub connected once per tenant), the widened HBOM engine roster, frontend↔backend↔DB alignment, live per-family verification. Before that, frontend modernization — 🟢 DONE, all screens; Enterprise HBOM — 🟢 COMPLETE.
+**Next action:** Milestone 2 — the `BomModule` seam. ⚠ **Milestone 1 found and fixed a P0: every QBOM report had always failed, and every *imported* HBOM report with it** — the writer keyed documents on `project_id` and the reader looked them up by `scan_id`. There are no QBOM documents in the dev database at all, which is the evidence. Also removed: the pre-ZITADEL local-JWT auth surface, including an **unauthenticated `POST /v1/auth/register`**. ⚠ **`NVD_API_KEY` is still set in no environment**, so hardware vulnerability matching reports `not-attempted` for every component and element 24 scores zero; setting a key is the one step that turns it on. 🟡 Carried forward, none a regression: `mock-engine`/`cbomkit`/`aibom-generator` are dispatchable with no adapter and leave a permanent `skipped` row; three `lib/projects.ts` mutations invalidate query keys no query registers (deliberately left for milestone 3, which adds the missing reads); nine auth handlers are unmounted but not deleted; `component_provenance` is written by nothing; `axebom toolctl pin` has never existed; `crypto-mixed` still has no CBOM golden harness. ⚠ `cdxgen`'s image is 15.5 GB and 18 GB of `:dev`/`:good` rollback tags are reclaimable — size any deployment, and reclaim before pulling anything new.
 
 > 🟢 **A REAL SCAN NOW NORMALIZES, LIVE, WITH NO MANUAL TRIGGER — THE
 > NORMALIZER'S DEPLOYED BOUNDARY FROM (e)/(k)/(l) IS CLOSED FOR SBOM.**
@@ -2265,6 +2265,219 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-09-05 (a) — Milestone 1 of a new 6-milestone plan: the defect sweep, and a P0 in which every QBOM report had always failed
+
+Plan: `BOM-type-first registration, the HBOM engine roster, and a defect sweep`.
+Three user asks — why only three HBOM engines run, per-BOM-type registration,
+and an endpoint/bug sweep — sequenced as six milestones. **This is milestone 1
+of 6.** Milestones 2–6 (the BOM module seam, registration rebuilt around the BOM
+type, the widened engine roster, frontend↔backend↔DB alignment, live
+verification) are NOT started.
+
+`go build`, `go vet` and `tsc` were all already clean. Everything below is a
+runtime or semantic defect no compiler could see.
+
+#### P0 — every QBOM report failed, always. Proven, then fixed, then proven again
+
+Two halves of document resolution were built independently and never reconciled:
+
+- **writer** — `services/project/internal/store/qbom.go` wrote `scan_id = projectID`
+  and **no `project_id` at all**, borrowing `scan_id` exactly as HBOM did and for
+  the same honest reason: a Table 8 device form has no scan to point at, and the
+  column has no FK precisely so it could be borrowed.
+- **reader** — `services/report/internal/store/bomsource.go:127` resolves
+  `WHERE scan_id = $1`, bound to the report's **real** scan id.
+- `GenerateFlow.tsx:206` posts that real scan id for *every* selected `bom_type`.
+
+A real scan id is never a project id, so the lookup never matched. Every QBOM
+report failed `NOTFOUND_RESOURCE` — "no normalized QBOM exists for this scan" —
+surfaced to the user as a generic "some reports could not be rendered". The same
+break hit **every imported HBOM**: only `hbom-ecad` scans could render.
+
+Fixed without moving the API contract, because the helper already existed:
+`resolveProjectIDForScan` (same file, already used twice) now backs a second
+lookup that runs **only on `ErrNoRows`**. The scan lookup stays first and stays
+authoritative — a project whose hardware was both imported and scanned has two
+documents, and a report generated from a scan must describe that scan.
+
+`migrations/normalize/0014_qbom_project_lineage.sql` backfills QBOM the way
+`0012` backfilled HBOM (0012 said "HBOM only" in as many words, correctly at the
+time), and the writer now populates `project_id` going forward.
+
+⚠ **Proven against the live database, not just compiled**, in a rolled-back
+transaction: old resolver 0 rows, new fallback 1 row. There are **no QBOM
+documents in the dev database at all**, which is itself the evidence — nothing
+has ever successfully produced one.
+
+#### The stale-claim sweep — and why no test caught any of it
+
+Every honest-label guard in this repo watches for **over**-claiming. All six of
+these **under**-claimed, and that direction was unguarded.
+
+- ⚠ **`ProjectWizard.tsx:348` rendered "there is no HBOM scanner" to users**,
+  live, long after `hbom-ecad` shipped — steering people away from a working
+  path at the moment they choose a source. The Python guard walks
+  `workers/hbom/*.py`; the TS twin covered `lib/hbom.ts` and the `BOM_TYPES`
+  summaries. Neither read this file.
+  **`hbom.test.ts` now walks every `.ts`/`.tsx` under `src/`** — Vitest runs
+  under Node, so `node:fs` works; the old comment claiming "a bundler cannot
+  read files" was simply wrong, and that wrongness is what let this ship.
+  Comments are exempt from the *under*-claim half only, so a file may still
+  record what the wording used to be.
+- **`model.BOMType.RequiresImport()` hardcoded HBOM**, which
+  `GET /v1/projects/options` publishes and the wizard renders as an
+  `import only` chip. Now empty, with the fact moved where it belongs:
+  **`TestBOMTypeFactsAgreeWithTheEngineRegistry`** (new, in
+  `services/scan-orchestrator/internal/policy`) asserts the model's answer
+  matches the registry's. `depguard` rightly forbids `libs/go-shared` importing
+  a service, so the test lives on the side that can see both — same shape as
+  `generated_agreement_test.go`.
+  ⚠ **That test caught me conflating two facts on its first run.** "Not
+  scannable" and "import-only" are not the same: `rejectNonScannableFamilies`
+  uses one predicate (`RequiresImport || Derived`) for two different reasons,
+  and the UI renders them as two different chips because they tell a user to do
+  two different things — *derived* means "run a CBOM scan and this appears",
+  *import-only* means "there is nothing to run". QBOM is derived. Calling it
+  import-only would send someone hunting a file that does not exist.
+- `docs/02-CONTRACTS.md` asserted HBOM cannot be a scan family, that `hbom-csv`
+  was the only registered engine, and that `workers/hbom` has no runner. Three
+  false, one (QBOM) still true.
+- `orchestrator.go` said HBOM and QBOM have no worker; `hbom-worker` is a live
+  compose service.
+- `normalize_trigger.go` said "SBOM ONLY, FOR NOW" directly above a map listing
+  four families.
+- `handler/hbom.go` said `ProductDetails`/`ManufacturingDate` were absent, forty
+  lines above the fields.
+
+#### The type-specific caveats were missing from the PDF, and the test that should have caught it was named for a job it did not do
+
+`render/pdf.go:570` iterated only `r.bom.Notes` and never called
+`render.TypeNotes(r.bom)` — which `Sheets`, `WriteJSON` and `WriteDOCX` all do.
+So HBOM's provenance and vulnerability caveat, CBOM's type-discrimination note,
+QBOM's form disclosure and AIBOM's extensions note were absent **from the PDF
+alone** — the format most likely to be forwarded to someone who reads only that.
+
+⚠ **`TestEveryBOMTypesHonestyLabelReachesEveryFormat` existed and checked exactly
+one format.** A test whose name claims more than its body checks is worse than no
+test: it is read as coverage. It now renders XLSX, DOCX, PDF and JSON and
+searches all four.
+
+Tightening it surfaced a second problem in the test itself: three of its four
+phrases were bare words — `"quantum"`, `"AxeBOM"`, `"asset type"` — which appear
+all over any rendered report, so those assertions passed on documents carrying no
+caveat at all. **Only HBOM's phrase was specific enough to fail.** Now all four
+are distinctive sentences. `zipContains` unescapes XML entities, because both
+OOXML writers escape an apostrophe to `&#39;` and a raw substring search on a
+phrase containing one reads as a missing label.
+
+Mutation-verified: reverting the `pdf.go` line fails the test.
+
+#### Every sandbox failure destroyed its own cause
+
+`EngineUnavailableError` takes `(engine, reason)`. All three raise sites in
+`sandbox.Sandbox.check()` passed **one** argument, so each raised `TypeError`
+instead — and `SandboxedAdapter.available()` catches `Exception` and renders what
+it caught. An operator whose Docker daemon was stopped saw
+
+    EngineUnavailableError.__init__() missing 1 required positional argument: 'reason'
+
+in the Engine Coverage section instead of the daemon's own message. The one
+moment the cause was needed is the moment it was thrown away. This is on the
+availability path of **every containerised engine**.
+
+Fixed with a `_SANDBOX` sentinel (the failure belongs to the shared bridge, not
+to any one engine), and `available()` now reads `exc.detail["reason"]` rather
+than re-wrapping an already-framed message. New regression test drives the real
+code path; mutation-verified.
+
+#### `syft-spdx` was implemented end to end and reachable by nothing
+
+Adapter, `ADAPTERS` entry, SPDX ingest branch and smoke fixture all existed. The
+engine was in **neither** the manifest nor `DefaultRegistry()`, so `Resolve` could
+never select it, `EnginePolicyUpsert` rejected it as "not valid for family", and
+it could never appear in Engine Coverage. CERT-In's Automation Support element
+asks for **both** formats.
+
+Registered in both places. It also needed its own `Capabilities`: it inherited
+`SyftAdapter.__init__` unchanged and therefore reported `engine_id="syft"` and
+`native_format="cyclonedx-json-1.6"` — harmless only while unreachable, and now
+it would have announced that the SPDX pass produced a CycloneDX document.
+
+Same fix uncovered that **`syft`'s own `NativeFormat` in the Go registry said
+`spdx-json-2.3`** while the adapter asks for CycloneDX on stdout and the manifest
+records `cyclonedx-json-1.6` + `also_emits`. The Engine Coverage panel renders
+that field.
+
+#### The legacy local-JWT auth surface is gone
+
+CLAUDE.md's standing rule is that the hand-rolled auth is deleted once the
+frontend is on ZITADEL. It is. Until now `services/auth/routes.go` still mounted
+`POST /v1/auth/register`, `/login` and `/refresh` **with no middleware**, and the
+gateway still proxied them.
+
+The tokens opened nothing — every product service verifies ZITADEL only — but
+that is not the same as harmless: **`register` was an unauthenticated
+account-creation and user-enumeration surface**, running parallel to the
+sanctioned `POST /v1/auth/signup`, and producing accounts that could not sign in.
+Meanwhile `/me`, `/logout` and `/invitations` were wrapped in the **local**
+issuer, so no ZITADEL-authenticated browser could ever reach them — permanently
+401, for every real user.
+
+Nine routes removed; `github/connect/{authorize,callback}` kept, because a
+browser redirect to github.com cannot carry a bearer token and that pair mints no
+AxeBOM session. The **handlers** stay, marked unmounted with a note not to
+re-mount one to "fix" a 404 — deleting them means deleting the issuer, the
+sessions table, the invitation store and their migrations, which is a wider
+change than a route table.
+
+The gateway's `authPaths` rate-limit list named four routes that no longer exist;
+it now names `/v1/auth/signup` and the connect pair. Its test was pointed at
+`/v1/auth/login` — **a test aimed at a deleted path still passes, it just stops
+testing the limiter**.
+
+#### Pagination that could not paginate
+
+- `GET /v1/reports` accepted `cursor` and never returned `next_cursor`, so page
+  two was unreachable without guessing a report id. The store had always paged
+  correctly. Fixed, with the page-size clamp **exported from the store** rather
+  than copied into the handler — a handler guessing 50 while the store used 200
+  stops paginating after the first page.
+- `useProjects` sent no limit and discarded `next_cursor`, so a tenant with more
+  than 50 projects **saw 50, with no indication anything was missing** — and
+  every BOM-type lens filters that same list client-side, so a project could be
+  absent from its own lens for no visible reason. Now walks pages, bounded, and
+  reports a non-empty cursor rather than swallowing it.
+- `useReports` inferred truncation from a full page; it reads the real cursor now.
+
+#### `/shared/{token}` 404'd in development
+
+`nginx.conf` routes `/shared/` to the gateway; `vite.config.ts` did not. A share
+link worked in production and hit the SPA router locally — precisely the failure
+the ZITADEL comment in that same file warns about, with the rule not applied to
+our own path.
+
+#### Verification
+
+`task verify` **exits 0**. Go suite green; `pytest libs/py-shared workers` green;
+frontend **127 tests** (up from 126), `tsc`/`eslint`/`prettier` clean.
+`task profile:lint`, `task profile:guardrails` and `docs lint` (253 refs) all
+pass. `migrations/normalize/0014` applied to the live database.
+
+#### Owed, and unchanged by this session
+
+- ⚠ `NVD_API_KEY` is set in no environment, so hardware vulnerability matching
+  still reports `not-attempted` and element 24 scores zero. One config step.
+- Three write mutations in `lib/projects.ts` still invalidate query keys no query
+  registers (`connections`, `web-sources`, `uploads`). **Deliberately left**: the
+  fix is the missing *reads*, which belong with milestone 3's registration work,
+  and removing the invalidations now would only mean re-adding them.
+- `mock-engine` is still dispatchable with no adapter, so every SBOM scan carries
+  a permanent `skipped`/`ENGINE_NOT_IMPLEMENTED` row; same for `cbomkit` and
+  `aibom-generator`.
+- Nine auth handlers are now unmounted but not deleted (see above).
+- `component_provenance` is written by nothing; `axebom toolctl pin` has never
+  existed; `crypto-mixed` has no CBOM golden harness.
 
 ### 2026-09-03 (j) — The remaining screens, and five bugs the screenshots found
 

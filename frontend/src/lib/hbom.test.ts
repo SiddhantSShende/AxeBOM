@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 import { BOM_TYPES } from '../design/theme';
 import {
@@ -79,9 +82,13 @@ describe('the honest label', () => {
   // that stayed false.
   //
   // This checks the strings this module EXPORTS — the ones that reach a user.
-  // The worker's own source is walked by `workers/hbom/test_hbom.py`, which can
-  // read files; a bundler cannot, and a test that pretends to would be checking
-  // nothing.
+  //
+  // ⚠ IT USED TO SAY A BUNDLER CANNOT READ FILES, SO ONLY EXPORTS COULD BE
+  // GUARDED. That was wrong, and the cost of it was concrete: `ProjectWizard`
+  // rendered "there is no HBOM scanner" to every user choosing a manual source,
+  // for as long as hbom-ecad had existed, and nothing here was looking at that
+  // file. Vitest runs under Node — `node:fs` works — so the source walk below
+  // does exactly what workers/hbom/test_hbom.py does on the Python side.
   const claims = [
     /\b(hardware|device)\s+scan/i,
     /\bscans?\s+(your\s+|the\s+|their\s+)?(hardware|device)\b/i,
@@ -136,6 +143,59 @@ describe('the honest label', () => {
     expect(flagged('run an HBOM scan to discover your hardware')).toBe(true);
 
     expect(flagged('Hardware is not discoverable by any scan')).toBe(false);
+  });
+
+  it('no source file in the UI claims discovery, or denies the scan that exists', () => {
+    // ⚠ THE TWIN OF workers/hbom/test_hbom.py's GUARD, AND IT WALKS FILES FOR
+    // THE SAME REASON: the rule is about what we SAY, and a sentence rendered
+    // from a component is as much of a claim as one exported from a module.
+    //
+    // Two directions, because the product got both wrong at different times:
+    //   OVER-claiming — "scans your hardware" — was always guarded.
+    //   UNDER-claiming — "there is no HBOM scanner" — was not, and shipped.
+    const root = path.resolve(__dirname, '..');
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (/\.(ts|tsx)$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) {
+          files.push(full);
+        }
+      }
+    };
+    walk(root);
+    expect(files.length).toBeGreaterThan(20);
+
+    const offenders: string[] = [];
+    const denials: string[] = [];
+    for (const file of files) {
+      const lines = fs.readFileSync(file, 'utf8').split('\n');
+      lines.forEach((line, i) => {
+        // The preceding line joins the context so a negation written above the
+        // claim still counts — the same two-line window the Python guard uses.
+        const context = (i > 0 ? lines[i - 1] : '') + line;
+        if (claims.some((c) => c.test(line)) && !negations.test(context)) {
+          offenders.push(`${path.relative(root, file)}:${i + 1}: ${line.trim()}`);
+        }
+        // ⚠ THE UNDER-CLAIM. `hbom-ecad` exists; saying otherwise sends a user
+        // away from a working path.
+        //
+        // Comments are exempt from THIS half only, and deliberately: the two
+        // files that record what the wording used to be are doing the right
+        // thing, and a guard that forbids naming the old mistake is a guard
+        // that erases the reason the rule exists. The over-claim half above
+        // still reads every line, comments included — a docstring asserting
+        // that we scan hardware is as false as a rendered one.
+        const isComment = /^\s*(\/\/|\/\*|\*|\{\/\*)/.test(line);
+        if (!isComment && /there is no HBOM scanner|no scanner produces it/i.test(line)) {
+          denials.push(`${path.relative(root, file)}:${i + 1}: ${line.trim()}`);
+        }
+      });
+    }
+
+    expect(offenders, `discovery claims in UI source:\n${offenders.join('\n')}`).toEqual([]);
+    expect(denials, `denies a scan that exists:\n${denials.join('\n')}`).toEqual([]);
   });
 
   it('does not flag a design-file scan, which is accurate', () => {

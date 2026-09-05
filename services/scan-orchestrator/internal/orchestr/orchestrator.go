@@ -128,12 +128,20 @@ func (o *Orchestrator) CreateScan(ctx context.Context, tenantID string, in Creat
 		}
 	}
 
-	// HBOM and QBOM have no worker: workers/hbom and workers/qbom deliberately
-	// have no runner, because neither is a scan (CLAUDE.md honest labels — HBOM
-	// is a CSV/form import, QBOM is derived from CBOM discovery). Resolving
-	// either into `resolution.Engines` below would publish a scan.job.hbom /
-	// scan.job.qbom job that nothing ever consumes, and the scan would sit
-	// unconsumed until the reaper times it out. Reject before anything is
+	// ⚠ QBOM HAS NO WORKER. HBOM DOES, AND THIS COMMENT USED TO DENY IT.
+	//
+	// It said "workers/hbom and workers/qbom deliberately have no runner". That
+	// was true until hbom-ecad shipped: workers/hbom/runner.py exists, and
+	// hbom-worker is a live service in docker-compose.app.yml. Only the QBOM
+	// half still holds — workers/qbom has derive.py and metadata.py and no
+	// runner, because a QBOM is derived from CBOM discovery plus a Table 8
+	// form, not scanned.
+	//
+	// The rejection itself is generic and reads the registry, so it needed no
+	// change when HBOM became scannable — a family is refused only when every
+	// engine in it is derived or import-only. Resolving such a family into
+	// `resolution.Engines` below would publish a job nothing consumes, and the
+	// scan would sit until the reaper timed it out. Reject before anything is
 	// persisted or published — never discover this at worker time.
 	if err := o.rejectNonScannableFamilies(in); err != nil {
 		return Scan{}, err

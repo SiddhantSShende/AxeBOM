@@ -133,8 +133,15 @@ func TestClientsAreLimitedIndependently(t *testing.T) {
 	}
 }
 
-// Login is the endpoint worth brute-forcing, so it gets a much tighter budget
-// than ordinary API traffic.
+// Signup is the endpoint worth abusing, so it gets a much tighter budget than
+// ordinary API traffic.
+//
+// ⚠ THIS USED TO EXERCISE /v1/auth/login, WHICH NO LONGER EXISTS. The local-JWT
+// auth surface was removed (services/auth/routes.go); the sanctioned
+// unauthenticated endpoint is now POST /v1/auth/signup, which creates a real
+// organisation in ZITADEL and is therefore the one a stranger can make cost
+// something. A test pointed at a deleted path still passes — it just stops
+// testing the limiter and starts testing the general budget instead.
 func TestCredentialEndpointsAreLimitedSeparatelyAndMoreTightly(t *testing.T) {
 	l, _ := newTestLimiter(RateLimitConfig{
 		Rate: 100, Burst: 100, // generous general budget
@@ -145,16 +152,16 @@ func TestCredentialEndpointsAreLimitedSeparatelyAndMoreTightly(t *testing.T) {
 	const addr = "10.0.0.6:1"
 	for i := 1; i <= 2; i++ {
 		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, request("/v1/auth/login", addr))
+		h.ServeHTTP(rec, request("/v1/auth/signup", addr))
 		if rec.Code != http.StatusOK {
-			t.Fatalf("login %d: status = %d, want 200 within the auth burst", i, rec.Code)
+			t.Fatalf("signup %d: status = %d, want 200 within the auth burst", i, rec.Code)
 		}
 	}
 
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, request("/v1/auth/login", addr))
+	h.ServeHTTP(rec, request("/v1/auth/signup", addr))
 	if rec.Code != http.StatusTooManyRequests {
-		t.Fatalf("a third login attempt was allowed: status = %d", rec.Code)
+		t.Fatalf("a third signup attempt was allowed: status = %d", rec.Code)
 	}
 
 	// The same client's ordinary API traffic must be unaffected: the buckets

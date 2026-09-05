@@ -160,3 +160,40 @@ def test_worker_config_has_no_credential_fields() -> None:
             f"WorkerConfig.{attr} looks credential-shaped; workers must hold "
             f"no credentials (docs/ADR/0008)"
         )
+
+
+def test_a_sandbox_failure_reports_its_cause_not_a_typeerror() -> None:
+    """⚠ EVERY SANDBOX FAILURE USED TO DESTROY ITS OWN REASON.
+
+    `EngineUnavailableError` takes `(engine, reason)`. All three raise sites in
+    `sandbox.Sandbox.check()` passed a single argument, so each raised
+    `TypeError` instead — and `SandboxedAdapter.available()` catches `Exception`
+    and renders whatever it caught. An operator whose Docker daemon was stopped
+    was shown
+
+        EngineUnavailableError.__init__() missing 1 required positional
+        argument: 'reason'
+
+    in the Engine Coverage section, instead of what the daemon actually said.
+    The one moment the cause was needed is the moment it was thrown away.
+
+    This drives the real code path rather than asserting on the constructor,
+    because the constructor was never the thing that was wrong.
+    """
+    from axebom_shared.errors import EngineUnavailableError
+    from axebom_shared.sandbox import Sandbox
+
+    # A binary that cannot exist, so check() takes its OSError branch.
+    sandbox = Sandbox(binary="axebom-not-a-real-binary-xyz")
+
+    with pytest.raises(EngineUnavailableError) as exc:
+        sandbox.check()
+
+    reason = exc.value.detail.get("reason", "")
+    assert "axebom-not-a-real-binary-xyz" in reason, (
+        f"the failure does not name the bridge it could not run: {reason!r}"
+    )
+    assert "positional argument" not in str(exc.value), (
+        "the arity bug is back: the error is reporting its own construction "
+        "rather than why the sandbox is unusable"
+    )

@@ -91,12 +91,18 @@ export function useReports(scanId?: string) {
     queryFn: async ({ signal }) => {
       const q = new URLSearchParams({ limit: String(PAGE) });
       if (scanId) q.set('scan_id', scanId);
-      const data = await request<{ reports: Report[] }>(`/v1/reports?${q.toString()}`, { signal });
+      const data = await request<{ reports: Report[]; next_cursor?: string }>(
+        `/v1/reports?${q.toString()}`,
+        { signal },
+      );
       return {
         reports: data.reports,
-        // The server cannot tell us there is more, so infer it from a full
-        // page and say so in the UI rather than implying completeness.
-        truncated: data.reports.length >= PAGE,
+        // ⚠ THE SERVER CAN TELL US NOW. It always paged correctly but never
+        // returned next_cursor, so this had to infer "there is more" from a
+        // full page — which is wrong in both directions: a listing of exactly
+        // PAGE reports claimed truncation, and there was no way to fetch the
+        // rest even when it was right.
+        truncated: Boolean(data.next_cursor) || data.reports.length >= PAGE,
       };
     },
     // ⚠ SAME REASONING AS useReport's OWN INTERVAL, APPLIED TO A LIST. A

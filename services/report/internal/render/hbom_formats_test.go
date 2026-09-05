@@ -1,8 +1,11 @@
 package render
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"html"
+	"io"
 	"strings"
 	"testing"
 
@@ -130,9 +133,18 @@ func TestEveryBOMTypesHonestyLabelReachesEveryFormat(t *testing.T) {
 		bom     BOM
 		phrase  string
 	}{
-		{model.BOMTypeCBOM, BOM{BOMType: model.BOMTypeCBOM}, "asset type"},
-		{model.BOMTypeQBOM, BOM{BOMType: model.BOMTypeQBOM}, "quantum"},
-		{model.BOMTypeAIBOM, BOM{BOMType: model.BOMTypeAIBOM}, "AxeBOM"},
+		// ⚠ THE PHRASES ARE DISTINCTIVE SENTENCES FROM EACH NOTE, NOT WORDS
+		// LIKE "quantum" OR "AxeBOM". A bare word appears all over a rendered
+		// report — in headings, in the tool name, in a sheet title — so the
+		// assertion passed on documents carrying no caveat at all. Only HBOM's
+		// phrase was specific enough to fail when the PDF label went missing,
+		// which is why HBOM was the only type that caught the regression.
+		{model.BOMTypeCBOM, BOM{BOMType: model.BOMTypeCBOM},
+			"would score a certificate against a key's fields"},
+		{model.BOMTypeQBOM, BOM{BOMType: model.BOMTypeQBOM},
+			"no open-source scanner for quantum"},
+		{model.BOMTypeAIBOM, BOM{BOMType: model.BOMTypeAIBOM},
+			"tie that percentage to a rule this product does not own"},
 		{model.BOMTypeHBOM, BOM{BOMType: model.BOMTypeHBOM, Hardware: costed()},
 			"did not examine any hardware"},
 	}
@@ -157,6 +169,47 @@ func TestEveryBOMTypesHonestyLabelReachesEveryFormat(t *testing.T) {
 			if !strings.Contains(strings.Join(bundle.Notes, " "), tt.phrase) {
 				t.Errorf("the JSON bundle carries no %q label: %v", tt.phrase, bundle.Notes)
 			}
+
+			// ⚠ THE THREE ASSERTIONS BELOW ARE WHY THIS TEST'S NAME IS NOW
+			// TRUE. It was called ...ReachesEveryFormat and checked exactly one
+			// format, and that gap is precisely how the PDF went on shipping
+			// without any of these labels for four formats' worth of releases.
+			// A test whose name claims more than its body checks is worse than
+			// no test: it is read as coverage.
+			renderable := tt.bom
+			renderable.ProjectName = "sample"
+			renderable.GeneratedAt = "2026-09-05T00:00:00Z"
+			renderable.ToolName, renderable.ToolVersion = "AxeBOM", "0.1.0"
+			renderable.ProfileID = model.ProfileID
+			renderable.ProfileRevision = model.ProfileRevision
+
+			var pdf bytes.Buffer
+			if _, err := WritePDF(&pdf, renderable, PDFOptions{}); err != nil {
+				t.Fatalf("pdf: %v", err)
+			}
+			if text := extractPDFText(t, pdf.Bytes()); !strings.Contains(text, tt.phrase) {
+				t.Errorf("the PDF carries no %q label", tt.phrase)
+			}
+
+			var docx bytes.Buffer
+			if _, err := WriteDOCX(&docx, renderable, DOCXOptions{}); err != nil {
+				t.Fatalf("docx: %v", err)
+			}
+			if !zipContains(t, docx.Bytes(), tt.phrase) {
+				t.Errorf("the Word document carries no %q label", tt.phrase)
+			}
+
+			sheets, err := Sheets(renderable)
+			if err != nil {
+				t.Fatalf("sheets: %v", err)
+			}
+			var xlsx bytes.Buffer
+			if _, err := WriteXLSX(&xlsx, sheets); err != nil {
+				t.Fatalf("xlsx: %v", err)
+			}
+			if !zipContains(t, xlsx.Bytes(), tt.phrase) {
+				t.Errorf("the workbook carries no %q label", tt.phrase)
+			}
 		})
 	}
 
@@ -164,4 +217,38 @@ func TestEveryBOMTypesHonestyLabelReachesEveryFormat(t *testing.T) {
 	if notes := TypeNotes(BOM{BOMType: model.BOMTypeSBOM}); len(notes) != 0 {
 		t.Errorf("an SBOM gained a caveat it does not have: %v", notes)
 	}
+}
+
+// zipContains reports whether any entry of an OOXML package contains phrase.
+//
+// XLSX and DOCX are both zips of XML, and a caveat can legitimately live in a
+// shared-string table, a worksheet or the document body depending on the
+// writer. Searching every entry asserts the thing that actually matters — that
+// a reader opening the file can find the sentence — without coupling the test
+// to which part the writer happened to put it in.
+func zipContains(t *testing.T, raw []byte, phrase string) bool {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+	if err != nil {
+		t.Fatalf("open package: %v", err)
+	}
+	for _, f := range zr.File {
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("open %s: %v", f.Name, err)
+		}
+		body, err := io.ReadAll(rc)
+		_ = rc.Close()
+		if err != nil {
+			t.Fatalf("read %s: %v", f.Name, err)
+		}
+		// ⚠ UNESCAPE BEFORE SEARCHING. Both writers XML-escape an apostrophe
+		// to &#39;, so a caveat that IS present fails a raw substring search
+		// on any phrase containing one — which reads as a missing label and
+		// sends the next person hunting a bug that is not there.
+		if strings.Contains(html.UnescapeString(string(body)), phrase) {
+			return true
+		}
+	}
+	return false
 }

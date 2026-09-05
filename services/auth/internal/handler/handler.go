@@ -144,9 +144,30 @@ type tenantDTO struct {
 
 // ---------------------------------------------------------------------------
 // Handlers
+//
+// ⚠ NINE OF THESE ARE NO LONGER MOUNTED ON ANY ROUTE.
+//
+// Register, Login, Refresh, Logout, Me, CreateInvite, AcceptInvite,
+// GitHubAuthorize and GitHubCallback were the pre-ZITADEL local-JWT identity
+// system. Their routes were removed from services/auth/routes.go — see the
+// comment there for why, in particular that `POST /v1/auth/register` was an
+// unauthenticated account-creation and user-enumeration surface parallel to the
+// sanctioned `POST /v1/auth/signup` on the gateway.
+//
+// The FUNCTIONS are still here on purpose. Deleting them means also deleting
+// the issuer, the sessions table, the invitation store and their migrations,
+// which is a wider change than removing a route table and one that should be
+// made deliberately rather than as a side effect. Nothing can reach them in the
+// meantime: an unmounted handler is unreachable, not merely unadvertised.
+//
+// ⚠ DO NOT RE-MOUNT ONE TO "FIX" A 404. If a caller needs invitations back,
+// they need a ZITADEL-authenticated route, not this one — these verify tokens
+// from a local issuer that no browser in the product ever obtains.
 // ---------------------------------------------------------------------------
 
 // Register handles POST /v1/auth/register.
+//
+// ⚠ NOT MOUNTED. See the section comment above.
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := decode(r, &req); err != nil {

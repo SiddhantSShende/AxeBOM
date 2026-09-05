@@ -266,10 +266,22 @@ func (s *Store) Get(ctx context.Context, tenantID, reportID string) (Report, err
 //
 // UUIDv7 ids are time-ordered, so `ORDER BY id DESC` is chronological AND a
 // stable keyset cursor — unlike created_at, which ties.
-func (s *Store) List(ctx context.Context, tenantID, scanID string, limit int, cursor string) ([]Report, error) {
-	if limit <= 0 || limit > 200 {
-		limit = 50
+// EffectiveLimit is the page size List will actually use.
+//
+// ⚠ EXPORTED BECAUSE THE HANDLER HAS TO KNOW IT, AND A SECOND COPY WOULD DRIFT.
+// The handler decides whether to emit a next_cursor by comparing the row count
+// against the limit that was used — so if it guessed 50 while this clamped to
+// 200, pagination would stop after the first page of a large listing. One
+// function, two callers.
+func EffectiveLimit(requested int) int {
+	if requested <= 0 || requested > 200 {
+		return 50
 	}
+	return requested
+}
+
+func (s *Store) List(ctx context.Context, tenantID, scanID string, limit int, cursor string) ([]Report, error) {
+	limit = EffectiveLimit(limit)
 
 	var out []Report
 	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.Tx) error {

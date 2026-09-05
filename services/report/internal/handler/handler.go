@@ -273,7 +273,26 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	for _, rep := range reports {
 		out = append(out, toResponse(rep, nil))
 	}
-	errs.WriteJSON(w, http.StatusOK, map[string]any{"reports": out})
+
+	// ⚠ THIS ENDPOINT ACCEPTED `cursor` AND NEVER RETURNED ONE, SO PAGINATION
+	// WAS UNREACHABLE. The store has always paged correctly — keyset on id
+	// DESC, no OFFSET — and the handler read the caller's cursor and passed it
+	// down. It simply never told the caller what the next one was, so the only
+	// way to get page two was to guess a report id.
+	//
+	// Same idiom as scan-orchestrator's List and project's: the cursor is the
+	// LAST id, because ids are UUIDv7 and therefore ordered. The page size
+	// comes from store.EffectiveLimit rather than a copy here — see its
+	// comment for why a second clamp would silently break the boundary case.
+	var next string
+	if len(reports) > 0 && len(reports) == store.EffectiveLimit(limit) {
+		next = reports[len(reports)-1].ID
+	}
+
+	errs.WriteJSON(w, http.StatusOK, map[string]any{
+		"reports":     out,
+		"next_cursor": next,
+	})
 }
 
 // Download streams a rendered artifact.

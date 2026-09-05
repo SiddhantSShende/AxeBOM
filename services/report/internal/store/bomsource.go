@@ -127,15 +127,63 @@ func (s *Store) resolveDocument(ctx context.Context, tx db.Tx, r Report) (string
 		 WHERE scan_id = $1 AND bom_type = $2
 		 ORDER BY normalization_version DESC
 		 LIMIT 1`, r.ScanID, r.BOMType).Scan(&id)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "", fmt.Errorf(
-				"%w: no normalized %s exists for this scan; the scan may still be "+
-					"running or may have produced nothing", ErrNotFound, r.BOMType)
-		}
+	if err == nil {
+		return id, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
 		return "", fmt.Errorf("resolve bom document: %w", err)
 	}
+
+	// ⚠ SECOND LOOKUP, BY PROJECT — AND WITHOUT IT QBOM COULD NEVER RENDER AT
+	// ALL, NOR COULD AN IMPORTED HBOM.
+	//
+	// Not every BOM document is produced by a scan. A QBOM comes from the
+	// Table 8 device form and an HBOM can come from a CSV or the structured
+	// form, and both are written keyed on the PROJECT they describe
+	// (services/project/internal/store/{qbom,hbom}.go). This resolver is
+	// handed a report, and a report names a scan — so the first lookup above
+	// asks a question those documents can never answer. A real scan id is
+	// never a project id, so it did not return the wrong row; it returned no
+	// row, and every QBOM report failed with "no normalized QBOM exists for
+	// this scan".
+	//
+	// The scan lookup stays FIRST and stays authoritative. A project whose
+	// hardware was both imported and scanned has two documents, and a report
+	// generated from a scan must describe that scan — falling back only on
+	// ErrNoRows is what keeps that true.
+	projectID, perr := resolveProjectIDForScan(ctx, tx, r.ScanID)
+	if perr != nil {
+		// The scan itself is unreadable, so there is no project to fall back
+		// to. Report the original miss, which is the more useful error.
+		return "", notFoundDocument(r.BOMType)
+	}
+
+	err = tx.QueryRow(ctx, `
+		SELECT id FROM normalize.bom_documents
+		 WHERE project_id = $1 AND bom_type = $2
+		 ORDER BY normalization_version DESC
+		 LIMIT 1`, projectID, r.BOMType).Scan(&id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", notFoundDocument(r.BOMType)
+		}
+		return "", fmt.Errorf("resolve bom document by project: %w", err)
+	}
 	return id, nil
+}
+
+// notFoundDocument is the one message both lookups fail with.
+//
+// ⚠ IT NAMES BOTH PATHS, because by the time a user sees it we have checked
+// two genuinely different things: a scan produced nothing for this type, AND
+// nothing was imported or entered for the project either. Saying only the
+// first would send someone to look at a scan when the answer is that they
+// never filled in the form.
+func notFoundDocument(bomType string) error {
+	return fmt.Errorf(
+		"%w: no normalized %s exists for this scan or its project; the scan may "+
+			"still be running or may have produced nothing, and nothing has been "+
+			"imported or entered for this project", ErrNotFound, bomType)
 }
 
 func loadDocumentMeta(ctx context.Context, tx db.Tx, docID string, out *render.BOM) error {

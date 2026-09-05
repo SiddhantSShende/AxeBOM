@@ -575,6 +575,23 @@ func (r *pdfRender) methodologyPage() {
 		r.body("• " + n)
 	}
 
+	// ⚠ THE PDF WAS THE ONE FORMAT THIS WAS MISSING FROM, AND TypeNotes EXISTS
+	// BECAUSE OF EXACTLY THIS BUG.
+	//
+	// TypeNotes was extracted out of Sheets() so that every renderer would get
+	// the type-specific caveats — CBOM's type-discrimination note, QBOM's form
+	// disclosure, AIBOM's extensions note, HBOM's provenance and vulnerability
+	// lines. Sheets, WriteJSON and WriteDOCX were all updated. This function
+	// was not, so a caveat present in the XLSX, the JSON and the Word document
+	// was absent from the PDF — which is the single most likely artifact to be
+	// forwarded to somebody who will read only that.
+	//
+	// See TypeNotes' own comment in bom.go: a caveat that appears in one format
+	// and not another is worse than one that appears nowhere.
+	for _, n := range TypeNotes(r.bom) {
+		r.body("• " + n)
+	}
+
 	r.body("• " + weightsNote)
 	r.body("• Two identifiers are reported per component and they are not " +
 		"interchangeable. The PURL is the canonical ecosystem identifier every " +

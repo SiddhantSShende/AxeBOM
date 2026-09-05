@@ -45,6 +45,7 @@ from axebom_shared.adapters.base import (
 )
 from axebom_shared.enginedb import EngineDatabase, database_root
 from axebom_shared.enginedb import resolve as enginedb_resolve
+from axebom_shared.errors import EngineUnavailableError
 from axebom_shared.sandbox import Mount, Sandbox, SandboxLimits, SandboxResult, WorkspaceLayout
 
 
@@ -320,6 +321,19 @@ class SandboxedAdapter(ToolAdapterBase):
 
         try:
             self._sandbox.check()
+        except EngineUnavailableError as exc:
+            # ⚠ THE REASON, NOT THE WHOLE MESSAGE. EngineUnavailableError's
+            # str() is already "engine 'sandbox' unavailable: <reason>", so
+            # wrapping it produced "the sandbox is not usable: engine 'sandbox'
+            # unavailable: ..." — two framings of one fact, with the part an
+            # operator actually needs pushed to the end of the line.
+            reason = exc.detail.get("reason") or exc.message
+            return Availability(
+                available=False,
+                mode=EngineMode.UNAVAILABLE,
+                version=image.version,
+                detail=f"the sandbox is not usable: {reason}",
+            )
         except Exception as exc:
             return Availability(
                 available=False,

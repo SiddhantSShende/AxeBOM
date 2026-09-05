@@ -15,10 +15,14 @@ import (
 // maybeTriggerNormalize fires exactly one NormalizeTriggerV1 the moment
 // every engine dispatched for one family reaches a terminal state.
 //
-// ⚠ SBOM ONLY, FOR NOW — an explicit, trivially-removable guard. The
-// mechanism below is family-generic (readiness is derived from the registry,
-// not a hardcoded engine list), but CBOM/AIBOM are deliberately not wired
-// yet: the normalize consumer this publishes to only exists for SBOM today.
+// ⚠ FOUR FAMILIES, NOT ONE. This comment used to say "SBOM ONLY, FOR NOW …
+// CBOM/AIBOM are deliberately not wired yet", directly above a map that lists
+// SBOM, HBOM, CBOM and AIBOM. All four consumers exist
+// (workers/*/normalize_consumer.py) and all four are deployed.
+//
+// QBOM is the one exclusion that remains, and it is permanent rather than
+// pending: nothing scans for it, so there is no engine set whose completion
+// could trigger anything. See normalizedFamilies below.
 //
 // ⚠ BEST EFFORT, AND PUBLISH-THEN-CLAIM, DELIBERATELY IN THAT ORDER.
 //

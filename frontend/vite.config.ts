@@ -21,6 +21,23 @@ export default defineConfig({
         ws: true, // scan progress is a WebSocket (docs/02-CONTRACTS.md §10)
       },
 
+      // ⚠ THE RULE WRITTEN BELOW FOR ZITADEL, APPLIED TO OUR OWN PATH — WHICH
+      // IT WAS NOT, AND SHARE LINKS 404'd IN `npm run dev`.
+      //
+      // `POST /v1/reports/{id}/shares` returns a URL of the form
+      // `/shared/<token>`, and deploy/docker/nginx.conf routes /shared/ to the
+      // gateway. This file did not, so in development the SPA router caught it
+      // and rendered NotFound — a share link that works in production and
+      // fails locally, which reads as a broken token rather than a missing
+      // proxy rule. Exactly the failure the ZITADEL comment below describes.
+      //
+      // Unauthenticated by design: the token IS the credential, and the
+      // gateway rate-limits it.
+      '/shared': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+
       // ZITADEL's canonical paths, mirroring deploy/docker/nginx.conf.
       //
       // ⚠ THE TWO MUST AGREE. nginx serves the container build and this serves
@@ -51,10 +68,7 @@ export default defineConfig({
           '/ui/login',
           '/ui/v2/login',
           '/device',
-        ].map((path) => [
-          path,
-          { target: 'http://localhost:58080', changeOrigin: false },
-        ]),
+        ].map((path) => [path, { target: 'http://localhost:58080', changeOrigin: false }]),
       ),
     },
   },

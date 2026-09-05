@@ -116,6 +116,40 @@ tools:
       injected by goreleaser ldflags — a source build reports "unknown", which
       is why ADR-0002 forbids one.
 
+  - id: syft-spdx
+    role: generator
+    families: [sbom]
+    upstream: https://github.com/anchore/syft
+    license: Apache-2.0
+    version: "1.51.0"
+    # ⚠ THE SAME IMAGE AND THE SAME BINARY AS `syft`, DELIBERATELY. This is not
+    # a second tool; it is syft's SECOND PASS, invoked with `-o spdx-json`
+    # instead of CycloneDX. It is a separate engine id rather than a second
+    # output flag because syft writes ONE format to stdout and the sandbox has
+    # no writable host mount to collect a second file from (every mount is
+    # read-only, deliberately — CLAUDE.md invariant 7).
+    container:
+      image: docker.io/anchore/syft
+      image_tag: "v1.51.0"
+      image_digest: null          # `toolctl pin` fills this
+    source_kinds: [git, upload, image]
+    produces: [components, licenses]
+    native_format: spdx-json-2.3
+    default_weight: 1
+    db_backed: false
+    notes: >
+      ⚠ ADDED BECAUSE IT WAS IMPLEMENTED AND UNREACHABLE. SyftSPDXAdapter,
+      its dispatch entry in workers/sbom/runner.py, the SPDX branch of
+      normalize/ingest.py and a smoke-test fixture all existed; the engine was
+      in NEITHER this manifest NOR DefaultRegistry(), so policy.Registry.Resolve
+      could never select it, EnginePolicyUpsert rejected it as "not valid for
+      family", and it could never appear in an Engine Coverage section.
+      CERT-In's Automation Support minimum element asks for BOTH SPDX and
+      CycloneDX, so producing only one was not the intended behaviour.
+      Nothing consumes this pass's output — it publishes no workspace artifact,
+      because overwriting syft's CycloneDX under a CycloneDX name would hand
+      grype an SPDX document to match vulnerabilities against.
+
   - id: cdxgen
     role: generator
     families: [sbom]

@@ -66,13 +66,32 @@ func (t BOMType) Valid() bool {
 
 func (t BOMType) String() string { return string(t) }
 
-// RequiresImport reports whether this BOM type is populated by user import
-// rather than by scanning.
+// RequiresImport reports whether this BOM type can ONLY be populated by user
+// import, because no engine in its family reads a source.
 //
-// Only HBOM. This exists so the UI can label the difference at the point the
-// user chooses a classification, instead of letting them select HBOM, run a
-// scan, and receive an empty result that looks like a failure.
-func (t BOMType) RequiresImport() bool { return t == BOMTypeHBOM }
+// ⚠ THIS RETURNED TRUE FOR HBOM LONG AFTER HBOM BECAME SCANNABLE, AND THE
+// FRONTEND RENDERED THAT AS AN "import only" CHIP ON THE REGISTRATION SCREEN.
+//
+// `hbom-ecad` parses committed KiCad, Altium and OrCAD design files from a
+// repository or an upload — a real scan producing real jobs on scan.job.hbom.
+// A user choosing classifications was being told, at the point of the decision,
+// that a working path did not exist.
+//
+// It is now empty, and that is the honest answer: no BOM type is import-only.
+// The method stays because `GET /v1/projects/options` publishes it and because
+// a future type could genuinely be import-only — deleting it would move the
+// question into the UI, where invariant 2 says facts like this must not live.
+//
+// ⚠ THE REAL FIX IS THE AGREEMENT TEST, NOT THIS LINE. Whether a family can be
+// scanned is decided by the engine registry
+// (services/scan-orchestrator/internal/policy), and depguard rightly forbids
+// this package from importing a service. So the registry's own test asserts
+// that these two answers match — see TestBOMTypeFactsAgreeWithTheEngineRegistry.
+// Without it this is just a second place to forget.
+func (t BOMType) RequiresImport() bool { return importOnlyTypes[t] }
+
+// importOnlyTypes is empty on purpose. See RequiresImport.
+var importOnlyTypes = map[BOMType]bool{}
 
 // IsDerived reports whether this BOM type is derived from another's findings
 // rather than discovered independently.

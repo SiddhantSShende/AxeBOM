@@ -27,12 +27,16 @@ const maxHBOMFileBytes = 32 << 20 // 32 MiB
 
 // componentDTO mirrors frontend/src/lib/hbom.ts's HardwareComponent exactly.
 //
-// ⚠ NOT EVERY hbom.Component FIELD IS HERE. ProductDetails and
-// ManufacturingDate exist in normalize.hardware_components and in
-// workers/hbom/model.py's 24-field model, but the frontend's own
-// HardwareComponent type does not expose them yet — this DTO matches the
-// CONTRACT the frontend actually calls, not the full CERT-In field set. See
-// the final report note on this gap.
+// ⚠ THIS COMMENT USED TO SAY ProductDetails AND ManufacturingDate WERE NOT
+// HERE. They are — forty lines below, with a second comment correctly
+// describing the gap in the past tense. Both fields round-trip through all
+// three tiers now.
+//
+// It is left recorded rather than deleted because the failure it describes is
+// the one this struct exists to prevent: a field the database stores, the
+// model carries and this DTO omits is a field the UI silently discards on
+// save. `extended_price` is the remaining instance — a generated column the
+// report reads and this API does not return.
 type componentDTO struct {
 	ID       string  `json:"id"`
 	ParentID *string `json:"parent_id"`

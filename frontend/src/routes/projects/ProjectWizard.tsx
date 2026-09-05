@@ -342,11 +342,27 @@ function SourceStep({
 
       {draft.sourceType === 'url' && <UrlSource draft={draft} patch={patch} />}
 
+      {/* ⚠ THIS NOTE USED TO READ "there is no HBOM scanner", AND IT WAS
+          RENDERED TO USERS LONG AFTER IT STOPPED BEING TRUE.
+
+          `hbom-ecad` parses committed KiCad, Altium and OrCAD design files out
+          of an upload or a connected repository and publishes real jobs on
+          scan.job.hbom. Telling someone at the point of registration that
+          hardware can only be typed in by hand steers them away from a path
+          that works.
+
+          Neither honest-label guard could catch it: the Python guard walks
+          workers/hbom/*.py and the TypeScript twin covers lib/hbom.ts and the
+          BOM_TYPES summaries, and both look for OVER-claiming. This sentence
+          under-claimed, which no test was watching for. hbom.test.ts now reads
+          this file too. */}
       {draft.sourceType === 'manual' && (
         <p className="note">
-          Manual registration records structured metadata with no repository. This is the normal
-          path for hardware: <strong>there is no HBOM scanner</strong> — an HBOM is built from a CSV
-          or form import, never discovered.
+          Manual registration records structured metadata with no repository — the path for a
+          hardware BOM you enter by hand or import as a CSV. If your hardware design files are in a
+          repository, connect it instead: AxeBOM parses committed KiCad, Altium and OrCAD files.
+          Either way <strong>nothing here examines physical hardware</strong> — a schematic states
+          what was designed, not what was built.
         </p>
       )}
     </section>

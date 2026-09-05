@@ -34,6 +34,20 @@ from typing import Any
 
 from axebom_shared.errors import EngineUnavailableError
 
+#: The "engine" a sandbox-level failure is attributed to.
+#:
+#: ⚠ EngineUnavailableError TAKES (engine, reason), AND THE THREE CALL SITES
+#: BELOW EACH PASSED ONE ARGUMENT. Every one of them raised TypeError instead of
+#: the error it meant to raise, and SandboxedAdapter.available() catches
+#: Exception and renders whatever it caught — so an operator whose Docker daemon
+#: was stopped was shown "EngineUnavailableError.__init__() missing 1 required
+#: positional argument: 'reason'" instead of the daemon's own message. The real
+#: cause was destroyed at exactly the moment somebody needed it.
+#:
+#: The sandbox is shared by every engine, so no single engine id is the honest
+#: attribution; the failure belongs to the bridge itself.
+_SANDBOX = "sandbox"
+
 
 @dataclass(frozen=True)
 class SandboxLimits:
@@ -190,18 +204,21 @@ class Sandbox:
             )
         except (OSError, subprocess.SubprocessError) as exc:
             raise EngineUnavailableError(
-                f"the sandbox bridge ({self._binary}) could not be run: {exc}"
+                _SANDBOX, f"the bridge ({self._binary}) could not be run: {exc}"
             ) from exc
 
         if proc.returncode != 0:
             raise EngineUnavailableError(
-                f"the sandbox is not usable: {proc.stdout.strip() or proc.stderr.strip()}"
+                _SANDBOX,
+                proc.stdout.strip()
+                or proc.stderr.strip()
+                or f"the bridge exited {proc.returncode} and said nothing",
             )
         try:
             return json.loads(proc.stdout)
         except json.JSONDecodeError as exc:
             raise EngineUnavailableError(
-                f"the sandbox bridge returned unreadable output: {exc}"
+                _SANDBOX, f"the bridge returned unreadable output: {exc}"
             ) from exc
 
     def run(

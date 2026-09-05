@@ -85,11 +85,50 @@ export function useProjectOptions() {
   });
 }
 
+/** How many pages useProjects will walk before giving up. */
+const MAX_PROJECT_PAGES = 20;
+
+/** The server's own clamp, mirrored so the request is explicit. */
+const PROJECT_PAGE = 100;
+
 export function useProjects() {
   return useQuery({
     queryKey: ['projects'],
-    queryFn: ({ signal }) =>
-      request<{ projects: Project[]; next_cursor: string }>('/v1/projects', { signal }),
+    queryFn: async ({ signal }) => {
+      // ⚠ THIS USED TO SEND NO LIMIT AND DISCARD next_cursor, SO IT SILENTLY
+      // SHOWED THE FIRST 50 PROJECTS AND NOTHING ELSE.
+      //
+      // The response type already declared next_cursor; nothing read it. A
+      // tenant with 60 projects saw 50, with no page control, no count and no
+      // indication that anything was missing — and every BOM-type lens
+      // (/sbom, /hbom, …) filters this same list client-side, so a project
+      // could be absent from its own lens for no visible reason.
+      //
+      // Walking the pages rather than exposing a cursor is deliberate: this is
+      // a catalogue the whole UI filters in memory, and a partial catalogue is
+      // the bug. The bound exists so a runaway cursor cannot spin forever.
+      const projects: Project[] = [];
+      let cursor = '';
+
+      for (let page = 0; page < MAX_PROJECT_PAGES; page++) {
+        const q = new URLSearchParams({ limit: String(PROJECT_PAGE) });
+        if (cursor) q.set('cursor', cursor);
+
+        const data = await request<{ projects: Project[]; next_cursor?: string }>(
+          `/v1/projects?${q.toString()}`,
+          { signal },
+        );
+        projects.push(...data.projects);
+
+        if (!data.next_cursor) return { projects, next_cursor: '' };
+        cursor = data.next_cursor;
+      }
+
+      // ⚠ REPORTED, NOT SWALLOWED. Hitting the bound means the list is
+      // incomplete, and a caller that cannot tell will render it as if it were
+      // everything — the exact failure this whole change is fixing.
+      return { projects, next_cursor: cursor };
+    },
   });
 }
 

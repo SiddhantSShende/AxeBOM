@@ -8,6 +8,7 @@ Its output is also grype's input. See grype.py for why that matters.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from axebom_shared.adapters.base import Capabilities, GenerateResult, ResultStatus, ScanTarget
@@ -133,6 +134,26 @@ class SyftAdapter(SandboxedAdapter):
         return base
 
 
+#: `syft-spdx`'s OWN capabilities, and it must not inherit syft's.
+#:
+#: ⚠ THIS CLASS USED TO REPORT engine_id="syft" AND
+#: native_format="cyclonedx-json-1.6", BECAUSE IT INHERITED SyftAdapter.__init__
+#: UNCHANGED. That was harmless only for as long as the engine was unreachable:
+#: it was in neither the manifest nor the Go registry, so nothing ever
+#: dispatched it. Now that it is registered, an availability failure would name
+#: the wrong engine and — worse — the Engine Coverage panel would announce that
+#: the SPDX pass produced a CycloneDX document.
+#:
+#: The image is the same one syft resolves; that is the point. This is one
+#: binary invoked twice, not two tools.
+SPDX_CAPABILITIES = replace(
+    CAPABILITIES,
+    engine_id="syft-spdx",
+    native_format="spdx-json-2.3",
+    default_weight=1,
+)
+
+
 class SyftSPDXAdapter(SyftAdapter):
     """The second syft pass, producing SPDX.
 
@@ -143,6 +164,11 @@ class SyftSPDXAdapter(SyftAdapter):
     """
 
     media_type = "application/spdx+json"
+
+    def __init__(self, **kwargs: Any) -> None:
+        # ⚠ SKIPS SyftAdapter.__init__ ON PURPOSE — it hardcodes CAPABILITIES,
+        # which is exactly the identity this pass must not borrow.
+        SandboxedAdapter.__init__(self, SPDX_CAPABILITIES, **kwargs)
 
     #: ⚠ EXPLICITLY None, BECAUSE THIS CLASS INHERITS FROM SyftAdapter.
     #:

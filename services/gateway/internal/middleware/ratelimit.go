@@ -64,11 +64,22 @@ func (c RateLimitConfig) withDefaults() RateLimitConfig {
 }
 
 // authPaths are the credential endpoints, held to the tighter budget.
+//
+// ⚠ THE FOUR LOCAL-JWT PATHS THIS USED TO NAME NO LONGER EXIST. login,
+// register, refresh and invitations/accept were removed with the rest of the
+// pre-ZITADEL auth surface (services/auth/routes.go). Leaving them here would
+// not have been harmful — an unmatched path simply never matches — but it
+// would have read as a list of live credential endpoints, which is precisely
+// the thing a reader consults this for.
+//
+// `/v1/auth/signup` is the sanctioned account-creation path and is the one that
+// now needs the tighter budget: it is unauthenticated, it creates an
+// organisation in ZITADEL, and it is the only remaining endpoint where a
+// stranger's request costs real work.
 var authPaths = []string{
-	"/v1/auth/login",
-	"/v1/auth/register",
-	"/v1/auth/refresh",
-	"/v1/auth/invitations/accept",
+	"/v1/auth/signup",
+	"/v1/auth/github/connect/authorize",
+	"/v1/auth/github/connect/callback",
 }
 
 // Limiter is the gateway's rate-limiting POLICY over the shared token-bucket

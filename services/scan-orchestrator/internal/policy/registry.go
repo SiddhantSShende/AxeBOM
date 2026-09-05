@@ -145,15 +145,49 @@ type Registry struct {
 func DefaultRegistry() *Registry {
 	list := []Engine{
 		{
-			ID:            "syft",
+			ID:          "syft",
+			Mode:        "container",
+			Families:    []events.Family{events.FamilySBOM},
+			SourceKinds: []events.SourceKind{events.SourceGit, events.SourceUpload, events.SourceImage},
+			Ecosystems:  []string{"npm", "pypi", "maven", "golang", "gem", "cargo", "nuget", "deb", "rpm", "apk", "conan", "swift"},
+			Produces:    []string{"components", "licenses"},
+			// ⚠ CycloneDX, NOT SPDX. This said "spdx-json-2.3" while
+			// SyftAdapter.build_argv asks for CycloneDX on stdout and the
+			// manifest records `native_format: cyclonedx-json-1.6` with
+			// `also_emits: [spdx-json-2.3]`. The Engine Coverage panel renders
+			// this field, so it told the reader the wrong thing about which
+			// document syft actually produced. The SPDX pass is syft-spdx,
+			// directly below.
+			NativeFormat:  "cyclonedx-json-1.6",
+			DefaultWeight: 3,
+			GraphTrust:    map[string]int{"npm": 2, "pypi": 2, "golang": 3, "maven": 2},
+		},
+		{
+			// ⚠ SYFT'S SECOND PASS, AND IT WAS IMPLEMENTED AND UNREACHABLE.
+			//
+			// SyftSPDXAdapter, its entry in workers/sbom/runner.py's ADAPTERS,
+			// the SPDX branch of normalize/ingest.py and a smoke fixture all
+			// existed — but the engine was in neither the manifest nor this
+			// registry. Resolve() only ever selects registry engines, so it
+			// could never be dispatched; EnginePolicyUpsert rejected it as
+			// "not valid for family"; and it could never appear in an Engine
+			// Coverage section. CERT-In's Automation Support minimum element
+			// asks for BOTH formats.
+			//
+			// It is a separate engine rather than a second flag on syft
+			// because syft writes ONE format to stdout, and every sandbox
+			// mount is read-only by design, so there is no second file to
+			// collect. The cost is one extra pass over the already-fetched
+			// tree, no network, on an image that is already pulled for syft —
+			// which is why its weight is 1 and not 3.
+			ID:            "syft-spdx",
 			Mode:          "container",
 			Families:      []events.Family{events.FamilySBOM},
 			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload, events.SourceImage},
 			Ecosystems:    []string{"npm", "pypi", "maven", "golang", "gem", "cargo", "nuget", "deb", "rpm", "apk", "conan", "swift"},
 			Produces:      []string{"components", "licenses"},
 			NativeFormat:  "spdx-json-2.3",
-			DefaultWeight: 3,
-			GraphTrust:    map[string]int{"npm": 2, "pypi": 2, "golang": 3, "maven": 2},
+			DefaultWeight: 1,
 		},
 		{
 			ID:           "grype",
