@@ -77,6 +77,10 @@ func init() {
 		{"verify", "Check a report artifact against its detached signature", 9, runVerify},
 		{"audit", "Export a tenant's audit log for review (CERT-In §5.3.6)", 16, runAudit},
 		{"apikey", "Mint an API key without a browser session (CI, scripting)", 16, runAPIKey},
+		// ⚠ RUNS ON THE CUSTOMER'S MACHINE, NOT ON OURS. It reads the files the
+		// kernel publishes and writes a file they choose to upload; it contacts
+		// nothing, and no part of AxeBOM invokes it.
+		{"collect", "Read THIS machine's own hardware inventory into an uploadable BOM", 15, runCollect},
 	}
 }
 

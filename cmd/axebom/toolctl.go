@@ -410,6 +410,29 @@ func toolctlLicenses(args []string) error {
 		return fmt.Errorf("%d copyleft dependency problem(s)", len(problems))
 	}
 
+	// ⚠ SHOWN, NOT LEFT TO INFERENCE. Several engines PARSE the output of
+	// copyleft tools the customer ran themselves. That creates no obligation —
+	// reading text is not linking — but a legal reviewer running this command
+	// should see the boundary stated rather than conclude from silence that we
+	// never touch those tools at all.
+	var reads []string
+	for _, t := range m.Tools {
+		for _, r := range t.ReadsOutputOf {
+			reads = append(reads, fmt.Sprintf("  %-14s %s  (read by %s; never invoked)",
+				r.License, r.Tool, t.ID))
+		}
+	}
+	if len(reads) > 0 {
+		fmt.Println()
+		fmt.Println("Output PARSED from tools AxeBOM never runs, links against or ships.")
+		fmt.Println("The customer runs these on their own machine and uploads the result:")
+		fmt.Println()
+		sort.Strings(reads)
+		for _, line := range reads {
+			fmt.Println(line)
+		}
+	}
+
 	fmt.Printf("\nNo copyleft dependency is linked into an AxeBOM binary.\n")
 	if len(m.Rejected) > 0 {
 		fmt.Printf("%d tool(s) are deliberately rejected — see `toolctl list`.\n", len(m.Rejected))

@@ -32,12 +32,13 @@ test('a device can be registered, listed and edited', async ({ page }) => {
   // exists" — which is a confusing lie about the database.
   await expect(page.locator('a[href^="/projects/0"]').first()).toBeVisible({ timeout: 20_000 });
 
-  const projectId = await page.evaluate(() => {
-    const hrefs = Array.from(document.querySelectorAll('a[href^="/projects/"]'))
-      .map((a) => a.getAttribute('href') ?? '')
-      .map((h) => h.replace('/projects/', '').split('/')[0] ?? '');
-    return hrefs.find((h) => /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(h)) ?? '';
-  });
+  // ⚠ READ THROUGH THE LOCATOR API, NOT page.evaluate(). An evaluate callback
+  // runs in the browser, where `document` has no type under this project's
+  // eslint config — so every line inside it became an "unsafe member access on
+  // a type that cannot be resolved". The locator API is typed, shorter, and
+  // does not need the DOM lib at all.
+  const href = (await page.locator('a[href^="/projects/0"]').first().getAttribute('href')) ?? '';
+  const projectId = href.replace('/projects/', '').split('/')[0] ?? '';
   expect(projectId, 'no project exists to attach a device to').not.toBe('');
 
   await page.goto(`/projects/${projectId}/hardware`);

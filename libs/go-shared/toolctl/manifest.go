@@ -64,6 +64,13 @@ type Verify struct {
 }
 
 // Tool is one engine.
+// ReadTool is a third-party tool whose output we parse but never run.
+type ReadTool struct {
+	Tool       string `yaml:"tool"`
+	License    string `yaml:"license"`
+	Invocation string `yaml:"invocation"`
+}
+
 type Tool struct {
 	ID       string   `yaml:"id"`
 	Role     string   `yaml:"role"`
@@ -82,6 +89,21 @@ type Tool struct {
 	Mode        string   `yaml:"mode"`
 	SourceKinds []string `yaml:"source_kinds"`
 	Produces    []string `yaml:"produces"`
+
+	// ReadsOutputOf names third-party tools whose OUTPUT an internal engine
+	// parses, without ever invoking, linking against or shipping them.
+	//
+	// ⚠ THE DISTINCTION IS THE WHOLE OF INVARIANT 9, SO IT IS DATA RATHER THAN
+	// A COMMENT. `hbom-host-report` reads text produced by lshw, dmidecode and
+	// fwupd — all copyleft — because the CUSTOMER ran them on their own
+	// machine. Reading a tool's output carries no licence obligation, the same
+	// reason a CSV exported from Altium is not an Altium derivative work.
+	//
+	// Recording it here means `toolctl licenses` can SHOW a legal reviewer the
+	// boundary instead of leaving them to infer it from silence — and means the
+	// next person cannot quietly promote one of these into a real dependency
+	// without the audit noticing the licence.
+	ReadsOutputOf []ReadTool `yaml:"reads_output_of"`
 
 	NativeFormat      string   `yaml:"native_format"`
 	AlsoEmits         []string `yaml:"also_emits"`

@@ -7,8 +7,8 @@ A session that writes code but does not update this file has failed — the next
 ---
 
 **Last updated:** 2026-09-05
-**Current phase:** *Hardware as a first-class thing, and making every artifact actually contain its data*. 🟢 **Track A rendering matrix DONE** (session b); 🟢 **Track B3 — the device register — DONE** (session c). Not started: B1 collectors, B2 `axebom collect`, most of B4 (upload formats, the component form), A6 (writerless tables) and A7 (ecosystem coverage).
-**Next action:** B1 — `hbom-host-report`, one engine parsing lshw / dmidecode / fwupd / WMI / Redfish output the customer ran themselves — then B2, the first-party collector. ⚠ **Hardware is registerable now**: `project.hardware_devices` gives a device stable identity, uniqueness on serial and asset tag, and several devices per project, with the form generated from the compliance profile. ⚠ **Two latent traps were caught this session**: the obvious device route shape panics ServeMux at startup (a new test now mounts the mux, because nothing did), and every store test has been leaking child rows because `DeleteProject` is a soft delete — 44 devices accumulated in one afternoon. ⚠ **The Playwright suite had been red since a button was renamed from "Sign in" to "Log in"**, and `task verify` does not run it; 9/9 pass now. ⚠ **`NVD_API_KEY` is still set in no environment**, so element 24 reports `not-attempted`. 🟡 Carried forward: nothing checks project classification, so a device can be registered against an SBOM-only project and every project shows a Hardware tab; five `normalize` tables have no writer (two with live readers, so the per-component provenance panel is empty); ecosystem coverage is npm/golang/pypi/github only; `mock-engine`/`cbomkit`/`aibom-generator` are dispatchable with no adapter.
+**Current phase:** *Hardware as a first-class thing, and making every artifact actually contain its data*. 🟢 Track A rendering matrix (b); 🟢 **B3 device register** (c); 🟢 **B1 collector formats + B2 `axebom collect hardware`** (d). Not started: most of B4 (upload formats, the component form, the collector affordance in the UI), A6 (writerless tables), A7 (ecosystem coverage).
+**Next action:** B4 — the import screen accepts **CSV only** while parsers for XLSX/JSON/CycloneDX already exist, the component edit form exposes **6 of ~35 fields**, and **no screen tells anyone a collector exists**: `hbom-host-report` is reachable today only by uploading a file to a project and running a scan. ⚠ **Hardware inventory now has six input formats** (`axebom collect hardware`, cdxgen, lshw, dmidecode, fwupd, WMI, Redfish) behind one engine, and a first-party offline collector that opens no network connection — asserted by a test over its import set, not a comment. ⚠ **Two gate defects fixed this session**: the Go tree had no honest-label guard at all (`profile:guardrails` now covers all five trees), and `task verify` carried `ignore_error: true` on both the Python and TypeScript lint steps, so it enforced Go lint and nothing else — sixteen eslint errors passed it twice. ⚠ **`NVD_API_KEY` is still set in no environment**, so element 24 reports `not-attempted`. 🟡 Carried forward: nothing checks project classification; five `normalize` tables have no writer (two with live readers, so the per-component provenance panel is empty); ecosystem coverage is npm/golang/pypi/github only; `mock-engine`/`cbomkit`/`aibom-generator` are dispatchable with no adapter; `fixtures/hbom-nested` is still the only HBOM golden.
 
 > 🟢 **A REAL SCAN NOW NORMALIZES, LIVE, WITH NO MANUAL TRIGGER — THE
 > NORMALIZER'S DEPLOYED BOUNDARY FROM (e)/(k)/(l) IS CLOSED FOR SBOM.**
@@ -2265,6 +2265,131 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-09-05 (d) — Track B1 and B2: five collector formats, a first-party collector, and a gate that only ever enforced one of its three linters
+
+#### `hbom-host-report` — one engine, six parsers
+
+`hbom-cdxgen-host` already read one host-inventory format. It required cdxgen,
+which most people do not have. This reads what they do: **`axebom collect
+hardware`** (ours), `lshw --json`, `dmidecode`, `fwupdmgr get-devices --json`,
+PowerShell's CIM cmdlets, and a Redfish service's own JSON.
+
+⚠ **ONE ENGINE, NOT SIX.** `Registry.Resolve` fans out a job per engine, so six
+engines over one upload would leave five `unavailable` rows in the Engine
+Coverage section of somebody who ran one tool — five broken things rather than
+one working one. `hbom-ecad` already dispatches internally for the same reason.
+Selection is by **content, never filename**; which parser matched is recorded as
+a diagnostic and on every row's `source_engine`.
+
+Things worth naming, each covered by a test:
+
+- ⚠ **Firmware placeholders are refused.** `Default string`, `To Be Filled By
+  O.E.M.`, `System Serial Number` are what a board says when the manufacturer
+  left the field blank, and they are burned into millions of units. Recorded as
+  a serial, every one of those boards would **collide on the uniqueness
+  `project.hardware_devices` exists to enforce**.
+- ⚠ **SMBIOS type 1 is the machine, so it is the root and not also its own
+  child.** The first version emitted it twice, inflating the parts count and
+  putting the system's serial on a component row inside itself.
+- ⚠ **An unexpanded Redfish collection is a link, not a list.** Following it
+  would mean AxeBOM talking to a BMC, which it does not do — so it contributes
+  nothing and says why, rather than leaving a reader to conclude the machine has
+  no processors.
+- fwupd's `Version` is a **firmware** version, not a product revision.
+- Bounded: `MAX_NODES`, `MAX_NESTING`, `discovery`'s file caps, symlinks skipped
+  rather than resolved. Every cap reported, never silent (invariant 12).
+
+⚠ **`lshw`, `dmidecode` and `fwupd` are GPL, and that is not a problem here.**
+Nothing invokes, links against or ships them — the customer runs one and uploads
+the text. Recorded as data in the manifest's new `reads_output_of`, and
+**printed by `task osint:licenses`** under "Output PARSED from tools AxeBOM
+never runs, links against or ships", so a legal reviewer sees the boundary
+stated instead of inferring it from silence.
+
+#### `axebom collect hardware` — ours, offline, on their machine
+
+A single static binary reading what the kernel already publishes
+(`/sys/class/dmi/id`, `/proc/cpuinfo`, `/sys/block/*/device`,
+`/sys/class/net/*/device`). It exists because lshw and dmidecode may not be
+installed, and asking somebody to install a package on a production appliance in
+order to document it is a real barrier.
+
+- ⚠ **It opens no network connection and runs no other program**, and both are
+  asserted by a test over its **import set** rather than left to a comment.
+  `os/exec` is forbidden there too: shelling out to `lshw` would make this a GPL
+  *invocation* rather than a file read.
+- ⚠ **It names what it could not read.** SMBIOS serials are root-readable only;
+  lshw and dmidecode simply omit them unprivileged, so a reader sees a blank and
+  concludes the machine has no serial. "Nobody had permission to look" is fixed
+  by `sudo`; "there is no serial" is not. The document carries an `unreadable`
+  list and the parser turns it into a diagnostic.
+- It prints the file list **before** opening anything — this runs on somebody's
+  production machine at somebody else's suggestion, and "trust me" is not an
+  interface.
+- Writes `0600`: the file can hold values that required privilege to read.
+- Non-Linux is **refused with a pointer** to the formats we do read, never
+  silently degraded into an almost-empty file that reads as "no hardware".
+
+Verified by running it on this VM: it identified the QEMU host, CPU, disks and
+NIC, and recorded `/sys/class/dmi/id/product_serial` as permission-denied rather
+than blank. Round-trips through `hbom-host-report`.
+
+#### ⚠ The Go tree had no honest-label guard at all
+
+`workers/hbom/test_hbom.py` walks the Python package and `hbom.test.ts` walks
+the frontend. **The CLI, the registry and every Go service string were watched by
+nothing** — and `axebom collect hardware` is exactly the feature somebody would
+naturally describe as "discovers your hardware".
+
+New `claims-hardware-discovery` rule in `compliance.auditFile`, so
+`task profile:guardrails` now covers all five trees. Two false-positive classes
+had to be handled first, and both are instructive:
+
+- `fmt.Errorf("scan hardware component: %w", err)` is **`rows.Scan`**, six times
+  over. A guard with known false positives is one people route around, and the
+  routing-around is what lets a real claim through.
+- The denial is routinely on the line **above** the claim it denies — "No
+  open-source tool looks at a device" / "and enumerates its parts". A
+  single-line check flagged the very sentence whose job is to state the
+  boundary. Now a two-line window, matching the Python guard.
+
+Mutation-verified in both directions.
+
+#### ⚠ `task verify` enforced Go lint and nothing else
+
+Both the Python and TypeScript lint steps carried **`ignore_error: true`**, with
+no recorded reason. A ruff or eslint failure ran, printed, and passed.
+
+Found the ordinary way: a new Playwright spec had **sixteen eslint errors** and
+`task verify` reported exit 0 twice in a row. The spec used `page.evaluate` with
+`document`, which has no type under this project's config; rewritten through the
+typed locator API, which is shorter anyway. Both allowances removed — both trees
+are clean today, so the gate now means what its name says.
+
+#### Verification
+
+`task verify` exits 0 **with all three linters enforcing**. `pytest workers/hbom`
+green including 17 new tests. Playwright 9/9 against the live stack. `docs lint`
+254 refs. `task osint:licenses` shows the read-not-linked boundary explicitly.
+The discovery-claim guard passes **unmodified** against every new file — which
+is the real test of the framing, and it was mutation-verified to prove it walks
+them.
+
+#### Owed
+
+- **B4 mostly not started**: the import screen still accepts **CSV only** (the
+  parsers for XLSX/JSON/CycloneDX exist), the component edit form still exposes
+  6 of ~35 fields, and there is still **no UI affordance** telling anyone to run
+  a collector — the only instruction anywhere is an error hint shown *after* a
+  scan found nothing. `hbom-host-report` is reachable today only by uploading a
+  file to a project and running a scan.
+- No golden fixture for a collector format yet; `fixtures/hbom-nested` remains
+  the only HBOM golden.
+- ⚠ Nothing checks project classification (device registration and the Hardware
+  tab both ignore it).
+- Tracks A6 (five writerless `normalize` tables) and A7 (ecosystem coverage)
+  unchanged. ⚠ `NVD_API_KEY` still set in no environment.
 
 ### 2026-09-05 (c) — Track B: hardware becomes a thing you register, and the e2e suite had been red since a button was renamed
 

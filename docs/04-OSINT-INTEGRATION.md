@@ -115,6 +115,7 @@ Both emit CycloneDX 1.6, so merging is clean.
 |---|---|---|---|
 | `hbom-ecad` | internal | `git`, `upload` | Parses the customer's own hardware **design files** — KiCad `.kicad_sch`, KiCad netlist XML, and BOM exports from KiCad/Altium/OrCAD |
 | `hbom-cdxgen-host` | internal | `upload` | Ingests a CycloneDX 1.7 **host inventory the customer generated themselves** with `cdxgen -t hbom` |
+| `hbom-host-report` | internal | `upload` | The same import, widened to the tools people actually have: **`axebom collect hardware`**, `lshw --json`, `dmidecode`, `fwupdmgr get-devices --json`, PowerShell's CIM cmdlets, a Redfish service's JSON |
 | `hbom-csv` | internal | *(none)* | The interactive REST import path, `POST /v1/hbom/{projectId}/import`. Not a scan job |
 | `hbom-form` | internal | *(manual)* | Structured manual entry, recursive subcomponents. Not in the Go registry |
 
@@ -130,9 +131,25 @@ Both emit CycloneDX 1.6, so merging is clean.
 
 **`hbom-ecad` groups placements into line items.** R1, R4 and R17 of the same 10 kΩ resistor are one row with quantity 3 and all three designators — because that is what gets ordered and what gets placed. Emitting three components would inflate the component count in a compliance document and produce a BOM nobody can order from. Grouping is by MPN where one exists, otherwise by **value *and* footprint together**, never value alone: a 10 kΩ 0402 and a 10 kΩ 0805 are different parts that cannot substitute.
 
+**`hbom-host-report` is one engine with six parsers, and that is deliberate.** `policy.Registry.Resolve` fans out one job per engine, so six engines over one upload would leave five `unavailable` rows in the Engine Coverage section of a customer who ran one tool — reading as five broken things rather than one working one. `hbom-ecad` already dispatches internally to its KiCad and BOM-table parsers for the same reason. Selection is by **content, never filename**: an upload holding an lshw dump beside a dmidecode one is exactly what somebody documenting a server produces. Which parser matched is recorded as a diagnostic and on every row's `source_engine`.
+
+> ⚠ **`lshw`, `dmidecode` and `fwupd` are GPL, and that is not a problem here.** Nothing invokes, links against or ships any of them — the **customer** runs one on their own machine and uploads the text. Reading a tool's output carries no licence obligation, for the same reason a CSV exported from Altium is not an Altium derivative work. Recorded as data in the manifest's `reads_output_of`, and printed by `task osint:licenses` under "Output PARSED from tools AxeBOM never runs, links against or ships" — so a legal reviewer sees the boundary stated instead of inferring it from silence. `CLAUDE.md` invariant 9 governs the case that *would* matter: importing their code into our binary.
+
+**`axebom collect hardware` is ours, and it runs on the customer's machine.** A single static binary that reads what the kernel already publishes — `/sys/class/dmi/id`, `/proc/cpuinfo`, `/sys/block/*/device`, `/sys/class/net/*/device` — and writes an uploadable BOM. It exists because `lshw` and `dmidecode` may simply not be installed, and asking somebody to install a package on a production appliance in order to document it is a real barrier.
+
+> ⚠ **It opens no network connection and runs no other program**, and both claims are asserted by a test over its import set (`TestTheCollectorOpensNoNetwork`) rather than left to a code comment. `os/exec` is forbidden there too: shelling out to `lshw` would make this a GPL *invocation* rather than a file read.
+>
+> ⚠ **It names what it could not read rather than leaving a blank.** SMBIOS serial numbers are root-readable only. `lshw` and `dmidecode` simply omit them when unprivileged, so a reader sees an empty field and concludes the machine has no serial — "nobody had permission to look" is fixed by re-running with `sudo`, and "there is no serial" is not. The two must not render the same, so the document carries an `unreadable` list and the parser turns it into a diagnostic.
+>
+> ⚠ **Firmware placeholders are rejected on both sides.** `Default string`, `To Be Filled By O.E.M.` and `System Serial Number` are what a board says when the manufacturer left the field blank, and they are burned into millions of units. Recorded as a serial, every one of those boards would collide on the uniqueness `project.hardware_devices` exists to enforce.
+>
+> It prints the file list before opening anything, and writes the output `0600` — the file can contain values that required privilege to read.
+
 **`hbom-cdxgen-host` is an import, never an invocation.** `cdxgen -t hbom` inventories *the host it runs on*. Executed inside our sandbox it would document AxeBOM's own container host and present it as the customer's hardware, so it is never run here — the customer runs it on the device they want documented and uploads the result, and the raw artifact is their file byte for byte.
 
 Part enrichment sits behind a `PartDataProvider` interface: `nexar` (Octopart's current API, Altium), `mouser`, `manual`. **`manual` is the default**, so no paid quota-limited API is ever a hard dependency.
+
+> ⚠ **Nexar's free tier is a 100-matched-part *lifetime* cap, not a monthly quota** — verified 2026-09. It does not reset, so free-tier Nexar cannot enrich even one real assembly BOM twice. Paid self-serve tiers reset monthly (Standard 2,000, Pro 15,000). This is why `manual` is the default rather than a fallback.
 
 **Hardware vulnerability matching (CERT-In element 24) is a lookup, not an engine.** `workers/hbom/vulnmatch.py` builds CPE candidates from a component's manufacturer and part number (`cpe.py`) and searches NVD's CVE API 2.0. It runs in the normalize consumer, never in the sandbox, and dispatches no container — there is nothing to execute.
 

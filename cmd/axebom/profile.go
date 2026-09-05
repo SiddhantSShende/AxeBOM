@@ -243,6 +243,7 @@ func profileGuardrails(args []string) error {
 	if report.OK() {
 		fmt.Println("  no hardcoded field count")
 		fmt.Println("  no assertion of compliance in customer-facing output")
+		fmt.Println("  no claim that AxeBOM examined physical hardware")
 		fmt.Println("\nguardrails: OK")
 		return nil
 	}

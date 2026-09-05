@@ -570,6 +570,56 @@ tools:
       parses that document. The raw artifact is their file byte for byte.
       Confirmed against cdxgen/docs/HBOM.md, 2026-09.
 
+  - id: hbom-host-report
+    role: importer
+    families: [hbom]
+    # ⚠ `internal`, FOR THE SAME REASON hbom-cdxgen-host IS. AxeBOM implements
+    # this engine; it parses files the customer produced. There is no artifact
+    # to acquire, and pointing `upstream` at one of the tools would make the
+    # availability probe try to resolve a container for it and report the
+    # engine unavailable while it worked perfectly.
+    upstream: internal
+    license: proprietary
+    source_kinds: [upload]
+    produces: [hardware_components]
+    native_format: axebom-hbom-json-1
+    mode: internal
+    default_weight: 2
+    reads_output_of:
+      # ⚠ OURS, LISTED FIRST BECAUSE IT IS THE ONE WITH NO PREREQUISITE. lshw
+      # and dmidecode may simply not be installed on an appliance somebody needs
+      # to document, and asking them to install a package on a production box to
+      # inventory it is a real barrier. `axebom collect hardware` is a single
+      # static binary that reads the files the kernel already publishes.
+      - { tool: axebom-collect, license: proprietary, invocation: "axebom collect hardware" }
+      # ⚠ THESE ARE GPL, AND THAT IS NOT A PROBLEM HERE. Nothing invokes,
+      # links against or ships any of them — the CUSTOMER runs one on their own
+      # machine and uploads the text. Reading a tool's output carries no licence
+      # obligation, the same reason a CSV exported from Altium is not an Altium
+      # derivative work. CLAUDE.md invariant 9 governs the case that WOULD
+      # matter: importing their code into our binary. See the `rejected:` block
+      # for tools refused on exactly that ground.
+      - { tool: lshw, license: GPL-2.0-only, invocation: "lshw -json" }
+      - { tool: dmidecode, license: GPL-2.0-only, invocation: "dmidecode" }
+      - { tool: fwupd, license: LGPL-2.1-or-later, invocation: "fwupdmgr get-devices --json" }
+      - { tool: powershell-cim, license: proprietary, invocation: "Get-CimInstance … | ConvertTo-Json" }
+      - { tool: redfish, license: n/a, invocation: "GET /redfish/v1/Systems?$expand=." }
+    notes: >
+      ⚠ NOT RUN BY AxeBOM. Each of these tools inventories THE MACHINE IT RUNS
+      ON. Running one inside our sandbox would document AxeBOM's own container
+      host and present it as the customer's hardware — the identical trap
+      hbom-cdxgen-host records — so none is ever invoked here. The customer runs
+      one on the device they want documented and uploads the output; this engine
+      parses it, and the raw artifact is their file byte for byte.
+      One engine rather than five because policy.Registry.Resolve fans out a job
+      per engine: five would leave four `unavailable` rows in the Engine
+      Coverage section of somebody who ran one tool. Selection is by CONTENT,
+      never filename. Which parser matched is recorded as a diagnostic and on
+      every row's source_engine.
+      ⚠ WHAT IT CANNOT SEE: an operating system reports what it can see. A part
+      with no driver, no bus presence and no SMBIOS entry is absent from the
+      file, and that absence is not evidence.
+
   - id: hbom-csv
     role: importer
     families: [hbom]

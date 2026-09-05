@@ -64,6 +64,43 @@ func (r GuardrailReport) OK() bool { return len(r.Findings) == 0 }
 // them to it.
 var compliantWord = regexp.MustCompile(`(?i)\bcompliant\b|\bcompliance status\b`)
 
+// discoveryClaims are the sentences that assert AxeBOM EXAMINED HARDWARE.
+//
+// ⚠ THE GO TREE HAD NO SUCH GUARD, AND IT IS WHERE THE CLAIM IS MOST TEMPTING.
+// workers/hbom/test_hbom.py walks the Python package and hbom.test.ts walks the
+// frontend; the CLI, the registry and every service string were watched by
+// nothing. `axebom collect hardware` is exactly the feature somebody would
+// naturally describe as "discovers your hardware" — and it does not, it reads
+// files on a machine its operator ran it on.
+//
+// The list mirrors the Python one deliberately: three shapes, and it forbids the
+// VERB applied to hardware, not the word "scan". Parsing a committed design file
+// IS a scan, and forbidding the accurate word is how a rule gets quietly
+// deleted (see the honest-labels section of CLAUDE.md).
+var discoveryClaims = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)\b(hardware|device)\s+scan`),
+	regexp.MustCompile(`(?i)\bscans?\s+(your\s+|the\s+|their\s+)?(hardware|device)\b`),
+	regexp.MustCompile(`(?i)\b(discover|discovers|discovered|detect|detects|inspect|inspects|` +
+		`enumerate|enumerates)\s+(your\s+|the\s+|their\s+|its\s+)?(hardware|device|parts)\b`),
+}
+
+// discoveryAllowed are the ways of SAYING the claim in order to deny it.
+//
+// ⚠ MATCHED AGAINST THE PREVIOUS LINE TOO. Prose wraps, and the denial is
+// routinely on the line above the claim it denies — "No open-source tool looks
+// at a device" / "and enumerates its parts". A single-line check flagged
+// exactly that sentence, in the file whose job is to state the boundary.
+var discoveryAllowed = regexp.MustCompile(
+	`(?i)\b(not|no|never|cannot|can't|must not|would be|rather than|instead of|there is)\b`)
+
+// rowScanIdiom is `fmt.Errorf("scan hardware component: %w", err)` — Go's
+// database row scan, not a claim about anything.
+//
+// ⚠ WITHOUT THIS THE RULE FLAGS SIX STORE FUNCTIONS AND TEACHES THE NEXT
+// PERSON THAT IT CRIES WOLF. A guard with known false positives is one people
+// route around, and the routing-around is what lets a real claim through.
+var rowScanIdiom = regexp.MustCompile(`(?i)\bscan [a-z_ ]+: %w`)
+
 // Uses of the word that are not claims: negations, and third-party markings.
 var compliantAllowed = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\b(not|never|cannot|no|isn't|is not|avoid)\b[^.]{0,80}\bcompliant\b`),
@@ -164,9 +201,14 @@ func auditFile(path, body string, counts map[string]int) []GuardrailFinding {
 	// version flagged two comments explaining these very rules.
 	inBlock := false
 
-	for i, line := range strings.Split(body, "\n") {
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
 		number := i + 1
 		trimmed := strings.TrimSpace(line)
+		previous := ""
+		if i > 0 {
+			previous = strings.TrimSpace(lines[i-1])
+		}
 
 		wasComment := inBlock
 		inBlock = trackComment(trimmed, inBlock)
@@ -191,6 +233,32 @@ func auditFile(path, body string, counts map[string]int) []GuardrailFinding {
 						counts[bomType], bomType),
 				})
 				break
+			}
+		}
+
+		// --- Rule 3: no claim that AxeBOM examined hardware ---------------
+		//
+		// ⚠ WHAT IS FORBIDDEN IS THE EXAMINATION, NOT THE WORD "scan".
+		// `hbom-ecad` parses a customer's committed KiCad schematic, which is a
+		// scan in exactly the sense that reading a lockfile is. What no string
+		// may say is that this product looked at a physical device — no
+		// open-source tool does, and a customer finds out at an audit.
+		context := previous + " " + trimmed
+		if inUserFacingString(trimmed) &&
+			!discoveryAllowed.MatchString(context) &&
+			!rowScanIdiom.MatchString(trimmed) {
+			for _, claim := range discoveryClaims {
+				if claim.MatchString(trimmed) {
+					findings = append(findings, GuardrailFinding{
+						Rule: "claims-hardware-discovery", File: path, Line: number,
+						Text: truncate(trimmed),
+						Why: "nothing in this product examines physical hardware, and no " +
+							"open-source tool does. An HBOM is a document the customer " +
+							"produced — a design file, a parts list, or a report their own " +
+							"machine generated. Say what was read, not what was inspected.",
+					})
+					break
+				}
 			}
 		}
 

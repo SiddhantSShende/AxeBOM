@@ -472,6 +472,33 @@ func DefaultRegistry() *Registry {
 			RequiresImport: true,
 		},
 		{
+			// HONEST LABEL: the same import as hbom-cdxgen-host above, widened
+			// to the tools people actually have installed — lshw, dmidecode,
+			// fwupdmgr, PowerShell's CIM cmdlets, a Redfish service's JSON.
+			// Requiring one specific tool means most customers have nothing to
+			// upload; this asks only that they ran SOMETHING on the machine.
+			//
+			// AxeBOM runs none of them. Each inventories THE MACHINE IT RUNS
+			// ON, so invoking one in our sandbox would document AxeBOM's own
+			// container host and present it as the customer's hardware.
+			//
+			// ⚠ ONE ENGINE, FIVE PARSERS. Resolve fans out a job per engine, so
+			// five engines over one upload would leave four `unavailable` rows
+			// in the Engine Coverage section of somebody who ran one tool —
+			// reading as four broken things rather than one working one.
+			// workers/hbom/adapters/hostreport.py dispatches internally and
+			// records which parser matched.
+			ID:             "hbom-host-report",
+			Mode:           "internal",
+			Families:       []events.Family{events.FamilyHBOM},
+			SourceKinds:    []events.SourceKind{events.SourceUpload},
+			Ecosystems:     []string{"hardware"},
+			Produces:       []string{"hardware_components"},
+			NativeFormat:   "axebom-hbom-json-1",
+			DefaultWeight:  2,
+			RequiresImport: true,
+		},
+		{
 			// HONEST LABEL: QBOM is largely a DERIVATION from CBOM crypto
 			// assets. Only Table 8 device metadata is separately captured.
 			ID:            "qbom-derive",

@@ -44,11 +44,11 @@ from workers.sbom.runner import SBOMWorker
 from axebom_shared.logging import get_logger
 from axebom_shared.worker_runtime import run_worker
 
-from .adapters import CdxgenHostHBOMAdapter, ECADAdapter
+from .adapters import CdxgenHostHBOMAdapter, ECADAdapter, HostReportAdapter
 
 log = get_logger("hbom-worker")
 
-#: The two dispatchable HBOM engines.
+#: The dispatchable HBOM engines.
 #:
 #: ⚠ `hbom-csv` IS ABSENT ON PURPOSE, AND IT IS NOT A GAP. It names the
 #: interactive REST path (POST /v1/hbom/preview, then
@@ -60,6 +60,7 @@ log = get_logger("hbom-worker")
 ADAPTERS: dict[str, type] = {
     "hbom-ecad": ECADAdapter,
     "hbom-cdxgen-host": CdxgenHostHBOMAdapter,
+    "hbom-host-report": HostReportAdapter,
 }
 
 #: No engine here consumes another's output.

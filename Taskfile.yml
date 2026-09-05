@@ -116,10 +116,16 @@ tasks:
       # Forward slashes deliberately: task's embedded shell accepts them on
       # Windows, and backslashes from `go env GOPATH` would be eaten as escapes.
       - '"$(go env GOPATH)/bin/golangci-lint" run ./...'
-      - cmd: '{{.PY}} -m ruff check libs/py-shared workers'
-        ignore_error: true
-      - cmd: npm --prefix frontend run lint
-        ignore_error: true
+      # ⚠ THESE TWO USED TO CARRY `ignore_error: true`, SO THE GATE ENFORCED GO
+      # LINT AND NOTHING ELSE.
+      #
+      # A Python or TypeScript lint failure ran, printed, and passed. It was
+      # found the ordinary way: a new Playwright spec had sixteen eslint errors
+      # and `task verify` reported exit 0 twice in a row. Nothing recorded why
+      # the allowance existed, and both trees are clean today — so the gate now
+      # means what its name says.
+      - '{{.PY}} -m ruff check libs/py-shared workers'
+      - npm --prefix frontend run lint
 
   lint:boundaries:
     desc: Fail if any service imports another service's internals
