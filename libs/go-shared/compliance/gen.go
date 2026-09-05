@@ -51,6 +51,17 @@ type ProfileField struct {
 	Scored        bool
 	SourcePage    int
 	Status        string
+	// Values is the closed set an enum field accepts, empty for every other
+	// type.
+	//
+	// ⚠ IT WAS DROPPED BY THE GENERATOR, AND FOUR COPIES OF ONE SET GREW IN ITS
+	// PLACE. The profile has always carried a values list — criticality's
+	// [critical, high, medium, low] is transcribed verbatim from p.23 — but
+	// nothing emitted it, so every consumer that needed an enum hardcoded it:
+	// hbom.Criticalities, hbom.CriticalityValues, a sentence inside a
+	// validation error, and workers/hbom/model.py CRITICALITY_VALUES. Two of
+	// them had already drifted apart.
+	Values []string
 }
 
 `)
@@ -167,10 +178,23 @@ var CryptoFieldsByAssetType = map[string][]ProfileField{
 func writeGoField(b *bytes.Buffer, f Field) {
 	fmt.Fprintf(b, "\t{ID: %s, Ordinal: %d, Name: %q, CanonicalPath: %q, "+
 		"CycloneDXPath: %q, SPDXPath: %q, Type: %q, Weight: %d, Required: %v, "+
-		"Scored: %v, SourcePage: %d, Status: %q},\n",
+		"Scored: %v, SourcePage: %d, Status: %q",
 		goConstName(f.ID), f.Ordinal, f.Name, f.CanonicalPath,
 		f.CycloneDXPath, f.SPDXPath, f.Type, f.Weight, f.Required,
 		f.IsScored(), f.SourcePage, f.Status)
+	// Emitted only when the profile declares one, so the generated file does
+	// not grow `Values: nil` on every non-enum field.
+	if len(f.Values) > 0 {
+		b.WriteString(", Values: []string{")
+		for i, v := range f.Values {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			fmt.Fprintf(b, "%q", v)
+		}
+		b.WriteString("}")
+	}
+	b.WriteString("},\n")
 }
 
 func writeGoStringSlice(b *bytes.Buffer, name, doc string, values []string) {
@@ -254,6 +278,10 @@ class ProfileField:
     scored: bool
     source_page: int
     status: str
+    #: The closed set an enum field accepts, empty for every other type.
+    #:
+    #: A trailing default so every positional construction above keeps working.
+    values: tuple[str, ...] = ()
 
 
 PROFILE_ID = %q
@@ -319,10 +347,20 @@ CRYPTO_FIELDS_BY_ASSET_TYPE: dict[str, list[ProfileField]] = {
 }
 
 func writePyField(b *bytes.Buffer, f Field, indent string) {
-	fmt.Fprintf(b, "%sProfileField(%q, %d, %q, %q, %q, %q, %q, %d, %s, %s, %d, %q),\n",
+	fmt.Fprintf(b, "%sProfileField(%q, %d, %q, %q, %q, %q, %q, %d, %s, %s, %d, %q",
 		indent, f.ID, f.Ordinal, f.Name, f.CanonicalPath,
 		f.CycloneDXPath, f.SPDXPath, f.Type, f.Weight,
 		pyBool(f.Required), pyBool(f.IsScored()), f.SourcePage, f.Status)
+	// A trailing argument with a default, so every existing positional
+	// construction keeps working and only enum fields carry the extra tuple.
+	if len(f.Values) > 0 {
+		b.WriteString(", (")
+		for _, v := range f.Values {
+			fmt.Fprintf(b, "%q, ", v)
+		}
+		b.WriteString(")")
+	}
+	b.WriteString("),\n")
 }
 
 func writePyList(b *bytes.Buffer, name string, values []string) {

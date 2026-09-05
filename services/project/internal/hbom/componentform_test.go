@@ -179,3 +179,79 @@ func TestTheOperationalEnumsCarryTheirValues(t *testing.T) {
 		}
 	}
 }
+
+// TestCriticalityComesFromTheProfileAndNowhereElse.
+//
+// ⚠ ONE CLOSED SET HAD FOUR HAND-WRITTEN COPIES AND TWO OF THEM DISAGREED.
+//
+//   - hbom.Criticalities (the device form)      {critical, high, medium, low, unknown}
+//   - hbom.CriticalityValues (the component validator)  {critical, high, medium, low}
+//   - a sentence inside a validation error       "critical, high, medium, low"
+//   - workers/hbom/model.py CRITICALITY_VALUES   ("critical","high","medium","low")
+//
+// The first carried a fifth value beneath a comment reading "⚠ IT MUST MATCH
+// normalize.hardware_components.criticality" — a table whose CHECK allows four.
+// So a device recorded as `unknown` was storable and unrepresentable in the
+// parts table its tree flows into: the comment named the exact invariant the
+// line below it broke.
+//
+// They multiplied because `axebom profile gen` DROPPED the profile's values
+// list, leaving every consumer to write its own. The generator emits it now, so
+// this asserts the single source rather than the four agreeing by luck.
+func TestCriticalityComesFromTheProfileAndNowhereElse(t *testing.T) {
+	var want []string
+	for _, f := range model.HBOMFields {
+		if f.ID == model.FieldCertinHbom23Criticality {
+			want = f.Values
+		}
+	}
+	if len(want) == 0 {
+		t.Fatal("the profile declares no criticality values; every consumer below " +
+			"would fall back to an empty set and accept anything")
+	}
+
+	if len(hbom.Criticalities) != len(want) {
+		t.Errorf("the device form offers %v, the profile declares %v",
+			hbom.Criticalities, want)
+	}
+	for _, v := range want {
+		if !hbom.CriticalityValues[v] {
+			t.Errorf("the component validator rejects %q, which the profile allows", v)
+		}
+	}
+	// And nothing extra — the direction that actually broke. `unknown` was
+	// accepted here and rejected by normalize.hardware_components' CHECK.
+	if len(hbom.CriticalityValues) != len(want) {
+		t.Errorf("the component validator accepts %d values, the profile declares %d",
+			len(hbom.CriticalityValues), len(want))
+	}
+}
+
+// TestTheOperationalEnumsComeFromTheProfile.
+//
+// The same fix, applied where the same mistake was about to be repeated: the
+// manufacturing enums were briefly a hand-written Go map for exactly the reason
+// criticality was, and are now read from the generated operational set.
+func TestTheOperationalEnumsComeFromTheProfile(t *testing.T) {
+	fromProfile := map[string][]string{}
+	for _, f := range model.HBOMManufacturingFields {
+		if len(f.Values) > 0 {
+			attr := strings.TrimPrefix(f.CanonicalPath, "hardware_component.")
+			fromProfile[attr] = f.Values
+		}
+	}
+	if len(fromProfile) == 0 {
+		t.Fatal("the operational profile declares no enum values at all")
+	}
+
+	byAttr := map[string]hbom.ComponentFormField{}
+	for _, f := range hbom.ComponentFormFields() {
+		byAttr[f.Attr] = f
+	}
+	for attr, want := range fromProfile {
+		got := byAttr[attr].Values
+		if len(got) != len(want) {
+			t.Errorf("%s: the form offers %v, the profile declares %v", attr, got, want)
+		}
+	}
+}

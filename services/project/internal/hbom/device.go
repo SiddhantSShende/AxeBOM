@@ -52,12 +52,35 @@ type Device struct {
 	PartsUpdatedAt string `json:"parts_updated_at,omitempty"`
 }
 
-// Criticalities is the closed set the column's CHECK constraint allows.
+// Criticalities is the closed set a device's criticality may take.
 //
-// ⚠ IT MUST MATCH normalize.hardware_components.criticality. A device assessed
-// `critical` whose parts table cannot express that value would report two
-// different criticalities for one thing.
-var Criticalities = []string{"critical", "high", "medium", "low", "unknown"}
+// ⚠ IT USED TO BE A HAND-WRITTEN LIST WITH AN EXTRA VALUE, UNDER A COMMENT
+// ASSERTING THE OPPOSITE. It read `{critical, high, medium, low, unknown}`
+// beneath "⚠ IT MUST MATCH normalize.hardware_components.criticality" — and
+// that table's CHECK allows four values, not five. So the comment stated the
+// exact invariant the line below it broke: a device recorded as `unknown` is
+// accepted here and cannot be expressed in the parts table it flows into.
+//
+// Four copies of one closed set existed — this, CriticalityValues in model.go,
+// a sentence inside a validation error, and workers/hbom/model.py's
+// CRITICALITY_VALUES — because `axebom profile gen` dropped the profile's
+// values list. It emits it now, so this reads from the one place CERT-In's
+// answer is written down (p.23, transcribed verbatim).
+var Criticalities = criticalityValues()
+
+func criticalityValues() []string {
+	for _, f := range model.HBOMFields {
+		if f.ID == model.FieldCertinHbom23Criticality {
+			out := make([]string, len(f.Values))
+			copy(out, f.Values)
+			return out
+		}
+	}
+	// Unreachable while the profile declares element 23. Panicking in a package
+	// initialiser is right for a generated-data contract: the alternative is a
+	// device form with an empty dropdown and a validator that accepts anything.
+	panic("compliance profile declares no criticality values for HBOM element 23")
+}
 
 // deviceFieldMap ties each editable device attribute to its CERT-In element,
 // where one exists.
@@ -331,33 +354,12 @@ func manufacturingFormFields(taken map[string]bool) []ComponentFormField {
 			Name:      f.Name,
 			Multiline: f.Type == "text",
 			List:      list,
-			Values:    manufacturingEnums[attr],
+			Values:    f.Values,
 			// ⚠ false, and load-bearing — see ComponentFormField.CertIn.
 			CertIn: false,
 		})
 	}
 	return out
-}
-
-// manufacturingEnums are the closed value sets for two operational elements.
-//
-// ⚠ THE PROFILE CARRIES THESE AND THE GENERATED MODEL DROPS THEM.
-// `compliance.Field` has a `values` list — `assembly_type: [smt, tht,
-// mechanical]`, `lifecycle_status: [active, nrnd, obsolete, eol, preview,
-// unknown]` — but `model.ProfileField` has no Values member, so `axebom profile
-// gen` discards it for CERT-In's fields too. That is why `criticality` is
-// looked up in Go a few lines above rather than read from the profile, and this
-// mirrors that existing precedent rather than inventing a second one.
-//
-// Rendering these as free text would be worse than a duplicated list: a
-// customer typing "EOL " or "obsolete?" produces a lifecycle status nothing
-// matches, in a field whose whole value is that it is comparable across parts.
-// Widening ProfileField is the real fix and is recorded in docs/STATE.md; it
-// changes the generated struct in two languages and the agreement test that
-// holds them together.
-var manufacturingEnums = map[string][]string{
-	"assembly_type":    {"smt", "tht", "mechanical"},
-	"lifecycle_status": {"active", "nrnd", "obsolete", "eol", "preview", "unknown"},
 }
 
 func seenAttrs(fields []ComponentFormField) map[string]bool {

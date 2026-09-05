@@ -17,7 +17,9 @@ from axebom_shared.model.generated_certin import HBOM_FIELDS
 from .csv_import import CANONICAL_COLUMNS, ColumnMapping, HBOMImportError, parse
 from .form import FormError, blank_form, from_payload
 from .model import (
+    ASSEMBLY_TYPES,
     CRITICALITY_VALUES,
+    LIFECYCLE_VALUES,
     MAX_DEPTH,
     NOT_PROVIDED,
     Alternate,
@@ -970,3 +972,53 @@ def test_the_go_ports_column_order_matches():
         "part_number must be visited before mpn, or the first-column-wins rule "
         "silently prefers whichever the customer's file happens to list"
     )
+
+
+def _operational_profile() -> dict:
+    """Load the operational profile from the repository.
+
+    A TEST-ONLY read. `model.py`'s comment explains why the constants are not
+    loaded this way at runtime: the operational profile generates Go only, and
+    a worker container has no copy of `docs/`.
+    """
+    import pathlib
+
+    import yaml
+
+    path = pathlib.Path(__file__).resolve().parents[2] / "docs/reference/hbom-manufacturing-v1.yaml"
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def _operational_values(element_id: str) -> tuple[str, ...]:
+    profile = _operational_profile()
+    for element in profile["hbom_manufacturing"]["elements"]:
+        if element["id"] == element_id:
+            return tuple(element.get("values") or ())
+    raise AssertionError(f"the operational profile declares no element {element_id}")
+
+
+def test_criticality_comes_from_the_compliance_profile() -> None:
+    """⚠ ONE CLOSED SET HAD FOUR HAND-WRITTEN COPIES AND TWO DISAGREED.
+
+    Go's device-form list carried a fifth value (`unknown`) beneath a comment
+    asserting it matched `normalize.hardware_components`, whose CHECK allows
+    four — so a device recorded as `unknown` was storable here and
+    unrepresentable in the parts table its tree flows into. They multiplied
+    because `axebom profile gen` dropped the profile's values list.
+    """
+    from axebom_shared.model.generated_certin import HBOM_FIELDS
+
+    declared = next(
+        f.values for f in HBOM_FIELDS if f.id == "certin.hbom.23.criticality"
+    )
+    assert declared, "the profile declares no criticality values"
+    assert CRITICALITY_VALUES == declared
+
+
+def test_the_operational_enums_match_their_profile() -> None:
+    """The operational profile generates Go only, so a TEST is what holds the
+    Python constants to it — the same arrangement the engine-registry
+    agreement tests use, and for the same reason: the authority lives
+    somewhere this module may not import at runtime."""
+    assert ASSEMBLY_TYPES == _operational_values("axebom.hbom.mfg.11.assembly_type")
+    assert LIFECYCLE_VALUES == _operational_values("axebom.hbom.mfg.12.lifecycle_status")

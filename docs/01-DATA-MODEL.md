@@ -143,7 +143,7 @@ parts list stays in `normalize.hardware_components`, versioned, and is linked by
 | `name` | TEXT NOT NULL | CHECK non-blank. The only required field |
 | `manufacturer`, `model_number`, `serial_number`, `lot_number` | TEXT | |
 | `asset_tag`, `firmware_version`, `location` | TEXT | |
-| `criticality` | TEXT | CHECK in (`critical`,`high`,`medium`,`low`,`unknown`) — same set as `normalize.hardware_components.criticality` |
+| `criticality` | TEXT | CHECK in (`critical`,`high`,`medium`,`low`) — the set CERT-In element 23 declares, and the same one `normalize.hardware_components.criticality` allows. ⚠ It listed a fifth value, `unknown`, beside the words "same set as `normalize.hardware_components`" — which allows four. A device recorded as `unknown` was storable here and unrepresentable in the parts table its tree flows into. Narrowed by `migrations/project/0006`; leaving it NULL already meant what `unknown` meant, and both score zero (invariant 3) |
 | `notes` | TEXT | |
 | `created_by` | UUID NOT NULL | → `auth.users.id`, **no FK** (cross-schema) |
 | `created_at`, `updated_at`, `deleted_at` | TIMESTAMPTZ | |

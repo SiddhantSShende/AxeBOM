@@ -40,11 +40,36 @@ NOT_PROVIDED = "not-provided"
 #: assembly; past that, the customer is told rather than guessed at.
 MAX_DEPTH = 10
 
+def _profile_values(field_id: str) -> tuple[str, ...]:
+    """The closed value set the compliance profile declares for one element.
+
+    ⚠ THESE USED TO BE TYPED OUT, AND ONE OF THE FOUR COPIES HAD DRIFTED.
+    `axebom profile gen` dropped the profile's values list, so every consumer
+    that needed an enum wrote its own — and Go's device-form list carried a
+    fifth criticality (`unknown`) beneath a comment asserting it matched
+    `normalize.hardware_components`, whose CHECK allows four. The generator
+    emits the values now; this reads them.
+    """
+    for f in HBOM_FIELDS:
+        if f.id == field_id:
+            return f.values
+    raise RuntimeError(f"the compliance profile declares no values for {field_id}")
+
+
 #: Criticality is a closed set, matching the CHECK constraint on
-#: `normalize.hardware_components`.
-CRITICALITY_VALUES = ("critical", "high", "medium", "low")
+#: `normalize.hardware_components` — and, now, read from the profile that is
+#: the authority for both.
+CRITICALITY_VALUES = _profile_values("certin.hbom.23.criticality")
 
 #: Assembly method. Closed, matching migration 0011's CHECK.
+#:
+#: ⚠ STILL TYPED OUT, UNLIKE CRITICALITY ABOVE, AND FOR A STRUCTURAL REASON.
+#: This value set lives in the OPERATIONAL profile
+#: (docs/reference/hbom-manufacturing-v1.yaml), which generates Go only —
+#: `compliance.Load` reads YAML from disk and a worker container has no copy of
+#: docs/. A runtime file dependency here would trade one drift risk for a
+#: harder failure. `test_hbom.py` holds these to the YAML instead, which is the
+#: same arrangement the engine-registry agreement tests use.
 ASSEMBLY_TYPES = ("smt", "tht", "mechanical")
 
 #: Part lifecycle. Closed, matching migration 0011's CHECK.

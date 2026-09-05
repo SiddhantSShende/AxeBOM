@@ -199,6 +199,28 @@ These are scored — that is the whole point of them — but into their **own nu
 
 - **`FieldsForBOMType` is untouched.** That one function feeds `HBOM_FIELDS` → `workers/hbom/normalize.py`'s `_SCORED` → `completeness_pct`. Leaving it alone *is* the separation.
 - **`axebom profile gen` takes a different path for an operational profile, not no path.** It used to refuse one outright, for two reasons. The first still holds: `GenerateGo` emits package-level `ProfileID`/`ProfileRevision`/`ProfileAllVerified` and the `ProfileField` type, so a second profile through it is four duplicate declarations and a compile error — which is why `GenerateGoOperational` writes a **separate file** (`generated_operational.go`) carrying only the field list and its own id constants. The second reason — "nothing in Go needs the list, Python reads it at runtime" — was true when written and went stale: `hbom.ComponentFormFields` builds the hardware component form from the **generated** `model.HBOMFields`, and `compliance.Load` reads from disk, which no service container has a copy of. So the manufacturing elements were authored, linted, scored and reported while being invisible in the one screen where a person could enter them.
+- ⚠ **The generator emits each field's closed `values` list, and it used not to.**
+  The profile has always carried `values:` — criticality's `[critical, high,
+  medium, low]` is transcribed verbatim from p.23 — but `ProfileField` had no
+  member for it in either language, so every consumer that needed an enum wrote
+  its own copy. Four grew for criticality alone: `hbom.Criticalities` (the
+  device form), `hbom.CriticalityValues` (the component validator), a sentence
+  inside a validation error, and `workers/hbom/model.py`'s
+  `CRITICALITY_VALUES`. **Two of them had already drifted**: the device form
+  carried a fifth value, `unknown`, beneath a comment reading "⚠ IT MUST MATCH
+  normalize.hardware_components.criticality" — a table whose CHECK allows four.
+  A device recorded as `unknown` was storable and unrepresentable in the parts
+  table its tree flows into. All four now read the profile, and
+  `migrations/project/0006` brings the column with them.
+- **`TestGoAndPythonEnumValuesAgree` holds the two languages together.** The
+  existing agreement tests compare ids and counts, so the moment values became
+  load-bearing the two could disagree about what an enum ACCEPTS with every test
+  green — one language rejecting a value the other stores, on one document.
+  The operational profile generates Go only, so Python's `ASSEMBLY_TYPES` and
+  `LIFECYCLE_VALUES` stay literals held to the YAML by a test instead: a worker
+  container has no copy of `docs/`, and a runtime file dependency would trade a
+  drift risk for a harder failure.
+
 - ⚠ **The generated operational fields must never merge into a CERT-In list.** They are emitted as `HBOMManufacturingFields`, never appended to `HBOMFields`, and every consumer opts in by naming them. The form marks each input `certin: true|false` and renders the two sets as separate groups, because a customer filling in unit prices must not watch a compliance percentage rise.
 - **`docs/COMPLIANCE-REPORT.md` is unchanged.** `BuildEvidencePack` never sees an operational profile. Adding non-CERT-In rows to a document titled "CERT-In coverage evidence" is the category error this design exists to prevent.
 - **`task profile:lint` runs over both files**, by the same checker. A second field set that nothing validates is a second field set that drifts.

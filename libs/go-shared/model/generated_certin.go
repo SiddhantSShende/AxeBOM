@@ -23,6 +23,17 @@ type ProfileField struct {
 	Scored        bool
 	SourcePage    int
 	Status        string
+	// Values is the closed set an enum field accepts, empty for every other
+	// type.
+	//
+	// ⚠ IT WAS DROPPED BY THE GENERATOR, AND FOUR COPIES OF ONE SET GREW IN ITS
+	// PLACE. The profile has always carried a values list — criticality's
+	// [critical, high, medium, low] is transcribed verbatim from p.23 — but
+	// nothing emitted it, so every consumer that needed an enum hardcoded it:
+	// hbom.Criticalities, hbom.CriticalityValues, a sentence inside a
+	// validation error, and workers/hbom/model.py CRITICALITY_VALUES. Two of
+	// them had already drifted apart.
+	Values []string
 }
 
 // ProfileID identifies the standard these fields come from.
@@ -180,13 +191,13 @@ var SBOMFields = []ProfileField{
 	{ID: FieldCertinSbom03ComponentDescription, Ordinal: 3, Name: "Component Description", CanonicalPath: "component.description", CycloneDXPath: "components[].description", SPDXPath: "packages[].description", Type: "text", Weight: 1, Required: true, Scored: true, SourcePage: 23, Status: "verified"},
 	{ID: FieldCertinSbom04ComponentSupplier, Ordinal: 4, Name: "Component Supplier", CanonicalPath: "component.supplier", CycloneDXPath: "components[].supplier.name", SPDXPath: "packages[].supplier", Type: "string", Weight: 3, Required: true, Scored: true, SourcePage: 23, Status: "verified"},
 	{ID: FieldCertinSbom05ComponentLicense, Ordinal: 5, Name: "Component License", CanonicalPath: "component.license_effective", CycloneDXPath: "components[].licenses", SPDXPath: "packages[].licenseConcluded", Type: "spdx_expression", Weight: 3, Required: true, Scored: true, SourcePage: 23, Status: "verified"},
-	{ID: FieldCertinSbom06ComponentOrigin, Ordinal: 6, Name: "Component Origin", CanonicalPath: "component.origin", CycloneDXPath: "components[].properties[axebom:origin]", SPDXPath: "packages[].originator", Type: "enum", Weight: 3, Required: true, Scored: true, SourcePage: 23, Status: "verified"},
+	{ID: FieldCertinSbom06ComponentOrigin, Ordinal: 6, Name: "Component Origin", CanonicalPath: "component.origin", CycloneDXPath: "components[].properties[axebom:origin]", SPDXPath: "packages[].originator", Type: "enum", Weight: 3, Required: true, Scored: true, SourcePage: 23, Status: "verified", Values: []string{"proprietary", "open-source", "third-party-vendor", "unknown"}},
 	{ID: FieldCertinSbom07ComponentDependencies, Ordinal: 7, Name: "Component Dependencies", CanonicalPath: "component.dependencies[]", CycloneDXPath: "dependencies[]", SPDXPath: "relationships[DEPENDS_ON]", Type: "ref_list", Weight: 3, Required: true, Scored: true, SourcePage: 23, Status: "verified"},
 	{ID: FieldCertinSbom08Vulnerabilities, Ordinal: 8, Name: "Vulnerabilities", CanonicalPath: "component.findings[]", CycloneDXPath: "vulnerabilities[]", SPDXPath: "relationships[HAS_ASSOCIATED_VULNERABILITY]", Type: "ref_list", Weight: 3, Required: true, Scored: true, SourcePage: 23, Status: "verified"},
-	{ID: FieldCertinSbom09PatchStatus, Ordinal: 9, Name: "Patch Status", CanonicalPath: "component.patch_status", CycloneDXPath: "components[].properties[axebom:patch_status]", SPDXPath: "annotations[]", Type: "enum", Weight: 3, Required: true, Scored: true, SourcePage: 23, Status: "verified"},
+	{ID: FieldCertinSbom09PatchStatus, Ordinal: 9, Name: "Patch Status", CanonicalPath: "component.patch_status", CycloneDXPath: "components[].properties[axebom:patch_status]", SPDXPath: "annotations[]", Type: "enum", Weight: 3, Required: true, Scored: true, SourcePage: 23, Status: "verified", Values: []string{"up-to-date", "patch-available", "no-fix-available", "unknown"}},
 	{ID: FieldCertinSbom10ReleaseDate, Ordinal: 10, Name: "Release Date", CanonicalPath: "component.release_date", CycloneDXPath: "components[].properties[axebom:release_date]", SPDXPath: "packages[].releaseDate", Type: "date", Weight: 1, Required: true, Scored: true, SourcePage: 23, Status: "verified"},
 	{ID: FieldCertinSbom11EolDate, Ordinal: 11, Name: "End-of-Life (EOL) Date", CanonicalPath: "component.eol_date", CycloneDXPath: "components[].properties[axebom:eol_date]", SPDXPath: "packages[].validUntilDate", Type: "date", Weight: 1, Required: true, Scored: true, SourcePage: 23, Status: "verified"},
-	{ID: FieldCertinSbom12Criticality, Ordinal: 12, Name: "Criticality", CanonicalPath: "component.criticality", CycloneDXPath: "components[].properties[axebom:criticality]", SPDXPath: "annotations[]", Type: "enum", Weight: 3, Required: true, Scored: true, SourcePage: 23, Status: "verified"},
+	{ID: FieldCertinSbom12Criticality, Ordinal: 12, Name: "Criticality", CanonicalPath: "component.criticality", CycloneDXPath: "components[].properties[axebom:criticality]", SPDXPath: "annotations[]", Type: "enum", Weight: 3, Required: true, Scored: true, SourcePage: 23, Status: "verified", Values: []string{"critical", "high", "medium", "low"}},
 	{ID: FieldCertinSbom13UsageRestrictions, Ordinal: 13, Name: "Usage Restrictions", CanonicalPath: "component.usage_restrictions", CycloneDXPath: "components[].properties[axebom:usage_restrictions]", SPDXPath: "packages[].comment", Type: "text", Weight: 1, Required: true, Scored: true, SourcePage: 23, Status: "verified"},
 	{ID: FieldCertinSbom14Checksums, Ordinal: 14, Name: "Checksums or Hashes", CanonicalPath: "component.hashes[]", CycloneDXPath: "components[].hashes[]", SPDXPath: "packages[].checksums[]", Type: "hash_list", Weight: 3, Required: true, Scored: true, SourcePage: 23, Status: "verified"},
 	{ID: FieldCertinSbom15Comments, Ordinal: 15, Name: "Comments or Notes", CanonicalPath: "component.comments", CycloneDXPath: "components[].properties[axebom:comments]", SPDXPath: "packages[].comment", Type: "text", Weight: 1, Required: true, Scored: true, SourcePage: 23, Status: "verified"},
@@ -266,7 +277,7 @@ var HBOMFields = []ProfileField{
 	{ID: FieldCertinHbom20SubComponent, Ordinal: 0, Name: "Sub-component", CanonicalPath: "hardware_component.children[]", CycloneDXPath: "", SPDXPath: "", Type: "recursive_ref", Weight: 3, Required: false, Scored: true, SourcePage: 61, Status: "verified"},
 	{ID: FieldCertinHbom21FirmwareVersion, Ordinal: 0, Name: "Firmware Version", CanonicalPath: "hardware_component.firmware_version", CycloneDXPath: "", SPDXPath: "", Type: "string", Weight: 3, Required: false, Scored: true, SourcePage: 62, Status: "verified"},
 	{ID: FieldCertinHbom22Origin, Ordinal: 0, Name: "Origin", CanonicalPath: "hardware_component.origin", CycloneDXPath: "", SPDXPath: "", Type: "string", Weight: 3, Required: false, Scored: true, SourcePage: 62, Status: "verified"},
-	{ID: FieldCertinHbom23Criticality, Ordinal: 0, Name: "Criticality Rating", CanonicalPath: "hardware_component.criticality", CycloneDXPath: "", SPDXPath: "", Type: "enum", Weight: 3, Required: false, Scored: true, SourcePage: 62, Status: "verified"},
+	{ID: FieldCertinHbom23Criticality, Ordinal: 0, Name: "Criticality Rating", CanonicalPath: "hardware_component.criticality", CycloneDXPath: "", SPDXPath: "", Type: "enum", Weight: 3, Required: false, Scored: true, SourcePage: 62, Status: "verified", Values: []string{"critical", "high", "medium", "low"}},
 	{ID: FieldCertinHbom24Vulnerabilities, Ordinal: 0, Name: "Vulnerabilities", CanonicalPath: "hardware_component.findings[]", CycloneDXPath: "", SPDXPath: "", Type: "ref_list", Weight: 3, Required: false, Scored: true, SourcePage: 62, Status: "verified"},
 }
 
@@ -279,7 +290,7 @@ var HBOMFields = []ProfileField{
 var CryptoFieldsByAssetType = map[string][]ProfileField{
 	"algorithm": {
 		{ID: FieldCertinCryptoAlgoName, Ordinal: 0, Name: "Name", CanonicalPath: "crypto_asset.name", CycloneDXPath: "", SPDXPath: "", Type: "string", Weight: 3, Required: false, Scored: true, SourcePage: 45, Status: "verified"},
-		{ID: FieldCertinCryptoAlgoAssetType, Ordinal: 0, Name: "Asset Type", CanonicalPath: "crypto_asset.asset_type", CycloneDXPath: "", SPDXPath: "", Type: "enum", Weight: 3, Required: false, Scored: true, SourcePage: 45, Status: "verified"},
+		{ID: FieldCertinCryptoAlgoAssetType, Ordinal: 0, Name: "Asset Type", CanonicalPath: "crypto_asset.asset_type", CycloneDXPath: "", SPDXPath: "", Type: "enum", Weight: 3, Required: false, Scored: true, SourcePage: 45, Status: "verified", Values: []string{"algorithm"}},
 		{ID: FieldCertinCryptoAlgoPrimitive, Ordinal: 0, Name: "Primitive", CanonicalPath: "crypto_asset.primitive", CycloneDXPath: "", SPDXPath: "", Type: "string", Weight: 3, Required: false, Scored: true, SourcePage: 45, Status: "verified"},
 		{ID: FieldCertinCryptoAlgoMode, Ordinal: 0, Name: "Mode", CanonicalPath: "crypto_asset.mode", CycloneDXPath: "", SPDXPath: "", Type: "string", Weight: 3, Required: false, Scored: true, SourcePage: 45, Status: "verified"},
 		{ID: FieldCertinCryptoAlgoCryptoFunctions, Ordinal: 0, Name: "Crypto Functions", CanonicalPath: "crypto_asset.crypto_functions[]", CycloneDXPath: "", SPDXPath: "", Type: "string_list", Weight: 3, Required: false, Scored: true, SourcePage: 46, Status: "verified"},
@@ -289,7 +300,7 @@ var CryptoFieldsByAssetType = map[string][]ProfileField{
 	},
 	"certificate": {
 		{ID: FieldCertinCryptoCertName, Ordinal: 0, Name: "Name", CanonicalPath: "crypto_asset.name", CycloneDXPath: "", SPDXPath: "", Type: "string", Weight: 3, Required: false, Scored: true, SourcePage: 47, Status: "verified"},
-		{ID: FieldCertinCryptoCertAssetType, Ordinal: 0, Name: "Asset Type", CanonicalPath: "crypto_asset.asset_type", CycloneDXPath: "", SPDXPath: "", Type: "enum", Weight: 3, Required: false, Scored: true, SourcePage: 47, Status: "verified"},
+		{ID: FieldCertinCryptoCertAssetType, Ordinal: 0, Name: "Asset Type", CanonicalPath: "crypto_asset.asset_type", CycloneDXPath: "", SPDXPath: "", Type: "enum", Weight: 3, Required: false, Scored: true, SourcePage: 47, Status: "verified", Values: []string{"certificate"}},
 		{ID: FieldCertinCryptoCertSubjectName, Ordinal: 0, Name: "Subject Name", CanonicalPath: "crypto_asset.cert_subject", CycloneDXPath: "", SPDXPath: "", Type: "string", Weight: 3, Required: false, Scored: true, SourcePage: 47, Status: "verified"},
 		{ID: FieldCertinCryptoCertIssuerName, Ordinal: 0, Name: "Issuer Name", CanonicalPath: "crypto_asset.cert_issuer", CycloneDXPath: "", SPDXPath: "", Type: "string", Weight: 3, Required: false, Scored: true, SourcePage: 47, Status: "verified"},
 		{ID: FieldCertinCryptoCertNotValidBefore, Ordinal: 0, Name: "Not Valid Before", CanonicalPath: "crypto_asset.not_valid_before", CycloneDXPath: "", SPDXPath: "", Type: "datetime", Weight: 3, Required: false, Scored: true, SourcePage: 47, Status: "verified"},
@@ -301,16 +312,16 @@ var CryptoFieldsByAssetType = map[string][]ProfileField{
 	},
 	"key": {
 		{ID: FieldCertinCryptoKeyName, Ordinal: 0, Name: "Name", CanonicalPath: "crypto_asset.name", CycloneDXPath: "", SPDXPath: "", Type: "string", Weight: 3, Required: false, Scored: true, SourcePage: 46, Status: "verified"},
-		{ID: FieldCertinCryptoKeyAssetType, Ordinal: 0, Name: "Asset Type", CanonicalPath: "crypto_asset.asset_type", CycloneDXPath: "", SPDXPath: "", Type: "enum", Weight: 3, Required: false, Scored: true, SourcePage: 46, Status: "verified"},
+		{ID: FieldCertinCryptoKeyAssetType, Ordinal: 0, Name: "Asset Type", CanonicalPath: "crypto_asset.asset_type", CycloneDXPath: "", SPDXPath: "", Type: "enum", Weight: 3, Required: false, Scored: true, SourcePage: 46, Status: "verified", Values: []string{"key"}},
 		{ID: FieldCertinCryptoKeyId, Ordinal: 0, Name: "id", CanonicalPath: "crypto_asset.key_id", CycloneDXPath: "", SPDXPath: "", Type: "string", Weight: 3, Required: false, Scored: true, SourcePage: 46, Status: "verified"},
-		{ID: FieldCertinCryptoKeyState, Ordinal: 0, Name: "state", CanonicalPath: "crypto_asset.key_state", CycloneDXPath: "", SPDXPath: "", Type: "enum", Weight: 3, Required: false, Scored: true, SourcePage: 46, Status: "verified"},
+		{ID: FieldCertinCryptoKeyState, Ordinal: 0, Name: "state", CanonicalPath: "crypto_asset.key_state", CycloneDXPath: "", SPDXPath: "", Type: "enum", Weight: 3, Required: false, Scored: true, SourcePage: 46, Status: "verified", Values: []string{"active", "revoked", "expired", "unknown"}},
 		{ID: FieldCertinCryptoKeySize, Ordinal: 0, Name: "size", CanonicalPath: "crypto_asset.key_size", CycloneDXPath: "", SPDXPath: "", Type: "integer", Weight: 3, Required: false, Scored: true, SourcePage: 46, Status: "verified"},
 		{ID: FieldCertinCryptoKeyCreationDate, Ordinal: 0, Name: "Creation Date", CanonicalPath: "crypto_asset.creation_date", CycloneDXPath: "", SPDXPath: "", Type: "date", Weight: 1, Required: false, Scored: true, SourcePage: 46, Status: "verified"},
 		{ID: FieldCertinCryptoKeyActivationDate, Ordinal: 0, Name: "Activation Date", CanonicalPath: "crypto_asset.activation_date", CycloneDXPath: "", SPDXPath: "", Type: "date", Weight: 1, Required: false, Scored: true, SourcePage: 46, Status: "verified"},
 	},
 	"protocol": {
 		{ID: FieldCertinCryptoProtoName, Ordinal: 0, Name: "Name", CanonicalPath: "crypto_asset.name", CycloneDXPath: "", SPDXPath: "", Type: "string", Weight: 3, Required: false, Scored: true, SourcePage: 46, Status: "verified"},
-		{ID: FieldCertinCryptoProtoAssetType, Ordinal: 0, Name: "Asset Type", CanonicalPath: "crypto_asset.asset_type", CycloneDXPath: "", SPDXPath: "", Type: "enum", Weight: 3, Required: false, Scored: true, SourcePage: 47, Status: "verified"},
+		{ID: FieldCertinCryptoProtoAssetType, Ordinal: 0, Name: "Asset Type", CanonicalPath: "crypto_asset.asset_type", CycloneDXPath: "", SPDXPath: "", Type: "enum", Weight: 3, Required: false, Scored: true, SourcePage: 47, Status: "verified", Values: []string{"protocol"}},
 		{ID: FieldCertinCryptoProtoVersion, Ordinal: 0, Name: "Version", CanonicalPath: "crypto_asset.protocol_version", CycloneDXPath: "", SPDXPath: "", Type: "string", Weight: 3, Required: false, Scored: true, SourcePage: 47, Status: "verified"},
 		{ID: FieldCertinCryptoProtoCipherSuites, Ordinal: 0, Name: "Cipher Suites", CanonicalPath: "crypto_asset.cipher_suites[]", CycloneDXPath: "", SPDXPath: "", Type: "string_list", Weight: 3, Required: false, Scored: true, SourcePage: 47, Status: "verified"},
 		{ID: FieldCertinCryptoProtoOid, Ordinal: 0, Name: "OID", CanonicalPath: "crypto_asset.oid", CycloneDXPath: "", SPDXPath: "", Type: "string", Weight: 1, Required: false, Scored: true, SourcePage: 47, Status: "verified"},
@@ -325,7 +336,7 @@ var PracticeFields = []ProfileField{
 	{ID: FieldCertinSbomPpDepth, Ordinal: 0, Name: "Depth", CanonicalPath: "", CycloneDXPath: "", SPDXPath: "", Type: "enum", Weight: 3, Required: false, Scored: true, SourcePage: 0, Status: "verified"},
 	{ID: FieldCertinSbomPpKnownUnknowns, Ordinal: 0, Name: "Known Unknowns", CanonicalPath: "", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 3, Required: false, Scored: true, SourcePage: 0, Status: "verified"},
 	{ID: FieldCertinSbomPpDistributionAndDelivery, Ordinal: 0, Name: "Distribution and Delivery", CanonicalPath: "", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 3, Required: false, Scored: true, SourcePage: 0, Status: "verified"},
-	{ID: FieldCertinSbomPpAccessControl, Ordinal: 0, Name: "Access Control", CanonicalPath: "", CycloneDXPath: "", SPDXPath: "", Type: "enum", Weight: 3, Required: false, Scored: true, SourcePage: 0, Status: "verified"},
+	{ID: FieldCertinSbomPpAccessControl, Ordinal: 0, Name: "Access Control", CanonicalPath: "", CycloneDXPath: "", SPDXPath: "", Type: "enum", Weight: 3, Required: false, Scored: true, SourcePage: 0, Status: "verified", Values: []string{"public", "private"}},
 	{ID: FieldCertinSbomPpAccommodationOfMistakes, Ordinal: 0, Name: "Accommodation of Mistakes", CanonicalPath: "", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 3, Required: false, Scored: true, SourcePage: 0, Status: "verified"},
 }
 

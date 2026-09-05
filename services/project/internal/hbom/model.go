@@ -36,14 +36,21 @@ import "strings"
 // descending, matching workers/hbom/model.py's MAX_DEPTH.
 const MaxDepth = 10
 
-// CriticalityValues is the closed set, matching the CHECK constraint on
-// normalize.hardware_components and workers/hbom/model.py's
-// CRITICALITY_VALUES.
-var CriticalityValues = map[string]bool{
-	"critical": true,
-	"high":     true,
-	"medium":   true,
-	"low":      true,
+// CriticalityValues is the closed set, as a set, for the component validator.
+//
+// ⚠ IT WAS THE SECOND OF FOUR HAND-WRITTEN COPIES, and the only reason it did
+// not drift is luck: Criticalities in device.go carried a fifth value under a
+// comment claiming both matched normalize.hardware_components. Both now derive
+// from the compliance profile, which is where CERT-In's answer is written down
+// once (element 23, p.23, transcribed verbatim).
+var CriticalityValues = criticalitySet()
+
+func criticalitySet() map[string]bool {
+	out := make(map[string]bool, len(Criticalities))
+	for _, v := range Criticalities {
+		out[v] = true
+	}
+	return out
 }
 
 // AssemblyTypes is the closed set for how a part is mounted.

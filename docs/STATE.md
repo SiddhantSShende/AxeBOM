@@ -8,7 +8,7 @@ A session that writes code but does not update this file has failed — the next
 
 **Last updated:** 2026-09-05
 **Current phase:** *Hardware as a first-class thing, and making every artifact actually contain its data*. 🟢 Track A rendering matrix (b); 🟢 B3 device register (c); 🟢 B1+B2 collectors and `axebom collect hardware` (d); 🟢 scans actually run (e); 🟢 **B4 the hardware screens** (f). **Track B is complete.** Not started: A6 (writerless tables), A7 (ecosystem coverage).
-**Next action:** The six-milestone registration plan is COMPLETE — defect sweep, BOM module seam, BOM-type-first registration, widened HBOM roster, alignment audit, live verification. ⚠ **The frontend is a container serving a built bundle** — `docker compose up -d --build frontend` before any e2e run. 🟡 Carried forward: `model.ProfileField` drops the profile's `values` list, so every enum's values are hardcoded in Go (widening it touches two generated languages and their agreement test); `aibom-generator` and `cbomkit` are dispatchable with no adapter (aibom-generator's stop is documented and deliberate — invariant 10); gEDA/LibrePCB/Horizon EDA/Fritzing unparsed; the interactive import has no path for CycloneDX or collector JSON; `alpine/git` is tag-pinned and `toolctl pin` does not exist; `raw_findings` and `licenses` remain deliberately writerless; one pre-existing `AIBOM | url` project is left unmigrated. ⚠ **`NVD_API_KEY` is still set in no environment — `task preflight` now says so.**
+**Next action:** The six-milestone registration plan is COMPLETE, and the `ProfileField.values` gap carried out of it is closed — enums now come from the compliance profile in both languages, held together by `TestGoAndPythonEnumValuesAgree`. ⚠ **The frontend is a container serving a built bundle** — `docker compose up -d --build frontend` before any e2e run. 🟡 Carried forward: `aibom-generator` and `cbomkit` are dispatchable with no adapter (aibom-generator's stop is documented and deliberate — invariant 10); gEDA/LibrePCB/Horizon EDA/Fritzing unparsed; the interactive import has no path for CycloneDX or collector JSON; `alpine/git` is tag-pinned and `toolctl pin` does not exist; `raw_findings` and `licenses` remain deliberately writerless; one pre-existing `AIBOM | url` project is left unmigrated. ⚠ **`NVD_API_KEY` is still set in no environment — `task preflight` now says so.**
 
 > 🟢 **A REAL SCAN NOW NORMALIZES, LIVE, WITH NO MANUAL TRIGGER — THE
 > NORMALIZER'S DEPLOYED BOUNDARY FROM (e)/(k)/(l) IS CLOSED FOR SBOM.**
@@ -2265,6 +2265,72 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-09-05 (m) — ProfileField carries `values`, and the drift it was hiding
+
+The gap recorded as owed at the end of Milestone 5, closed — and it was hiding a
+live inconsistency rather than merely being untidy.
+
+**The generator dropped the profile's `values` list.** `docs/reference/certin-v2.0.yaml`
+has always carried it — criticality's `[critical, high, medium, low]` is
+transcribed verbatim from p.23 — but `ProfileField` had no member for it in
+either language, so every consumer that needed an enum wrote its own copy.
+
+⚠ **Four copies existed for criticality alone, and two had already drifted:**
+
+| Copy | Values |
+|---|---|
+| `docs/reference/certin-v2.0.yaml` element 23 | 4 |
+| `hbom.CriticalityValues` (component validator) | 4 |
+| `workers/hbom/model.py` `CRITICALITY_VALUES` | 4 |
+| a sentence inside a validation error | 4, as prose |
+| **`hbom.Criticalities` (device form)** | **5 — `unknown`** |
+
+⚠ **The outlier sat directly beneath a comment stating the invariant it broke**:
+"⚠ IT MUST MATCH normalize.hardware_components.criticality. A device assessed
+`critical` whose parts table cannot express that value would report two
+different criticalities for one thing." That table's CHECK allows four. So a
+device recorded as `unknown` was accepted, stored, and unrepresentable in the
+parts table its tree flows into — exactly the failure the comment predicted, one
+line above the line that caused it.
+
+#### What was done
+
+- **`ProfileField` gained `Values` in Go and `values` in Python**, emitted only
+  for fields that declare them. Python's is a trailing tuple with a default, so
+  every existing positional construction keeps working. Both files regenerated;
+  12 enum fields now carry their sets.
+- **All four copies now read the profile.** `Criticalities` derives from element
+  23; `CriticalityValues` derives from `Criticalities`; the error message joins
+  the list rather than spelling it out — a message naming values the validator
+  no longer accepts is worse than a vague one, because the customer types
+  exactly what they were told and is refused again. Python's `CRITICALITY_VALUES`
+  reads the generated model.
+- **The manufacturing enums stopped being a hand-written Go map** — added one
+  milestone earlier for precisely the reason criticality's copies existed, and
+  now read from the generated operational set.
+- **`migrations/project/0006`** narrows `project.hardware_devices.criticality`
+  to the four the profile declares. ⚠ Verified 0 rows used `unknown` before
+  writing it, and the migration NULLs any that exist elsewhere — NULL is what
+  `unknown` already meant, and invariant 3 scores both zero, so no capability
+  is lost. `docs/01-DATA-MODEL.md` carried the same false claim ("same set as
+  `normalize.hardware_components`" beside a five-value list) and is corrected.
+
+#### Three guards, all mutation-verified
+
+- `TestGoAndPythonEnumValuesAgree` — the existing agreement tests compare ids
+  and counts, so the moment values became load-bearing the two languages could
+  disagree about what an enum ACCEPTS with every test green: one language
+  rejecting a value the other stores, on one document. Fails in both directions
+  (a value missing from Python, and a count mismatch).
+- `TestCriticalityComesFromTheProfileAndNowhereElse` — reintroducing the exact
+  original drift (`append(criticalityValues(), "unknown")`) fails it by name.
+- `test_the_operational_enums_match_their_profile` — the operational profile
+  generates Go only, so Python's `ASSEMBLY_TYPES` and `LIFECYCLE_VALUES` stay
+  literals held to the YAML by a test. ⚠ Not loaded at runtime on purpose: a
+  worker container has no copy of `docs/`, and a runtime file dependency would
+  trade a drift risk for a harder failure. Same arrangement as the
+  engine-registry agreement tests.
 
 ### 2026-09-05 (l) — Milestones 5 and 6: the alignment audit, and live verification
 

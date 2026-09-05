@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/axebom/axebom/libs/go-shared/model"
@@ -140,4 +141,90 @@ func TestGeneratedSetsAreDistinctAndNonEmpty(t *testing.T) {
 		seen[len(fields)] = at
 	}
 	t.Logf("field set sizes: %v", sizes)
+}
+
+// TestGoAndPythonEnumValuesAgree.
+//
+// ⚠ THE EXISTING AGREEMENT TESTS COMPARE IDS AND COUNTS, NOT VALUES — so the
+// moment the generator started emitting a field's closed value set, Go and
+// Python could disagree about what an enum ACCEPTS while every test stayed
+// green. That matters more than it sounds: the values are now what validates a
+// submitted criticality in Go and what `workers/hbom/model.py` checks in
+// Python, so a divergence is one language accepting a value the other rejects,
+// on the same document, silently.
+//
+// This reads the generated Python text for the same reason the tests above do:
+// `libs/go-shared/model` cannot import Python, and the two files are generated
+// from one profile by one command — so the only thing that can hold them
+// together is an assertion that reads both.
+func TestGoAndPythonEnumValuesAgree(t *testing.T) {
+	data, err := os.ReadFile(pythonModelPath(t))
+	if err != nil {
+		t.Fatalf("read generated Python: %v", err)
+	}
+	py := string(data)
+
+	all := [][]model.ProfileField{
+		model.SBOMFields, model.QBOMFields, model.AIBOMFields,
+		model.HBOMFields, model.PracticeFields, model.HBOMManufacturingFields,
+	}
+	for _, fields := range model.CryptoFieldsByAssetType {
+		all = append(all, fields)
+	}
+
+	checked := 0
+	for _, set := range all {
+		for _, f := range set {
+			if len(f.Values) == 0 {
+				continue
+			}
+			checked++
+
+			line := pythonLineFor(py, f.ID)
+			if line == "" {
+				// HBOMManufacturingFields has no Python counterpart — the
+				// operational profile generates Go only. Skipping is correct;
+				// asserting its absence belongs to a different test.
+				continue
+			}
+			for _, want := range f.Values {
+				if !strings.Contains(line, `"`+want+`"`) {
+					t.Errorf("%s: Go accepts %q, the generated Python line does not list it:\n  %s",
+						f.ID, want, line)
+				}
+			}
+			// And nothing EXTRA on the Python side: a value Python accepts and
+			// Go rejects fails in the opposite direction and is just as bad.
+			if got := len(pyTupleValues(line)); got != len(f.Values) {
+				t.Errorf("%s: Go has %d values %v, Python has %d",
+					f.ID, len(f.Values), f.Values, got)
+			}
+		}
+	}
+
+	if checked == 0 {
+		t.Fatal("no field in any generated set carries a value list; either the " +
+			"profile stopped declaring enums or the generator stopped emitting " +
+			"them, and this test is guarding nothing")
+	}
+	t.Logf("%d enum field(s) agree between Go and Python", checked)
+}
+
+// pythonLineFor returns the generated Python construction for one field id.
+func pythonLineFor(py, id string) string {
+	for _, line := range strings.Split(py, "\n") {
+		if strings.Contains(line, `ProfileField("`+id+`"`) {
+			return line
+		}
+	}
+	return ""
+}
+
+// pyTupleValues pulls the quoted strings out of the trailing values tuple.
+func pyTupleValues(line string) []string {
+	open := strings.LastIndex(line, ", (")
+	if open < 0 {
+		return nil
+	}
+	return regexp.MustCompile(`"([^"]*)"`).FindAllString(line[open:], -1)
 }

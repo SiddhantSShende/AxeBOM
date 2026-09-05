@@ -72,8 +72,13 @@ func validateHardwareComponent(c *hbom.Component, path string) error {
 				"reported as not-provided; a component with no name cannot be referred to at all.", path)
 	}
 	if crit := strings.ToLower(strings.TrimSpace(c.Criticality)); crit != "" && !hbom.CriticalityValues[crit] {
+		// ⚠ THE SET WAS SPELLED OUT AS PROSE HERE — the fourth hand-written
+		// copy of one closed list. A message naming values the validator no
+		// longer accepts is worse than a vague one: the customer types exactly
+		// what they were told and is refused again.
 		return errs.Newf(errs.ValidationFieldInvalid,
-			"%s: criticality %q is not one of critical, high, medium, low", path, c.Criticality)
+			"%s: criticality %q is not one of %s", path, c.Criticality,
+			strings.Join(hbom.Criticalities, ", "))
 	}
 	for i, child := range c.Children {
 		if err := validateHardwareComponent(child, fmt.Sprintf("%s > child %d", path, i)); err != nil {
