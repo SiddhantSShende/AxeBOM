@@ -7,8 +7,8 @@ A session that writes code but does not update this file has failed — the next
 ---
 
 **Last updated:** 2026-09-05
-**Current phase:** *Hardware as a first-class thing, and making every artifact actually contain its data*. 🟢 Track A rendering matrix (b); 🟢 **B3 device register** (c); 🟢 **B1 collector formats + B2 `axebom collect hardware`** (d). Not started: most of B4 (upload formats, the component form, the collector affordance in the UI), A6 (writerless tables), A7 (ecosystem coverage).
-**Next action:** B4 — the import screen accepts **CSV only** while parsers for XLSX/JSON/CycloneDX already exist, the component edit form exposes **6 of ~35 fields**, and **no screen tells anyone a collector exists**: `hbom-host-report` is reachable today only by uploading a file to a project and running a scan. ⚠ **Hardware inventory now has six input formats** (`axebom collect hardware`, cdxgen, lshw, dmidecode, fwupd, WMI, Redfish) behind one engine, and a first-party offline collector that opens no network connection — asserted by a test over its import set, not a comment. ⚠ **Two gate defects fixed this session**: the Go tree had no honest-label guard at all (`profile:guardrails` now covers all five trees), and `task verify` carried `ignore_error: true` on both the Python and TypeScript lint steps, so it enforced Go lint and nothing else — sixteen eslint errors passed it twice. ⚠ **`NVD_API_KEY` is still set in no environment**, so element 24 reports `not-attempted`. 🟡 Carried forward: nothing checks project classification; five `normalize` tables have no writer (two with live readers, so the per-component provenance panel is empty); ecosystem coverage is npm/golang/pypi/github only; `mock-engine`/`cbomkit`/`aibom-generator` are dispatchable with no adapter; `fixtures/hbom-nested` is still the only HBOM golden.
+**Current phase:** *Hardware as a first-class thing, and making every artifact actually contain its data*. 🟢 Track A rendering matrix (b); 🟢 B3 device register (c); 🟢 B1 collector formats + B2 `axebom collect hardware` (d); 🟢 **scans actually run** (e). Not started: most of B4 (upload formats, the component form, the collector affordance in the UI), A6 (writerless tables), A7 (ecosystem coverage).
+**Next action:** B4. ⚠ **A real scan completes end to end for the first time on this stack**: cdxgen, syft, syft-spdx and grype all succeed in ~2s on `expressjs/express`. Three things had to be fixed to get there — **cdxgen was running `npm install` inside the sandbox** (forbidden by invariant 7, impossible under `--network=none`, and it stalled every scan for 10+ minutes), **nothing had ever pulled the fetcher's `alpine/git` clone image** (so every repository scan failed at step one), and **every seeded project was unscannable** with two of them asserting a `github` source that had no connection row. ⚠ **732 scans stuck in `queued` were a test leak, not a product bug** — 12 rows per run of the project store tests, from a cleanup that had been silently aborting its own transaction since it was written; fixed at source and the residue cleared. ⚠ **`NVD_API_KEY` is still set in no environment.** 🟡 Carried forward: `mock-engine` is dispatchable with no adapter; `alpine/git` is tag-pinned and `toolctl pin` does not exist; nothing checks project classification; five `normalize` tables have no writer; ecosystem coverage is npm/golang/pypi/github only.
 
 > 🟢 **A REAL SCAN NOW NORMALIZES, LIVE, WITH NO MANUAL TRIGGER — THE
 > NORMALIZER'S DEPLOYED BOUNDARY FROM (e)/(k)/(l) IS CLOSED FOR SBOM.**
@@ -2265,6 +2265,119 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-09-05 (e) — Why no scan had ever really run: cdxgen was running `npm install` in a network-less sandbox
+
+Asked to "fix the running scan". There was no stuck scan — but nothing had
+genuinely completed either, and finding out why turned up four distinct
+problems.
+
+#### ⚠ cdxgen ran `npm install` over customer source, which invariant 7 forbids outright
+
+Watching a real scan of `expressjs/express`, the sandbox container was executing
+
+    npm install --ignore-scripts --no-audit --no-bin-links --git=git --package-lock
+
+cdxgen's `--install-deps` **defaults to true**, and nothing disabled it.
+
+CLAUDE.md invariant 7 is a flat prohibition: *"Never run package-manager
+resolution that executes user code. No `npm install`, no `mvn`, no `gradle`, no
+`pip install`, no `setup.py`. Lockfile and manifest parsing only."*
+`--ignore-scripts` blocks the lifecycle-hook vector, so this was **not a
+breach** — and the rule still says no, because a resolver executes resolution
+logic over manifests an attacker wrote.
+
+⚠ **The sandbox held.** The container was `--network=none`, read-only rootfs,
+all capabilities dropped, uid 65534 — verified by inspecting the live container.
+So the install could never reach a registry: it retried and backed off while the
+scan sat in `running` for **over ten minutes** with all nine engine runs queued
+behind it.
+
+This is the identical failure `FETCH_LICENSE=false` already guards, in the same
+adapter, with the same symptom and the same mechanism — a network-reliant step
+stalling to its own timeout inside a network-less sandbox. One was found on a
+live run; this one was not, because nobody had watched a scan of a repository
+with no committed lockfile.
+
+**`--no-install-deps` added, with a test pinning it.** After: cdxgen
+**succeeds in 2 seconds**. Before: killed by hand at 10+ minutes.
+
+#### Nothing had ever pulled the fetcher's clone image
+
+Every scan of a repository failed at the first step with
+`FETCH_CLONE_FAILED` → `No such image: alpine/git:latest`. `toolctl pull` has
+always known to fetch it — its comment describes exactly this failure — but
+nothing told an operator they had not run it, and `preflight` checked
+toolchains only.
+
+⚠ **A missing ENGINE image degrades honestly** (that engine reports
+`unavailable`, Engine Coverage says so, the scan proceeds). A missing CLONE
+image is different in kind: source is never materialized, so **every** engine
+fails and the surfaced cause is a Docker daemon message three retries later.
+New `preflight` check, singling it out for that reason.
+
+#### Every seeded project was unscannable, and two asserted a source that did not exist
+
+`migrations/seed/0001` registers `payments-api` and `ml-inference` with
+`source_type = 'github'` and seeds **no `repository_connections` row and no
+`uploads` row for any project**. So the first scan a new developer runs, on the
+flagship seeded project, failed with nine failed engines — and the state itself
+is invalid: a project claiming `github` with no connection is a registration
+asserting something untrue.
+
+`0002` seeds the two public-repo connections with `credential_ref` NULL, which
+the fetcher explicitly supports ("a public repository … demanding one would
+block the common case").
+
+⚠ **The first version of that file silently did nothing.** Seed files are NOT
+goose migrations — 0001 says so in its first line and carries no annotations —
+so the `-- +goose Down` I wrote was an ordinary comment and the DELETE beneath
+it ran too. It inserted two rows, deleted them, and reported "seed applied".
+
+#### 732 scans stuck in `queued` were a test leak, not a product bug
+
+Every one belonged to a project whose name is literally a Go test name. Measured
+rather than guessed: **771 rows before `go test ./services/project/internal/store`,
+783 after — 12 leaked per run.**
+
+Two causes, both instructive:
+
+- `seedCryptoAssets` and `seedAIModels` registered **no cleanup at all**.
+- `seedSBOM` had one, and it had been failing on every run since it was written:
+  `findings.cluster_id` has a foreign key to `vuln_clusters`, so deleting the
+  cluster while its findings exist fails with 23503 — which **aborted the whole
+  cleanup transaction**, made every later statement a no-op, and was **discarded
+  with `_ =`**. Its own comment predicted this shape for `vex_statements`; the
+  fragility that caused it was left in place.
+
+⚠ **The same trap as yesterday's 44 leaked devices**: `DeleteProject` is a SOFT
+delete, so `ON DELETE CASCADE` never fires and nothing a fixture creates under a
+project is cleaned up by removing it.
+
+Fixed at source (a shared `cleanupSeededScan`, correct delete order, errors
+logged); a full `go test ./...` now leaks **zero**. Residue cleared: 751 scans,
+2,143 soft-deleted test projects, and their documents removed — against 11 real
+projects and 39 real scans.
+
+#### Verified live, end to end
+
+A scan of `expressjs/express` through the Generate flow: source cloned (213
+files, 713 KB), then **cdxgen, syft, syft-spdx and grype all succeeded in ~2s
+each**; osv-scanner and trivy-fs partial; dependency-check and
+github-dependency-graph-sbom honestly `unavailable`. `syft-spdx` — registered
+two sessions ago and never dispatched before — ran for the first time.
+
+`task verify` exits 0.
+
+#### Owed
+
+- `mock-engine` is still dispatchable with no adapter, so every SBOM scan
+  carries a permanent `skipped` row.
+- ⚠ `alpine/git:latest` is pinned **by tag**, which `fetcher.GitImage`'s own
+  comment flags as production-unsafe; `toolctl pin` still does not exist.
+- B4 unchanged: CSV-only import, 6 of ~35 fields in the component form, and no
+  UI affordance for the collectors.
+- A6/A7 unchanged. ⚠ `NVD_API_KEY` still set in no environment.
 
 ### 2026-09-05 (d) — Track B1 and B2: five collector formats, a first-party collector, and a gate that only ever enforced one of its three linters
 

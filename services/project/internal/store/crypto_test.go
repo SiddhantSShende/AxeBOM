@@ -15,6 +15,7 @@ import (
 // covered at the normalizer level in workers/cbom/test_crypto_normalize.py.
 func seedCryptoAssets(t *testing.T, pool *db.Pool, tenantID, projectID string) (docID string) {
 	t.Helper()
+	var seededScanID string
 	err := pool.WithTenant(t.Context(), tenantID, func(ctx context.Context, tx db.Tx) error {
 		var scanID string
 		if err := tx.QueryRow(ctx, `
@@ -56,11 +57,16 @@ VALUES ($1, $2, 'CBOM', 1, 'test-1', NULL, '', now())
 			VALUES ($1, $2, 'key-ref-1', 'key', 'RSA-2048',
 			        2048, 'active', true, 'vulnerable')`,
 			tenantID, docID)
-		return err
+		if err != nil {
+			return err
+		}
+		seededScanID = scanID
+		return nil
 	})
 	if err != nil {
 		t.Fatalf("seed CBOM: %v", err)
 	}
+	cleanupSeededScan(t, pool, tenantID, seededScanID, docID)
 	return docID
 }
 

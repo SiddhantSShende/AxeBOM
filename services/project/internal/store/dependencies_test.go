@@ -3,6 +3,7 @@ package store_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -159,22 +160,51 @@ func seedSBOM(t *testing.T, pool *db.Pool, tenantID, projectID string) sbomFixtu
 	}
 
 	t.Cleanup(func() {
-		_ = pool.WithTenant(context.Background(), tenantID, func(ctx context.Context, tx db.Tx) error {
-			// findings/components/provenance have no FK to bom_documents and so
-			// are NOT cascaded by this delete — they become harmless orphans
-			// scoped to a bom_document_id nothing will ever resolve to again.
-			// vuln_clusters cascades to vuln_ids via ON DELETE CASCADE.
+		// ⚠ THE ERROR USED TO BE DISCARDED WITH `_ =`, SO A CLEANUP THAT FAILED
+		// SAID NOTHING AT ALL — and this one was failing on every run, leaking
+		// six scan rows a time. A silent cleanup is worse than none: the rows
+		// accumulate and the test suite looks tidy.
+		err := pool.WithTenant(context.Background(), tenantID, func(ctx context.Context, tx db.Tx) error {
+			// ⚠ ORDER IS LOAD-BEARING, AND GETTING IT WRONG WAS SILENT.
 			//
-			// vex_statements is DELIBERATELY NOT cleaned up here: it is
-			// iterative and append-only by design (docs/01-DATA-MODEL.md §7),
-			// and this service's database role holds no DELETE grant on it at
-			// all — attempting one aborts the whole cleanup transaction, which
-			// is what originally left every table below uncleaned too.
-			_, _ = tx.Exec(ctx, `DELETE FROM normalize.bom_documents WHERE id = $1`, f.docID)
-			_, _ = tx.Exec(ctx, `DELETE FROM normalize.vuln_clusters WHERE id = $1`, f.clusterID)
+			// This block used to delete bom_documents and vuln_clusters with
+			// `_, _ =`, on the reasoning that findings and components "have no
+			// FK to bom_documents and so become harmless orphans". The first
+			// half is true. The second is not: `findings.cluster_id` DOES have
+			// a foreign key to vuln_clusters, so deleting the cluster while its
+			// findings still exist fails with 23503 — which aborted the whole
+			// transaction, made every later statement a no-op, and was
+			// discarded, so the scan row leaked on every single run.
+			//
+			// The findings therefore go first, explicitly. vuln_clusters then
+			// cascades to vuln_ids on its own.
+			//
+			// vex_statements is DELIBERATELY NOT cleaned up: it is iterative
+			// and append-only by design (docs/01-DATA-MODEL.md §7), and this
+			// service's role holds no DELETE grant on it at all — attempting
+			// one aborts the transaction in exactly the way described above.
+			if _, err := tx.Exec(ctx,
+				`DELETE FROM normalize.findings WHERE bom_document_id = $1`, f.docID); err != nil {
+				return fmt.Errorf("findings: %w", err)
+			}
+			if _, err := tx.Exec(ctx,
+				`DELETE FROM normalize.components WHERE bom_document_id = $1`, f.docID); err != nil {
+				return fmt.Errorf("components: %w", err)
+			}
+			if _, err := tx.Exec(ctx,
+				`DELETE FROM normalize.bom_documents WHERE id = $1`, f.docID); err != nil {
+				return fmt.Errorf("bom_documents: %w", err)
+			}
+			if _, err := tx.Exec(ctx,
+				`DELETE FROM normalize.vuln_clusters WHERE id = $1`, f.clusterID); err != nil {
+				return fmt.Errorf("vuln_clusters: %w", err)
+			}
 			_, err := tx.Exec(ctx, `DELETE FROM scan.scans WHERE id = $1`, f.scanID)
 			return err
 		})
+		if err != nil {
+			t.Logf("cleanup sbom fixture (scan %s): %v", f.scanID, err)
+		}
 	})
 
 	return f
@@ -413,4 +443,47 @@ func TestDependenciesCrossTenantAccessIsNotFound(t *testing.T) {
 	if !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("ListFindings cross-tenant error = %v, want ErrNotFound", err)
 	}
+}
+
+// cleanupSeededScan removes a fixture's scan row and its BOM document.
+//
+// ⚠ EVERY FIXTURE IN THIS PACKAGE THAT SEEDS A SCAN MUST CALL THIS, AND TWO OF
+// THEM DID NOT.
+//
+// `seedCryptoAssets` and `seedAIModels` inserted a `scan.scans` row each and
+// registered no cleanup at all, so **twelve scan rows leaked on every run of
+// this package**. Measured, not guessed: 771 rows before `go test`, 783 after.
+// Across sessions that reached 732 scans stuck in `queued` — rows no product
+// code created, that no worker will ever pick up (no fetch job was ever
+// published for them), and that make the scans list and every "is anything
+// running?" question unreadable.
+//
+// ⚠ THE PROJECT'S OWN CLEANUP CANNOT DO THIS. store.DeleteProject is a SOFT
+// delete, so `ON DELETE CASCADE` never fires — the same trap that left 44
+// devices behind, in the same package, for the same reason.
+//
+// Deliberately NOT deleted here: findings, components and provenance have no FK
+// to bom_documents, so they become harmless orphans scoped to a document id
+// nothing will resolve again; and `vex_statements` is append-only by design
+// (docs/01-DATA-MODEL.md §7) with no DELETE grant for this role at all —
+// attempting one aborts the whole cleanup transaction, which is what originally
+// left every other table uncleaned too.
+func cleanupSeededScan(t *testing.T, pool *db.Pool, tenantID, scanID, docID string) {
+	t.Helper()
+	t.Cleanup(func() {
+		err := pool.WithTenant(context.Background(), tenantID,
+			func(ctx context.Context, tx db.Tx) error {
+				if docID != "" {
+					_, _ = tx.Exec(ctx, `DELETE FROM normalize.bom_documents WHERE id = $1`, docID)
+				}
+				if scanID == "" {
+					return nil
+				}
+				_, err := tx.Exec(ctx, `DELETE FROM scan.scans WHERE id = $1`, scanID)
+				return err
+			})
+		if err != nil {
+			t.Logf("cleanup seeded scan %s: %v", scanID, err)
+		}
+	})
 }

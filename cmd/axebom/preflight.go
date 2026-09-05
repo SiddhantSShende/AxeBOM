@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/axebom/axebom/libs/go-shared/fetcher"
 )
 
 // Preflight reports what is installed and — more usefully — what is missing and
@@ -74,6 +76,7 @@ func runPreflight(ctx context.Context, args []string) error {
 		checkTask(ctx),
 		checkGolangciLint(ctx),
 		checkCosign(ctx),
+		checkCloneImage(ctx),
 	}
 	if runtime.GOOS == "windows" {
 		results = append(results, checkWSL(ctx))
@@ -232,6 +235,41 @@ func checkDocker(ctx context.Context) checkResult {
 // Java 1.8 on this machine is too old for Dependency-Check (11+) and cbomkit
 // (17+), but that is not a blocker: ADR-0002 runs every Java tool
 // container-only, precisely so the host JDK never matters.
+// checkCloneImage reports whether the fetcher's clone image is present.
+//
+// ⚠ ITS ABSENCE KILLS EVERY SCAN, WHICH IS WHY IT IS SINGLED OUT FROM THE
+// ENGINE IMAGES.
+//
+// A missing ENGINE image degrades honestly: that engine reports `unavailable`,
+// the report says so in Engine Coverage, and the rest of the scan proceeds.
+// A missing CLONE image is different in kind — source is never materialized, so
+// every engine on the scan fails with FETCH_CLONE_FAILED and the surfaced cause
+// is a Docker daemon message ("No such image: alpine/git:latest") three retries
+// after the fact.
+//
+// Observed on this machine: with the image absent, every scan of a repository-
+// backed project failed at the first step, and nothing before the failure said
+// why. `toolctl pull` has always known to fetch it — nothing told an operator
+// they had not run it.
+func checkCloneImage(ctx context.Context) checkResult {
+	r := checkResult{name: "clone image", version: fetcher.GitImage}
+
+	// #nosec G204 -- fetcher.GitImage is a compile-time constant in this
+	// repository, not user input. This command takes no arguments at all.
+	cmd := exec.CommandContext(ctx, "docker", "image", "inspect", fetcher.GitImage)
+	if err := cmd.Run(); err != nil {
+		r.severity = sevWarn
+		r.detail = "the fetcher clones inside this image; without it EVERY scan of a " +
+			"repository fails at the first step with FETCH_CLONE_FAILED"
+		r.fix = "task osint:pull   (or: docker pull " + fetcher.GitImage + ")"
+		return r
+	}
+
+	r.found = true
+	r.severity = sevOK
+	return r
+}
+
 func checkJava(ctx context.Context) checkResult {
 	out, err := run(ctx, "java", "-version")
 	if err != nil {

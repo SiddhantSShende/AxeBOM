@@ -16,6 +16,7 @@ import (
 // the normalizer itself.
 func seedAIModels(t *testing.T, pool *db.Pool, tenantID, projectID string) (docID, modelID string) {
 	t.Helper()
+	var seededScanID string
 	err := pool.WithTenant(t.Context(), tenantID, func(ctx context.Context, tx db.Tx) error {
 		var scanID string
 		if err := tx.QueryRow(ctx, `
@@ -53,14 +54,18 @@ VALUES ($1, $2, 'AIBOM', 1, 'test-1', NULL, '', now())
 			return err
 		}
 
-		_, err := tx.Exec(ctx, `
+		if _, err := tx.Exec(ctx, `
 			INSERT INTO normalize.ai_model_dependencies (tenant_id, ai_model_id, component_key)
-			VALUES ($1, $2, 'purl:pkg:pypi/langchain@0.3.7')`, tenantID, modelID)
-		return err
+			VALUES ($1, $2, 'purl:pkg:pypi/langchain@0.3.7')`, tenantID, modelID); err != nil {
+			return err
+		}
+		seededScanID = scanID
+		return nil
 	})
 	if err != nil {
 		t.Fatalf("seed AIBOM: %v", err)
 	}
+	cleanupSeededScan(t, pool, tenantID, seededScanID, docID)
 	return docID, modelID
 }
 

@@ -87,6 +87,34 @@ class CdxgenAdapter(SandboxedAdapter):
             "--spec-version",
             "1.6",
             "--no-banner",
+            # ⚠ THE MOST IMPORTANT FLAG HERE, AND IT WAS MISSING.
+            #
+            # cdxgen's `--install-deps` DEFAULTS TO TRUE. Without this it runs
+            #
+            #     npm install --ignore-scripts --no-audit --no-bin-links …
+            #
+            # inside the sandbox, over the customer's source tree — observed
+            # live on a real scan of expressjs/express.
+            #
+            # That is forbidden outright by CLAUDE.md invariant 7: "Never run
+            # package-manager resolution that executes user code. No
+            # `npm install`, no `mvn`, no `gradle`, no `pip install`, no
+            # `setup.py`. Lockfile and manifest parsing only." `--ignore-scripts`
+            # blocks the lifecycle-hook vector, which is why this was not a
+            # breach — but the rule is a flat prohibition, not a risk
+            # assessment, and a resolver still executes resolution logic over
+            # attacker-controlled manifests.
+            #
+            # It also cannot work: the container runs `--network=none`, so the
+            # install can never reach a registry. It retries and backs off
+            # instead, and a scan of a 213-file repository sat in `running` for
+            # over ten minutes with every engine still queued behind it.
+            #
+            # This is the identical failure FETCH_LICENSE=false already guards
+            # against below, by the same mechanism, with the same symptom — a
+            # network-reliant step stalling to its own timeout inside a network-
+            # less sandbox. One was found; this one was not.
+            "--no-install-deps",
         ]
 
     def extra_env(self, layout: WorkspaceLayout) -> dict[str, str]:
