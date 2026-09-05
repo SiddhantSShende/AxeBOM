@@ -74,9 +74,21 @@ const (
 	KindRepoToken Kind = "repo-token"
 	// KindWebhookSecret is a shared secret for verifying inbound webhooks.
 	KindWebhookSecret Kind = "webhook-secret"
+	// KindProviderToken is a tenant-wide OAuth token for a source-code provider
+	// — the "connect GitHub once" credential, as opposed to KindRepoToken's
+	// per-repository one.
+	//
+	// ⚠ A SEPARATE KIND BECAUSE THE BLAST RADIUS IS DIFFERENT. A repo token
+	// reaches one repository; this one reaches everything the authorising
+	// account can see. Sharing a path space with per-repo tokens would make
+	// "revoke this project's access" and "revoke the tenant's GitHub access"
+	// look like the same operation in the store, and they are not.
+	KindProviderToken Kind = "provider-token"
 )
 
-func (k Kind) valid() bool { return k == KindRepoToken || k == KindWebhookSecret }
+func (k Kind) valid() bool {
+	return k == KindRepoToken || k == KindWebhookSecret || k == KindProviderToken
+}
 
 // Ref identifies a secret by the facts the SERVER knows, never by a string the
 // client supplied.

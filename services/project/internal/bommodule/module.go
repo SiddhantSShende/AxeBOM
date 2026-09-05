@@ -63,6 +63,55 @@ type Module interface {
 	// from. Delegated to model.RegistrationSources, which the engine registry's
 	// agreement test holds honest — a module must not invent its own answer.
 	Sources() []string
+
+	// DependsOn names the BOM types this one is derived from.
+	//
+	// ⚠ A DEPENDENCY THE PRODUCT ALREADY KNEW ABOUT AND NEVER ACTED ON.
+	// model.BOMType.IsDerived's own comment says a project classified QBOM
+	// without CBOM "will produce device metadata and no crypto assets — worth
+	// warning about at registration rather than at report time". Nothing warned.
+	// The registration screen showed a "derived from CBOM" chip, which states
+	// the relationship and not the consequence of ignoring it.
+	DependsOn() []model.BOMType
+
+	// Requirements are what the customer must still supply for this BOM type to
+	// produce a document, beyond the fields every project has.
+	//
+	// ⚠ AN EMPTY LIST IS AN ANSWER, NOT A GAP. SBOM and CBOM need nothing past
+	// a source their engines can read; saying so is what makes the non-empty
+	// ones meaningful.
+	Requirements() []Requirement
+}
+
+// Requirement is one thing a BOM type needs that the common project fields do
+// not cover.
+//
+// ⚠ THIS IS NOT A FORM DEFINITION, AND MUST NOT BECOME ONE. Three per-type form
+// generators already exist — hbom.DeviceFormFields, qbom.FormFields,
+// aibom.UserSuppliedFormFields — with three different shapes because they
+// describe three different things: a device is per-device, Table 8 metadata is
+// per-project, and Table 10's user fields are per-MODEL. Collapsing them into
+// one list of inputs would force a shape that is wrong for at least two of
+// them, which is the drift this package was built to prevent. A Requirement
+// says WHAT is needed and WHERE it is done; the screen that does it owns its
+// own fields, still generated from the profile.
+type Requirement struct {
+	// ID is stable and is what the UI routes on. Never a URL: a path is the
+	// frontend's to own, and putting one here would make a route rename a
+	// backend change.
+	ID string
+	// Title is the task, in the customer's words.
+	Title string
+	// Detail says what happens if it is not done. A checklist item that does
+	// not say the consequence reads as optional.
+	Detail string
+	// AtRegistration is true when the wizard itself collects this, false when
+	// it is a task on the project after it exists.
+	AtRegistration bool
+	// ⚠ Required means "without this, the BOM type produces nothing" — not
+	// "recommended". Softening it would put an item on a checklist that a
+	// customer can skip and then wonder why their report is empty.
+	Required bool
 }
 
 // Registry holds one module per BOM type.
@@ -147,6 +196,45 @@ func (r *Registry) RequireClassified(classifications []model.BOMType, want model
 			"use a project that already has it — otherwise this would be "+
 			"stored against a project whose reports can never contain it.",
 		m.Noun(), want, have, want)
+}
+
+// MissingDependencies reports the BOM types a selection derives from but does
+// not include.
+//
+// ⚠ A WARNING, NOT A REFUSAL, AND THE DIFFERENCE IS DELIBERATE. A QBOM without
+// a CBOM still produces something real — Table 8's device metadata, which no
+// scan can generate and which a customer may legitimately want on its own.
+// Refusing the combination would block a valid registration to prevent a
+// partial one. Naming it at the point of the decision is the useful half; the
+// customer is then choosing a hollow readiness section rather than discovering
+// one.
+func (r *Registry) MissingDependencies(selected []model.BOMType) map[model.BOMType][]model.BOMType {
+	have := make(map[model.BOMType]bool, len(selected))
+	for _, t := range selected {
+		have[t] = true
+	}
+
+	var out map[model.BOMType][]model.BOMType
+	for _, t := range selected {
+		m, ok := r.For(t)
+		if !ok {
+			continue
+		}
+		var missing []model.BOMType
+		for _, dep := range m.DependsOn() {
+			if !have[dep] {
+				missing = append(missing, dep)
+			}
+		}
+		if len(missing) == 0 {
+			continue
+		}
+		if out == nil {
+			out = map[model.BOMType][]model.BOMType{}
+		}
+		out[t] = missing
+	}
+	return out
 }
 
 // RequireSource refuses a registration whose source type no engine for that BOM

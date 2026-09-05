@@ -573,20 +573,32 @@ func (h *Handler) Source(w http.ResponseWriter, r *http.Request) {
 
 // ListRepos handles GET /v1/github/repos.
 //
-// The token comes from the Authorization-bearing GitHub session, supplied by
-// the caller per request. It is used and discarded — this endpoint stores
-// nothing.
+// The token is the tenant's stored connection when there is one, and the
+// X-GitHub-Token header otherwise. Either way it is used and discarded here.
 func (h *Handler) ListRepos(w http.ResponseWriter, r *http.Request) {
-	if _, err := auth.RequireTenant(r.Context()); err != nil {
+	tenantID, err := auth.RequireTenant(r.Context())
+	if err != nil {
 		errs.Write(w, r, err)
 		return
 	}
 
+	// ⚠ THE STORED TOKEN IS PREFERRED, AND THE HEADER IS THE FALLBACK.
+	//
+	// This endpoint used to REQUIRE the token in a header, which meant the
+	// browser held a GitHub credential and sent it back out on every keystroke
+	// of a repo search. A tenant that has connected GitHub once now needs none
+	// of that: the token stays in Vault and never leaves the server.
+	//
+	// The header path stays for the connect flow itself — the moment a token
+	// first arrives, before there is anything stored to read.
 	token := strings.TrimSpace(r.Header.Get("X-GitHub-Token"))
 	if token == "" {
-		errs.Write(w, r, errs.New(errs.ValidationFieldRequired,
-			"supply the GitHub token in the X-GitHub-Token header"))
-		return
+		stored, err := h.svc.GitHubToken(r.Context(), tenantID)
+		if err != nil {
+			errs.Write(w, r, err)
+			return
+		}
+		token = stored
 	}
 
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
@@ -708,6 +720,13 @@ func (h *Handler) Options(w http.ResponseWriter, r *http.Request) {
 			// service now refuses. Publishing the per-type list lets the screen
 			// narrow the choice instead of failing after the form is filled.
 			"sources": o.Sources,
+			// ⚠ WHAT A TYPE STILL NEEDS, AND WHAT IT DERIVES FROM. Both were
+			// facts the product already held and never told anyone at the point
+			// of the decision: model.BOMType.IsDerived's own comment says a
+			// QBOM without a CBOM is "worth warning about at registration
+			// rather than at report time", and nothing warned.
+			"depends_on":   o.DependsOn,
+			"requirements": requirementsJSON(o.Requirements),
 		})
 	}
 
@@ -725,6 +744,21 @@ func (h *Handler) Options(w http.ResponseWriter, r *http.Request) {
 		"source_types": h.svc.SourceTypes(),
 		"practices":    practices,
 	})
+}
+
+// requirementsJSON renders the per-type tasks for the registration screen.
+func requirementsJSON(reqs []service.BOMRequirement) []map[string]any {
+	out := make([]map[string]any, 0, len(reqs))
+	for _, r := range reqs {
+		out = append(out, map[string]any{
+			"id":              r.ID,
+			"title":           r.Title,
+			"detail":          r.Detail,
+			"at_registration": r.AtRegistration,
+			"required":        r.Required,
+		})
+	}
+	return out
 }
 
 // ---------------------------------------------------------------------------
@@ -849,4 +883,84 @@ func formatDate(t *time.Time) *string {
 	}
 	s := t.UTC().Format("2006-01-02")
 	return &s
+}
+
+// ---------------------------------------------------------------------------
+// GitHub connection — one per tenant
+// ---------------------------------------------------------------------------
+
+// GetGitHubConnection handles GET /v1/github/connection.
+//
+// Answers 200 with `connected: false` rather than 404 when there is none: not
+// being connected is the state every tenant starts in and the state the
+// registration screen renders a button for, not a missing resource.
+func (h *Handler) GetGitHubConnection(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := auth.RequireTenant(r.Context())
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	status, err := h.svc.GitHubConnection(r.Context(), tenantID)
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	errs.WriteJSON(w, http.StatusOK, githubConnectionJSON(status))
+}
+
+// ConnectGitHub handles PUT /v1/github/connection.
+//
+// ⚠ PUT, NOT POST. Reconnecting is the normal repair for an expired or revoked
+// authorisation, and it replaces the one connection a tenant has rather than
+// creating a second — which is precisely what PUT means and what the table's
+// primary key enforces.
+func (h *Handler) ConnectGitHub(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := auth.RequireTenant(r.Context())
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	var req struct {
+		Token string `json:"token"`
+		Login string `json:"github_login"`
+	}
+	if err := decode(r, &req); err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+
+	status, err := h.svc.ConnectGitHub(r.Context(), tenantID,
+		ctxkey.UserID(r.Context()), req.Token, req.Login)
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	errs.WriteJSON(w, http.StatusOK, githubConnectionJSON(status))
+}
+
+// DisconnectGitHub handles DELETE /v1/github/connection.
+func (h *Handler) DisconnectGitHub(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := auth.RequireTenant(r.Context())
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	if err := h.svc.DisconnectGitHub(r.Context(), tenantID); err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// githubConnectionJSON renders the status.
+//
+// ⚠ NO TOKEN AND NO CREDENTIAL REF. The Vault path is not itself a secret, but
+// publishing it hands anyone who reaches this API the exact location to aim at,
+// and no screen has a use for it.
+func githubConnectionJSON(s service.GitHubConnectionStatus) map[string]any {
+	return map[string]any{
+		"connected":    s.Connected,
+		"github_login": s.GitHubLogin,
+		"connected_at": s.ConnectedAt,
+	}
 }

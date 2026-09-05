@@ -27,6 +27,8 @@ import {
   useCreateProject,
   useCreateWebSource,
   useGitHubConnect,
+  useGitHubConnection,
+  useSaveGitHubConnection,
   useProjectOptions,
   useSetPractices,
   useUploadFile,
@@ -69,7 +71,7 @@ interface StagedRepo {
   token: string;
 }
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2 | 3 | 4;
 
 /**
  * recordedPractices counts substantively-filled sub-elements.
@@ -200,13 +202,18 @@ export function ProjectWizard() {
     }
   }
 
+  // Step 1 gates on having chosen something to produce: a project classified
+  // for nothing is refused by the server anyway, and finding that out on the
+  // last screen is the failure this reorder exists to remove.
   const canAdvance =
     step === 1
-      ? draft.name.trim() !== '' &&
-        (draft.sourceType !== 'github' || draft.githubRepo !== null) &&
-        (draft.sourceType !== 'upload' || draft.uploadFiles.length > 0) &&
-        (draft.sourceType !== 'url' || isHttpsURL(draft.webSourceUrl))
-      : true;
+      ? draft.classifications.length > 0
+      : step === 2
+        ? draft.name.trim() !== '' &&
+          (draft.sourceType !== 'github' || draft.githubRepo !== null) &&
+          (draft.sourceType !== 'upload' || draft.uploadFiles.length > 0) &&
+          (draft.sourceType !== 'url' || isHttpsURL(draft.webSourceUrl))
+        : true;
 
   return (
     <div className="page">
@@ -215,9 +222,10 @@ export function ProjectWizard() {
         <ol className="steps" aria-label="Progress">
           {(
             [
-              [1, 'Source'],
-              [2, 'Owner & validity'],
-              [3, 'Classification & practices'],
+              [1, 'BOM types'],
+              [2, 'Source'],
+              [3, 'Owner & validity'],
+              [4, 'Practices'],
             ] as const
           ).map(([n, label]) => (
             <li key={n} aria-current={step === n ? 'step' : undefined} data-done={step > n}>
@@ -234,9 +242,15 @@ export function ProjectWizard() {
         </p>
       )}
 
-      {step === 1 && <SourceStep draft={draft} patch={patch} options={options.data} />}
-      {step === 2 && <OwnerStep draft={draft} patch={patch} />}
-      {step === 3 && <ClassificationStep draft={draft} patch={patch} options={options.data} />}
+      {/* ⚠ BOM TYPES FIRST. The wizard used to ask for the source on step 1 and
+          the classifications on step 3, so an incompatible pairing — an AIBOM
+          project on a url source, say — was only knowable on the last screen,
+          after the whole form was filled. The order is the fix: choosing what
+          to produce is what narrows every question after it. */}
+      {step === 1 && <BomTypeStep draft={draft} patch={patch} options={options.data} />}
+      {step === 2 && <SourceStep draft={draft} patch={patch} options={options.data} />}
+      {step === 3 && <OwnerStep draft={draft} patch={patch} />}
+      {step === 4 && <PracticesStep draft={draft} patch={patch} options={options.data} />}
 
       <nav className="wizard-nav">
         <button
@@ -247,7 +261,7 @@ export function ProjectWizard() {
         >
           Back
         </button>
-        {step < 3 ? (
+        {step < 4 ? (
           <button
             type="button"
             className="btn btn-primary"
@@ -282,7 +296,12 @@ function SourceStep({
 }: {
   draft: Draft;
   patch: (p: Partial<Draft>) => void;
-  options: { source_types: string[] } | undefined;
+  options:
+    | {
+        source_types: string[];
+        bom_types: Array<{ id: string; sources: string[] }>;
+      }
+    | undefined;
 }) {
   // ⚠ FILTERED, NOT THE RAW API LIST. `/v1/projects/options` reflects the
   // full project.source_type CHECK constraint — github, gitlab, bitbucket,
@@ -293,13 +312,49 @@ function SourceStep({
   // control that looks like it does something and does not. Restricted here,
   // not on the server: another client is still free to create a project
   // with a source_type this wizard has no UI for.
-  const sources = (options?.source_types ?? SUPPORTED_SOURCE_TYPES).filter((s) =>
+  const wizardSources = (options?.source_types ?? SUPPORTED_SOURCE_TYPES).filter((s) =>
     SUPPORTED_SOURCE_TYPES.includes(s),
   );
+
+  // ⚠ NARROWED BY WHAT WAS CHOSEN ON STEP 1, WHICH IS WHY STEP 1 MOVED.
+  //
+  // A source has to work for EVERY selected type, not just one: the source is a
+  // property of the project while the classifications are a set, so a url
+  // project classified {SBOM, AIBOM} produces a real SBOM and a permanently
+  // empty AIBOM. The server refuses that; offering it here would turn a
+  // preventable choice into a 422 after the form is filled.
+  //
+  // An empty `sources` on a type means "unknown" — the options fetch failed —
+  // never "nothing", so it narrows nothing and the server stays authoritative.
+  const perType = options?.bom_types ?? [];
+  const chosen = perType.filter((t) => draft.classifications.includes(t.id));
+  const sources = wizardSources.filter((src) =>
+    chosen.every((t) => t.sources.length === 0 || t.sources.includes(src)),
+  );
+
+  // Reachable only by going back and adding a type after a source was picked.
+  // Not silently reset: the source was a deliberate choice and the user is the
+  // one who should decide which of the two to change.
+  const sourceNowInvalid = sources.length > 0 && !sources.includes(draft.sourceType);
 
   return (
     <section aria-labelledby="source-heading">
       <h2 id="source-heading">Where does this project come from?</h2>
+
+      {sourceNowInvalid && (
+        <p className="status status-down" role="alert">
+          {humanizeEnum(draft.sourceType)} cannot be read by every BOM type you selected
+          {chosen.length > 0 && <> ({chosen.map((t) => t.id).join(', ')})</>}. Pick one of the
+          sources below, or go back and change the BOM types.
+        </p>
+      )}
+
+      {sources.length === 0 && (
+        <p className="status status-down" role="alert">
+          No source this wizard supports can be read by every BOM type you selected. Go back and
+          reduce the selection — for example, register the hardware separately from the software.
+        </p>
+      )}
 
       <fieldset>
         <legend>Source</legend>
@@ -373,13 +428,24 @@ function SourceStep({
 // repository — nothing is sent to POST /v1/projects/{id}/connections until
 // submit(), which needs the project id this wizard has not created yet.
 function GitHubSource({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>) => void }) {
+  const connection = useGitHubConnection();
   const connect = useGitHubConnect();
+  const saveConnection = useSaveGitHubConnection();
   const [token, setToken] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  // ⚠ CONNECTED ONCE PER ORGANISATION, NOT ONCE PER PROJECT. Every registration
+  // used to open its own OAuth popup and push a token through the browser. When
+  // the organisation is already connected the token stays in Vault, this
+  // component never sees one, and the picker opens immediately.
+  const alreadyConnected = connection.data?.connected === true;
 
   async function handleConnect() {
     try {
       const t = await connect.mutateAsync();
+      // Stored server-side before the picker opens, so this is the last time a
+      // GitHub credential passes through the browser for this organisation.
+      await saveConnection.mutateAsync({ token: t });
       setToken(t);
       setPickerOpen(true);
     } catch {
@@ -402,14 +468,23 @@ function GitHubSource({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft
             Change
           </button>
         </div>
+      ) : alreadyConnected ? (
+        <div className="row-actions">
+          <button type="button" className="btn" onClick={() => setPickerOpen(true)}>
+            Choose a repository
+          </button>
+          <small>
+            Connected as <strong>{connection.data?.github_login || 'your GitHub account'}</strong>.
+          </small>
+        </div>
       ) : (
         <button
           type="button"
           className="btn"
           onClick={() => void handleConnect()}
-          disabled={connect.isPending}
+          disabled={connect.isPending || saveConnection.isPending}
         >
-          {connect.isPending ? 'Connecting…' : 'Connect GitHub'}
+          {connect.isPending || saveConnection.isPending ? 'Connecting…' : 'Connect GitHub'}
         </button>
       )}
 
@@ -420,15 +495,20 @@ function GitHubSource({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft
       )}
 
       <small>
-        Opens a GitHub window asking to read your repositories. The token this grants is used to
-        list them and, once you pick one, to attach it to the project — it is never AxeBOM&apos;s
-        password and nothing here is stored until you connect a repository.
+        {alreadyConnected
+          ? 'Your organisation is already connected, so no GitHub window opens. Disconnect from Settings to revoke it.'
+          : 'Opens a GitHub window asking to read your repositories. The token is stored once for your organisation, server-side, so later projects can pick a repository without authorising again.'}
       </small>
 
       <AnimatePresence>
-        {pickerOpen && token && (
+        {/* ⚠ `token` IS EMPTY WHEN THE ORGANISATION IS ALREADY CONNECTED, and
+            the picker must still open. This condition was `pickerOpen && token`,
+            which silently did nothing on the connect-once path: the button
+            opened a picker that never rendered. The empty string means "use the
+            organisation's stored credential", which the server resolves. */}
+        {pickerOpen && (token !== null || alreadyConnected) && (
           <GitHubRepoPicker
-            token={token}
+            token={token ?? ''}
             onClose={() => setPickerOpen(false)}
             onSelect={(repo: Repo) =>
               patch({
@@ -437,7 +517,9 @@ function GitHubSource({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft
                   externalId: repo.external_id,
                   defaultBranch: repo.default_branch,
                   cloneUrl: repo.clone_url,
-                  token,
+                  // Empty when the organisation is connected: the server pulls
+                  // the stored credential rather than the browser carrying one.
+                  token: token ?? '',
                 },
               })
             }
@@ -668,7 +750,7 @@ function OwnerStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>) 
 // Step 3 — classification and practices
 // ---------------------------------------------------------------------------
 
-function ClassificationStep({
+function BomTypeStep({
   draft,
   patch,
   options,
@@ -682,10 +764,15 @@ function ClassificationStep({
           requires_import: boolean;
           is_derived: boolean;
           sources: string[];
+          depends_on: string[];
+          requirements: Array<{
+            id: string;
+            title: string;
+            detail: string;
+            at_registration: boolean;
+            required: boolean;
+          }>;
         }>;
-        sdlc_stages: string[];
-        bom_depths: string[];
-        practices: Array<{ id: string; name: string }>;
       }
     | undefined;
 }) {
@@ -701,28 +788,15 @@ function ClassificationStep({
       // server refuses the genuinely wrong ones either way, so the offline
       // form stays permissive and the server stays authoritative.
       sources: [] as string[],
+      depends_on: [] as string[],
+      requirements: [] as Array<{
+        id: string;
+        title: string;
+        detail: string;
+        at_registration: boolean;
+        required: boolean;
+      }>,
     }));
-  const stages = options?.sdlc_stages ?? [];
-  const depths = options?.bom_depths ?? [];
-
-  // ⚠ A BOM TYPE WHOSE ENGINES CANNOT READ THIS PROJECT'S SOURCE.
-  //
-  // The source is chosen on step 1 and the classifications here on step 3, so
-  // this is the first screen where the combination is knowable. It matters
-  // because the pairing is silently useless rather than obviously wrong: no
-  // AIBOM engine reads a `url` source, so an AIBOM project registered from one
-  // scans clean and reports nothing, forever. The dev database contains exactly
-  // that row. The server refuses it now; offering the chip anyway would turn a
-  // preventable choice into a 422 after the whole form is filled.
-  //
-  // An empty `sources` means "unknown" (the options fetch failed), never
-  // "nothing" — see the fallback above.
-  const incompatible = (t: { sources: string[] }) =>
-    t.sources.length > 0 && !t.sources.includes(draft.sourceType);
-
-  const blockedSelections = bomTypes
-    .filter((t) => draft.classifications.includes(t.id) && incompatible(t))
-    .map((t) => t.id);
 
   const toggle = (id: string) =>
     patch({
@@ -731,50 +805,48 @@ function ClassificationStep({
         : [...draft.classifications, id],
     });
 
-  const setPractice = (key: keyof PracticesInput, value: string) =>
-    patch({ practices: { ...draft.practices, [key]: value } });
+  const selected = new Set(draft.classifications);
 
-  // Rendered from the fetched list, never a literal. Writing the number here
-  // would be the same mistake as hardcoding it in the backend.
-  const practiceCount = options?.practices.length ?? 0;
-  const recorded = recordedPractices(draft.practices);
+  // ⚠ A DERIVATION WITH NOTHING TO DERIVE FROM. model.BOMType.IsDerived's own
+  // comment has always said a QBOM without a CBOM "will produce device metadata
+  // and no crypto assets — worth warning about at registration rather than at
+  // report time". Nothing warned: the chip said "derived from CBOM", which
+  // states the relationship and not the consequence of ignoring it. Named, not
+  // refused — device metadata alone is a legitimate thing to want.
+  const unmetDependencies = bomTypes
+    .filter((t) => selected.has(t.id))
+    .flatMap((t) => t.depends_on.filter((d) => !selected.has(d)).map((d) => [t.id, d] as const));
+
+  const pendingRequirements = bomTypes
+    .filter((t) => selected.has(t.id))
+    .flatMap((t) => t.requirements)
+    .filter((r) => !r.at_registration);
 
   return (
     <section aria-labelledby="class-heading">
-      <h2 id="class-heading">Classification</h2>
+      <h2 id="class-heading">What do you want to produce?</h2>
+
+      {/* The first question, because the answer changes every question after
+          it: which sources can be read, and what the project will still need. */}
+      <p className="note">
+        Pick the BOM types first. The sources you can register from, and the data
+        this project will need, both follow from this choice.
+      </p>
 
       <fieldset>
         <legend>BOM types</legend>
         <ul className="chips chips-selectable">
           {bomTypes.map((t) => {
-            const selected = draft.classifications.includes(t.id);
-            const blocked = incompatible(t);
+            const isSelected = selected.has(t.id);
             return (
               <li key={t.id}>
-                <label
-                  className="chip"
-                  data-bom={t.id.toLowerCase()}
-                  data-selected={selected}
-                  data-blocked={blocked}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected}
-                    disabled={blocked && !selected}
-                    onChange={() => toggle(t.id)}
-                  />
+                <label className="chip" data-bom={t.id.toLowerCase()} data-selected={isSelected}>
+                  <input type="checkbox" checked={isSelected} onChange={() => toggle(t.id)} />
                   <span>{t.id}</span>
                   {/* The honest labels travel with the data, so the UI cannot
                       imply discovery where there is none. */}
                   {t.requires_import && <span className="chip-note">import only</span>}
                   {t.is_derived && <span className="chip-note">derived from CBOM</span>}
-                  {/* Says WHY, and names the sources that would work — a
-                      disabled control with no reason reads as a broken one. */}
-                  {blocked && (
-                    <span className="chip-note">
-                      needs {t.sources.map(humanizeEnum).join(', ')}
-                    </span>
-                  )}
                 </label>
               </li>
             );
@@ -785,24 +857,76 @@ function ClassificationStep({
             Select at least one. A project with no classification produces no BOM.
           </p>
         )}
-        {/* ⚠ SELECTED **AND** BLOCKED IS REACHABLE, AND ONLY BY GOING BACK.
-            Disabling the checkbox stops a new incompatible choice, but a user
-            who selects AIBOM here, returns to step 1 and switches the source to
-            a url leaves a selection that was legal when it was made and is not
-            any more. Silently dropping it would discard a choice they made on
-            purpose, so it is named and left for them to remove — and the
-            selected chips stay clickable precisely so they can. */}
-        {blockedSelections.length > 0 && (
-          <p className="status status-down" role="alert">
-            {blockedSelections.join(', ')} cannot be produced from a{' '}
-            {humanizeEnum(draft.sourceType)} source — no engine for{' '}
-            {blockedSelections.length === 1 ? 'it' : 'them'} can read one, so the report would
-            always be empty. Remove {blockedSelections.length === 1 ? 'it' : 'them'}, or go back and
-            change the source.
+        {unmetDependencies.map(([type, dep]) => (
+          <p key={`${type}-${dep}`} className="note note-important">
+            {type} is derived from {dep}, and {dep} is not selected. The project will still record
+            its {type} device metadata, but the readiness section will contain no cryptographic
+            assets — there will be nothing to derive them from. Add {dep} unless that is what you
+            intend.
           </p>
-        )}
+        ))}
       </fieldset>
 
+      {/* What this selection will still need once the project exists. Rendered
+          from the modules, so a BOM type that grows a new prerequisite says so
+          here without a frontend change. */}
+      {pendingRequirements.length > 0 && (
+        <section className="note" aria-labelledby="needs-heading">
+          <h3 id="needs-heading">What these BOM types will need</h3>
+          <ul className="requirement-list">
+            {pendingRequirements.map((r) => (
+              <li key={r.id} data-required={r.required}>
+                <strong>{r.title}</strong>
+                {r.required && <span className="chip-note">required</span>}
+                <p>{r.detail}</p>
+              </li>
+            ))}
+          </ul>
+          <small>
+            These are set up after the project is created — the project page links to each one.
+          </small>
+        </section>
+      )}
+    </section>
+  );
+}
+
+/**
+ * PracticesStep — CERT-In's third minimum-element category, plus SDLC stage.
+ *
+ * Split out of the old combined classification screen when BOM types moved to
+ * step 1. They were together only because both happened to be "the rest";
+ * choosing what to produce and describing how you govern it are different
+ * decisions and the second is much longer.
+ */
+function PracticesStep({
+  draft,
+  patch,
+  options,
+}: {
+  draft: Draft;
+  patch: (p: Partial<Draft>) => void;
+  options:
+    | {
+        sdlc_stages: string[];
+        bom_depths: string[];
+        practices: Array<{ id: string; name: string }>;
+      }
+    | undefined;
+}) {
+  const stages = options?.sdlc_stages ?? [];
+  const depths = options?.bom_depths ?? [];
+
+  const setPractice = (key: keyof PracticesInput, value: string) =>
+    patch({ practices: { ...draft.practices, [key]: value } });
+
+  // Rendered from the fetched list, never a literal. Writing the number here
+  // would be the same mistake as hardcoding it in the backend.
+  const practiceCount = options?.practices.length ?? 0;
+  const recorded = recordedPractices(draft.practices);
+
+  return (
+    <section aria-labelledby="practices-heading">
       <label className="field">
         <span>SDLC stage</span>
         <select value={draft.sdlcStage} onChange={(e) => patch({ sdlcStage: e.target.value })}>

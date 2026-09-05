@@ -186,6 +186,31 @@ This is the commonly-missed minimum-element category. **Not a report section —
 
 `credential_ref` is a **Vault path**, never a token. `repo_external_id` is the provider's numeric id — stable across renames.
 
+### `project.github_connections`
+`(tenant_id PK, credential_ref, github_login, connected_by, connected_at, updated_at)`
+
+The organisation's single GitHub authorisation — "connect once", as opposed to
+`repository_connections`' per-repository credential. `credential_ref` is a
+**Vault path**, never a token, exactly as above.
+
+⚠ **One row per tenant, enforced by the primary key.** A second connection would
+mean two tokens with different scopes and no rule for which one a repository
+search should use. Reconnecting — the normal repair for an expired or revoked
+authorisation — replaces the row and overwrites the secret at the same
+deterministic path, so no orphaned secret is left behind.
+
+No FK on `connected_by`: the user lives in another service's schema and a
+cross-schema FK is the coupling that makes a service unextractable
+(invariant 11). It is recorded for the audit question "who connected this?".
+
+⚠ **An empty token on `POST /v1/projects/{id}/connections` no longer means
+"public repository" for a `github` provider.** With the organisation connected,
+the browser never holds a token, so the service copies the organisation
+credential into the connection's own Vault ref. It is copied rather than
+referenced so the fetcher — the only component permitted to hold credentials —
+keeps resolving exactly one path, and so disconnecting GitHub does not
+retroactively break projects that were already connected.
+
 ### `project.uploads`
 `(id, tenant_id, project_id, kind, storage_ref, sha256, size_bytes, original_filename, uploaded_by, created_at)`
 `kind` CHECK in (`source_archive`,`manifest`,`lockfile`,`sbom`,`hbom_csv`,`image_tarball`).

@@ -8,7 +8,7 @@ A session that writes code but does not update this file has failed — the next
 
 **Last updated:** 2026-09-05
 **Current phase:** *Hardware as a first-class thing, and making every artifact actually contain its data*. 🟢 Track A rendering matrix (b); 🟢 B3 device register (c); 🟢 B1+B2 collectors and `axebom collect hardware` (d); 🟢 scans actually run (e); 🟢 **B4 the hardware screens** (f). **Track B is complete.** Not started: A6 (writerless tables), A7 (ecosystem coverage).
-**Next action:** Milestone 3 — registration rebuilt around the BOM type. The seam exists now (`services/project/internal/bommodule`): every BOM type has a module, no BOM-type-specific creation path can write to a project not classified for it, and no project can be registered from a source its engines cannot read — all three enforced by mutation-verified guards rather than by care. ⚠ **What is still not done is the ORDER the user actually asked for**: the wizard asks for the source on step 1 and the BOM types on step 3, so an incompatible pairing is only knowable on the later screen; "user will select first which BOM he wants to register" reverses that. 🟡 Carried forward: `Module` has no `RegistrationFields()` (three per-type form shapes await a Milestone 3 consumer); the interactive import has no path for CycloneDX or collector JSON; manufacturing fields are not in the generated form because their profile is not loaded in Go; `mock-engine` leaves a permanent `skipped` row; `alpine/git` is tag-pinned and `toolctl pin` does not exist; `raw_findings` and `licenses` remain deliberately writerless (see docs/LIMITATIONS.md); one pre-existing `AIBOM | url` project is left unmigrated. ⚠ **`NVD_API_KEY` is still set in no environment.**
+**Next action:** Milestones 4–6 of the registration plan — the widened HBOM engine roster, frontend↔backend↔DB alignment, and live verification. Milestones 1–3 are done: the defect sweep, the BOM module seam (`services/project/internal/bommodule`), and registration reordered around the BOM type. ⚠ **The frontend is a container serving a built bundle** — `docker compose up -d --build frontend` before any e2e run, or the browser tests grade the previous version. 🟡 Carried forward: no Settings screen for disconnecting GitHub (the wizard's copy points at one); registration names per-type inputs and routes to them rather than collecting them inline (deliberate — three per-type form shapes are per-device, per-project and per-model); the interactive import has no path for CycloneDX or collector JSON; manufacturing fields are not in the generated form because their profile is not loaded in Go; `mock-engine` leaves a permanent `skipped` row; `alpine/git` is tag-pinned and `toolctl pin` does not exist; `raw_findings` and `licenses` remain deliberately writerless (see docs/LIMITATIONS.md); one pre-existing `AIBOM | url` project is left unmigrated. ⚠ **`NVD_API_KEY` is still set in no environment.**
 
 > 🟢 **A REAL SCAN NOW NORMALIZES, LIVE, WITH NO MANUAL TRIGGER — THE
 > NORMALIZER'S DEPLOYED BOUNDARY FROM (e)/(k)/(l) IS CLOSED FOR SBOM.**
@@ -2265,6 +2265,152 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-09-05 (j) — Milestone 3: registration asks the BOM type first, and GitHub is connected once
+
+**The ask, verbatim: "user will select first which BOM he wants to register, ask
+the input and data needed accordingly to the BOM he wants to register"** and
+**"GitHub repo will be necessary for all and needs to connect once so user can
+directly provide the repository."** Both are done.
+
+#### The order was the defect
+
+The wizard asked for the **source on step 1** and the **classifications on step
+3**. Milestone 2 made the server refuse an incompatible pairing, which meant the
+customer filled the entire form and then got a 422. The reorder is the actual
+fix: choosing what to produce is what narrows every question after it.
+
+- **Step 1 is now BOM types**, step 2 the source, step 3 owner & validity, step
+  4 practices. Classification and practices were together only because both were
+  "the rest"; choosing what to produce and describing how you govern it are
+  different decisions, and the second is much longer.
+- **The source step offers only sources valid for EVERY selected type.** The
+  source is a property of the project while classifications are a set, so a url
+  project classified {SBOM, AIBOM} produces a real SBOM and a permanently empty
+  AIBOM. Going back and adding an incompatible type is named rather than
+  silently resetting the source — the source was a deliberate choice and the
+  customer decides which of the two to change.
+- ⚠ **The chip-blocking added in Milestone 2 was REMOVED, not kept.** It
+  disabled BOM types incompatible with the chosen source, which was correct when
+  the source came first and is backwards now. Leaving both would have meant two
+  mechanisms enforcing the same rule in opposite directions.
+
+#### Two facts the product held and never told anyone
+
+- **`Module.DependsOn()`** — `model.BOMType.IsDerived`'s own comment has said,
+  for as long as it has existed, that a project classified QBOM without CBOM
+  "will produce device metadata and no crypto assets — **worth warning about at
+  registration rather than at report time**". Nothing warned. The screen showed
+  a "derived from CBOM" chip, which states the relationship and not the
+  consequence. ⚠ **Named, not refused** — device metadata alone is a legitimate
+  thing to want, and blocking a valid registration to prevent a partial one is
+  the wrong trade.
+- **`Module.Requirements()`** — what each type still needs once the project
+  exists, published through `/v1/projects/options` and rendered at the moment of
+  the decision. QBOM needs its Table 8 form (without it there is no QBOM
+  document at all), AIBOM the Table 10 elements no tool reports, HBOM a device
+  or an imported parts file. ⚠ **SBOM and CBOM return an empty list, and that is
+  an answer**: inventing a checklist item to make five types look symmetrical
+  would put a task in front of a customer that they cannot act on.
+
+⚠ **`Requirements` is deliberately NOT a form definition.** Milestone 2 deferred
+`RegistrationFields()` because three per-type form generators exist with three
+different shapes — and the reason is now explicit: a device is per-device, Table
+8 metadata is per-project, and Table 10's user fields are per-**model**.
+Collapsing them into one list of inputs would force a shape that is wrong for at
+least two. A Requirement says *what* is needed and *where*; the screen that does
+it still generates its own fields from the profile.
+
+#### Connect GitHub once
+
+Every registration used to run its own OAuth round trip: a popup, a repo-scoped
+token through the browser to the repo picker, then to
+`POST /v1/projects/{id}/connections`, which wrote it to Vault against **that one
+project**. Nothing kept it — so three projects meant three authorisations, and
+every repo search sent the token back out through the browser again.
+
+- **`project.github_connections`**, one row per tenant by primary key, holding a
+  Vault path and never a token. RLS in the same migration; `TestRLSCoverage`
+  green. Reconnecting (the normal repair for a revoked authorisation) replaces
+  the row and overwrites the secret at the same deterministic path, so no
+  orphaned secret is left behind.
+- **`vault.KindProviderToken`**, separate from `KindRepoToken`: a repo token
+  reaches one repository, this one reaches everything the authorising account
+  can see. Sharing a path space would make "revoke this project's access" and
+  "revoke the organisation's access" look like one operation in the store.
+- **`GET /v1/github/repos` now prefers the stored credential**, with the header
+  as a fallback for the connect flow itself. The browser no longer holds a
+  GitHub token during a repo search.
+
+⚠ **Two bugs I introduced and caught, both in the connect-once path.** The
+picker rendered on `pickerOpen && token`, so on an already-connected
+organisation the "Choose a repository" button opened nothing — the component
+never holds a token on that path. And an empty token on `Connect` had always
+meant "public repository", which stops being true when the browser has no token
+to send: every repository picked this way would have been stored with no
+credential and failed at scan time on anything private. The service now copies
+the organisation credential into the connection's own Vault ref — **copied, not
+referenced**, so the fetcher keeps resolving exactly one path and disconnecting
+GitHub does not retroactively break projects already connected.
+
+#### Verification
+
+`task verify` exits 0. Six new live tests against real Postgres cover connect,
+reconnect, disconnect, the token never appearing in a status response, and
+**one tenant's connection being invisible to another** — invariant 6 on a table
+whose primary key IS the tenant id, the shape where a missing RLS policy would
+be least obvious because every query looks tenant-free. The credential fallback
+is mutation-verified.
+
+Two new Playwright specs drive the reordered wizard in a real browser: step 1 is
+the BOM types; selecting SBOM alone offers a `url` source and adding AIBOM
+removes it (a within-test A/B, so the narrowing is demonstrably doing the work);
+and QBOM without CBOM shows the warning, states the Table 8 task, and leaves
+Continue enabled.
+
+⚠ **The frontend is a CONTAINER serving a built bundle, not a Vite dev server.**
+The first browser run tested the old code and reported the reorder missing. Any
+frontend change needs `docker compose up -d --build frontend` before an e2e run.
+
+⚠ **My own cleanup helper used `t.Context()` and leaked a row into the dev
+database.** `t.Context()` is already cancelled when cleanups run — which is
+precisely what `cleanupProject`'s existing comment says, two files away — so the
+disconnect failed with "context canceled", the connection survived, and the next
+test in the package found the tenant already connected. It failed loudly rather
+than passing on dirty state, because the test asserts up front that the tenant
+is NOT connected; that assertion is worth keeping for exactly that reason.
+Fixed to `context.Background()`, and repeated runs now leave zero rows.
+
+#### Two e2e tests that had been passing on shapes the product now refuses
+
+Running the full browser suite — not just the new specs — found both:
+
+- **`device-register.spec.ts` registered a device against whatever project was
+  first in the list**, which is an SBOM project. The seam refuses that now, and
+  correctly. ⚠ **There was no HBOM project in the dev seed at all** — tenant A
+  had SBOM+CBOM and SBOM+AIBOM and nothing else — so the test had never had a
+  valid target and only passed because nothing checked.
+  `migrations/seed/0001_dev_tenants.sql` now carries `edge-gateway`, a manual
+  HBOM project, and the test names it.
+- **`upload-project.spec.ts` filled "Project name" on step 1**, which is the BOM
+  types screen now. Fixed to advance through it.
+
+All 12 browser specs pass.
+
+#### Owed
+
+- **`GET /v1/github/connection` has no Settings screen.** The hook and the three
+  endpoints exist and the wizard uses them, but disconnecting is currently
+  API-only — the wizard's copy tells a customer to disconnect "from Settings",
+  which is the one sentence there that is ahead of the code.
+- Registration still does not collect any per-type input **inline**; it names
+  what is needed and links to the screen that owns it. That is the deliberate
+  choice above, not an omission — but it does mean "ask the input and data
+  needed accordingly to the BOM" is answered by *stating and routing*, not by
+  moving three incompatible forms into the wizard.
+- `docs/07-FRONTEND-SPEC.md` said the practices step has "six fields", a
+  hardcoded count of exactly the kind invariant 2 forbids. Removed while editing
+  that section.
 
 ### 2026-09-05 (i) — Milestone 2: the BOM module seam, and the gate that was on none of the five types
 

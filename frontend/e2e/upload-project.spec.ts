@@ -38,6 +38,17 @@ test('a project registered by upload reaches a real scan instead of FETCH_NO_SOU
   // --- Register the project -------------------------------------------
   await page.goto('/projects/new');
 
+  // ⚠ STEP 1 IS THE BOM TYPES NOW, NOT THE SOURCE. Registration was reordered
+  // so that choosing what to produce narrows the sources offered — an AIBOM
+  // project on a url source is a combination no AIBOM engine can read, and it
+  // used to be discoverable only on the last screen. SBOM is preselected, which
+  // is what this test wants, so it advances straight through.
+  await expect(page.getByRole('heading', { name: 'What do you want to produce?' })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByRole('checkbox', { name: 'SBOM' })).toBeChecked();
+  await page.getByRole('button', { name: 'Continue' }).click(); // -> source
+
   await page.getByLabel('Project name').fill(projectName);
   await page.getByRole('radio', { name: 'Upload' }).check();
 
@@ -55,7 +66,7 @@ test('a project registered by upload reaches a real scan instead of FETCH_NO_SOU
 
   await expect(page.getByText('package.json')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click(); // -> owner & validity
-  await page.getByRole('button', { name: 'Continue' }).click(); // -> classification & practices
+  await page.getByRole('button', { name: 'Continue' }).click(); // -> practices
 
   const createFailures: string[] = [];
   page.on('response', (r) => {

@@ -110,6 +110,22 @@ VALUES
      '2026-01-01', NULL, 'Aaron Analyst', 'aaron@acme.test',
      '01900000-0000-7000-8000-0000000000a1'),
 
+    -- ⚠ A HARDWARE PROJECT, BECAUSE THERE WAS NOT ONE AND A BROWSER TEST WAS
+    -- QUIETLY REGISTERING DEVICES AGAINST AN SBOM PROJECT.
+    --
+    -- e2e/device-register.spec.ts picks the first project in the list and
+    -- registers a device on it. Nothing refused that until the BOM-module seam
+    -- did, so the test was exercising a combination the product now (correctly)
+    -- rejects with PROJECT_NOT_CLASSIFIED. `manual` is the honest source: a
+    -- device, its parts tree and a CSV import all produce a real hardware
+    -- document with no repository.
+    ('01900000-0000-7000-8000-0000000000f4',
+     '01900000-0000-7000-8000-00000000000a',
+     'edge-gateway', 'Hardware BOM for the ENC-GW-4400 edge gateway',
+     'manual', 'deployed',
+     '2026-01-01', NULL, 'Aaron Analyst', 'aaron@acme.test',
+     '01900000-0000-7000-8000-0000000000a1'),
+
     -- Same name as Acme's. A cross-tenant read shows up as two rows.
     ('01900000-0000-7000-8000-0000000000f3',
      '01900000-0000-7000-8000-00000000000b',
@@ -126,6 +142,7 @@ INSERT INTO project.project_classifications (project_id, tenant_id, bom_type) VA
     ('01900000-0000-7000-8000-0000000000f1', '01900000-0000-7000-8000-00000000000a', 'CBOM'),
     ('01900000-0000-7000-8000-0000000000f2', '01900000-0000-7000-8000-00000000000a', 'SBOM'),
     ('01900000-0000-7000-8000-0000000000f2', '01900000-0000-7000-8000-00000000000a', 'AIBOM'),
+    ('01900000-0000-7000-8000-0000000000f4', '01900000-0000-7000-8000-00000000000a', 'HBOM'),
     ('01900000-0000-7000-8000-0000000000f3', '01900000-0000-7000-8000-00000000000b', 'SBOM')
 ON CONFLICT DO NOTHING;
 

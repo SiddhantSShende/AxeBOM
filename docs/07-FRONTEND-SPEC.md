@@ -152,9 +152,31 @@ Reconnect with exponential backoff, capped, showing a "reconnecting" state rathe
 Cards or table. Each shows name, BOM-type chips, owner, validity window (with an expiry warning inside 30 days), last scan status, open critical count. Filter by classification, owner, status.
 
 ### Connect / register wizard
-Three steps: **source** (GitHub repo picker with search, or upload archive/manifest/lockfile/image ref, or fully manual) → **owner & validity** (name, email, GitHub, phone; validity window) → **classification & practices** (BOM types, SDLC stage, and the six CERT-In practices fields).
+Four steps, **BOM types first**: **BOM types** (what this project should produce, its unmet derivations, and what each type will still need) → **source** (narrowed to what those types' engines can read: GitHub repo picker with search, or upload archive/manifest/lockfile/image ref, or fully manual) → **owner & validity** (name, email, GitHub, phone; validity window) → **practices** (SDLC stage and the CERT-In practices fields).
 
-The practices step is not optional and is not buried in settings. Its six fields are a minimum element (`06-COMPLIANCE-PROFILES.md §6`), and a project without them cannot produce a complete compliance report — the UI should say that plainly at the point of entry rather than surfacing it as a coverage gap weeks later.
+⚠ **The order is the feature, and it used to be the other way round.** Source was
+step 1 and classification step 3, so an incompatible pairing — an AIBOM project
+on a `url` source, which no AIBOM engine can read — was only knowable on the
+last screen, after the whole form was filled. Choosing what to produce is what
+narrows every question after it, so it goes first: the source step then offers
+only sources valid for **every** selected type, because the source is a property
+of the project while the classifications are a set.
+
+⚠ **A derivation with nothing to derive from is named, not refused.** Selecting
+QBOM without CBOM says what the project will actually contain — device metadata
+and an empty readiness section — because device metadata alone is a legitimate
+thing to want. `model.BOMType.IsDerived`'s own comment has always called this
+"worth warning about at registration rather than at report time"; the screen
+previously showed a "derived from CBOM" chip, which states the relationship and
+not the consequence of ignoring it.
+
+⚠ **GitHub is connected once per organisation, not once per project.** When a
+connection exists the repo picker opens immediately with no OAuth popup and the
+browser never holds a token. Registration previously ran its own OAuth round
+trip every time and pushed the token through the browser to the repo search on
+every keystroke.
+
+The practices step is not optional and is not buried in settings. Its fields are a minimum element (`06-COMPLIANCE-PROFILES.md §6`), and a project without them cannot produce a complete compliance report — the UI should say that plainly at the point of entry rather than surfacing it as a coverage gap weeks later.
 
 ### Hardware
 

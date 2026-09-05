@@ -188,6 +188,20 @@ type BOMTypeOption struct {
 	// from. Without it the wizard offers every source for every type and the
 	// customer discovers the incompatible ones as a 422 after filling the form.
 	Sources []string
+	// DependsOn names the BOM types this one derives from, so the screen can
+	// say what a QBOM without a CBOM will actually produce.
+	DependsOn []string
+	// Requirements are what this BOM type still needs once the project exists.
+	Requirements []BOMRequirement
+}
+
+// BOMRequirement is one per-type task published to the registration screen.
+type BOMRequirement struct {
+	ID             string
+	Title          string
+	Detail         string
+	AtRegistration bool
+	Required       bool
 }
 
 // BOMTypeOptions is what GET /v1/projects/options publishes about BOM types.
@@ -205,11 +219,24 @@ func (s *Service) BOMTypeOptions() []BOMTypeOption {
 		if !ok {
 			continue
 		}
+		deps := make([]string, 0, len(m.DependsOn()))
+		for _, d := range m.DependsOn() {
+			deps = append(deps, string(d))
+		}
+		reqs := make([]BOMRequirement, 0, len(m.Requirements()))
+		for _, r := range m.Requirements() {
+			reqs = append(reqs, BOMRequirement{
+				ID: r.ID, Title: r.Title, Detail: r.Detail,
+				AtRegistration: r.AtRegistration, Required: r.Required,
+			})
+		}
 		out = append(out, BOMTypeOption{
 			ID:             string(t),
 			RequiresImport: t.RequiresImport(),
 			IsDerived:      t.IsDerived(),
 			Sources:        m.Sources(),
+			DependsOn:      deps,
+			Requirements:   reqs,
 		})
 	}
 	return out
@@ -459,12 +486,36 @@ func (s *Service) Connect(ctx context.Context, tenantID, projectID string, in Co
 		return store.RepoConnection{}, mapStoreError(err)
 	}
 
-	if in.Token == "" {
+	token := in.Token
+	if token == "" && provider == "github" {
+		// ⚠ THE BROWSER NO LONGER CARRIES A TOKEN, SO AN EMPTY ONE IS NOT
+		// AUTOMATICALLY "PUBLIC REPOSITORY" ANY MORE.
+		//
+		// Registration used to hand this call the token from its own OAuth
+		// popup. With the organisation connected once, the browser never sees
+		// one — so an empty token on a github connection means "use the
+		// organisation's credential", and treating it as public would create a
+		// connection that cannot clone anything private and fails at scan time
+		// with no explanation.
+		//
+		// Copied into the connection's OWN Vault ref rather than referenced:
+		// the fetcher resolves connection.credential_ref and knows nothing
+		// about tenant-level connections, and teaching it a second lookup for
+		// this is a change to the one component permitted to hold credentials.
+		// Disconnecting GitHub therefore does not retroactively break existing
+		// connections, which is the behaviour a customer expects from "this
+		// project is already connected".
+		if stored, tokenErr := s.GitHubToken(ctx, tenantID); tokenErr == nil {
+			token = stored
+		}
+	}
+
+	if token == "" {
 		return conn, nil // a public repository needs no credential
 	}
 
 	ref := vault.Ref{TenantID: tenantID, Kind: vault.KindRepoToken, ID: conn.ID}
-	path, err := s.vault.Put(ctx, ref, map[string]string{"token": in.Token})
+	path, err := s.vault.Put(ctx, ref, map[string]string{"token": token})
 	if err != nil {
 		// The connection row exists without a credential. That is the safe
 		// failure: a connection that cannot authenticate fails visibly at scan

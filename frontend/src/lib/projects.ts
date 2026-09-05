@@ -70,6 +70,24 @@ export interface ProjectOptions {
      * the form is filled.
      */
     sources: string[];
+    /**
+     * BOM types this one is derived from.
+     *
+     * ⚠ QBOM DERIVES FROM CBOM, AND NOTHING EVER SAID SO AT THE POINT OF THE
+     * DECISION. The registration chip read "derived from CBOM", which states
+     * the relationship and not the consequence: a project classified QBOM
+     * without CBOM produces device metadata and a readiness section with no
+     * cryptographic assets in it, permanently.
+     */
+    depends_on: string[];
+    /** What this BOM type still needs once the project exists. */
+    requirements: Array<{
+      id: string;
+      title: string;
+      detail: string;
+      at_registration: boolean;
+      required: boolean;
+    }>;
   }>;
   sdlc_stages: string[];
   bom_depths: string[];
@@ -304,6 +322,54 @@ export function useUploadFile() {
   });
 }
 
+export interface GitHubConnectionStatus {
+  connected: boolean;
+  github_login: string;
+  connected_at: string;
+}
+
+/**
+ * useGitHubConnection reports whether this ORGANISATION has connected GitHub.
+ *
+ * ⚠ TENANT-WIDE, NOT PER PROJECT, WHICH IS THE WHOLE CHANGE. Registration used
+ * to run its own OAuth round trip every time: a popup, a token through the
+ * browser, and a fresh authorisation for each project. Connecting once means
+ * the token lives in Vault and the repo picker opens straight away.
+ */
+export function useGitHubConnection() {
+  return useQuery({
+    queryKey: ['github-connection'],
+    queryFn: ({ signal }) => request<GitHubConnectionStatus>('/v1/github/connection', { signal }),
+  });
+}
+
+/**
+ * useSaveGitHubConnection stores the token the popup returned, once.
+ *
+ * PUT, not POST: reconnecting is the normal repair for an expired or revoked
+ * authorisation and replaces the single connection an organisation has.
+ */
+export function useSaveGitHubConnection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { token: string; github_login?: string }) =>
+      request<GitHubConnectionStatus>('/v1/github/connection', { method: 'PUT', body: input }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['github-connection'] });
+    },
+  });
+}
+
+export function useDisconnectGitHub() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => request<void>('/v1/github/connection', { method: 'DELETE' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['github-connection'] });
+    },
+  });
+}
+
 /**
  * useGitHubConnect opens the repo-scoped "connect" popup and resolves with
  * the token GitHubConnectCallback relays back via postMessage.
@@ -383,9 +449,13 @@ export function useRepoSearch(token: string, query: string, enabled: boolean) {
     queryFn: ({ signal }) =>
       request<{ repos: Repo[]; next_page?: number }>(
         `/v1/github/repos?q=${encodeURIComponent(query)}`,
-        { headers: { 'X-GitHub-Token': token }, signal },
+        // ⚠ THE HEADER IS OMITTED WHEN THE ORGANISATION IS CONNECTED, and the
+        // server reads its stored token instead. Sending a GitHub credential
+        // from the browser on every keystroke of a repo search was the cost of
+        // having nowhere to keep it; there is somewhere now.
+        { ...(token ? { headers: { 'X-GitHub-Token': token } } : {}), signal },
       ),
-    enabled: enabled && token.length > 0,
+    enabled,
   });
 }
 

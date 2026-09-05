@@ -88,6 +88,18 @@ func registerRoutes(mux *http.ServeMux, d *deps) {
 	mux.Handle("GET /v1/github/repos",
 		guard(authz.ResourceRepoConn, authz.ActionList, h.ListRepos))
 
+	// --- GitHub connection: one per tenant, not one per project -------------
+	//
+	// ⚠ NOT UNDER /v1/projects/{id}/. The connection belongs to the TENANT, and
+	// nesting it under a project would say the opposite in the URL — which is
+	// exactly the shape that produced a fresh OAuth popup per registration.
+	mux.Handle("GET /v1/github/connection",
+		guard(authz.ResourceRepoConn, authz.ActionRead, h.GetGitHubConnection))
+	mux.Handle("PUT /v1/github/connection",
+		guard(authz.ResourceRepoConn, authz.ActionCreate, h.ConnectGitHub))
+	mux.Handle("DELETE /v1/github/connection",
+		guard(authz.ResourceRepoConn, authz.ActionDelete, h.DisconnectGitHub))
+
 	// --- Uploads ------------------------------------------------------------
 	mux.Handle("POST /v1/projects/{id}/uploads",
 		guard(authz.ResourceUpload, authz.ActionCreate, h.Upload))

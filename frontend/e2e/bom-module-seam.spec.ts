@@ -73,6 +73,27 @@ test('the options endpoint publishes per-BOM-type sources, and the server enforc
   expect(byID.get('HBOM'), 'manual is HBOM first-class path').toContain('manual');
   expect(byID.get('SBOM'), 'no form produces a component inventory').not.toContain('manual');
 
+  // Milestone 3: the per-type tasks and the derivation dependency are published
+  // too, so the screen can state them at the moment of the decision rather than
+  // leaving them to be discovered from an empty report.
+  const full = options.body['bom_types'] as Array<{
+    id: string;
+    depends_on: string[];
+    requirements: Array<{ id: string; required: boolean; detail: string }>;
+  }>;
+  const qbom = full.find((t) => t.id === 'QBOM');
+  expect(qbom?.depends_on, 'QBOM does not publish its CBOM dependency').toContain('CBOM');
+  expect(qbom?.requirements.length, 'QBOM publishes no requirement').toBeGreaterThan(0);
+
+  const sbom = full.find((t) => t.id === 'SBOM');
+  expect(sbom?.requirements, 'SBOM invented a requirement it does not have').toHaveLength(0);
+
+  // Connect-once: the status endpoint answers for the organisation, and never
+  // hands back a token.
+  const conn = await api('/v1/github/connection');
+  expect(conn.status).toBe(200);
+  expect(Object.keys(conn.body).sort()).toEqual(['connected', 'connected_at', 'github_login']);
+
   // And the server refuses what it declines to offer.
   const refused = await api('/v1/projects', {
     method: 'POST',

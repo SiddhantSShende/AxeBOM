@@ -450,6 +450,19 @@ organisation name or email answers `AUTH_ORG_NAME_TAKEN` /
 `AUTH_EMAIL_TAKEN` (§9), never by silently attaching the visitor to the
 existing one.
 
+**`GET`/`PUT`/`DELETE /v1/github/connection` are tenant-scoped, not project-scoped.**
+The organisation connects GitHub once; every project then picks a repository
+with no further authorisation. `GET` answers `200 {connected: false}` rather
+than 404 when there is none — that is the state every tenant starts in, not a
+missing resource — and no response ever carries the token or its Vault path.
+`PUT` (not `POST`) replaces the single connection, because reconnecting is the
+normal repair for an expired authorisation.
+
+`GET /v1/github/repos` now prefers that stored credential and treats
+`X-GitHub-Token` as a fallback for the connect flow itself. Previously the
+header was mandatory, which meant the browser held a GitHub token and sent it
+back out on every keystroke of a repository search.
+
 **`GET /v1/projects/options` publishes registration sources PER BOM TYPE, not as
 one flat list.** Each entry in `bom_types[]` carries `sources[]` — the project
 `source_type` values that BOM type can actually be registered from — alongside
@@ -464,6 +477,14 @@ and `PATCH /v1/projects/{id}` now refuse any classification whose `sources[]`
 excludes the project's source type (`VALIDATION_FIELD_INVALID`, §9). A client
 that renders from the flat list alone will therefore offer combinations the
 server refuses.
+
+Each `bom_types[]` entry also carries `depends_on[]` and `requirements[]`.
+`depends_on` names the BOM types this one derives from — QBOM derives from CBOM,
+and a project classified for QBOM alone produces device metadata with an empty
+readiness section, which the registration screen now states rather than leaving
+to be discovered from a report. `requirements[]` is what the type still needs
+once the project exists (`id`, `title`, `detail`, `at_registration`,
+`required`); an empty list is an answer, and SBOM and CBOM have one.
 
 The lists are generated from the engine registry and held to it by
 `TestRegistrationSourcesAgreeWithTheEngineRegistry`; `manual` is the one entry

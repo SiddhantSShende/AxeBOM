@@ -19,27 +19,20 @@ test('a device can be registered, listed and edited', async ({ page }) => {
   await fillZitadelLogin(page, USER, PASSWORD);
   await page.waitForURL(/\/projects/, { timeout: 45_000 });
 
-  // ⚠ THE ID COMES FROM THE DOM, NOT FROM fetch() INSIDE THE PAGE. The SPA
-  // holds its bearer token in memory and attaches it in its own client, so a
-  // raw in-page fetch goes out unauthenticated and returns an error body —
-  // which reads here as "no projects exist".
+  // ⚠ A SEEDED HARDWARE PROJECT, NOT "WHATEVER IS FIRST IN THE LIST".
   //
-  // ⚠ AND THE UUID FILTER IS LOAD-BEARING: /projects/new is a link too, and a
-  // previous session's screenshot script grabbed exactly that.
-  // ⚠ WAIT FOR THE LIST BEFORE READING THE DOM. waitForURL only says the route
-  // changed; React has not necessarily rendered the projects yet, and an
-  // evaluate() that runs a frame early finds no links and reports "no project
-  // exists" — which is a confusing lie about the database.
+  // This used to take the first /projects/0… link it found, which is an
+  // SBOM project — and registering a device against one is now refused with
+  // PROJECT_NOT_CLASSIFIED, correctly: no report that project can produce would
+  // ever contain the device. Nothing checked before the BOM-module seam, so
+  // this test had been exercising a combination the product does not allow.
+  //
+  // migrations/seed/0001_dev_tenants.sql now carries `edge-gateway`, a manual
+  // HBOM project, for exactly this. A fixed id rather than a search: the point
+  // of the test is the device register, and picking the target by classification
+  // through the UI would make an unrelated screen able to fail it.
+  const projectId = '01900000-0000-7000-8000-0000000000f4';
   await expect(page.locator('a[href^="/projects/0"]').first()).toBeVisible({ timeout: 20_000 });
-
-  // ⚠ READ THROUGH THE LOCATOR API, NOT page.evaluate(). An evaluate callback
-  // runs in the browser, where `document` has no type under this project's
-  // eslint config — so every line inside it became an "unsafe member access on
-  // a type that cannot be resolved". The locator API is typed, shorter, and
-  // does not need the DOM lib at all.
-  const href = (await page.locator('a[href^="/projects/0"]').first().getAttribute('href')) ?? '';
-  const projectId = href.replace('/projects/', '').split('/')[0] ?? '';
-  expect(projectId, 'no project exists to attach a device to').not.toBe('');
 
   await page.goto(`/projects/${projectId}/hardware`);
   await expect(page.getByRole('heading', { name: 'Devices' })).toBeVisible({ timeout: 15_000 });

@@ -1,6 +1,7 @@
 package bommodule
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -140,4 +141,120 @@ func TestRequireSourceRefusesASourceNoEngineCanRead(t *testing.T) {
 	if err := r.RequireSource(model.BOMTypeSBOM, "manual"); err == nil {
 		t.Error("SBOM was accepted from a manual source; there is no form that produces a component inventory")
 	}
+}
+
+// TestQBOMWithoutCBOMIsNamedAsADerivationWithNothingToDeriveFrom.
+//
+// ⚠ THE PRODUCT ALREADY KNEW THIS AND NEVER SAID IT. model.BOMType.IsDerived's
+// own comment: a project classified QBOM without CBOM "will produce device
+// metadata and no crypto assets — worth warning about at registration rather
+// than at report time". The registration screen showed a "derived from CBOM"
+// chip, which states the relationship and not the consequence of ignoring it.
+func TestQBOMWithoutCBOMIsNamedAsADerivationWithNothingToDeriveFrom(t *testing.T) {
+	r := Default()
+
+	missing := r.MissingDependencies([]model.BOMType{model.BOMTypeSBOM, model.BOMTypeQBOM})
+	deps, ok := missing[model.BOMTypeQBOM]
+	if !ok {
+		t.Fatal("QBOM selected without CBOM was not flagged")
+	}
+	if len(deps) != 1 || deps[0] != model.BOMTypeCBOM {
+		t.Errorf("missing = %v, want [CBOM]", deps)
+	}
+}
+
+// Selecting both is the whole point of the warning, and must be silent.
+func TestQBOMWithCBOMIsNotFlagged(t *testing.T) {
+	r := Default()
+	if got := r.MissingDependencies([]model.BOMType{model.BOMTypeCBOM, model.BOMTypeQBOM}); len(got) != 0 {
+		t.Errorf("a complete selection was flagged: %v", got)
+	}
+}
+
+// TestOnlyTheTypesThatNeedSomethingCarryRequirements.
+//
+// An empty list is an answer. If SBOM ever grows a checklist item, it should be
+// because something real changed — not because five types were made to look
+// symmetrical.
+func TestOnlyTheTypesThatNeedSomethingCarryRequirements(t *testing.T) {
+	r := Default()
+	want := map[model.BOMType]bool{
+		model.BOMTypeQBOM:  true,
+		model.BOMTypeAIBOM: true,
+		model.BOMTypeHBOM:  true,
+	}
+
+	for _, bt := range model.AllBOMTypes() {
+		m, ok := r.For(bt)
+		if !ok {
+			continue
+		}
+		reqs := m.Requirements()
+		if got := len(reqs) > 0; got != want[bt] {
+			t.Errorf("%s has requirements = %v, want %v", bt, got, want[bt])
+		}
+		for _, req := range reqs {
+			if req.ID == "" || req.Title == "" || req.Detail == "" {
+				t.Errorf("%s: a requirement is missing id, title or detail: %+v", bt, req)
+			}
+			// A checklist item that does not say the consequence reads as
+			// optional, which is the opposite of what Required means here.
+			if req.Required && len(req.Detail) < 40 {
+				t.Errorf("%s: requirement %q is required but does not explain why",
+					bt, req.ID)
+			}
+		}
+	}
+}
+
+// TestNoRequirementWritesAFieldCount is invariant 2, applied to copy that ships.
+//
+// ⚠ THE AIBOM REQUIREMENT NAMES A COUNT, AND IT MUST COME FROM THE PROFILE.
+// "four Table 10 elements" typed into a string is exactly how a product ships a
+// false compliance claim the day the guideline is revised.
+//
+// ⚠ IT MATCHES A NUMBER NEXT TO A FIELD NOUN, NOT EVERY NUMBER WORD. The first
+// version banned the words outright and flagged "the one part of a QBOM that no
+// scan can produce" and "until one of those exists" — ordinary English, no
+// count in sight. A guard that cries wolf on prose gets the assertion deleted
+// rather than the prose fixed, so it looks for the shape invariant 2 is
+// actually about: a quantity immediately qualifying elements or fields.
+func TestNoRequirementWritesAFieldCount(t *testing.T) {
+	r := Default()
+
+	// "<number word> [up to two words] element(s)/field(s)".
+	countOfFields := regexp.MustCompile(
+		`\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|` +
+			`thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|` +
+			`twenty|twenty-one|twenty-four|\d+)\b(\s+\S+){0,2}\s+(element|field)s?\b`)
+
+	for _, bt := range model.AllBOMTypes() {
+		m, ok := r.For(bt)
+		if !ok {
+			continue
+		}
+		for _, req := range m.Requirements() {
+			text := strings.ToLower(req.Title + " " + req.Detail)
+			// %d rendered from the profile at runtime is the CORRECT form, so
+			// the literal source text is what must be checked — not the output.
+			// These strings are built with fmt.Sprintf from len(profile fields),
+			// which is why this test reads them after formatting and still
+			// passes: the digits it sees came from the profile, not a keyboard.
+			if match := countOfFields.FindString(text); match != "" && !renderedFromProfile(bt, req.ID) {
+				t.Errorf("%s requirement %q writes a field count as a literal (%q); "+
+					"render it from the profile", bt, req.ID, match)
+			}
+		}
+	}
+}
+
+// renderedFromProfile names the requirements whose counts are produced by
+// fmt.Sprintf from a profile-derived length rather than typed.
+//
+// ⚠ AN ALLOWLIST IS A LIABILITY AND THIS ONE IS DELIBERATELY TINY. It exists
+// because the test can only read the FORMATTED string, where a profile-rendered
+// count and a typed one look identical. Each entry is a claim that the source
+// uses len() on a profile list — check modules.go before adding to it.
+func renderedFromProfile(bt model.BOMType, id string) bool {
+	return bt == model.BOMTypeAIBOM && id == "aibom.user_fields"
 }

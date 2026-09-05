@@ -18,6 +18,11 @@ export function GitHubRepoPicker({
   onSelect,
   onClose,
 }: {
+  /**
+   * The GitHub token, or '' when the organisation has a stored connection and
+   * the server should use that instead. An empty string is not a missing
+   * value here — it is the connect-once path.
+   */
   token: string;
   onSelect: (repo: Repo) => void;
   onClose: () => void;
