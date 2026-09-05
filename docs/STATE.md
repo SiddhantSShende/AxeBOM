@@ -2266,6 +2266,45 @@ mind**, because a claim about limits should be falsifiable.
 
 ## Session log
 
+### 2026-09-05 (h) — A5 re-audited: two of three items were already done, and the third was a gate the data outgrew
+
+**Most of A5 was already closed, and one attempt to "finish" it was wrong.**
+The plan listed three A5 items. Re-checking each against the code rather than
+against the plan:
+
+- **Level projection of `CryptoAssets` / `AIModels`** — already handled, by
+  `flatInventoryLevelNote`, and handled *deliberately the opposite way to what
+  the plan proposed*. I began implementing the projection the plan describes
+  (drop assets whose component the level dropped, mirroring the Findings rule)
+  and **reverted it**. The existing comment makes the better argument: Table 9's
+  assets have no depth of their own, so narrowing them applies a rule this
+  product invented, inside a compliance document. The concrete harm is specific
+  — a Top-Level CBOM would report a *smaller* cryptographic exposure than the
+  project has, and "no quantum-vulnerable algorithms" is exactly the sentence a
+  reader would take from it. Rendering everything and stating why is the honest
+  form. ⚠ The prohibition is recorded in `flatInventoryLevelNote`'s own comment;
+  a future session should not re-derive the projection a third time.
+- **XLSX `truncated`** — already fixed (`cellsCut > 0`).
+- **`render/csv.go`** — no longer the ambiguous third state the plan describes.
+  It carries an explicit decision: `parseFormat` rejects `csv` with a test
+  asserting the rejection, and the writer stays as the shared subject of the
+  formula-injection tests, because a CSV field has no type for invariant 8's
+  escaping to hide behind. Documented decision, not dead code.
+
+**The one real defect A6/A7's neighbour work exposed.**
+`flatInventoryLevelNote`'s crypto case was gated `&& out.BOMType ==
+model.BOMTypeCBOM`, correct when written because a CBOM was then the only report
+carrying Table 9 assets. **A2 gave a QBOM those assets** — resolved from the
+companion CBOM document, and they are the whole of its readiness half — without
+giving it the explanation. A Top-Level QBOM therefore matched no case and
+produced an **empty level note**: a document labelled "Top-Level" rendering a
+complete inventory and saying nothing about the discrepancy, which is the exact
+failure the level work exists to prevent. The condition is now the presence of
+the assets, like the AI-model case, since the reason in the note is a fact about
+the assets and not about which report renders them. Mutation-verified: the test
+fails on the QBOM subtest under the old gate and passes under the new one, with
+the CBOM subtest green throughout.
+
 ### 2026-09-05 (g) — Track A6 + A7: three tables that had readers and no writer, and an engine whose every component was thrown away
 
 **A6 — the writerless tables.** Five `normalize` tables had no writer. Three of

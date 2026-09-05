@@ -1183,7 +1183,15 @@ func flatInventoryLevelNote(out *render.BOM, l level.Level) string {
 		return ""
 	}
 	switch {
-	case len(out.CryptoAssets) > 0 && out.BOMType == model.BOMTypeCBOM:
+	// ⚠ NOT GATED ON BOMTypeCBOM — IT WAS, AND A QBOM FELL THROUGH TO SILENCE.
+	// The gate was written when a CBOM was the only report that carried Table 9
+	// assets. A QBOM now carries them too (they are resolved from the companion
+	// CBOM document, which is the whole of its readiness half), so a Top-Level
+	// QBOM matched no case and said nothing at all about its own level. The
+	// REASON in this note — Table 9 assets have no depth to narrow by — is a
+	// fact about the assets, not about which report renders them, so the
+	// condition is now the presence of the assets, like the AI-model case below.
+	case len(out.CryptoAssets) > 0:
 		return fmt.Sprintf(
 			"All %d cryptographic asset(s) are listed. A CERT-In §3.1 level "+
 				"narrows a dependency tree by depth, and Table 9's assets have "+
