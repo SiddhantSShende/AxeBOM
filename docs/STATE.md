@@ -8,7 +8,7 @@ A session that writes code but does not update this file has failed — the next
 
 **Last updated:** 2026-09-05
 **Current phase:** *Hardware as a first-class thing, and making every artifact actually contain its data*. 🟢 Track A rendering matrix (b); 🟢 B3 device register (c); 🟢 B1+B2 collectors and `axebom collect hardware` (d); 🟢 scans actually run (e); 🟢 **B4 the hardware screens** (f). **Track B is complete.** Not started: A6 (writerless tables), A7 (ecosystem coverage).
-**Next action:** The six-milestone registration plan is COMPLETE, and the `ProfileField.values` gap carried out of it is closed — enums now come from the compliance profile in both languages, held together by `TestGoAndPythonEnumValuesAgree`. ⚠ **The frontend is a container serving a built bundle** — `docker compose up -d --build frontend` before any e2e run. 🟡 Carried forward: `aibom-generator` and `cbomkit` are dispatchable with no adapter (aibom-generator's stop is documented and deliberate — invariant 10); gEDA/LibrePCB/Horizon EDA/Fritzing unparsed; the interactive import has no path for CycloneDX or collector JSON; `alpine/git` is tag-pinned and `toolctl pin` does not exist; `raw_findings` and `licenses` remain deliberately writerless; one pre-existing `AIBOM | url` project is left unmigrated. ⚠ **`NVD_API_KEY` is still set in no environment — `task preflight` now says so.**
+**Next action:** ⚠ **Campaigns work now and never did before** — the campaign→orchestrator contract had three disagreeing fields and no test across the boundary, so every scheduled scan was refused before it existed. Verified live end to end. ⚠ **The frontend is a container serving a built bundle** — `docker compose up -d --build frontend` before any e2e run. 🟡 Carried forward: `scan.source_kind` is still caller-asserted for direct API callers (one live row diverges; it fails safely at dispatch, and fixing it properly means a synchronous project-service call in CreateScan); 26 unexplained webrecon misroutes for deleted scans, not reproducible; `aibom-generator` and `cbomkit` dispatchable with no adapter; gEDA/LibrePCB/Horizon EDA/Fritzing unparsed; the interactive import has no path for CycloneDX or collector JSON; `alpine/git` is tag-pinned; `raw_findings` and `licenses` deliberately writerless. ⚠ **`NVD_API_KEY` is still set in no environment — `task preflight` now says so.**
 
 > 🟢 **A REAL SCAN NOW NORMALIZES, LIVE, WITH NO MANUAL TRIGGER — THE
 > NORMALIZER'S DEPLOYED BOUNDARY FROM (e)/(k)/(l) IS CLOSED FOR SBOM.**
@@ -2265,6 +2265,83 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-09-05 (n) — Audit sweep: campaigns had never started a scan
+
+A full sweep of the codebase and the running stack, asked for as "examine
+everything and make sure there are no errors and bugs". Most of it was clean:
+27 containers up, no stuck scans or reports, no Python worker errors, `task
+verify` green, 13 browser specs green.
+
+#### The finding: the campaign → orchestrator contract had never been exercised
+
+⚠ **`triggered_by` in a database of 58 scans was only ever `api` or `user`,
+never `campaign`.** Three fields disagreed across one HTTP call:
+
+| Campaign sent | Orchestrator reads | Effect |
+|---|---|---|
+| `bom_types` | `families` | `len(Families) == 0` → "select at least one BOM family" |
+| *(nothing)* | `source_kind` | `""` → "source_kind must be git, upload, image or url" |
+| `triggered_by`, `trigger_ref` | *(no field at all)* | silently dropped |
+
+So **every scheduled scan was refused before it existed**, and the campaign
+feature — reachable from the UI, with a wizard and a list screen — silently did
+nothing. `CreateScan` fails on the first check, so the second was never even
+reached.
+
+⚠ **Both sides had tests and the boundary had none.** The campaign's trigger
+tests drive an `httptest` server that accepts any JSON at all, and
+`TestTheScanRecordsItsCampaignProvenance` asserted the campaign *sends*
+`triggered_by` — which it did. Nothing asserted the orchestrator *accepts* it.
+That is the same mock-shaped blind spot that produced several other defects this
+session.
+
+#### What was done
+
+- **`contract_test.go`** decodes the campaign's real request body with a copy of
+  the orchestrator's real `createScanRequest`. Copied rather than imported
+  because depguard forbids reaching into another service's internals
+  (invariant 11) — which is precisely why the contract went untested. It fails
+  by name on both original defects.
+- **The campaign resolves the project's source** through `projectsource`, the
+  shared client the fetcher and webrecon already use for this exact question. It
+  cannot assert the kind and must not guess: defaulting to `git` would queue a
+  clone of nothing and surface as a fetch failure with no hint that a campaign
+  caused it.
+- **`triggered_by`/`trigger_ref` are honoured — but only from a service
+  principal.** ⚠ A signed-in person must not be able to claim `campaign`, or
+  anybody could attribute their own scan to an automation that never ran. That
+  is the same reason `triggerFields` derives the value from the verified subject
+  instead of reading it from the body.
+- The trigger tests now use a **real `projectsource.Client` against a stub
+  server** rather than a hand-rolled fake: the client does kind-aware validation
+  of its own, and stubbing it away would let a response shape pass in tests that
+  the real client refuses in production.
+
+#### Verified live — the path had never run before
+
+A campaign created through the API and run: `scan_ids` returned, and the scan
+row reads `source_kind = git` (resolved, not asserted), `triggered_by =
+campaign`, `trigger_ref` = the campaign id, 8 real engines dispatched, and it
+completed with **22 normalized components**.
+
+#### Two things examined and left alone, with reasons
+
+- ⚠ **`scan.source_kind` is still caller-asserted for direct API callers.**
+  One live row proves divergence — a user-triggered scan on a `github` project
+  recorded `source_kind = upload` — and `01-DATA-MODEL.md` calls the column
+  "denormalized from the project at create time", which nothing does. It is not
+  a false-report risk: that scan **failed at dispatch** (`started_at` NULL),
+  because the producer cannot resolve the claimed source. So the symptom is a
+  confusing late failure, not a wrong document. Making the orchestrator resolve
+  it would add a synchronous project-service dependency to scan creation, which
+  is a design change rather than a bug fix; recorded here instead.
+- **26 webrecon "non-url-sourced job" errors, all for scans that no longer
+  exist.** Not reproducible from the UI flow — the browser sends `source_kind`
+  derived correctly from the project, and a capture confirmed `"git"` for the
+  github project. Not from campaigns either (none had ever run). The scans were
+  deleted with their e2e projects before webrecon picked the jobs up. Left as an
+  open question rather than a fixed bug, because I could not reproduce it.
 
 ### 2026-09-05 (m) — ProfileField carries `values`, and the drift it was hiding
 

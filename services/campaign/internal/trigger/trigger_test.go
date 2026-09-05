@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/axebom/axebom/libs/go-shared/projectsource"
 	"github.com/axebom/axebom/services/campaign/internal/scheduler"
 )
 
@@ -77,11 +78,38 @@ func extract(body, field string) string {
 
 func mustTrigger(t *testing.T, url string) *Trigger {
 	t.Helper()
-	tr, err := New(Options{BaseURL: url, Token: token, Client: &http.Client{Timeout: 5 * time.Second}})
+	tr, err := New(Options{
+		BaseURL: url, Token: token,
+		Client:   &http.Client{Timeout: 5 * time.Second},
+		Resolver: fakeResolver(t),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return tr
+}
+
+// fakeResolver stands in for the project service, answering `git` for every
+// project.
+//
+// ⚠ A REAL projectsource.Client AGAINST A STUB SERVER, NOT A HAND-ROLLED
+// INTERFACE. The client does kind-aware validation of its own — a git-shaped
+// answer with no repo_url is ErrNoSource — and stubbing that away would let a
+// response shape pass here that the real client refuses in production. That is
+// the same gap that let the whole campaign contract break unnoticed.
+func fakeResolver(t *testing.T) *projectsource.Client {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"kind":"git","repo_url":"https://example.test/acme/widget.git","default_branch":"main"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	c, err := projectsource.New(projectsource.Options{BaseURL: srv.URL, Token: token})
+	if err != nil {
+		t.Fatalf("fake resolver: %v", err)
+	}
+	return c
 }
 
 func TestOneScanPerProject(t *testing.T) {

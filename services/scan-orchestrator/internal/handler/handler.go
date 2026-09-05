@@ -89,6 +89,11 @@ type createScanRequest struct {
 	SourceKind string   `json:"source_kind"`
 	Families   []string `json:"families"`
 	Engines    []string `json:"engines,omitempty"`
+	// TriggeredBy and TriggerRef are honoured ONLY from a service principal —
+	// see triggerFields. The campaign service sends them and they used to be
+	// dropped on the floor, because this struct had no field for either.
+	TriggeredBy string `json:"triggered_by,omitempty"`
+	TriggerRef  string `json:"trigger_ref,omitempty"`
 }
 
 type engineRunDTO struct {
@@ -233,6 +238,12 @@ func toFindingsSummaryDTO(s orchestr.FindingsSummary, gaps []string) findingsSum
 // is the CI/scripting path `axebom apikey mint` exists for (and the service
 // principal path internal callers use), so both must actually work, not
 // only interactive sign-in.
+// isServicePrincipal reports whether the caller is another AxeBOM service,
+// as opposed to an API key or a signed-in person.
+func isServicePrincipal(subject string) bool {
+	return strings.HasPrefix(subject, oidcauth.ServiceSubjectPrefix)
+}
+
 func triggerFields(subject string) (triggeredBy, requestedBy string) {
 	switch {
 	case strings.HasPrefix(subject, oidcauth.APIKeySubjectPrefix),
@@ -276,6 +287,24 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	triggeredBy, requestedBy := triggerFields(ctxkey.UserID(r.Context()))
+
+	// ⚠ A SERVICE PRINCIPAL MAY NAME ITSELF; A BROWSER MAY NOT.
+	//
+	// The campaign service sends triggered_by=campaign and trigger_ref=<id> so
+	// a scan answers "why does this exist?" without a join — and this handler
+	// had no field for either, so both were dropped and every scheduled scan
+	// would have been recorded as a plain `api` call with no campaign at all.
+	//
+	// Honoured only for a service principal, whose identity the middleware has
+	// already verified. Letting a signed-in user assert `campaign` would let
+	// anybody attribute their own scan to an automation that never ran — the
+	// same reason triggerFields derives the value rather than reading it.
+	if triggeredBy == "api" && isServicePrincipal(ctxkey.UserID(r.Context())) {
+		if claimed := strings.TrimSpace(req.TriggeredBy); claimed != "" {
+			triggeredBy = claimed
+			requestedBy = strings.TrimSpace(req.TriggerRef)
+		}
+	}
 
 	scan, err := h.orch.CreateScan(r.Context(), tenantID, orchestr.CreateScanInput{
 		ProjectID:        req.ProjectID,

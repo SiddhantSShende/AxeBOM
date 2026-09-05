@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/axebom/axebom/libs/go-shared/oidcauth"
+	"github.com/axebom/axebom/libs/go-shared/projectsource"
 	"github.com/axebom/axebom/services/campaign/internal/scheduler"
 )
 
@@ -39,6 +40,14 @@ type Trigger struct {
 	// on the request as X-AxeBOM-Tenant, which the middleware honours only
 	// for a verified service principal.
 	token func(ctx context.Context) (string, error)
+	// resolver answers what a project's source actually is.
+	//
+	// ⚠ THE SCAN REQUEST CANNOT ASSERT THIS AND MUST NOT GUESS IT. CreateScan
+	// accepts only git/upload/image/url and this request carried none, so every
+	// scheduled scan was refused before it existed. The project service owns
+	// the answer; projectsource is the shared client the fetcher and webrecon
+	// already resolve through, for exactly this question.
+	resolver *projectsource.Client
 }
 
 // Options configure a Trigger.
@@ -46,6 +55,9 @@ type Options struct {
 	BaseURL string
 	Client  *http.Client
 	Token   func(ctx context.Context) (string, error)
+	// Resolver answers what a project's source is. Required: a scan request
+	// without a valid source_kind is refused by CreateScan.
+	Resolver *projectsource.Client
 }
 
 // New builds a Trigger.
@@ -56,6 +68,9 @@ func New(opts Options) (*Trigger, error) {
 	if opts.Token == nil {
 		return nil, fmt.Errorf("trigger: a token source is required")
 	}
+	if opts.Resolver == nil {
+		return nil, fmt.Errorf("trigger: a project source resolver is required")
+	}
 	client := opts.Client
 	if client == nil {
 		// A bounded timeout, not none. A scan-creation call that hangs holds
@@ -63,9 +78,10 @@ func New(opts Options) (*Trigger, error) {
 		client = &http.Client{Timeout: 30 * time.Second}
 	}
 	return &Trigger{
-		client:  client,
-		baseURL: strings.TrimRight(opts.BaseURL, "/"),
-		token:   opts.Token,
+		client:   client,
+		baseURL:  strings.TrimRight(opts.BaseURL, "/"),
+		token:    opts.Token,
+		resolver: opts.Resolver,
 	}, nil
 }
 
@@ -109,9 +125,19 @@ func (t *Trigger) Trigger(
 	return started, nil
 }
 
+// scanRequest MUST match services/scan-orchestrator/internal/handler's
+// createScanRequest. depguard forbids importing it, so contract_test.go decodes
+// a real body with a copy of that struct — which is what caught this.
+//
+// ⚠ IT SENT `bom_types` AND NO `source_kind`, AND THE ORCHESTRATOR READS
+// `families`. Both checks in CreateScan refuse that, so no campaign has ever
+// started a scan: a database with 58 of them holds none whose triggered_by is
+// `campaign`. Both sides had tests; the boundary between them had none, and the
+// tests here use an httptest server that accepts any JSON at all.
 type scanRequest struct {
 	ProjectID   string   `json:"project_id"`
-	BOMTypes    []string `json:"bom_types"`
+	SourceKind  string   `json:"source_kind"`
+	Families    []string `json:"families"`
 	TriggeredBy string   `json:"triggered_by"`
 	TriggerRef  string   `json:"trigger_ref"`
 }
@@ -124,9 +150,18 @@ func (t *Trigger) startScan(
 	ctx context.Context, token string, c scheduler.Campaign,
 	runID, projectID string,
 ) (string, error) {
+	src, err := t.resolver.Resolve(ctx, c.TenantID, projectID)
+	if err != nil {
+		// Named, not guessed. A project with no source cannot be scanned, and
+		// defaulting to `git` would queue a clone of nothing and surface as a
+		// fetch failure with no hint that the campaign was the cause.
+		return "", fmt.Errorf("resolving the project's source: %w", err)
+	}
+
 	body, err := json.Marshal(scanRequest{
-		ProjectID: projectID,
-		BOMTypes:  c.BOMTypes,
+		ProjectID:  projectID,
+		SourceKind: string(src.Kind),
+		Families:   c.BOMTypes,
 		// docs/01-DATA-MODEL.md: triggered_by is CHECKed against this
 		// vocabulary, and trigger_ref is the campaign — so a scan's provenance
 		// answers "why does this exist?" without a join.

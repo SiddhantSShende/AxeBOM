@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/axebom/axebom/libs/go-shared/oidcauth"
@@ -48,5 +49,48 @@ func TestTriggerFields(t *testing.T) {
 				t.Errorf("requestedBy = %q, want %q", gotRequested, tc.wantRequested)
 			}
 		})
+	}
+}
+
+// TestACampaignsProvenanceSurvivesTheRequest.
+//
+// ⚠ THE CAMPAIGN SERVICE SENT IT AND THIS HANDLER DROPPED IT. createScanRequest
+// had no field for triggered_by or trigger_ref, so every scheduled scan would
+// have been recorded as a plain `api` call with no campaign attached — losing
+// exactly the provenance the campaign's own comment promises ("a scan's
+// provenance answers 'why does this exist?' without a join").
+func TestACampaignsProvenanceSurvivesTheRequest(t *testing.T) {
+	var req createScanRequest
+	body := `{"project_id":"p1","source_kind":"git","families":["sbom"],` +
+		`"triggered_by":"campaign","trigger_ref":"01900000-0000-7000-8000-0000000000c1"}`
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if req.TriggeredBy != "campaign" {
+		t.Errorf("triggered_by did not survive the decode: %q", req.TriggeredBy)
+	}
+	if req.TriggerRef == "" {
+		t.Error("trigger_ref did not survive the decode")
+	}
+}
+
+// TestOnlyAServicePrincipalMayNameItsOwnTrigger.
+//
+// ⚠ A SIGNED-IN PERSON MUST NOT BE ABLE TO CLAIM `campaign`. Attribution is
+// what makes a scan's provenance worth anything; if a browser could assert it,
+// anybody could attribute their own scan to an automation that never ran. This
+// is the same reason triggerFields derives the value from the verified subject
+// rather than reading it from the body.
+func TestOnlyAServicePrincipalMayNameItsOwnTrigger(t *testing.T) {
+	if isServicePrincipal("01900000-0000-7000-8000-0000000000a1") {
+		t.Error("a human subject was treated as a service principal")
+	}
+	if isServicePrincipal(oidcauth.APIKeySubjectPrefix + "some-key") {
+		t.Error("an API key was treated as a service principal; a key holder " +
+			"could then attribute scans to a campaign that never ran")
+	}
+	if !isServicePrincipal(oidcauth.ServiceSubjectPrefix + "campaign") {
+		t.Error("the campaign service is not recognised as a service principal, " +
+			"so its provenance would be discarded")
 	}
 }

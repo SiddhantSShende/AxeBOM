@@ -14,6 +14,7 @@ import (
 	"github.com/axebom/axebom/libs/go-shared/platform/db"
 	"github.com/axebom/axebom/libs/go-shared/platform/httpx"
 	"github.com/axebom/axebom/libs/go-shared/platform/leader"
+	"github.com/axebom/axebom/libs/go-shared/projectsource"
 	"github.com/axebom/axebom/services/campaign/internal/handler"
 	"github.com/axebom/axebom/services/campaign/internal/scheduler"
 	"github.com/axebom/axebom/services/campaign/internal/store"
@@ -94,9 +95,24 @@ func buildDeps(ctx context.Context, cfg *config.Service) (*deps, error) {
 
 	campaignStore := store.New(pool)
 
-	scanTrigger, err := trigger.New(trigger.Options{
-		BaseURL: cfg.Services.ScanOrchestrator,
+	// The campaign cannot assert a project's source kind and must not guess
+	// it — CreateScan accepts only git/upload/image/url, and this request used
+	// to carry none. projectsource is the shared client the fetcher and
+	// webrecon already resolve through.
+	sourceResolver, err := projectsource.New(projectsource.Options{
+		BaseURL: cfg.Services.Project,
 		Token:   tokens.Token,
+	})
+	if err != nil {
+		_ = msgBus.Close()
+		pool.Close()
+		return nil, fmt.Errorf("source resolver: %w", err)
+	}
+
+	scanTrigger, err := trigger.New(trigger.Options{
+		BaseURL:  cfg.Services.ScanOrchestrator,
+		Token:    tokens.Token,
+		Resolver: sourceResolver,
 	})
 	if err != nil {
 		_ = msgBus.Close()
