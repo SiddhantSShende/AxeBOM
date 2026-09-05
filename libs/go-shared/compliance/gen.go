@@ -349,3 +349,102 @@ func SortedKeys[V any](m map[string]V) []string {
 	sort.Strings(out)
 	return out
 }
+
+// GenerateGoOperational emits an OPERATIONAL field set as Go.
+//
+// ⚠ THE REASON `profile gen` REFUSED OPERATIONAL PROFILES WAS TWO REASONS, AND
+// ONLY ONE OF THEM IS STILL TRUE.
+//
+// The first — that a second profile through GenerateGo would redeclare
+// ProfileID, ProfileRevision, ProfileAllVerified and the ProfileField type, and
+// fail to compile — is real and is why this is a separate function writing a
+// separate file. It emits ONLY the field list; every shared declaration stays
+// owned by the compliance profile's generated file.
+//
+// The second — "an operational field set has no generated consumer, Python
+// reads it at runtime" — was true when written and is not any more.
+// `services/project/internal/hbom.ComponentFormFields` builds the hardware
+// component form from `model.HBOMFields`, so the manufacturing elements were
+// authored, linted, scored in Python, and invisible in the one screen where
+// somebody could enter them. `compliance.Load` reads from disk, which a service
+// container has no copy of; generating is how the CERT-In fields already solve
+// exactly this.
+//
+// ⚠ THESE FIELDS MUST NEVER MOVE completeness_pct OR declaration_pct. The
+// profile's own header says so in as many words: they answer "how buildable is
+// this parts list", not "how much of what CERT-In requires is present". The
+// generated var is named for its set, never merged into HBOMFields, and every
+// consumer has to opt in by naming it.
+func GenerateGoOperational(p *Profile, setName, outDir string) (string, error) {
+	fields := p.OperationalFields(setName)
+	if len(fields) == 0 {
+		return "", fmt.Errorf("profile %q declares no operational field set %q", p.Meta.ID, setName)
+	}
+
+	varName := goOperationalVarName(setName)
+
+	var b bytes.Buffer
+	fmt.Fprintf(&b, doNotEdit, p.Meta.SourceDocument, p.Meta.ID, p.Meta.Revision)
+	b.WriteString("package model\n\n")
+
+	fmt.Fprintf(&b, `// %sLabel is what a report calls this number.
+//
+// Carried as data so no renderer hardcodes the string and none can mislabel it.
+const %sLabel = %q
+
+`, varName, varName, p.HBOMManufacturing.Label)
+
+	// ⚠ THE ID CONSTANTS ARE EMITTED HERE TOO, and they must be: writeGoField
+	// references a field by its constant, and the CERT-In generated file
+	// declares only CERT-In's. Without this block the generated file compiles
+	// against undefined names — which is exactly what the first run did.
+	fmt.Fprintf(&b, "// Operational field ids for the %s set.\nconst (\n", setName)
+	for _, f := range fields {
+		fmt.Fprintf(&b, "\t%s = %q\n", goConstName(f.ID), f.ID)
+	}
+	b.WriteString(")\n\n")
+
+	fmt.Fprintf(&b, `// %s are AxeBOM OPERATIONAL elements, not CERT-In ones.
+//
+// ⚠ THEY MUST NEVER MOVE completeness_pct OR declaration_pct. Those two numbers
+// answer "how much of what CERT-In requires is present". These answer "how
+// buildable and buyable is this parts list" — a different question with a
+// different authority behind it. Merging them would let a customer's diligence
+// about unit prices raise a percentage they hand to a regulator.
+//
+// Render the count from len(%s) — never write the number.
+var %s = []ProfileField{
+`, varName, varName, varName)
+	for _, f := range fields {
+		writeGoField(&b, f)
+	}
+	b.WriteString("}\n")
+
+	src, err := format.Source(b.Bytes())
+	if err != nil {
+		return "", fmt.Errorf("generated Go does not parse: %w", err)
+	}
+	path := filepath.Join(outDir, "generated_operational.go")
+	if err := os.MkdirAll(outDir, 0o750); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(path, src, 0o600); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// goOperationalVarName turns "hbom_manufacturing" into "HBOMManufacturingFields".
+func goOperationalVarName(setName string) string {
+	out := ""
+	for _, part := range strings.Split(setName, "_") {
+		switch part {
+		case "hbom", "sbom", "cbom", "qbom", "aibom":
+			out += strings.ToUpper(part)
+		case "":
+		default:
+			out += strings.ToUpper(part[:1]) + part[1:]
+		}
+	}
+	return out + "Fields"
+}

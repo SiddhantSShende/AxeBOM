@@ -102,3 +102,80 @@ func cutPrefix(s, prefix string) (string, bool) {
 	}
 	return "", false
 }
+
+// TestTheComponentFormCarriesTheManufacturingElements.
+//
+// ⚠ THEY WERE AUTHORED, LINTED, SCORED IN PYTHON — AND INVISIBLE IN THE ONLY
+// SCREEN WHERE ANYBODY COULD ENTER THEM. docs/reference/hbom-manufacturing-v1.yaml
+// defines designators, footprint, quantity, supplier SKU, alternates, lifecycle
+// status and the rest. The form is built from the GENERATED model, and
+// `axebom profile gen` refused operational profiles outright — so the elements
+// existed everywhere except where a customer could fill them in, and a
+// manufacturing readiness number was scored against fields no screen offered.
+func TestTheComponentFormCarriesTheManufacturingElements(t *testing.T) {
+	byAttr := map[string]hbom.ComponentFormField{}
+	for _, f := range hbom.ComponentFormFields() {
+		byAttr[f.Attr] = f
+	}
+
+	// Spot-check across the profile's three groups: engineering, sourcing,
+	// assembly. Named individually rather than counted — a count here would be
+	// the literal invariant 2 forbids.
+	for _, attr := range []string{
+		"designators", "package_footprint", "quantity",
+		"supplier_sku", "alternates", "assembly_type", "lifecycle_status",
+	} {
+		if _, ok := byAttr[attr]; !ok {
+			t.Errorf("the component form has no input for %q; the manufacturing "+
+				"readiness number scores a field nobody can fill in", attr)
+		}
+	}
+}
+
+// TestManufacturingElementsAreNotLabelledAsCERTIn.
+//
+// ⚠ THE TWO SETS SCORE INTO DIFFERENT NUMBERS AND CONFLATING THEM IS A
+// COMPLIANCE DEFECT. hbom-manufacturing-v1.yaml's own header: these may NEVER
+// move completeness_pct or declaration_pct. A form that presents a unit-price
+// input beside a CERT-In element with no distinction invites a customer to read
+// their procurement diligence as compliance coverage.
+func TestManufacturingElementsAreNotLabelledAsCERTIn(t *testing.T) {
+	for _, f := range hbom.ComponentFormFields() {
+		isManufacturing := strings.HasPrefix(f.FieldID, "axebom.hbom.mfg.")
+		if isManufacturing && f.CertIn {
+			t.Errorf("%q is an AxeBOM operational element but is flagged as CERT-In", f.Attr)
+		}
+		if !isManufacturing && !f.CertIn {
+			t.Errorf("%q is a CERT-In element but is not flagged as one", f.Attr)
+		}
+	}
+}
+
+// TestNoTwoInputsWriteTheSameColumn.
+//
+// ⚠ `mfg.04.description` DELIBERATELY SHARES CERT-In ELEMENT 3'S COLUMN. The
+// profile says so, to avoid splitting one fact in two and halving element 3's
+// coverage. Two inputs bound to one column is a form that silently discards
+// whichever the customer filled in second.
+func TestNoTwoInputsWriteTheSameColumn(t *testing.T) {
+	seen := map[string]string{}
+	for _, f := range hbom.ComponentFormFields() {
+		if prev, dup := seen[f.Attr]; dup {
+			t.Errorf("two inputs write %q (%s and %s); one would silently overwrite the other",
+				f.Attr, prev, f.FieldID)
+		}
+		seen[f.Attr] = f.FieldID
+	}
+}
+
+// A closed value set must reach the form, or a customer types "EOL " into a
+// field whose entire value is that it is comparable across parts.
+func TestTheOperationalEnumsCarryTheirValues(t *testing.T) {
+	for _, f := range hbom.ComponentFormFields() {
+		if f.Attr == "assembly_type" || f.Attr == "lifecycle_status" {
+			if len(f.Values) == 0 {
+				t.Errorf("%q is an enum in the profile but renders as free text", f.Attr)
+			}
+		}
+	}
+}

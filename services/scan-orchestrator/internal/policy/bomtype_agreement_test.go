@@ -189,3 +189,41 @@ func TestEveryHBOMEngineTellsTheCustomerWhatToProduce(t *testing.T) {
 		}
 	}
 }
+
+// TestTheEngineListingAndTheDispatchSetAgree.
+//
+// ⚠ THE SCAFFOLD FIX WAS HALF A FIX AND THIS IS THE HALF THAT WAS MISSING.
+// Marking `mock-engine` as a scaffold stopped it being dispatched, but
+// `GET /v1/scans/engines` enumerates the registry BY ID — so Settings → Engines
+// went on showing customers a fake scanner, with ecosystems and a weight, that
+// a tenant could "enable" and which would then never run.
+//
+// This asserts the property at the registry level, which is the only place both
+// sides can be seen: anything absent from every family's dispatch set has no
+// business being offered as a configurable engine.
+func TestTheEngineListingAndTheDispatchSetAgree(t *testing.T) {
+	reg := DefaultRegistry()
+
+	dispatchable := map[string]bool{}
+	for _, bt := range model.AllBOMTypes() {
+		f, ok := familyFor(bt)
+		if !ok {
+			continue
+		}
+		for _, e := range reg.ForFamily(f) {
+			dispatchable[e.ID] = true
+		}
+	}
+
+	for _, id := range reg.IDs() {
+		e, _ := reg.Get(id)
+		if dispatchable[id] {
+			continue
+		}
+		if !e.Scaffold {
+			t.Errorf("engine %q is in no family's dispatch set but is not marked as a "+
+				"scaffold; the engines endpoint would offer a configurable engine "+
+				"that can never run", id)
+		}
+	}
+}

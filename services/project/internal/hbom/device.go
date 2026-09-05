@@ -212,6 +212,16 @@ type ComponentFormField struct {
 	// elements are routinely confused for each other, and a form that does not
 	// say which is which collects the wrong answer.
 	Hint string `json:"hint,omitempty"`
+	// CertIn is false for AxeBOM's operational manufacturing elements.
+	//
+	// ⚠ THE FORM NOW CARRIES TWO FIELD SETS THAT SCORE INTO DIFFERENT NUMBERS,
+	// AND CONFLATING THEM WOULD BE A COMPLIANCE DEFECT. CERT-In's Table 11
+	// elements move completeness_pct and declaration_pct; the manufacturing
+	// elements answer "how buildable is this parts list" and
+	// docs/reference/hbom-manufacturing-v1.yaml says in its own header that
+	// they may NEVER move those two numbers. A customer filling in unit prices
+	// must not see a compliance percentage rise. The UI groups on this.
+	CertIn bool `json:"certin"`
 }
 
 // canonicalPathPrefix is what every Table 11 element's path begins with.
@@ -280,7 +290,80 @@ func ComponentFormFields() []ComponentFormField {
 		if attr == "criticality" {
 			field.Values = Criticalities
 		}
+		field.CertIn = true
 		out = append(out, field)
+	}
+
+	return append(out, manufacturingFormFields(seenAttrs(out))...)
+}
+
+// manufacturingFormFields adds AxeBOM's operational procurement elements.
+//
+// ⚠ THESE WERE AUTHORED, LINTED AND SCORED IN PYTHON, AND INVISIBLE IN THE ONE
+// SCREEN WHERE ANYBODY COULD ENTER THEM. `docs/reference/hbom-manufacturing-v1.yaml`
+// defines designators, footprint, quantity, supplier SKU, alternates,
+// lifecycle status and the rest; `compliance.Load` reads it from disk, which no
+// service container has a copy of, so the form — built from the GENERATED
+// `model.HBOMFields` — showed only CERT-In's elements. The operational set is
+// generated now, for the same reason CERT-In's is.
+//
+// ⚠ SKIPS ANY ATTRIBUTE CERT-In ALREADY CLAIMS. Element `mfg.04.description`
+// deliberately shares CERT-In element 3's column
+// (`hardware_component.product_details`) — the profile says so, to avoid
+// splitting one fact across two columns and halving element 3's coverage. Two
+// inputs writing one column is a form that silently discards whichever the
+// customer filled in second.
+func manufacturingFormFields(taken map[string]bool) []ComponentFormField {
+	out := make([]ComponentFormField, 0, len(model.HBOMManufacturingFields))
+	for _, f := range model.HBOMManufacturingFields {
+		attr, ok := strings.CutPrefix(f.CanonicalPath, canonicalPathPrefix)
+		if !ok || attr == "" {
+			continue
+		}
+		list := strings.HasSuffix(attr, "[]")
+		attr = strings.TrimSuffix(attr, "[]")
+		if taken[attr] {
+			continue
+		}
+		out = append(out, ComponentFormField{
+			Attr:      attr,
+			FieldID:   f.ID,
+			Name:      f.Name,
+			Multiline: f.Type == "text",
+			List:      list,
+			Values:    manufacturingEnums[attr],
+			// ⚠ false, and load-bearing — see ComponentFormField.CertIn.
+			CertIn: false,
+		})
+	}
+	return out
+}
+
+// manufacturingEnums are the closed value sets for two operational elements.
+//
+// ⚠ THE PROFILE CARRIES THESE AND THE GENERATED MODEL DROPS THEM.
+// `compliance.Field` has a `values` list — `assembly_type: [smt, tht,
+// mechanical]`, `lifecycle_status: [active, nrnd, obsolete, eol, preview,
+// unknown]` — but `model.ProfileField` has no Values member, so `axebom profile
+// gen` discards it for CERT-In's fields too. That is why `criticality` is
+// looked up in Go a few lines above rather than read from the profile, and this
+// mirrors that existing precedent rather than inventing a second one.
+//
+// Rendering these as free text would be worse than a duplicated list: a
+// customer typing "EOL " or "obsolete?" produces a lifecycle status nothing
+// matches, in a field whose whole value is that it is comparable across parts.
+// Widening ProfileField is the real fix and is recorded in docs/STATE.md; it
+// changes the generated struct in two languages and the agreement test that
+// holds them together.
+var manufacturingEnums = map[string][]string{
+	"assembly_type":    {"smt", "tht", "mechanical"},
+	"lifecycle_status": {"active", "nrnd", "obsolete", "eol", "preview", "unknown"},
+}
+
+func seenAttrs(fields []ComponentFormField) map[string]bool {
+	out := make(map[string]bool, len(fields))
+	for _, f := range fields {
+		out[f.Attr] = true
 	}
 	return out
 }

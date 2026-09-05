@@ -492,6 +492,18 @@ func (h *Handler) Engines(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]any, 0)
 	for _, id := range h.registry.IDs() {
 		e, _ := h.registry.Get(id)
+
+		// ⚠ SCAFFOLDS ARE NOT PART OF THE PRODUCT AND MUST NOT BE LISTED.
+		// Marking `mock-engine` as a scaffold stopped it being DISPATCHED, but
+		// this endpoint enumerates the whole registry by id — so Settings →
+		// Engines kept showing customers a fake scanner they could read
+		// ecosystems and weights for, and a tenant could "enable" it. Excluding
+		// it from dispatch and listing it in the UI is the same drift in two
+		// directions.
+		if e.Scaffold {
+			continue
+		}
+
 		row := map[string]any{
 			"engine_id":       e.ID,
 			"mode":            e.Mode,

@@ -8,7 +8,7 @@ A session that writes code but does not update this file has failed — the next
 
 **Last updated:** 2026-09-05
 **Current phase:** *Hardware as a first-class thing, and making every artifact actually contain its data*. 🟢 Track A rendering matrix (b); 🟢 B3 device register (c); 🟢 B1+B2 collectors and `axebom collect hardware` (d); 🟢 scans actually run (e); 🟢 **B4 the hardware screens** (f). **Track B is complete.** Not started: A6 (writerless tables), A7 (ecosystem coverage).
-**Next action:** Milestones 5–6 — frontend↔backend↔DB alignment and live verification. Milestones 1–4 are done: the defect sweep, the BOM module seam, registration reordered around the BOM type, and the widened HBOM roster (EAGLE) with four bugs removed. ⚠ **The frontend is a container serving a built bundle** — `docker compose up -d --build frontend` before any e2e run. 🟡 Carried forward: `aibom-generator` and `cbomkit` remain dispatchable with no adapter (aibom-generator's stop is documented and deliberate — invariant 10); gEDA/LibrePCB/Horizon EDA/Fritzing unparsed; the interactive import has no path for CycloneDX or collector JSON; manufacturing fields are not in the generated form because their profile is not loaded in Go; `alpine/git` is tag-pinned and `toolctl pin` does not exist; `raw_findings` and `licenses` remain deliberately writerless; one pre-existing `AIBOM | url` project is left unmigrated. ⚠ **`NVD_API_KEY` is still set in no environment — but `task preflight` now says so.**
+**Next action:** The six-milestone registration plan is COMPLETE — defect sweep, BOM module seam, BOM-type-first registration, widened HBOM roster, alignment audit, live verification. ⚠ **The frontend is a container serving a built bundle** — `docker compose up -d --build frontend` before any e2e run. 🟡 Carried forward: `model.ProfileField` drops the profile's `values` list, so every enum's values are hardcoded in Go (widening it touches two generated languages and their agreement test); `aibom-generator` and `cbomkit` are dispatchable with no adapter (aibom-generator's stop is documented and deliberate — invariant 10); gEDA/LibrePCB/Horizon EDA/Fritzing unparsed; the interactive import has no path for CycloneDX or collector JSON; `alpine/git` is tag-pinned and `toolctl pin` does not exist; `raw_findings` and `licenses` remain deliberately writerless; one pre-existing `AIBOM | url` project is left unmigrated. ⚠ **`NVD_API_KEY` is still set in no environment — `task preflight` now says so.**
 
 > 🟢 **A REAL SCAN NOW NORMALIZES, LIVE, WITH NO MANUAL TRIGGER — THE
 > NORMALIZER'S DEPLOYED BOUNDARY FROM (e)/(k)/(l) IS CLOSED FOR SBOM.**
@@ -2265,6 +2265,96 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-09-05 (l) — Milestones 5 and 6: the alignment audit, and live verification
+
+#### Milestone 5 — frontend ↔ backend ↔ database
+
+Audited mechanically rather than by reading: every `/v1/` path the frontend
+calls, diffed against every route the services register, then the live JSON
+shapes diffed against the TypeScript interfaces.
+
+**All 57 frontend paths resolve to real routes.** Four apparent misses were a
+comment, a doc-comment, a unit-test fixture and a template literal my regex had
+mangled. Project fields, scan/report/engine-run status enums and `isTerminal`
+all match the database's CHECK constraints exactly.
+
+⚠ **Two apparent findings were artifacts of my own sampling**, and both would
+have been reported as bugs by a less careful pass: dumping `array[0]` made
+`operator_action` and four `omitempty` component-form fields look missing when
+they were merely absent on the first row. The dump now unions keys across the
+whole array — recorded because the same shortcut will look reasonable next time.
+
+**The one real drift: `mock-engine` was still listed by `GET /v1/scans/engines`.**
+Milestone 4 marked it a scaffold and excluded it from `ForFamily`, so it stopped
+being dispatched — but that endpoint enumerates the registry **by id**, so
+Settings → Engines kept showing customers a fake scanner, with ecosystems and a
+weight, that a tenant could "enable" and which would then never run. Excluding
+it from dispatch while listing it in the UI is the same drift in two directions.
+`TestTheEngineListingAndTheDispatchSetAgree` now asserts the property at the
+registry level, which is the only place both sides are visible.
+
+**The big gap: the manufacturing elements existed everywhere except where
+anybody could enter them.** `docs/reference/hbom-manufacturing-v1.yaml` defines
+designators, footprint, quantity, supplier SKU, alternates, lifecycle status and
+the rest; they are linted, scored in Python, and rendered in reports. The
+hardware component form is built from the **generated** `model.HBOMFields`, and
+`axebom profile gen` **refused operational profiles outright** — so a
+manufacturing readiness number was being scored against fields no screen
+offered.
+
+The refusal gave two reasons. ⚠ **One still holds and one had gone stale.**
+`GenerateGo` emits package-level `ProfileID`, `ProfileRevision`,
+`ProfileAllVerified` and the `ProfileField` type, so a second profile through it
+really is four duplicate declarations and a compile error — which is why
+`GenerateGoOperational` writes a *separate* file containing only the field list.
+The other reason — "an operational field set has no generated consumer, Python
+reads it at runtime" — was true when written and is not any more;
+`compliance.Load` reads from disk and no service container has a copy of
+`docs/`, which is exactly why CERT-In's fields are generated in the first place.
+
+⚠ **The two sets score into different numbers and the form must never conflate
+them.** The profile's own header: they may NEVER move `completeness_pct` or
+`declaration_pct`. `ComponentFormField` gained a `certin` flag and the screen
+renders them as a separate fieldset saying plainly that they do not change
+compliance coverage. A customer filling in unit prices must not watch a
+compliance percentage rise.
+
+`mfg.04.description` deliberately shares CERT-In element 3's column, so it is
+skipped rather than rendered twice — two inputs bound to one column is a form
+that silently discards whichever was filled in second, and a test asserts no two
+inputs write the same attribute.
+
+#### Milestone 6 — live verification
+
+Against the running stack, not the test suite:
+
+| Check | Result |
+|---|---|
+| Component form | **22 CERT-In + 11 manufacturing** inputs — 12 in the profile minus `description`, deduplicated as designed |
+| Engine listing | **19 engines, `mock-engine` absent** |
+| Provenance panel | **22 of 22 components name their engines**, across `cdxgen`, `syft`, `syft-spdx` |
+| Reports | **all six formats `ready` and non-empty** — cyclonedx 4.4 KB, docx 5.6 KB, json 38 KB, pdf 13 KB, spdx 10 KB, xlsx 23 KB |
+| Both coverage numbers | **10.44 vs 13.06** — substantive and declaration genuinely differ (invariant 3) |
+| EAGLE | a schematic through the real `ECADAdapter`: `succeeded`, `components=3` |
+| Browser suite | **13 of 13 pass** |
+
+⚠ **One "finding" I nearly reported was my own error**: the provenance panel
+looked empty at 0/22 because my probe read a field called `engines` and the API
+calls it `detectedBy`. Checking the raw response rather than trusting the
+assumption turned a false bug report into a confirmation.
+
+#### Owed
+
+- ⚠ **`model.ProfileField` drops the profile's `values` list.**
+  `compliance.Field` carries `values:` — `assembly_type: [smt, tht, mechanical]`,
+  `lifecycle_status: [active, nrnd, …]` — and the generator discards it for
+  CERT-In's fields too. That is why `criticality`'s enum is hardcoded in Go, and
+  why the two new operational enums are as well. Widening `ProfileField` is the
+  real fix; it changes the generated struct in two languages and the agreement
+  test that holds them together, so it is recorded rather than done in passing.
+- `aibom-generator` and `cbomkit` remain dispatchable with no adapter, unchanged
+  from Milestone 4.
 
 ### 2026-09-05 (k) — Milestone 4: the roster widens, and four bugs come out
 

@@ -299,6 +299,19 @@ export interface ComponentFormField {
   list?: boolean;
   values?: string[];
   hint?: string;
+  /**
+   * Whether this is a CERT-In element or one of AxeBOM's operational
+   * manufacturing ones.
+   *
+   * ⚠ THE TWO SETS SCORE INTO DIFFERENT NUMBERS AND CONFLATING THEM IS A
+   * COMPLIANCE DEFECT. CERT-In's Table 11 elements move `completeness_pct` and
+   * `declaration_pct`; the manufacturing elements answer "how buildable is
+   * this parts list" and `docs/reference/hbom-manufacturing-v1.yaml` says in
+   * its own header that they may NEVER move those two. A form that puts a unit
+   * price beside a CERT-In element with no distinction invites a customer to
+   * read procurement diligence as compliance coverage.
+   */
+  certin: boolean;
 }
 
 export function useComponentForm() {

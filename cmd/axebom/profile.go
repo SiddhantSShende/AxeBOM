@@ -91,22 +91,41 @@ func profileGen(args []string) error {
 		return err
 	}
 
-	// ⚠ REFUSE AN OPERATIONAL PROFILE OUTRIGHT.
+	// ⚠ AN OPERATIONAL PROFILE TAKES A DIFFERENT PATH, NOT NO PATH.
 	//
-	// GenerateGo emits `package model` with package-level ProfileID,
-	// ProfileRevision, ProfileAllVerified and type ProfileField. Generating a
-	// second profile into the same package is four duplicate declarations and
-	// a compile error — so the failure would be confusing rather than absent.
+	// This used to refuse them outright, for two reasons. The first still
+	// holds: GenerateGo emits `package model` with package-level ProfileID,
+	// ProfileRevision, ProfileAllVerified and the ProfileField type, so a
+	// second profile through it is four duplicate declarations and a compile
+	// error. GenerateGoOperational writes a separate file containing ONLY the
+	// field list, which is why that objection is answered rather than ignored.
 	//
-	// Nothing needs it anyway: an operational field list has no Go consumer,
-	// and Python reads it at runtime exactly the way normalize_runner's
-	// sbom_fields() already reads the CERT-In one.
+	// The second reason — "an operational field set has no generated consumer,
+	// Python reads it at runtime" — was true when written and is not any more.
+	// hbom.ComponentFormFields builds the hardware component form from
+	// model.HBOMFields, so the manufacturing elements were authored, linted and
+	// scored in Python while being invisible in the one screen where a person
+	// could enter them. compliance.Load reads from disk and a service container
+	// has no copy of docs/, which is exactly why the CERT-In fields are
+	// generated in the first place.
 	if !p.Meta.IsCompliance() {
-		return fmt.Errorf("refusing to generate from operational profile %q: the "+
-			"generated models declare package-level ProfileID/ProfileRevision/"+
-			"ProfileField that a second profile would collide with, and an "+
-			"operational field set has no generated consumer — Python reads it "+
-			"at runtime instead", p.Meta.ID)
+		if res := compliance.Lint(p); !res.OK() {
+			for _, pr := range res.Problems {
+				fmt.Fprintf(os.Stderr, "  %s\n", pr)
+			}
+			return fmt.Errorf("refusing to generate from a profile with %d lint problem(s)",
+				len(res.Problems))
+		}
+		goPath, err := compliance.GenerateGoOperational(p, "hbom_manufacturing",
+			resolveFromRepoRoot(*outGo))
+		if err != nil {
+			return fmt.Errorf("generate operational Go: %w", err)
+		}
+		fmt.Printf("generated from %s (revision %d)\n", p.Meta.ID, p.Meta.Revision)
+		fmt.Printf("  %s\n", goPath)
+		fmt.Printf("\n%d operational field(s).\n",
+			len(p.OperationalFields("hbom_manufacturing")))
+		return nil
 	}
 
 	// Refuse to generate from a profile that does not lint. Generating from a

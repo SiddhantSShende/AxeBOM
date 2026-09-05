@@ -423,16 +423,48 @@ function ComponentForm({
       {form.isPending && <p className="field-hint">Loading the field list…</p>}
       {form.isError && <ErrorState error={form.error} action="load the field list" />}
 
+      {/* ⚠ TWO FIELD SETS, RENDERED APART, BECAUSE THEY SCORE INTO DIFFERENT
+          NUMBERS. CERT-In's hardware elements move the compliance percentages;
+          AxeBOM's manufacturing elements answer "how buildable is this parts
+          list" and may never touch them. One undivided grid would let somebody
+          fill in unit prices and reasonably believe their compliance coverage
+          had improved. */}
       <div className="field-grid">
-        {(form.data ?? []).map((field) => (
-          <ComponentField
-            key={field.attr}
-            field={field}
-            value={valueOf(draft, field)}
-            onChange={(value) => setField(field, value)}
-          />
-        ))}
+        {(form.data ?? [])
+          .filter((f) => f.certin)
+          .map((field) => (
+            <ComponentField
+              key={field.attr}
+              field={field}
+              value={valueOf(draft, field)}
+              onChange={(value) => setField(field, value)}
+            />
+          ))}
       </div>
+
+      {(form.data ?? []).some((f) => !f.certin) && (
+        <fieldset className="field-group">
+          <legend>Manufacturing and procurement</legend>
+          <p className="field-hint">
+            AxeBOM&apos;s own fields, not CERT-In&apos;s. They score a separate manufacturing
+            readiness number and <strong>never change your compliance coverage</strong> — a parts
+            list can be perfectly buildable and still incomplete against the guideline, and the
+            reverse.
+          </p>
+          <div className="field-grid">
+            {(form.data ?? [])
+              .filter((f) => !f.certin)
+              .map((field) => (
+                <ComponentField
+                  key={field.attr}
+                  field={field}
+                  value={valueOf(draft, field)}
+                  onChange={(value) => setField(field, value)}
+                />
+              ))}
+          </div>
+        </fieldset>
+      )}
 
       <AlternatesEditor
         alternates={draft.alternates}
