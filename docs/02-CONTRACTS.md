@@ -450,6 +450,26 @@ organisation name or email answers `AUTH_ORG_NAME_TAKEN` /
 `AUTH_EMAIL_TAKEN` (§9), never by silently attaching the visitor to the
 existing one.
 
+**`GET /v1/projects/options` publishes registration sources PER BOM TYPE, not as
+one flat list.** Each entry in `bom_types[]` carries `sources[]` — the project
+`source_type` values that BOM type can actually be registered from — alongside
+`requires_import` and `is_derived`. The top-level `source_types[]` remains as
+the union of those lists and is derived from them, never written independently.
+
+⚠ **The per-type list is the contract; the flat one is a convenience.** They
+were one list for all five types, so a client could offer, and the server would
+accept, an AIBOM project registered from a `url` — a source no AIBOM engine
+reads, producing an empty AIBOM forever with nothing said. `POST /v1/projects`
+and `PATCH /v1/projects/{id}` now refuse any classification whose `sources[]`
+excludes the project's source type (`VALIDATION_FIELD_INVALID`, §9). A client
+that renders from the flat list alone will therefore offer combinations the
+server refuses.
+
+The lists are generated from the engine registry and held to it by
+`TestRegistrationSourcesAgreeWithTheEngineRegistry`; `manual` is the one entry
+with no engine behind it and is asserted separately, because it is the path
+where the customer supplies the BOM and no engine runs at all.
+
 **`bom_types[]`, `report_levels[]`, `standards[]` and `formats[]` belong to
 report creation, not scan creation.** A report is one rendered document —
 `POST /v1/reports` takes one `scan_id` plus one `bom_type` / `level` /
@@ -486,6 +506,7 @@ Codes are `SCREAMING_SNAKE`, stable forever, and grouped by prefix. `message` is
 | `PERM_` | 403 | `PERM_ROLE_INSUFFICIENT`, `PERM_REPORT_PRIVATE`, `PERM_COMMENT_NOT_OWNER` |
 | `NOTFOUND_` | 404 | `NOTFOUND_PROJECT`, `NOTFOUND_REPORT` |
 | `VALIDATION_` | 422 | `VALIDATION_FIELD_REQUIRED`, `VALIDATION_FILTER_UNKNOWN` |
+| `PROJECT_` | 409 | `PROJECT_DEVICE_IDENTIFIER_TAKEN`, `PROJECT_NOT_CLASSIFIED` |
 | `SCAN_` | 422 / 409 | `SCAN_ENGINE_COMBINATION_INVALID`, `SCAN_ALREADY_RUNNING`, `SCAN_SOURCE_UNREACHABLE`, `SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE` |
 | `FETCH_` | 422 | `FETCH_URL_SCHEME_FORBIDDEN`, `FETCH_PRIVATE_ADDRESS_BLOCKED`, `FETCH_ARCHIVE_TOO_LARGE`, `FETCH_INFLATION_RATIO_EXCEEDED` |
 | `ENGINE_` | — | `ENGINE_UNAVAILABLE`, `ENGINE_PARTIAL_ECOSYSTEM`, `ENGINE_TIMEOUT`, `ENGINE_DB_STALE` |
@@ -504,6 +525,24 @@ service's handler checks authorship itself and returns this code when a
 same-tenant caller who can see a comment is not the one who wrote it. This is
 distinct from cross-tenant access (`NOTFOUND_RESOURCE`, above): RLS already
 makes another tenant's comment invisible before ownership is ever checked.
+
+**`PROJECT_NOT_CLASSIFIED`** (409) — an operation belonging to one BOM type was
+attempted on a project not classified for that type: registering a hardware
+device, importing a hardware parts file, or saving Table 8 quantum metadata
+against a project that produces only an SBOM.
+
+409 rather than 422 because the body is well-formed and every field in it is
+legal — what is wrong is the state of the target, so telling the caller to fix a
+field would send them looking in the wrong place. 409 rather than 404 because
+the project exists and the caller may see it; a 404 would send them hunting for
+a project that is right there. That is the opposite of the cross-tenant case
+above, where 404 is *required* precisely because the caller must not learn the
+resource exists.
+
+The rule applies to **creation only**. Editing or deleting data that already
+exists is never refused on this ground: a project's classifications are
+editable, so refusing the edit paths too would trap data a customer could then
+neither correct nor remove.
 
 `ENGINE_*` and `NORMALIZE_*` codes are usually **diagnostics attached to a result**, not HTTP responses. They surface in the report rather than failing a request.
 

@@ -43,6 +43,21 @@ func (s *Service) ListAIModels(ctx context.Context, tenantID, projectID string) 
 // in this project's current AIBOM", not "no such project" (mapStoreError's
 // only ErrNotFound mapping), the same reason GetComponentDetail
 // (dependencies.go) writes its own check rather than reusing it.
+// ⚠ DELIBERATELY NOT CLASSIFICATION-GATED, AND THIS COMMENT IS THE RECORD OF
+// THAT DECISION. Every other BOM-type-specific write path checks that the
+// project is classified for its type (see Service.requireClassified). This one
+// does not, because it CANNOT create anything: an AI model row exists only
+// because an AIBOM scan produced it, so the classification was necessarily
+// present when it appeared. What this call edits is the four Table 10 elements
+// no tool reports. Gating it would only trap data — a customer who removed the
+// AIBOM classification could no longer correct the fields they had entered —
+// which is the "second bug" requireClassified's own comment refuses to add.
+//
+// ⚠ SO AIBOM HAS NO GATED PATH AT ALL, AND THAT IS THE CORRECT STATE RATHER
+// THAN A MISSING ONE. TestEveryBOMTypeSpecificCreationPathIsGated checks
+// Create/Save/Import methods in this file and finds none — deliberately
+// tolerated per file, and asserted globally so the day AIBOM gains a path that
+// CREATES a model record, that path is required to take the gate.
 func (s *Service) UpdateAIModelUserFields(
 	ctx context.Context, tenantID, projectID, modelID string, fields aibom.UserFields,
 ) (*store.AIModel, error) {

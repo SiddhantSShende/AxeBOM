@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/axebom/axebom/libs/go-shared/model"
 	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 	"github.com/axebom/axebom/services/project/internal/hbom"
 	"github.com/axebom/axebom/services/project/internal/store"
@@ -33,6 +34,17 @@ func (s *Service) SaveHardwareComponent(ctx context.Context, tenantID, projectID
 	if err := validateHardwareComponent(c, "the component"); err != nil {
 		return nil, err
 	}
+
+	// ⚠ ON CREATION ONLY. An empty ID is an insert (see store.SaveHardwareComponent);
+	// an edit to an existing part must keep working even if the project's
+	// classifications changed underneath it, or the customer can neither
+	// correct nor remove hardware they already recorded.
+	if c.ID == "" {
+		if err := s.requireClassified(ctx, tenantID, projectID, model.BOMTypeHBOM); err != nil {
+			return nil, err
+		}
+	}
+
 	hbom.Normalize(c)
 
 	saved, err := s.store.SaveHardwareComponent(ctx, tenantID, projectID, c)
@@ -126,6 +138,10 @@ func (s *Service) PreviewHBOMImport(data []byte, mapping map[string]string, file
 // applied to a full re-import rather than a scanner re-run; see
 // store.ReplaceHardwareTree).
 func (s *Service) ImportHBOM(ctx context.Context, tenantID, projectID string, data []byte, mapping map[string]string, filename string) (string, error) {
+	if err := s.requireClassified(ctx, tenantID, projectID, model.BOMTypeHBOM); err != nil {
+		return "", err
+	}
+
 	result, err := hbom.ParseFormat(data, mapping, hbom.DetectFormat(filename, data))
 	if err != nil {
 		return "", importErrToAPIError(err)
@@ -203,6 +219,12 @@ func (s *Service) GetDevice(ctx context.Context, tenantID, projectID, deviceID s
 func (s *Service) CreateDevice(ctx context.Context, tenantID, projectID, createdBy string,
 	d *hbom.Device,
 ) (*hbom.Device, error) {
+	// The defect this whole seam was named for: a device could be registered
+	// against a project that produces only an SBOM. The row was written, the
+	// device appeared on screen, and no report would ever contain it.
+	if err := s.requireClassified(ctx, tenantID, projectID, model.BOMTypeHBOM); err != nil {
+		return nil, err
+	}
 	if err := hbom.ValidateDevice(d); err != nil {
 		return nil, errs.Newf(errs.ValidationFieldInvalid, "%v", err)
 	}

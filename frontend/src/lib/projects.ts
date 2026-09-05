@@ -55,7 +55,22 @@ export interface Practices {
 }
 
 export interface ProjectOptions {
-  bom_types: Array<{ id: string; requires_import: boolean; is_derived: boolean }>;
+  bom_types: Array<{
+    id: string;
+    requires_import: boolean;
+    is_derived: boolean;
+    /**
+     * The project source types this BOM type can actually be registered from.
+     *
+     * ⚠ NOT EVERY SOURCE WORKS FOR EVERY TYPE, AND THE WIZARD USED TO ACT AS IF
+     * IT DID. No AIBOM engine reads a `url` source, so an AIBOM project
+     * registered from one produces an empty AIBOM forever — the dev database
+     * contains exactly that row. The server now refuses the combination, so a
+     * screen that keeps offering it turns a preventable choice into a 422 after
+     * the form is filled.
+     */
+    sources: string[];
+  }>;
   sdlc_stages: string[];
   bom_depths: string[];
   source_types: string[];

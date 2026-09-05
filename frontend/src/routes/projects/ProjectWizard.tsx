@@ -677,7 +677,12 @@ function ClassificationStep({
   patch: (p: Partial<Draft>) => void;
   options:
     | {
-        bom_types: Array<{ id: string; requires_import: boolean; is_derived: boolean }>;
+        bom_types: Array<{
+          id: string;
+          requires_import: boolean;
+          is_derived: boolean;
+          sources: string[];
+        }>;
         sdlc_stages: string[];
         bom_depths: string[];
         practices: Array<{ id: string; name: string }>;
@@ -690,9 +695,34 @@ function ClassificationStep({
       id: b.type,
       requires_import: b.type === 'HBOM',
       is_derived: b.type === 'QBOM',
+      // ⚠ THE FALLBACK ALLOWS EVERYTHING, DELIBERATELY. This branch runs only
+      // when /v1/projects/options could not be fetched. Guessing a narrower
+      // list offline would disable a combination that is actually valid; the
+      // server refuses the genuinely wrong ones either way, so the offline
+      // form stays permissive and the server stays authoritative.
+      sources: [] as string[],
     }));
   const stages = options?.sdlc_stages ?? [];
   const depths = options?.bom_depths ?? [];
+
+  // ⚠ A BOM TYPE WHOSE ENGINES CANNOT READ THIS PROJECT'S SOURCE.
+  //
+  // The source is chosen on step 1 and the classifications here on step 3, so
+  // this is the first screen where the combination is knowable. It matters
+  // because the pairing is silently useless rather than obviously wrong: no
+  // AIBOM engine reads a `url` source, so an AIBOM project registered from one
+  // scans clean and reports nothing, forever. The dev database contains exactly
+  // that row. The server refuses it now; offering the chip anyway would turn a
+  // preventable choice into a 422 after the whole form is filled.
+  //
+  // An empty `sources` means "unknown" (the options fetch failed), never
+  // "nothing" — see the fallback above.
+  const incompatible = (t: { sources: string[] }) =>
+    t.sources.length > 0 && !t.sources.includes(draft.sourceType);
+
+  const blockedSelections = bomTypes
+    .filter((t) => draft.classifications.includes(t.id) && incompatible(t))
+    .map((t) => t.id);
 
   const toggle = (id: string) =>
     patch({
@@ -718,15 +748,33 @@ function ClassificationStep({
         <ul className="chips chips-selectable">
           {bomTypes.map((t) => {
             const selected = draft.classifications.includes(t.id);
+            const blocked = incompatible(t);
             return (
               <li key={t.id}>
-                <label className="chip" data-bom={t.id.toLowerCase()} data-selected={selected}>
-                  <input type="checkbox" checked={selected} onChange={() => toggle(t.id)} />
+                <label
+                  className="chip"
+                  data-bom={t.id.toLowerCase()}
+                  data-selected={selected}
+                  data-blocked={blocked}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected}
+                    disabled={blocked && !selected}
+                    onChange={() => toggle(t.id)}
+                  />
                   <span>{t.id}</span>
                   {/* The honest labels travel with the data, so the UI cannot
                       imply discovery where there is none. */}
                   {t.requires_import && <span className="chip-note">import only</span>}
                   {t.is_derived && <span className="chip-note">derived from CBOM</span>}
+                  {/* Says WHY, and names the sources that would work — a
+                      disabled control with no reason reads as a broken one. */}
+                  {blocked && (
+                    <span className="chip-note">
+                      needs {t.sources.map(humanizeEnum).join(', ')}
+                    </span>
+                  )}
                 </label>
               </li>
             );
@@ -735,6 +783,22 @@ function ClassificationStep({
         {draft.classifications.length === 0 && (
           <p className="status status-down" role="alert">
             Select at least one. A project with no classification produces no BOM.
+          </p>
+        )}
+        {/* ⚠ SELECTED **AND** BLOCKED IS REACHABLE, AND ONLY BY GOING BACK.
+            Disabling the checkbox stops a new incompatible choice, but a user
+            who selects AIBOM here, returns to step 1 and switches the source to
+            a url leaves a selection that was legal when it was made and is not
+            any more. Silently dropping it would discard a choice they made on
+            purpose, so it is named and left for them to remove — and the
+            selected chips stay clickable precisely so they can. */}
+        {blockedSelections.length > 0 && (
+          <p className="status status-down" role="alert">
+            {blockedSelections.join(', ')} cannot be produced from a{' '}
+            {humanizeEnum(draft.sourceType)} source — no engine for{' '}
+            {blockedSelections.length === 1 ? 'it' : 'them'} can read one, so the report would
+            always be empty. Remove {blockedSelections.length === 1 ? 'it' : 'them'}, or go back and
+            change the source.
           </p>
         )}
       </fieldset>

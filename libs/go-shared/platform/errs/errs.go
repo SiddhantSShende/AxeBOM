@@ -102,6 +102,22 @@ const (
 	// this unit" — a serial number identifies one physical device, so a
 	// duplicate is a statement about the world, not about the form.
 	ProjectDeviceIdentifierTaken Code = "PROJECT_DEVICE_IDENTIFIER_TAKEN"
+
+	// ProjectNotClassified means an operation specific to one BOM type was
+	// attempted on a project not classified for that type — registering a
+	// hardware device against a project that produces only an SBOM, for
+	// instance.
+	//
+	// ⚠ 409, NOT 422, ON THE SAME REASONING AS THE CODE ABOVE. The body is
+	// well-formed and every field in it is legal; what is wrong is the state of
+	// the TARGET. Telling the caller to fix a field would be misleading — the
+	// fix is to classify the project, or to address a different one.
+	//
+	// ⚠ AND NOT 404. The project exists and the caller may see it; pretending
+	// otherwise would send someone hunting for a missing project. That is the
+	// opposite of the cross-tenant case, where 404 is required precisely
+	// BECAUSE the caller must not learn the resource exists (invariant 6).
+	ProjectNotClassified Code = "PROJECT_NOT_CLASSIFIED"
 )
 
 // Validation — 422.
@@ -212,6 +228,7 @@ var statusOverride = map[Code]int{
 	// See the code's own comment: a duplicate serial is a conflict with the
 	// world, not a malformed field.
 	ProjectDeviceIdentifierTaken: http.StatusConflict,
+	ProjectNotClassified:         http.StatusConflict,
 	ReportRenderFailed:           http.StatusInternalServerError,
 	ReportSignatureFailed:        http.StatusInternalServerError,
 }

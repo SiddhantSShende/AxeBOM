@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -23,15 +24,17 @@ import (
 	"github.com/axebom/axebom/libs/go-shared/platform/blob"
 	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 	"github.com/axebom/axebom/libs/go-shared/vault"
+	"github.com/axebom/axebom/services/project/internal/bommodule"
 	"github.com/axebom/axebom/services/project/internal/store"
 )
 
 // Service implements project registration and management.
 type Service struct {
-	store *store.Store
-	blob  *blob.Store
-	vault vault.Store
-	now   func() time.Time
+	store   *store.Store
+	blob    *blob.Store
+	vault   vault.Store
+	now     func() time.Time
+	modules *bommodule.Registry
 }
 
 // Config configures the service.
@@ -46,7 +49,14 @@ func New(cfg Config) *Service {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	return &Service{store: cfg.Store, blob: cfg.Blob, vault: cfg.Vault, now: cfg.Now}
+	return &Service{
+		store: cfg.Store, blob: cfg.Blob, vault: cfg.Vault, now: cfg.Now,
+		// ⚠ NOT INJECTABLE. The registry is the set of BOM types this product
+		// has, not a policy a deployment gets to vary — a caller able to swap
+		// it could quietly re-enable the very cross-type writes this seam
+		// exists to refuse.
+		modules: bommodule.Default(),
+	}
 }
 
 // mapStoreError translates a store error into the canonical taxonomy.
@@ -130,6 +140,17 @@ func (s *Service) Create(ctx context.Context, tenantID, userID string, in Create
 		return store.Project{}, err
 	}
 
+	// ⚠ EVERY SELECTED TYPE MUST BE ABLE TO READ THIS SOURCE, NOT JUST ONE.
+	// The source type is a property of the PROJECT while classifications are a
+	// SET, so a url project classified {SBOM, AIBOM} produces a real SBOM and a
+	// permanently empty AIBOM. The dev database contains exactly that row.
+	// Refusing the whole registration is right: the customer asked for both, and
+	// silently honouring half is how they find out months later from an empty
+	// report.
+	if err := s.requireSources(types, in.SourceType); err != nil {
+		return store.Project{}, err
+	}
+
 	// Checked here for a clear message AND enforced by the schema constraint
 	// validity_window_ordered. The database check is the one that matters: a
 	// handler check is bypassed by any other write path.
@@ -156,6 +177,116 @@ func (s *Service) Create(ctx context.Context, tenantID, userID string, in Create
 		CreatedBy:       userID,
 	})
 	return p, mapStoreError(err)
+}
+
+// BOMTypeOption describes one BOM type to the registration screen.
+type BOMTypeOption struct {
+	ID             string
+	RequiresImport bool
+	IsDerived      bool
+	// Sources are the project source types this BOM type can be registered
+	// from. Without it the wizard offers every source for every type and the
+	// customer discovers the incompatible ones as a 422 after filling the form.
+	Sources []string
+}
+
+// BOMTypeOptions is what GET /v1/projects/options publishes about BOM types.
+//
+// ⚠ THE SOURCE LIST USED TO BE A LITERAL IN THE HANDLER — the exact drift that
+// endpoint's own comment warns about ("the frontend cannot drift from the
+// profile by hardcoding a list that was accurate when it was written"). It was
+// also flat: one list for all five types, which is how the wizard came to offer
+// combinations the service now refuses.
+func (s *Service) BOMTypeOptions() []BOMTypeOption {
+	types := s.modules.Types()
+	out := make([]BOMTypeOption, 0, len(types))
+	for _, t := range types {
+		m, ok := s.modules.For(t)
+		if !ok {
+			continue
+		}
+		out = append(out, BOMTypeOption{
+			ID:             string(t),
+			RequiresImport: t.RequiresImport(),
+			IsDerived:      t.IsDerived(),
+			Sources:        m.Sources(),
+		})
+	}
+	return out
+}
+
+// SourceTypes is every source any BOM type can be registered from.
+//
+// Derived from the modules rather than listed, so it cannot disagree with the
+// per-type lists beside it — a flat list that included a source no type accepts
+// would be a control the wizard could offer and the service would always
+// refuse.
+func (s *Service) SourceTypes() []string {
+	seen := map[string]bool{}
+	for _, t := range s.modules.Types() {
+		m, ok := s.modules.For(t)
+		if !ok {
+			continue
+		}
+		for _, src := range m.Sources() {
+			seen[src] = true
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for src := range seen {
+		out = append(out, src)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// requireClassified refuses an operation belonging to one BOM type on a project
+// not classified for it.
+//
+// ⚠ NOTHING ANYWHERE CHECKED THIS, FOR ANY TYPE. Hardware devices, hardware
+// components, CSV imports, Table 8 quantum metadata and AI model fields all
+// took a project id and wrote against it. The store package's own test helper
+// creates projects with NO classifications and the device tests passed — which
+// is the proof, not a suspicion: the data was accepted by a path that had no
+// opinion about whether it could ever be reported.
+//
+// ⚠ CREATION ONLY — UPDATE AND DELETE ARE DELIBERATELY NOT GATED. A project's
+// classifications are editable, so a customer can remove HBOM from a project
+// that already has devices. Gating the edit and delete paths too would trap
+// that data: they could neither correct it nor remove it, and the only escape
+// would be re-adding a classification they had decided was wrong. Refusing NEW
+// data that can never be reported is the useful half; refusing to clean up
+// existing data is just a second bug.
+//
+// ⚠ READS ARE NOT GATED EITHER. A read on an unclassified project returns
+// nothing, which is already the honest answer; turning it into an error would
+// break the listing screens for no gain.
+//
+// The project lookup also restores the cross-tenant answer these paths need:
+// mapStoreError turns a row RLS hid into 404, never 403 (invariant 6).
+func (s *Service) requireClassified(ctx context.Context, tenantID, projectID string,
+	want model.BOMType,
+) error {
+	p, err := s.store.GetProject(ctx, tenantID, projectID)
+	if err != nil {
+		return mapStoreError(err)
+	}
+	return s.modules.RequireClassified(p.Classifications, want)
+}
+
+// requireSources refuses a project whose source no engine for one of its
+// selected BOM types can read.
+//
+// ⚠ REPORTS THE FIRST FAILING TYPE, NOT ALL OF THEM. The customer changes one
+// thing — the source, or that classification — and re-submits; listing every
+// incompatible type at once reads as a wall of text about a single decision.
+func (s *Service) requireSources(types []model.BOMType, sourceType string) error {
+	for _, t := range types {
+		if err := s.modules.RequireSource(t, sourceType); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // parseClassifications validates the BOM-type set.
@@ -234,6 +365,22 @@ func (s *Service) Update(ctx context.Context, tenantID, projectID string, in Upd
 	if err != nil {
 		return store.Project{}, err
 	}
+
+	// ⚠ THE SAME RULE HERE, OR THE ONE IN Create IS DECORATIVE. Update cannot
+	// change SourceType — deliberately, see this function's own comment — but it
+	// CAN add a classification, so adding AIBOM to an existing url project would
+	// reach exactly the state Create refuses, by a second path. That is the
+	// "forgotten in exactly one query" failure invariant 6 describes, and the
+	// existing source type is what the new classifications must be checked
+	// against.
+	existing, err := s.store.GetProject(ctx, tenantID, projectID)
+	if err != nil {
+		return store.Project{}, mapStoreError(err)
+	}
+	if err := s.requireSources(types, existing.SourceType); err != nil {
+		return store.Project{}, err
+	}
+
 	if in.ValidityStart != nil && in.ValidityEnd != nil && in.ValidityEnd.Before(*in.ValidityStart) {
 		return store.Project{}, errs.New(errs.ValidationFieldInvalid,
 			"validity_end must not be earlier than validity_start")

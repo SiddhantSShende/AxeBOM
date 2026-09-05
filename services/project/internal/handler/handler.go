@@ -693,14 +693,21 @@ func (h *Handler) Options(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bomTypes := make([]map[string]any, 0, len(model.AllBOMTypes()))
-	for _, t := range model.AllBOMTypes() {
+	opts := h.svc.BOMTypeOptions()
+	bomTypes := make([]map[string]any, 0, len(opts))
+	for _, o := range opts {
 		bomTypes = append(bomTypes, map[string]any{
-			"id": string(t),
+			"id": o.ID,
 			// The honest labels travel with the data, so the UI cannot imply
 			// discovery where there is none.
-			"requires_import": t.RequiresImport(),
-			"is_derived":      t.IsDerived(),
+			"requires_import": o.RequiresImport,
+			"is_derived":      o.IsDerived,
+			// ⚠ PER TYPE, NOT ONE FLAT LIST. The wizard offered every source
+			// for every classification, so a customer could pick AIBOM with a
+			// url source — a combination no AIBOM engine can read, which the
+			// service now refuses. Publishing the per-type list lets the screen
+			// narrow the choice instead of failing after the form is filled.
+			"sources": o.Sources,
 		})
 	}
 
@@ -710,10 +717,12 @@ func (h *Handler) Options(w http.ResponseWriter, r *http.Request) {
 	}
 
 	errs.WriteJSON(w, http.StatusOK, map[string]any{
-		"bom_types":    bomTypes,
-		"sdlc_stages":  model.SDLCClassifications,
-		"bom_depths":   model.BOMLevels,
-		"source_types": []string{"github", "gitlab", "bitbucket", "upload", "image", "manual", "url"},
+		"bom_types":   bomTypes,
+		"sdlc_stages": model.SDLCClassifications,
+		"bom_depths":  model.BOMLevels,
+		// Derived from the modules, never listed here: a literal in this file
+		// is exactly the drift this endpoint's own comment warns about.
+		"source_types": h.svc.SourceTypes(),
 		"practices":    practices,
 	})
 }

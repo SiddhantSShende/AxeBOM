@@ -72,14 +72,33 @@ func uniqueName(t *testing.T) string {
 		"-" + time.Now().Format("150405.000000000")
 }
 
+// createProject makes a project the product would actually accept.
+//
+// ⚠ THE DEFAULT SOURCE WAS "manual", AND EVERY TEST INHERITED AN UNSCANNABLE
+// PROJECT. A manual project has no repository, no upload and no URL, so
+// handler.go's Source() switch falls through to the repository branch and
+// answers "the project has no repository connection to fetch from" — for an
+// SBOM project that is a dead end, not a registration. Nothing refused the
+// combination until the BOM-module seam did, so ~28 tests were quietly built on
+// a shape a customer could create and never scan. `upload` is the honest
+// default: it is a real SBOM path (project.uploads has an `sbom` kind) and it
+// is what the Source() switch handles first.
 func createProject(t *testing.T, f *fixture, tenantID string, classifications ...string) store.Project {
+	t.Helper()
+	return createProjectFromSource(t, f, tenantID, "upload", classifications...)
+}
+
+// createProjectFromSource is for tests whose subject is the source itself.
+func createProjectFromSource(t *testing.T, f *fixture, tenantID, sourceType string,
+	classifications ...string,
+) store.Project {
 	t.Helper()
 	if len(classifications) == 0 {
 		classifications = []string{"SBOM"}
 	}
 	p, err := f.svc.Create(t.Context(), tenantID, userA, service.CreateInput{
 		Name:            uniqueName(t),
-		SourceType:      "manual",
+		SourceType:      sourceType,
 		Classifications: classifications,
 	})
 	if err != nil {
@@ -118,9 +137,17 @@ func cleanupProject(t *testing.T, f *fixture, tenantID, projectID string) {
 // Registration
 // ---------------------------------------------------------------------------
 
+// TestCreateManualProject registers a project on the manual path.
+//
+// ⚠ CLASSIFIED HBOM, NOT SBOM, AND THAT IS THE POINT OF THE TEST NOW. This used
+// to create a manual SBOM project — a combination the product accepted and
+// could never scan. Manual registration is a FIRST-CLASS path for hardware
+// (CLAUDE.md's honest labels: a device, its parts tree and a CSV import produce
+// a real document with no repository) and for QBOM's Table 8 device form. It is
+// not a path for SBOM, where no form produces a component inventory.
 func TestCreateManualProject(t *testing.T) {
 	f := newFixture(t)
-	p := createProject(t, f, tenantA)
+	p := createProjectFromSource(t, f, tenantA, "manual", "HBOM")
 
 	if p.ID == "" {
 		t.Fatal("no id returned")
@@ -128,8 +155,25 @@ func TestCreateManualProject(t *testing.T) {
 	if p.SDLCStage != "source" {
 		t.Errorf("sdlc_stage = %q, want the 'source' default", p.SDLCStage)
 	}
-	if len(p.Classifications) != 1 || p.Classifications[0] != model.BOMTypeSBOM {
+	if len(p.Classifications) != 1 || p.Classifications[0] != model.BOMTypeHBOM {
 		t.Errorf("classifications = %v", p.Classifications)
+	}
+}
+
+// A manual SBOM project is refused: there is no form that produces a component
+// inventory, so it would register cleanly and never scan.
+func TestAManualSBOMProjectIsRefused(t *testing.T) {
+	f := newFixture(t)
+	_, err := f.svc.Create(t.Context(), tenantA, userA, service.CreateInput{
+		Name:            uniqueName(t),
+		SourceType:      "manual",
+		Classifications: []string{"SBOM"},
+	})
+	if err == nil {
+		t.Fatal("a manual SBOM project was accepted; it can never be scanned")
+	}
+	if !strings.Contains(err.Error(), "manual") {
+		t.Errorf("the refusal does not name the source: %v", err)
 	}
 }
 
@@ -194,7 +238,7 @@ func TestSDLCStageIsValidatedAgainstTheProfile(t *testing.T) {
 
 	for _, stage := range model.SDLCClassifications {
 		p, err := f.svc.Create(t.Context(), tenantA, userA, service.CreateInput{
-			Name: uniqueName(t) + "-" + stage, SourceType: "manual",
+			Name: uniqueName(t) + "-" + stage, SourceType: "upload",
 			SDLCStage: stage, Classifications: []string{"SBOM"},
 		})
 		if err != nil {
@@ -205,7 +249,7 @@ func TestSDLCStageIsValidatedAgainstTheProfile(t *testing.T) {
 	}
 
 	if _, err := f.svc.Create(t.Context(), tenantA, userA, service.CreateInput{
-		Name: uniqueName(t), SourceType: "manual",
+		Name: uniqueName(t), SourceType: "upload",
 		SDLCStage: "production", Classifications: []string{"SBOM"},
 	}); err == nil {
 		t.Error("a stage outside the profile was accepted")
@@ -257,7 +301,7 @@ func TestValidityWindowAcceptsEqualDates(t *testing.T) {
 	day := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
 
 	p, err := f.svc.Create(t.Context(), tenantA, userA, service.CreateInput{
-		Name: uniqueName(t), SourceType: "manual", Classifications: []string{"SBOM"},
+		Name: uniqueName(t), SourceType: "upload", Classifications: []string{"SBOM"},
 		ValidityStart: &day, ValidityEnd: &day,
 	})
 	if err != nil {
@@ -377,7 +421,7 @@ func TestProjectNamesAreUniquePerTenantNotGlobally(t *testing.T) {
 
 	for _, tenant := range []string{tenantA, tenantB} {
 		p, err := f.svc.Create(t.Context(), tenant, userA, service.CreateInput{
-			Name: name, SourceType: "manual", Classifications: []string{"SBOM"},
+			Name: name, SourceType: "upload", Classifications: []string{"SBOM"},
 		})
 		if err != nil {
 			t.Fatalf("tenant %s could not use the name: %v", tenant, err)
@@ -387,7 +431,7 @@ func TestProjectNamesAreUniquePerTenantNotGlobally(t *testing.T) {
 
 	// But a duplicate WITHIN one tenant is refused.
 	_, err := f.svc.Create(t.Context(), tenantA, userA, service.CreateInput{
-		Name: name, SourceType: "manual", Classifications: []string{"SBOM"},
+		Name: name, SourceType: "upload", Classifications: []string{"SBOM"},
 	})
 	if err == nil {
 		t.Error("a duplicate project name was accepted within one tenant")

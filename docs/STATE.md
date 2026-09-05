@@ -8,7 +8,7 @@ A session that writes code but does not update this file has failed — the next
 
 **Last updated:** 2026-09-05
 **Current phase:** *Hardware as a first-class thing, and making every artifact actually contain its data*. 🟢 Track A rendering matrix (b); 🟢 B3 device register (c); 🟢 B1+B2 collectors and `axebom collect hardware` (d); 🟢 scans actually run (e); 🟢 **B4 the hardware screens** (f). **Track B is complete.** Not started: A6 (writerless tables), A7 (ecosystem coverage).
-**Next action:** A6 or A7 — or the earlier plan's module seam, which is what would stop a device being registered against an SBOM-only project. ⚠ **The hardware screens are usable end to end now**: import accepts CSV/TSV/Excel through one tree builder, the component editor renders all of Table 11 from the profile instead of six hardcoded fields, a component can be created in the UI at all, and the Hardware tab tells you how to get parts off a device you have. ⚠ **The validation rules had been tested only on `workers/hbom/form.py`, which production never runs** — the live Go validator had no tests; it does now. 🟡 Carried forward: the interactive import has no path for CycloneDX or collector JSON (structured, not tabular — they reach the product through upload + scan); the manufacturing fields are not in the generated form because their profile is not loaded in Go; nothing checks project classification; `mock-engine` leaves a permanent `skipped` row on every SBOM scan; `alpine/git` is tag-pinned and `toolctl pin` does not exist; five `normalize` tables have no writer; ecosystem coverage is npm/golang/pypi/github only. ⚠ **`NVD_API_KEY` is still set in no environment.**
+**Next action:** Milestone 3 — registration rebuilt around the BOM type. The seam exists now (`services/project/internal/bommodule`): every BOM type has a module, no BOM-type-specific creation path can write to a project not classified for it, and no project can be registered from a source its engines cannot read — all three enforced by mutation-verified guards rather than by care. ⚠ **What is still not done is the ORDER the user actually asked for**: the wizard asks for the source on step 1 and the BOM types on step 3, so an incompatible pairing is only knowable on the later screen; "user will select first which BOM he wants to register" reverses that. 🟡 Carried forward: `Module` has no `RegistrationFields()` (three per-type form shapes await a Milestone 3 consumer); the interactive import has no path for CycloneDX or collector JSON; manufacturing fields are not in the generated form because their profile is not loaded in Go; `mock-engine` leaves a permanent `skipped` row; `alpine/git` is tag-pinned and `toolctl pin` does not exist; `raw_findings` and `licenses` remain deliberately writerless (see docs/LIMITATIONS.md); one pre-existing `AIBOM | url` project is left unmigrated. ⚠ **`NVD_API_KEY` is still set in no environment.**
 
 > 🟢 **A REAL SCAN NOW NORMALIZES, LIVE, WITH NO MANUAL TRIGGER — THE
 > NORMALIZER'S DEPLOYED BOUNDARY FROM (e)/(k)/(l) IS CLOSED FOR SBOM.**
@@ -2265,6 +2265,124 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-09-05 (i) — Milestone 2: the BOM module seam, and the gate that was on none of the five types
+
+**The customer's complaint, restated exactly: "our projects are still the same
+for all BOMs."** They were, in two specific and provable ways.
+
+**1. One flat source list for five BOM types.** `Create` validated
+`source_type` against a single map — github, gitlab, bitbucket, upload, image,
+manual, url — regardless of what the project was classified for. No AIBOM engine
+reads a `url` source, so an AIBOM project registered from one scans clean and
+reports nothing, forever. ⚠ **The dev database contains exactly that row**
+(`AIBOM | url`), which is how the defect was confirmed rather than argued.
+`parseClassifications` guarded the empty-classification case and said in its own
+comment that it existed to stop "a silent no-op the user only discovers when a
+report comes back empty" — it just never guarded the incompatible source.
+
+**2. No BOM-type-specific endpoint checked the project's classification. None of
+them, for any type.** Hardware devices, hardware components, CSV/XLSX imports,
+Table 8 quantum metadata and AI model fields all took a project id and wrote
+against it. A device could be registered against an SBOM-only project: the row
+was written, the device rendered on the hardware screen, and no report that
+project could generate would ever contain it. ⚠ **The proof was already in the
+test suite** — `store`'s own `createTestProject` helper creates projects with NO
+classifications at all, and the device tests passed.
+
+#### What was built
+
+- **`libs/go-shared/model/bomsource.go`** — `RegistrationSources(BOMType)` and
+  `SupportsRegistrationSource`. A transcription, and safe only because of the
+  agreement test below; the same arrangement `RequiresImport` already uses and
+  for the same reason (`model` may not import a service, ADR-0001).
+- **`services/project/internal/bommodule`** — the seam: a `Module` interface
+  (`Type`, `Noun`, `Sources`), five implementations, a `Registry`, and the two
+  enforcement helpers `RequireClassified` and `RequireSource`. Five
+  microservices was the rejected alternative: they would share tenancy, the RLS
+  wrapper, the project lookup and a database schema, which is a distributed
+  monolith rather than five services.
+- **`errs.ProjectNotClassified`** → **409**. Not 422 (the body is well-formed;
+  the target's state is what is wrong) and not 404 (the project exists and the
+  caller may see it — the opposite of the cross-tenant case, where 404 is
+  *required* so the caller cannot learn it exists).
+- **The gate on creation paths only.** Update and delete are deliberately
+  ungated: classifications are editable, so gating the edit paths would trap
+  data a customer could then neither correct nor remove. AIBOM has **no** gated
+  path because it has no creation path — its only write edits a row a scan
+  produced — and that is recorded in the code, not left looking like an
+  oversight.
+- **`GET /v1/projects/options` publishes `sources[]` per BOM type**, and the
+  flat `source_types[]` is now derived from the union instead of being a literal
+  in the handler — which was the exact drift that endpoint's own comment warns
+  about.
+- **The wizard narrows the choice** instead of failing after the form is filled:
+  incompatible BOM-type chips are disabled with the reason and the sources that
+  would work, and a classification that *becomes* incompatible when the user
+  goes back and changes the source is named rather than silently dropped.
+
+#### Three guards, all mutation-verified
+
+- `TestRegistrationSourcesAgreeWithTheEngineRegistry` — lives in the scan
+  orchestrator because that is the side allowed to see both. It owns the
+  vocabulary mapping (`git` ↔ github/gitlab/bitbucket) and checks BOTH
+  directions: a source offered that no engine reads, and a source an engine
+  reads that is not offered. Caught all three mutations, naming the harm each
+  time.
+- `TestManualRegistrationIsOfferedOnlyWhereItProducesADocument` — `manual` has
+  no engine behind it, so it is the one entry with no authority to check against
+  and gets its own assertion. Valid for HBOM and QBOM only.
+- `TestEveryBOMTypeSpecificCreationPathIsGated` — reads the AST of the per-BOM
+  service files and fails any exported `Create*`/`Save*`/`Import*` method that
+  neither calls `requireClassified` nor carries a written exemption. A
+  hand-applied rule is exactly the kind forgotten on the sixth path — and it was
+  already on zero of five.
+
+⚠ **The AST guard immediately caught a mistake in my own work**: I had written
+the AIBOM exemption comment on an `Update` method the guard never examines. Its
+per-file "must have at least one creation path" assertion also fired correctly
+on `ai_models.go`, which legitimately has none — so the staleness check is now
+global (zero across ALL files means the prefixes stopped matching and the guard
+has become a no-op) while zero in one file stays a fact about that BOM type.
+
+#### The fixture that had been building unscannable projects
+
+Applying the source rule turned **28 service tests red**, all from one shared
+helper: `createProject` used `SourceType: "manual"` with SBOM. A manual project
+has no repository, no upload and no URL, so `handler.go`'s `Source()` switch
+falls through and answers "the project has no repository connection to fetch
+from". ⚠ **Every one of those tests had been built on a project shape a customer
+could create and never scan**, and nothing refused it until the seam did. The
+default is now `upload` — a real SBOM path, since `project.uploads` has an
+`sbom` kind. `TestCreateManualProject` now registers an **HBOM** project, where
+manual is genuinely first-class, and a new test asserts a manual SBOM project is
+refused.
+
+#### Verification
+
+`task verify` exits 0. New live tests against real Postgres prove the device is
+refused on an SBOM-only project (409), accepted on an HBOM project, accepted on
+a project classified for both, and that a cross-tenant caller still gets **404,
+not the new 409** — the gate added a project lookup, and a lookup is exactly
+where invariant 6 gets broken. Mutation-verified by deleting the gate: the
+device is registered against the SBOM-only project, reproducing the defect.
+A new Playwright spec drives the running service end to end: the options
+endpoint really serves per-type sources to a browser, and `POST /v1/projects`
+with `url` + AIBOM really answers 422.
+
+#### Owed
+
+- **Milestone 3 — registration rebuilt around the BOM type — is NOT started.**
+  The wizard still asks for the source on step 1 and classifications on step 3,
+  so the incompatibility is only knowable on the later screen. The user's ask
+  was BOM-type-first ("user will select first which BOM he wants to register"),
+  which reverses that order.
+- `Module` deliberately has **no `RegistrationFields()`** yet. Three per-type
+  form generators exist with three different shapes, each correct for its own
+  screen; unifying them needs the Milestone 3 consumer to be right about, and
+  declaring the method now would mean three incompatible implementations.
+- The one pre-existing `AIBOM | url` project is **not migrated**. It stays as it
+  is; the rule refuses new ones.
 
 ### 2026-09-05 (h) — A5 re-audited: two of three items were already done, and the third was a gate the data outgrew
 

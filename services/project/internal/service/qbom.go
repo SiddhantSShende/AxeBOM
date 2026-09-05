@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 
+	"github.com/axebom/axebom/libs/go-shared/model"
 	"github.com/axebom/axebom/services/project/internal/qbom"
 )
 
@@ -46,6 +47,13 @@ func (s *Service) GetQuantumDevice(ctx context.Context, tenantID, projectID stri
 // not-provided rather than rejected, exactly as workers/qbom/metadata.py's
 // normalize_device() never rejects a payload.
 func (s *Service) SaveQuantumDevice(ctx context.Context, tenantID, projectID string, values qbom.DeviceValues) (*qbom.Device, []qbom.FieldGap, string, error) {
+	// This call MINTS the QBOM document (store.SaveQuantumDevice writes its own
+	// bom_documents row), so it is a creation, not an edit — a project not
+	// classified for QBOM would gain a document no report of its can reach.
+	if err := s.requireClassified(ctx, tenantID, projectID, model.BOMTypeQBOM); err != nil {
+		return nil, nil, "", err
+	}
+
 	device, gaps, docID, err := s.store.SaveQuantumDevice(ctx, tenantID, projectID, values)
 	return device, gaps, docID, mapStoreError(err)
 }
