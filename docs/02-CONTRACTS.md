@@ -343,14 +343,22 @@ GET /projects/{id}/dependencies?limit=100&cursor=<opaque>
 
 ### Surface
 
+> ⚠ **This block is the DESIGN surface and has drifted from the code.** The
+> authoritative list is each service's `routes.go`, which
+> `TestEveryRouteIsGuardedOrDeliberatelyPublic` parses and
+> `TestEveryRoutePatternRegistersWithoutConflict` actually mounts. Known
+> divergences left as-is rather than silently "corrected": several paths here
+> are the pre-implementation shape (`/projects/:id/connect-repo` is
+> `/projects/:id/connections`; `/projects/:id/scans` is `POST /v1/scans` with a
+> `project_id` in the body). The pre-ZITADEL local-JWT routes have been REMOVED
+> from this list because they were removed from the service — see
+> `services/auth/routes.go`.
+
 ```
 GET    /auth/config                                            # unauthenticated, OIDC bootstrap for the SPA
 POST   /auth/signup                                            # unauthenticated, creates an organisation + its Owner in ZITADEL
 
-POST   /auth/register                POST /auth/login          POST /auth/refresh
-GET    /auth/github/authorize        GET  /auth/github/callback         # sign-in
 GET    /auth/github/connect/authorize   GET /auth/github/connect/callback   # repo-scoped, see below
-POST   /auth/logout                  GET  /auth/me
 
 GET    /projects                     POST /projects
 GET    /projects/:id                 PATCH /projects/:id       DELETE /projects/:id
@@ -370,6 +378,12 @@ POST   /reports/:id/share            DELETE /shares/:token
 GET    /shared/:token                                          # unauthenticated, token-gated
 GET    /comments?report_id=:id       POST /comments
 PUT    /comments/:id                 DELETE /comments/:id
+
+GET    /hbom/:projectId              POST /hbom/:projectId/components
+POST   /hbom/preview                 POST /hbom/:projectId/import    # and /hbom/import (compat)
+GET    /hbom/:projectId/devices      POST /hbom/:projectId/devices
+GET    /hbom/:projectId/devices/:deviceId
+PUT    /hbom/:projectId/devices/:deviceId    DELETE /hbom/:projectId/devices/:deviceId
 
 POST   /projects/:id/vex             PATCH /vex/:id            GET /vex/:id/history
 GET    /vex/:id/csaf
@@ -411,12 +425,17 @@ Every scan-creation request (`POST /v1/scans`) carries `project_id`,
 which engine groups run (`sbom`, `cbom`, …), lowercase, matching
 `events.Family`.
 
-**`families[]` may never contain `hbom` or `qbom`** — see §7. Both are valid
-values of `events.Family` (`scan.engine_policy` still keys tenant overrides
-by them) but neither is something an engine scans; requesting either, or
-naming `hbom-csv` / `qbom-derive` in `engines[]` directly, is refused at
-create time with `SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE` (§9), not resolved into
-a job that nothing consumes.
+**`families[]` may never contain `qbom`** — see §7. It is a valid value of
+`events.Family` (`scan.engine_policy` still keys tenant overrides by it) but it
+is not something an engine scans; requesting it, or naming `qbom-derive` in
+`engines[]` directly, is refused at create time with
+`SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE` (§9), not resolved into a job that nothing
+consumes. Naming `hbom-csv` or `hbom-form` directly is refused the same way —
+both declare no source kind — while the `hbom` FAMILY is scannable through
+`hbom-ecad`.
+
+> ⚠ **This used to say `hbom` too.** It stopped being true when `hbom-ecad`
+> shipped; see the note in §7.
 
 **`POST /auth/signup`** takes `{organisation_name, email, password, given_name,
 family_name}` and returns `201 {organisation_name, email}` — no ZITADEL or
@@ -487,18 +506,18 @@ makes another tenant's comment invisible before ownership is ever checked.
 
 `ENGINE_*` and `NORMALIZE_*` codes are usually **diagnostics attached to a result**, not HTTP responses. They surface in the report rather than failing a request.
 
-**`SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE`** (422) — `families[]` (or an explicit
-`engines[]` entry) named `hbom` / `hbom-csv` or `qbom` / `qbom-derive` (§7,
-§8). Every offending family and engine is listed in `details`, not just the
+**`SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE`** (422) — `families[]` named `qbom`, or
+an explicit `engines[]` entry named `qbom-derive`, `hbom-csv` or `hbom-form`
+(§7, §8). Every offending family and engine is listed in `details`, not just the
 first:
 
 ```jsonc
 {
   "error": {
     "code": "SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE",
-    "message": "1 BOM family(s) cannot be requested as a scan: hbom. Every offending family and engine is listed in the error details, so one correction fixes all of them.",
+    "message": "1 BOM family(s) cannot be requested as a scan: qbom. Every offending family and engine is listed in the error details, so one correction fixes all of them.",
     "details": [
-      { "family": "hbom", "reason": "HBOM has no scanner; import hardware inventory via the /v1/hbom/* endpoints instead of requesting a scan." }
+      { "family": "qbom", "reason": "QBOM is derived from CBOM discovery; run a CBOM scan and record the Table 8 device metadata via /v1/qbom/*." }
     ],
     "request_id": "01J…",
     "docs": "https://docs.axebom.io/errors/SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE"

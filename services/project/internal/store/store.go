@@ -706,6 +706,12 @@ func (s *Store) ListUploads(ctx context.Context, tenantID, projectID string) ([]
 // The columns are nullable and the difference matters: NULL means "not
 // recorded", "" would mean "recorded as empty". Coverage scoring reads them
 // differently (CLAUDE.md invariant 3).
+//
+// ⚠ ALSO LOAD-BEARING FOR THE DEVICE TABLE'S PARTIAL UNIQUE INDEXES.
+// hardware_devices_serial_idx is `WHERE serial_number IS NOT NULL`, so any
+// number of devices with no serial are legal — but two devices with serial ”
+// would collide, and the second person registering an unserialled board would
+// be told their serial was already taken.
 func nullIfEmpty(s string) any {
 	if s == "" {
 		return nil

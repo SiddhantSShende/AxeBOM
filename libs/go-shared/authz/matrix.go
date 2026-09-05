@@ -278,6 +278,14 @@ var matrix = map[Permission]rule{
 	// over Viewer.
 	{ResourceHardware, ActionRead}:   {minRole: RoleViewer},
 	{ResourceHardware, ActionCreate}: {minRole: RoleAnalyst},
+	{ResourceHardware, ActionUpdate}: {minRole: RoleAnalyst},
+	// ⚠ ADMIN TO RETIRE A DEVICE, MATCHING project:delete AND FOR THE SAME
+	// REASON. The delete is soft and the BOM documents survive it (a
+	// normalization artifact is immutable, invariant 10) — but a device is the
+	// thing a compliance report is ABOUT, and removing one from the register
+	// changes what the organisation appears to have shipped. Analyst can edit
+	// every field on it; only an Admin can make it stop being listed.
+	{ResourceHardware, ActionDelete}: {minRole: RoleAdmin},
 
 	// --- quantum BOM (device metadata, captured by form, never a scan) ---
 	// Same read/write split as hardware BOM immediately above, and for the

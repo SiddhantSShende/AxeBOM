@@ -129,6 +129,43 @@ Store only the **hash** of the refresh token. Access tokens are stateless JWTs a
 ### `project.project_classifications`
 `(project_id, bom_type)` — composite PK. `bom_type` CHECK in (`SBOM`,`CBOM`,`QBOM`,`AIBOM`,`HBOM`). A project may carry any subset.
 
+### `project.hardware_devices`  ← the device a hardware BOM is *about*
+
+Registered by a person, never discovered. Identity and asset metadata only; the
+parts list stays in `normalize.hardware_components`, versioned, and is linked by
+`normalize.bom_documents.device_id` (a plain UUID, **no FK** — cross-schema).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID PK | |
+| `tenant_id` | UUID NOT NULL | RLS |
+| `project_id` | UUID NOT NULL | → `project.projects`, `ON DELETE CASCADE` |
+| `name` | TEXT NOT NULL | CHECK non-blank. The only required field |
+| `manufacturer`, `model_number`, `serial_number`, `lot_number` | TEXT | |
+| `asset_tag`, `firmware_version`, `location` | TEXT | |
+| `criticality` | TEXT | CHECK in (`critical`,`high`,`medium`,`low`,`unknown`) — same set as `normalize.hardware_components.criticality` |
+| `notes` | TEXT | |
+| `created_by` | UUID NOT NULL | → `auth.users.id`, **no FK** (cross-schema) |
+| `created_at`, `updated_at`, `deleted_at` | TIMESTAMPTZ | |
+
+> **`serial_number` and `lot_number` are separate columns because they answer
+> different questions.** A serial identifies one unit; a lot identifies a batch.
+> A board sampled from a batch has a lot and no serial, and recording the lot in
+> the serial column would assert a uniqueness that is not true.
+
+> **Unique on `(tenant_id, serial_number)` and `(tenant_id, asset_tag)`, both
+> partial** (`WHERE … IS NOT NULL AND deleted_at IS NULL`). Two units of the same
+> MODEL are ordinary, so `model_number` carries no constraint; two records
+> claiming one serial is a mistake worth refusing. The partial predicate is what
+> keeps any number of unserialled prototypes legal — which is also why the store
+> writes NULL, not `''`, for a blank.
+
+> **The duplication with the root component row is deliberate.** `manufacturer`
+> here and `hardware_components.manufacturer_name` on the level-0 row are two
+> different facts that usually agree: what the customer REGISTERED versus what a
+> parse of their file PRODUCED. Collapsing them destroys the only signal that a
+> schematic disagrees with the device somebody believes they are documenting.
+
 ### `project.practices`  ← CERT-In Table 5, category 3 (p.22)
 
 This is the commonly-missed minimum-element category. **Not a report section — a per-project setting captured at registration.** One row per project.

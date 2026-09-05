@@ -49,9 +49,18 @@ func uniqueName(t *testing.T) string {
 }
 
 // createTestProject inserts a minimal project directly via the store's own
-// CreateProject, and registers a hard-delete cleanup. project.projects has
-// no FK to normalize.* (cross-schema, by design), so hardware components and
-// bom_documents created against it are cleaned up separately by each test.
+// CreateProject and registers a cleanup.
+//
+// ⚠ THE CLEANUP IS A SOFT DELETE, AND THIS COMMENT USED TO CALL IT A HARD ONE.
+// store.DeleteProject sets `deleted_at`, so `ON DELETE CASCADE` never fires:
+// every child row a test creates SURVIVES the test. That went unnoticed while
+// the only children were in `normalize.*` (cleaned up explicitly below), and
+// stopped being invisible the moment project.hardware_devices existed — the dev
+// database accumulated 44 devices from one afternoon's test runs, on the very
+// screen those tests exist to prove works.
+//
+// Anything a test creates under a project must therefore clean itself up. See
+// cleanupDevices.
 func createTestProject(t *testing.T, st *store.Store, tenantID string) string {
 	t.Helper()
 	p, err := st.CreateProject(t.Context(), store.Project{

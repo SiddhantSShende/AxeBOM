@@ -12,7 +12,8 @@
  */
 
 import { useState } from 'react';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
+import { DeviceRegister } from './DeviceRegister';
 import { EmptyState, ErrorState, SkeletonRows } from '../../components/States';
 import {
   CRITICALITY_VALUES,
@@ -74,13 +75,28 @@ export function HardwareTree() {
 
   if (!roots || roots.length === 0) {
     return (
-      <EmptyState
-        title="No hardware recorded yet"
-        guidance={
-          'Hardware is not discoverable by any scanner, so this starts from a parts list ' +
-          'you already have — or from the form, one component at a time.'
-        }
-      />
+      <>
+        <DeviceRegister projectId={projectId} />
+        <EmptyState
+          title="No parts recorded yet"
+          /* ⚠ THIS USED TO SAY "Hardware is not discoverable by any scanner",
+             which reads as "AxeBOM cannot do hardware" and stopped being the
+             whole truth when hbom-ecad shipped. The denial that must survive is
+             narrower and sharper: nothing examines a PHYSICAL DEVICE. Design
+             files, parts lists and host inventories are all documents somebody
+             produced, and two of the three are parsed by a real scan. */
+          guidance={
+            'Nothing examined physical hardware — but a scan does read the design files you ' +
+            'commit. Connect a repository with KiCad, Altium or OrCAD files, import a parts ' +
+            'list, upload what a collector on the device reported, or add components by hand.'
+          }
+          action={
+            <Link className="btn btn-primary" to={`/projects/${projectId}/hardware/import`}>
+              Import a parts list
+            </Link>
+          }
+        />
+      </>
     );
   }
 
@@ -89,6 +105,12 @@ export function HardwareTree() {
 
   return (
     <section>
+      {/* ⚠ THE DEVICE REGISTER SITS ABOVE THE PARTS, because that is the order
+          the two facts exist in: a device is a thing you have, and a parts list
+          is something you later say about it. The tree used to be the whole
+          screen, which is why a project could only ever hold one. */}
+      <DeviceRegister projectId={projectId} />
+
       <header className="page-header">
         <div>
           <h1>Hardware</h1>

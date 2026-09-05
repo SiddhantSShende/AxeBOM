@@ -21,7 +21,7 @@ const PASSWORD = process.env['E2E_PASSWORD'] ?? 'AxeBOM-dev-only1!';
 
 async function signIn(page: import('@playwright/test').Page) {
   await page.goto('/projects');
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('button', { name: 'Log in' }).click();
   await fillZitadelLogin(page, USER, PASSWORD);
   await page.waitForURL(/\/projects/, { timeout: 45_000 });
 }
@@ -32,7 +32,7 @@ test('an anonymous visitor is asked to sign in rather than shown an error', asyn
   // ⚠ NOT `no bearer token`. That string was the symptom: the app rendered its
   // data screens, fired queries with no credential, and showed the API's
   // rejection as though the user had done something wrong.
-  await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Log in' })).toBeVisible();
   await expect(page.getByText(/no bearer token/i)).toHaveCount(0);
 });
 
@@ -56,7 +56,7 @@ test('the session survives a reload without another redirect', async ({ page }) 
   // A reload that bounces back to the identity provider means the session was
   // never restored, and every refresh would cost a full round trip.
   await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Sign in' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Log in' })).toHaveCount(0);
 });
 
 test('the header names who is signed in and offers a way out', async ({ page }) => {

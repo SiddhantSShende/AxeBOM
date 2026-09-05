@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { fillZitadelLogin } from './helpers';
+
 /**
  * The Generate wizard's "Run" action.
  *
@@ -10,20 +12,20 @@ import { expect, test } from '@playwright/test';
  * and rejects unknown fields outright (json.Decoder.DisallowUnknownFields).
  */
 
+// ⚠ USES THE SHARED HELPER, AND THIS FILE USED TO HAND-ROLL THE SAME FLOW WITH
+// FIXED `waitForTimeout(400)` PAUSES. That is precisely the hydration race
+// helpers.ts documents: ZITADEL's login is server-rendered, its submit button
+// stays disabled until React sees a value, and a fill landing before hydration
+// is silently discarded — the text sits visibly in the box and the button never
+// enables. A fixed 400ms sometimes wins that race and sometimes does not, which
+// is why this was the one spec still failing after the button label was fixed.
+//
+// Three copies of a login flow is three chances for one to rot. There is one.
 async function signIn(page: import('@playwright/test').Page) {
   await page.goto('/generate');
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  const l = page.getByLabel(/loginname|username|e-?mail/i);
-  await l.waitFor();
-  await l.fill('alice@acme.test');
-  await page.waitForTimeout(400);
-  await page.getByRole('button', { name: /next|continue/i }).click();
-  const p = page.getByLabel(/password/i);
-  await p.waitFor();
-  await p.fill('AxeBOM-dev-only1!');
-  await page.waitForTimeout(400);
-  await page.getByRole('button', { name: /next|continue|sign in|log ?in/i }).click();
-  await page.waitForURL(/\/generate/, { timeout: 45000 });
+  await page.getByRole('button', { name: 'Log in' }).click();
+  await fillZitadelLogin(page, 'alice@acme.test', 'AxeBOM-dev-only1!');
+  await page.waitForURL(/\/generate/, { timeout: 45_000 });
 }
 
 test('the generate wizard creates a scan and queues its reports without a 422', async ({
@@ -39,7 +41,10 @@ test('the generate wizard creates a scan and queues its reports without a 422', 
   await signIn(page);
 
   // Step 1 — project.
-  await page.getByRole('button', { name: /payments-api/i }).first().click();
+  await page
+    .getByRole('button', { name: /payments-api/i })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Continue' }).click();
 
   // Step 2 — classification.

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/axebom/axebom/libs/go-shared/auth"
+	"github.com/axebom/axebom/libs/go-shared/platform/ctxkey"
 	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 	"github.com/axebom/axebom/services/project/internal/hbom"
 )
@@ -472,4 +473,133 @@ func (h *Handler) PartProvider(w http.ResponseWriter, r *http.Request) {
 		"provider":   provider,
 		"configured": configured,
 	})
+}
+
+// ---------------------------------------------------------------------------
+// Devices
+// ---------------------------------------------------------------------------
+
+// deviceRequest is the registration body.
+//
+// ⚠ MIRRORS hbom.Device'S EDITABLE FIELDS ONLY. id, project_id, timestamps and
+// the parts summary are server-owned; accepting them would let a caller claim a
+// component count nobody counted. DisallowUnknownFields (see decode) turns a
+// typo into a 400 rather than a silently ignored field.
+type deviceRequest struct {
+	Name            string `json:"name"`
+	Manufacturer    string `json:"manufacturer,omitempty"`
+	ModelNumber     string `json:"model_number,omitempty"`
+	SerialNumber    string `json:"serial_number,omitempty"`
+	LotNumber       string `json:"lot_number,omitempty"`
+	AssetTag        string `json:"asset_tag,omitempty"`
+	FirmwareVersion string `json:"firmware_version,omitempty"`
+	Location        string `json:"location,omitempty"`
+	Criticality     string `json:"criticality,omitempty"`
+	Notes           string `json:"notes,omitempty"`
+}
+
+func (d deviceRequest) toDevice() *hbom.Device {
+	return &hbom.Device{
+		Name: strings.TrimSpace(d.Name), Manufacturer: d.Manufacturer,
+		ModelNumber: d.ModelNumber, SerialNumber: d.SerialNumber,
+		LotNumber: d.LotNumber, AssetTag: d.AssetTag,
+		FirmwareVersion: d.FirmwareVersion, Location: d.Location,
+		Criticality: d.Criticality, Notes: d.Notes,
+	}
+}
+
+// ListDevices handles GET /v1/hbom/{projectId}/devices.
+func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := auth.RequireTenant(r.Context())
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	devices, err := h.svc.ListDevices(r.Context(), tenantID, r.PathValue("projectId"))
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	errs.WriteJSON(w, http.StatusOK, map[string]any{
+		"devices": devices,
+		// ⚠ THE FORM TRAVELS WITH THE LIST, generated from the compliance
+		// profile. The frontend renders inputs from this rather than hardcoding
+		// Table 11's element names, so a CERT-In revision changes the YAML and
+		// the form follows without a frontend release (invariant 2).
+		"form": hbom.DeviceFormFields(),
+	})
+}
+
+// GetDevice handles GET /v1/hbom/{projectId}/devices/{deviceId}.
+func (h *Handler) GetDevice(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := auth.RequireTenant(r.Context())
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	d, err := h.svc.GetDevice(r.Context(), tenantID, r.PathValue("projectId"), r.PathValue("deviceId"))
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	errs.WriteJSON(w, http.StatusOK, d)
+}
+
+// CreateDevice handles POST /v1/hbom/{projectId}/devices.
+func (h *Handler) CreateDevice(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := auth.RequireTenant(r.Context())
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	var req deviceRequest
+	if err := decode(r, &req); err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+
+	created, err := h.svc.CreateDevice(r.Context(), tenantID,
+		r.PathValue("projectId"), ctxkey.UserID(r.Context()), req.toDevice())
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	errs.WriteJSON(w, http.StatusCreated, created)
+}
+
+// UpdateDevice handles PUT /v1/hbom/{projectId}/devices/{deviceId}.
+func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := auth.RequireTenant(r.Context())
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+
+	var req deviceRequest
+	if err := decode(r, &req); err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+
+	updated, err := h.svc.UpdateDevice(r.Context(), tenantID,
+		r.PathValue("projectId"), r.PathValue("deviceId"), req.toDevice())
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	errs.WriteJSON(w, http.StatusOK, updated)
+}
+
+// DeleteDevice handles DELETE /v1/hbom/{projectId}/devices/{deviceId}.
+func (h *Handler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := auth.RequireTenant(r.Context())
+	if err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	if err := h.svc.DeleteDevice(r.Context(), tenantID, r.PathValue("projectId"), r.PathValue("deviceId")); err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

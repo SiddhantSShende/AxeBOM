@@ -7,8 +7,8 @@ A session that writes code but does not update this file has failed — the next
 ---
 
 **Last updated:** 2026-09-05
-**Current phase:** *Hardware as a first-class thing, and making every artifact actually contain its data*. 🟢 **TRACK A, steps 1–2 and most of 5 DONE** — the (format × BOM type) rendering matrix. Track B (hardware collectors, `axebom collect`, the device registry) and tracks A6/A7 (provenance writing, ecosystem coverage) are **not started**. Before this: the endpoint/defect sweep (session a), frontend modernization, Enterprise HBOM — all 🟢 complete.
-**Next action:** Track B — the device table and its registration routes, then the collectors. ⚠ **Two P0s were fixed here, both of which had always been broken: SPDX and CycloneDX emitted a schema-valid, EMPTY document for CBOM, AIBOM and QBOM, and a QBOM's entire quantum-readiness half was unreachable by construction.** All 30 (format × type) cells are now covered by a matrix test rendering populated fixtures, and six new golden exports validate against the official SPDX and CycloneDX schemas. ⚠ **`NVD_API_KEY` is still set in no environment**, so element 24 reports `not-attempted` for every component. 🟡 Carried forward: five `normalize` tables have no writer — `component_provenance` and `component_candidate_identities` have live readers, so the per-component provenance panel is empty for everything (track A6); ecosystem coverage is npm/golang/pypi/github only with no goldens for gem, cargo, nuget, deb, rpm, apk, conan or swift (track A7); `mock-engine`/`cbomkit`/`aibom-generator` are dispatchable with no adapter; nine auth handlers are unmounted but not deleted. ⚠ `cdxgen`'s image is 15.5 GB and 18 GB of `:dev`/`:good` rollback tags are reclaimable — reclaim before pulling anything new.
+**Current phase:** *Hardware as a first-class thing, and making every artifact actually contain its data*. 🟢 **Track A rendering matrix DONE** (session b); 🟢 **Track B3 — the device register — DONE** (session c). Not started: B1 collectors, B2 `axebom collect`, most of B4 (upload formats, the component form), A6 (writerless tables) and A7 (ecosystem coverage).
+**Next action:** B1 — `hbom-host-report`, one engine parsing lshw / dmidecode / fwupd / WMI / Redfish output the customer ran themselves — then B2, the first-party collector. ⚠ **Hardware is registerable now**: `project.hardware_devices` gives a device stable identity, uniqueness on serial and asset tag, and several devices per project, with the form generated from the compliance profile. ⚠ **Two latent traps were caught this session**: the obvious device route shape panics ServeMux at startup (a new test now mounts the mux, because nothing did), and every store test has been leaking child rows because `DeleteProject` is a soft delete — 44 devices accumulated in one afternoon. ⚠ **The Playwright suite had been red since a button was renamed from "Sign in" to "Log in"**, and `task verify` does not run it; 9/9 pass now. ⚠ **`NVD_API_KEY` is still set in no environment**, so element 24 reports `not-attempted`. 🟡 Carried forward: nothing checks project classification, so a device can be registered against an SBOM-only project and every project shows a Hardware tab; five `normalize` tables have no writer (two with live readers, so the per-component provenance panel is empty); ecosystem coverage is npm/golang/pypi/github only; `mock-engine`/`cbomkit`/`aibom-generator` are dispatchable with no adapter.
 
 > 🟢 **A REAL SCAN NOW NORMALIZES, LIVE, WITH NO MANUAL TRIGGER — THE
 > NORMALIZER'S DEPLOYED BOUNDARY FROM (e)/(k)/(l) IS CLOSED FOR SBOM.**
@@ -2265,6 +2265,126 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-09-05 (c) — Track B: hardware becomes a thing you register, and the e2e suite had been red since a button was renamed
+
+Track B3 of *Hardware as a first-class thing*: **the device register**. B1
+(collectors), B2 (`axebom collect`) and most of B4 (upload formats, the
+component form) are **not started**.
+
+#### A device is a row now, not a convention
+
+`grep -riE '\bdevice\b' migrations/` used to return three comments and no
+tables. In practice the level-0 row of a versioned parts list WAS the device —
+`fixtures/hbom-nested`'s root is an ENC-GW-4400 with a serial and a manufacturer
+— but it lived inside a document that `ReplaceHardwareTree` replaces wholesale
+on every re-import. So nothing about "this device" survived one, nothing was
+unique on serial, there was no route that addressed one, and a project could
+hold exactly **one** hardware tree. A product line with three boards had nowhere
+to put two of them.
+
+New `project.hardware_devices` (RLS in the same migration, 45 tables all
+covered) plus `normalize.bom_documents.device_id` — a plain uuid with **no FK**,
+the same cross-schema precedent `project_id` and `scan_id` already set.
+
+⚠ **The duplication with the root component row is deliberate and documented.**
+`hardware_devices.manufacturer` and `hardware_components.manufacturer_name` are
+two different facts that usually agree: what the customer **registered** versus
+what a parse of their file **produced**. Collapsing them would destroy the only
+signal that a schematic disagrees with the device somebody believes they are
+documenting.
+
+⚠ **`serial_number` and `lot_number` are separate columns**, because a serial
+identifies one unit and a lot identifies a batch. Unique indexes on serial and
+asset tag are **partial** (`WHERE … IS NOT NULL AND deleted_at IS NULL`), so any
+number of unserialled prototypes are legal and a retired unit's serial is
+reusable — which is why the store writes NULL rather than `''`. A live test
+covers exactly that: three devices with no serial, and a re-registration after a
+retire.
+
+#### Two traps caught before they shipped
+
+- ⚠ **The obvious route shape panics the service at startup.**
+  `/v1/hbom/{projectId}/devices` plus `/v1/hbom/devices/{deviceId}` both match
+  `/v1/hbom/devices/devices` and neither is more specific, so `ServeMux`
+  **panics at registration**. Verified with a throwaway program rather than
+  assumed. Everything is project-scoped instead, which is the better shape
+  anyway — the guard sees the project id, and the store scopes on it, so a
+  device id from another project 404s rather than returning a row the URL says
+  belongs elsewhere.
+  **New `TestEveryRoutePatternRegistersWithoutConflict`** actually mounts the
+  mux, because nothing did: `TestEveryRouteIsGuardedOrDeliberatelyPublic` parses
+  routes.go as TEXT and would have passed while the container crash-looped.
+  Mutation-verified.
+- ⚠ **`task profile:guardrails` refused the legend "CERT-In Table 11 elements"**
+  — 11 is also the QBOM element count. It was right to: a literal reference to
+  the guideline's own numbering goes stale exactly as a count does. Each input
+  carries its own page citation, rendered from the profile.
+
+#### The device form is generated, not typed
+
+`DeviceFormFields()` reads `model.HBOMFields`, so the six CERT-In-backed inputs
+carry their element id, name and page citation from
+`docs/reference/certin-v2.0.yaml` — the same mechanism `internal/qbom`'s
+`FormFields()` already uses. The four AxeBOM additions (lot, asset tag,
+location, notes) sit in their own fieldset **labelled as not scoring anything**,
+so nobody mistakes an asset tag for a compliance element. Whether a field is
+long-form is a server-side fact too, beside the field it describes, rather than
+an `if (attr === 'notes')` in a component.
+
+#### ⚠ The e2e suite had been red since somebody renamed a button
+
+Every spec that signs in looked for a button named **"Sign in"**. It says
+**"Log in"** — changed in 2026-08-25 (x), when SignIn became a two-button choice
+screen. `auth.spec.ts` and `generate.spec.ts` failed at step one and nothing
+noticed, because **`task verify` does not run Playwright**.
+
+`generate.spec.ts` then failed for a second reason: it hand-rolled the ZITADEL
+login with fixed `waitForTimeout(400)` pauses instead of using `helpers.ts`,
+whose comment documents exactly that race — the login is server-rendered, its
+submit stays disabled until React sees a value, and a fill landing before
+hydration is silently discarded. Three copies of a login flow is three chances
+for one to rot; there is one now.
+
+**9 of 9 pass**, including a new `device-register.spec.ts` that registers,
+lists and retires a device through the real browser.
+
+#### ⚠ Every store test has been leaking rows, and this is how it surfaced
+
+`createTestProject`'s cleanup calls `store.DeleteProject`, which is a **soft**
+delete — so `ON DELETE CASCADE` never fires and every child row survives the
+test. The helper's own comment called it "a hard-delete cleanup".
+
+Invisible while the only children lived in `normalize.*` (cleaned up explicitly)
+and instantly visible once devices existed: **44 devices accumulated in the dev
+database from one afternoon**, on the very screen those tests exist to prove
+works. The device tests now clean up after themselves and the e2e spec retires
+what it registers; a full store run leaves **zero** rows behind. The comment is
+corrected.
+
+#### Verification
+
+`task verify` exits 0. `task db:verify-rls` — 45/45. Playwright 9/9 against the
+live stack over HTTPS. Screenshotted and read back: the generated form renders
+its CERT-In page citations, criticality is a `select` (**confirmed from the DOM,
+not from the PNG** — the chevron is faint at that size, and a previous session
+lost time to a screenshot artefact).
+
+#### Owed
+
+- **B1/B2 not started**: `hbom-host-report` (lshw, dmidecode, fwupd, WMI,
+  Redfish) and `axebom collect hardware`.
+- **B4 mostly not started**: the import screen still accepts **CSV only**, the
+  component edit form still exposes 6 of ~35 fields, and the cdxgen path still
+  has no UI affordance — the only instruction anywhere is an error hint shown
+  *after* a scan found nothing.
+- ⚠ **Nothing checks classification**: a device can be registered against a
+  project classified SBOM-only, and the Hardware tab renders for every project.
+  Confirmed live — the screenshot is of `koa-live-proof [SBOM]`. That is the
+  earlier plan's module-seam work.
+- Tracks A6 (five writerless `normalize` tables) and A7 (ecosystem coverage)
+  unchanged.
+- ⚠ `NVD_API_KEY` still set in no environment.
 
 ### 2026-09-05 (b) — The rendering matrix: six downloadable artifacts that validated and said nothing, and a second QBOM P0
 

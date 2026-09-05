@@ -91,6 +91,19 @@ const (
 	NotFoundResource Code = "NOTFOUND_RESOURCE"
 )
 
+// Project — 409.
+const (
+	// ProjectDeviceIdentifierTaken means a serial number or asset tag is
+	// already registered to another device in this tenant.
+	//
+	// ⚠ 409, NOT 422. The request is well-formed and the value is legal; it
+	// conflicts with a row that already exists. A 422 would tell the caller to
+	// fix their input when the right answer is usually "you already registered
+	// this unit" — a serial number identifies one physical device, so a
+	// duplicate is a statement about the world, not about the form.
+	ProjectDeviceIdentifierTaken Code = "PROJECT_DEVICE_IDENTIFIER_TAKEN"
+)
+
 // Validation — 422.
 const (
 	ValidationFieldRequired Code = "VALIDATION_FIELD_REQUIRED"
@@ -109,10 +122,16 @@ const (
 
 	// ScanFamilyNotDirectlyScannable means every registered engine for a
 	// requested family is metadata-only (policy.Engine.Derived or
-	// .RequiresImport) — HBOM (a CSV/form import) and QBOM (derived from CBOM
-	// discovery) today. Neither has a worker consuming its scan.job.* subject
-	// by design, so resolving one into a scan publishes a job nothing ever
-	// acks. Rejected at create time, never discovered at worker time.
+	// .RequiresImport) — QBOM alone today, derived from CBOM discovery.
+	//
+	// ⚠ THIS COMMENT USED TO NAME HBOM TOO, AND STOPPED BEING TRUE WHEN
+	// hbom-ecad SHIPPED. That engine parses committed KiCad, Altium and OrCAD
+	// design files and has a live worker, so the family is scannable and is no
+	// longer in familyRedirect. QBOM still has no worker by design.
+	//
+	// Resolving a genuinely unscannable family into a scan publishes a job
+	// nothing ever acks. Rejected at create time, never discovered at worker
+	// time.
 	ScanFamilyNotDirectlyScannable Code = "SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE"
 )
 
@@ -186,12 +205,15 @@ var statusOverride = map[Code]int{
 	// identical token and asks the identical question. 409 says "your request
 	// conflicts with the state of your account", which is exactly the case, and
 	// keeps the retry loop from existing at all.
-	AuthOrgAmbiguous:      http.StatusConflict,
-	AuthOrgNameTaken:      http.StatusConflict,
-	AuthEmailTaken:        http.StatusConflict,
-	ScanAlreadyRunning:    http.StatusConflict,
-	ReportRenderFailed:    http.StatusInternalServerError,
-	ReportSignatureFailed: http.StatusInternalServerError,
+	AuthOrgAmbiguous:   http.StatusConflict,
+	AuthOrgNameTaken:   http.StatusConflict,
+	AuthEmailTaken:     http.StatusConflict,
+	ScanAlreadyRunning: http.StatusConflict,
+	// See the code's own comment: a duplicate serial is a conflict with the
+	// world, not a malformed field.
+	ProjectDeviceIdentifierTaken: http.StatusConflict,
+	ReportRenderFailed:           http.StatusInternalServerError,
+	ReportSignatureFailed:        http.StatusInternalServerError,
 }
 
 // prefixStatus maps a code prefix to its default HTTP status.

@@ -131,3 +131,80 @@ func (s *Service) PartProvider() (provider string, configured bool) {
 func (s *Service) hbomProvider() hbom.Provider {
 	return hbom.Resolve(hbom.NexarFromEnv(), hbom.MouserFromEnv())
 }
+
+// ---------------------------------------------------------------------------
+// Devices
+//
+// ⚠ REGISTRATION, NOT DISCOVERY. Every field here is one a person typed or a
+// file they supplied. Nothing in this service reaches a device.
+// ---------------------------------------------------------------------------
+
+// ListDevices returns a project's registered devices.
+func (s *Service) ListDevices(ctx context.Context, tenantID, projectID string) ([]*hbom.Device, error) {
+	devices, err := s.store.ListDevices(ctx, tenantID, projectID)
+	if err != nil {
+		return nil, mapStoreError(err)
+	}
+	if devices == nil {
+		// [] not null, so a client can length-check without a nil guard.
+		devices = []*hbom.Device{}
+	}
+	return devices, nil
+}
+
+// GetDevice reads one registered device.
+func (s *Service) GetDevice(ctx context.Context, tenantID, projectID, deviceID string) (*hbom.Device, error) {
+	d, err := s.store.GetDevice(ctx, tenantID, projectID, deviceID)
+	return d, mapDeviceError(err)
+}
+
+// CreateDevice registers a device against a project.
+func (s *Service) CreateDevice(ctx context.Context, tenantID, projectID, createdBy string,
+	d *hbom.Device,
+) (*hbom.Device, error) {
+	if err := hbom.ValidateDevice(d); err != nil {
+		return nil, errs.Newf(errs.ValidationFieldInvalid, "%v", err)
+	}
+	created, err := s.store.CreateDevice(ctx, tenantID, projectID, createdBy, d)
+	return created, mapDeviceError(err)
+}
+
+// UpdateDevice edits a device's registration fields.
+func (s *Service) UpdateDevice(ctx context.Context, tenantID, projectID, deviceID string,
+	d *hbom.Device,
+) (*hbom.Device, error) {
+	if err := hbom.ValidateDevice(d); err != nil {
+		return nil, errs.Newf(errs.ValidationFieldInvalid, "%v", err)
+	}
+	updated, err := s.store.UpdateDevice(ctx, tenantID, projectID, deviceID, d)
+	return updated, mapDeviceError(err)
+}
+
+// DeleteDevice retires a device without destroying its BOM documents.
+func (s *Service) DeleteDevice(ctx context.Context, tenantID, projectID, deviceID string) error {
+	return mapDeviceError(s.store.DeleteDevice(ctx, tenantID, projectID, deviceID))
+}
+
+// mapDeviceError adds the two answers a device can give that a project cannot.
+//
+// ⚠ NOT-FOUND STAYS NOTFOUND_RESOURCE, NOT NOTFOUND_PROJECT. A caller who names
+// a device id that belongs to another tenant must get the same answer as one
+// who names an id that never existed — and mapStoreError's project wording
+// would tell them their PROJECT was missing, which is a different and
+// misleading fact.
+func mapDeviceError(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, store.ErrSerialTaken):
+		return errs.New(errs.ProjectDeviceIdentifierTaken,
+			"a device with this serial number or asset tag is already registered "+
+				"in your organisation. A serial identifies one physical unit, so "+
+				"this usually means it has been registered already — search for it "+
+				"rather than creating a second record.")
+	case errors.Is(err, store.ErrNotFound):
+		return errs.New(errs.NotFoundResource, "no such device")
+	default:
+		return err
+	}
+}

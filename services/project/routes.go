@@ -151,6 +151,35 @@ func registerRoutes(mux *http.ServeMux, d *deps) {
 	mux.Handle("POST /v1/hbom/import",
 		guard(authz.ResourceHardware, authz.ActionCreate, h.ConfirmHBOMImport))
 
+	// --- Registered devices --------------------------------------------------
+	//
+	// ⚠ PROJECT-SCOPED, AND THE OBVIOUS ALTERNATIVE PANICS AT STARTUP.
+	//
+	// `/v1/hbom/{projectId}/devices` for the list plus
+	// `/v1/hbom/devices/{deviceId}` for one device is REFUSED by ServeMux: both
+	// match "/v1/hbom/devices/devices" and neither is more specific, so
+	// registration panics and the service never starts.
+	// TestEveryRoutePatternRegistersWithoutConflict exists because nothing else
+	// in this repo builds the mux — the route-guard test parses this file as
+	// text and would have passed while the container crash-looped.
+	//
+	// Scoping every device route under its project is the better shape anyway:
+	// the guard sees the project id, and the store scopes on it too, so a device
+	// id from another project 404s instead of quietly returning a row the URL
+	// says belongs somewhere else.
+	mux.Handle("GET /v1/hbom/{projectId}/devices",
+		guard(authz.ResourceHardware, authz.ActionRead, h.ListDevices))
+	mux.Handle("POST /v1/hbom/{projectId}/devices",
+		guard(authz.ResourceHardware, authz.ActionCreate, h.CreateDevice))
+	mux.Handle("GET /v1/hbom/{projectId}/devices/{deviceId}",
+		guard(authz.ResourceHardware, authz.ActionRead, h.GetDevice))
+	mux.Handle("PUT /v1/hbom/{projectId}/devices/{deviceId}",
+		guard(authz.ResourceHardware, authz.ActionUpdate, h.UpdateDevice))
+	// Retiring a device is Admin — see the authz matrix's note on why the soft
+	// delete is gated higher than every edit on the same row.
+	mux.Handle("DELETE /v1/hbom/{projectId}/devices/{deviceId}",
+		guard(authz.ResourceHardware, authz.ActionDelete, h.DeleteDevice))
+
 	// --- Quantum BOM (QBOM) device metadata ----------------------------------
 	// Captured by form, never scanned — CERT-In Table 8 has no open-source
 	// discovery tool. See internal/qbom's package doc. Mounted the same

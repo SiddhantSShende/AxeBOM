@@ -1713,6 +1713,30 @@ input[type='radio']:disabled {
 
 /* --- Form fields ------------------------------------------------------- */
 
+/* A two-up grid for a form whose fields are short and independent — a device
+ * registration is eleven single-line inputs, and stacking them turns a
+ * thirty-second task into a scroll. Collapses to one column below the point
+ * where two inputs stop being comfortably wide. */
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0 var(--space-5);
+}
+.field-grid .field input,
+.field-grid .field select,
+.field-grid .field textarea {
+  max-width: none;
+}
+
+/* A secondary line inside a table cell — a manufacturer under a device name,
+ * an asset tag under a serial. Quieter than the value it qualifies, and never
+ * a second column, because these are two facets of one identity. */
+.cell-sub {
+  margin-top: 2px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
 .field {
   display: block;
   margin: var(--space-4) 0;
