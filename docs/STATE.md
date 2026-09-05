@@ -7,8 +7,8 @@ A session that writes code but does not update this file has failed — the next
 ---
 
 **Last updated:** 2026-09-05
-**Current phase:** A new 6-milestone plan — *BOM-type-first registration, the HBOM engine roster, and a defect sweep*. 🟢 **MILESTONE 1 of 6 DONE** (the defect sweep). Milestones 2–6 not started: the BOM module seam in `services/project`, registration rebuilt around the BOM type (type first, then only that type's inputs; GitHub connected once per tenant), the widened HBOM engine roster, frontend↔backend↔DB alignment, live per-family verification. Before that, frontend modernization — 🟢 DONE, all screens; Enterprise HBOM — 🟢 COMPLETE.
-**Next action:** Milestone 2 — the `BomModule` seam. ⚠ **Milestone 1 found and fixed a P0: every QBOM report had always failed, and every *imported* HBOM report with it** — the writer keyed documents on `project_id` and the reader looked them up by `scan_id`. There are no QBOM documents in the dev database at all, which is the evidence. Also removed: the pre-ZITADEL local-JWT auth surface, including an **unauthenticated `POST /v1/auth/register`**. ⚠ **`NVD_API_KEY` is still set in no environment**, so hardware vulnerability matching reports `not-attempted` for every component and element 24 scores zero; setting a key is the one step that turns it on. 🟡 Carried forward, none a regression: `mock-engine`/`cbomkit`/`aibom-generator` are dispatchable with no adapter and leave a permanent `skipped` row; three `lib/projects.ts` mutations invalidate query keys no query registers (deliberately left for milestone 3, which adds the missing reads); nine auth handlers are unmounted but not deleted; `component_provenance` is written by nothing; `axebom toolctl pin` has never existed; `crypto-mixed` still has no CBOM golden harness. ⚠ `cdxgen`'s image is 15.5 GB and 18 GB of `:dev`/`:good` rollback tags are reclaimable — size any deployment, and reclaim before pulling anything new.
+**Current phase:** *Hardware as a first-class thing, and making every artifact actually contain its data*. 🟢 **TRACK A, steps 1–2 and most of 5 DONE** — the (format × BOM type) rendering matrix. Track B (hardware collectors, `axebom collect`, the device registry) and tracks A6/A7 (provenance writing, ecosystem coverage) are **not started**. Before this: the endpoint/defect sweep (session a), frontend modernization, Enterprise HBOM — all 🟢 complete.
+**Next action:** Track B — the device table and its registration routes, then the collectors. ⚠ **Two P0s were fixed here, both of which had always been broken: SPDX and CycloneDX emitted a schema-valid, EMPTY document for CBOM, AIBOM and QBOM, and a QBOM's entire quantum-readiness half was unreachable by construction.** All 30 (format × type) cells are now covered by a matrix test rendering populated fixtures, and six new golden exports validate against the official SPDX and CycloneDX schemas. ⚠ **`NVD_API_KEY` is still set in no environment**, so element 24 reports `not-attempted` for every component. 🟡 Carried forward: five `normalize` tables have no writer — `component_provenance` and `component_candidate_identities` have live readers, so the per-component provenance panel is empty for everything (track A6); ecosystem coverage is npm/golang/pypi/github only with no goldens for gem, cargo, nuget, deb, rpm, apk, conan or swift (track A7); `mock-engine`/`cbomkit`/`aibom-generator` are dispatchable with no adapter; nine auth handlers are unmounted but not deleted. ⚠ `cdxgen`'s image is 15.5 GB and 18 GB of `:dev`/`:good` rollback tags are reclaimable — reclaim before pulling anything new.
 
 > 🟢 **A REAL SCAN NOW NORMALIZES, LIVE, WITH NO MANUAL TRIGGER — THE
 > NORMALIZER'S DEPLOYED BOUNDARY FROM (e)/(k)/(l) IS CLOSED FOR SBOM.**
@@ -2265,6 +2265,181 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-09-05 (b) — The rendering matrix: six downloadable artifacts that validated and said nothing, and a second QBOM P0
+
+New plan: *Hardware as a first-class thing, and making every artifact actually
+contain its data*. This is **track A, steps 1–2 and most of 5** — the render
+matrix and data landing. Track B (hardware collectors, `axebom collect`, the
+device registry) is **not started**.
+
+#### `go test ./services/report/...` passed completely, and that was the problem
+
+Every defect below sat inside the passing suite's blind spot. Two tests are the
+reason:
+
+- `TestEveryBOMTypesHonestyLabelReachesEveryFormat` rendered CBOM, QBOM and
+  AIBOM with **empty payloads** and asserted only that a caveat *string* was
+  present. It never asserted data rendered, so it passed on documents containing
+  nothing but a caveat.
+- `TestAnHBOMRendersInEveryFormat` covered xlsx/pdf/json — not docx, spdx or
+  cyclonedx, which is exactly where HBOM's export bug had lived.
+
+⚠ I strengthened the first of those in session (a) while this identical trap sat
+two functions away.
+
+#### P0 — SPDX and CycloneDX emitted a valid, EMPTY document for CBOM, AIBOM and QBOM
+
+`toExportDocument` read `b.Components`, `b.Roots`, `b.Dependencies` and
+`appendHardware`. **`CryptoAssets`, `AIModels` and `QuantumDevice` appeared
+nowhere in `internal/export/`.** The Python canonical builders never populate
+`components` for those types, so `loadComponents` correctly returned zero rows,
+the loop produced zero components, and `Serialize` returned a conformant
+document with an empty array. `parseFormat` accepts both formats for any type
+and `GenerateFlow` offers them unconditionally, so **a customer could download a
+schema-valid file asserting their project contained nothing.**
+
+This is the identical failure `appendHardware`'s own comment describes — fixed
+for HBOM only, and left live for the other three.
+
+Now mapped: CBOM assets, AI models (with datasets as `contains` children) and
+the Table 8 device. Two honest limits, both in the serializer:
+
+- ⚠ **CycloneDX's `cryptographic-asset` type cannot be emitted at all.**
+  protobom v0.5.8's `Purpose` enum has no member and its writer has no branch
+  producing one. Leaving the purpose unset is *worse* than choosing —
+  protobom then defaults to `application`, publishing that an RSA key is a
+  runnable program. `Purpose_OTHER` serializes as `data`, true of a key or a
+  certificate, and the real type rides as `certin:crypto:asset_type`.
+- SPDX 2.3 has no purpose for an ML model, so those are `OTHER` with Table 10 as
+  `certin:aibom:*` properties.
+
+⚠ **A rootless document is refused** ("no root nodes found"), and declaring each
+asset a root is wrong in a way that only shows up sometimes: with several assets
+protobom emits a headless document (correct), and with **exactly one** it hoists
+that asset into `metadata.component` — publishing that the thing this BOM
+describes is RSA-2048. A project with one crypto asset is ordinary. So CBOM and
+AIBOM now declare an explicit **project subject**, which is what
+`metadata.component` is for; a QBOM's subject is its device, and its assets hang
+off that.
+
+#### P0 — QBOM's quantum-readiness half was unreachable by construction
+
+`SaveQuantumDevice` mints its own `bom_documents` row holding just the device;
+`loadCryptoAssets` is scoped `WHERE bom_document_id = $1`. **Confirmed against
+the live database: all 214 crypto assets carry `bom_type = 'CBOM'` and no other
+type has one.** So every QBOM report, in every format, rendered the zero-asset
+branch — whose own words are the damaging part: *"No cryptographic assets were
+discovered … check Engine Coverage for whether a CBOM engine ran at all."* It
+sent the reader to inspect an engine that had run and found plenty.
+
+`qbom.go` resolved those assets into `crypto_asset_refs` at save time and the
+report loader never read them back. `render.BOM`'s own doc comment has always
+said CryptoAssets is *"READ (never re-discovered) by a QBOM's readiness view"* —
+that read simply did not exist.
+
+New `loadCompanionCryptoAssets` resolves the project's newest CBOM (by
+`project_id`, falling back to a join through `scan.scans`, because CBOM
+documents keep `project_id` NULL — only HBOM and QBOM were backfilled). It never
+overwrites: a document with its own assets wins.
+
+⚠ **The report now names the lending document and its date.** A QBOM displays
+another document's data as its own; undated, it reads as a statement about
+today. `QBOMCryptoSourceNote` travels through `TypeNotes`, so it reaches all
+four renderers.
+
+#### The Word document was a materially different report from the PDF
+
+Its own comment claimed *"THE SAME SECTIONS AS WritePDF, IN THE SAME ORDER"*.
+
+- ⚠ **A Word AIBOM carried none of CERT-In's 19 Table 10 elements.** It rendered
+  `Name`, `RiskScore`, `OwaspLLMTop10`, `Datasets` and never touched `m.Fields`
+  — so the only two values present were the two the code itself labels as **not**
+  CERT-In fields, derived from a third party's heuristics and excluded from both
+  coverage numbers. **A compliance artifact containing only the things that do
+  not count towards compliance is worse than an empty one: it looks complete.**
+- **A Word CBOM had no field coverage at all.** `docxCoveragePage` returns early
+  when the field list is empty, which for a CBOM it always is (Table 9 is
+  type-discriminated and `FieldsFor` rightly refuses to flatten it). The early
+  return was correct; the missing alternative was not. `CryptoFieldCoverageRows`
+  is now shared with the XLSX.
+- **`docx.go` guarded the quantum section on `b.QuantumDevice != nil`** — a
+  direct invariant-3 breach. PDF and XLSX both render every element as
+  `not-provided` with a stated gap; DOCX alone dropped the section, so a missing
+  device looked like a BOM type with no device concept.
+- Its device table hardcoded **6** of Table 8's **11** elements. Both renderers
+  now share `QuantumDeviceRows`, generated from the profile.
+
+#### QBOM fell through to the generic component path in PDF and DOCX
+
+Neither switch had a QBOM case, so it hit `default` and rendered a `Components`
+table with a header and zero rows — which `bom.go` says in as many words reads
+as *"the scan found nothing"* rather than *"this format does not apply here"*.
+`Sheets()` states the rule and honours it; the other two ignored it.
+
+#### The fix that stops all of this recurring
+
+**`TestEveryFormatCarriesEveryBOMTypesData`** — 30 cells, every format ×
+every BOM type, rendered from a **populated** fixture through `renderArtifact`
+(the real dispatch), asserting a value that could only come from that type's own
+inventory. It caught exactly the six broken cells on its first run, and passes
+now. Six new golden documents are validated against the **official** schemas:
+`tools/conformance` used to name two files, both software BOMs, and now globs
+the directory with a guard that the glob matched something — a glob that matches
+nothing parametrizes zero tests and reports green.
+
+`internal/pdftext` exists so `render` and `worker` share one PDF text extractor.
+Two copies of a **fail-open** helper is how one quietly stops working, and an
+extractor that reads nothing makes every `contains` assertion pass.
+
+#### Three more, each verified
+
+- **Level projection ignored crypto assets and AI models** — the third and
+  fourth entity kinds it has had to account for. ⚠ Fixed with a *statement*, not
+  an invented projection: neither has a depth, and filtering them on a rule this
+  product made up, in a compliance document, is worse than rendering all of them
+  and saying why.
+- **The XLSX `truncated` flag was hardcoded `false`** while `writerNote` counted
+  and reported cell truncations. `report.reports.truncated` is what a client
+  filters on, so a row could say data was cut and answer "nothing was truncated"
+  to the only question asked programmatically.
+- **`GenerateFlow` threw "HBOM is imported, not scanned, so this flow cannot
+  produce a BOM for it"** at real users. The guard added in session (a) caught
+  the wizard's wording and missed this one, because it listed two exact
+  sentences. It now matches the *shape* of the denial. The message was also
+  wrong about the cause: a `manual` project has no source for **any** family.
+
+#### `render/csv.go`
+
+Left in place, with its status recorded rather than left ambiguous: it is not a
+shipped format (`parseFormat` rejects `csv`, and a test asserts the rejection),
+and it exists because the formula-injection contract it proves is real and
+shared with the XLSX writer. Wiring it is a product decision; deleting it means
+deleting invariant 8's sharpest test. What must not happen is it staying
+ambiguous — well-written code wired to nothing reads as a feature to a reviewer
+and as coverage to a maintainer.
+
+#### Verification
+
+`task verify` **exits 0**. `pytest libs/py-shared workers` green;
+`pytest tools/conformance` 9 passed (4 CycloneDX + 4 SPDX + the not-empty
+guard); frontend 127 tests, `tsc`/`eslint`/`prettier` clean; `docs lint` 253
+refs. Both new guards mutation-verified.
+
+#### Owed, unchanged
+
+- ⚠ `NVD_API_KEY` is set in no environment — element 24 still reports
+  `not-attempted`.
+- Five `normalize` tables still have no writer: `component_provenance`,
+  `component_candidate_identities`, `raw_findings`, `licenses`, `license_refs`.
+  The first two have **live readers**, so the "where did this component come
+  from?" panel returns empty for every component, with the error swallowed by a
+  `//nolint:nilerr`. **Track A6, not started.**
+- Ecosystem coverage (**A7**) not started: the database holds npm, golang, pypi
+  and github only; the golden corpus has nothing for gem, cargo, nuget, deb,
+  rpm, apk, conan or swift.
+- `mock-engine`, `cbomkit` and `aibom-generator` are dispatchable with no
+  adapter and leave a permanent `skipped` row.
 
 ### 2026-09-05 (a) — Milestone 1 of a new 6-milestone plan: the defect sweep, and a P0 in which every QBOM report had always failed
 

@@ -2,10 +2,8 @@ package render
 
 import (
 	"bytes"
-	"compress/zlib"
 	"go/parser"
 	"go/token"
-	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -16,6 +14,7 @@ import (
 
 	"github.com/axebom/axebom/libs/go-shared/model"
 	"github.com/axebom/axebom/libs/go-shared/platform/errs"
+	"github.com/axebom/axebom/services/report/internal/pdftext"
 )
 
 // TestThePDFRendererCannotReachTheNetwork.
@@ -484,87 +483,20 @@ func testCP1252Translator(t *testing.T) func(string) string {
 //
 // ⚠ THE STREAMS ARE zlib-COMPRESSED, so a plain byte scan finds nothing — and
 // finds it silently. The first version of this returned an empty string and
-// every "is section X present" assertion passed vacuously. The Fatalf at the
-// bottom exists so that cannot happen again quietly.
+// every "is section X present" assertion passed vacuously. The Fatalf below
+// exists so that cannot happen again quietly.
 //
-// A full PDF parser would be a dependency added purely to read our own output.
-// This inflates each stream and pulls out the `(literal)` operands, which is
-// all fpdf writes for a text-only document.
+// The extractor itself moved to internal/pdftext so the (format × BOM type)
+// matrix test in `worker` can use the same one. Two copies of a fail-open
+// helper is how one of them quietly stops working.
 func extractPDFText(t *testing.T, data []byte) string {
 	t.Helper()
 
-	var sb strings.Builder
-	rest := data
-	for {
-		i := bytes.Index(rest, []byte("stream"))
-		if i < 0 {
-			break
-		}
-		body := bytes.TrimLeft(rest[i+len("stream"):], "\r\n")
-		j := bytes.Index(body, []byte("endstream"))
-		if j < 0 {
-			break
-		}
-		sb.WriteString(pdfLiterals(inflate(body[:j])))
-		// ⚠ Advance past the WHOLE keyword. Leaving `rest` pointing at
-		// `endstream` makes the next search match the `stream` inside it, so the
-		// following block starts mid-object, fails to inflate, and is scanned as
-		// raw compressed bytes — which yields garbage rather than an error, and
-		// silently drops every page after the first.
-		rest = body[j+len("endstream"):]
-	}
-
-	// Uncompressed literals too, for metadata strings outside content streams.
-	sb.WriteString(pdfLiterals(data))
-
-	text := sb.String()
+	text := pdftext.Extract(data)
 	if strings.TrimSpace(text) == "" {
 		t.Fatalf("no text could be read out of the %d-byte PDF. The extractor "+
 			"needs updating before any assertion using it means anything — an "+
 			"empty result makes every `contains` check pass.", len(data))
 	}
 	return text
-}
-
-// inflate zlib-decompresses a stream, returning it unchanged if it is not
-// compressed.
-func inflate(stream []byte) []byte {
-	zr, err := zlib.NewReader(bytes.NewReader(stream))
-	if err != nil {
-		return stream
-	}
-	defer func() { _ = zr.Close() }()
-	out, err := io.ReadAll(zr)
-	if err != nil {
-		return stream
-	}
-	return out
-}
-
-// pdfLiterals extracts PDF string literals — `(text)` — from a byte range.
-func pdfLiterals(data []byte) string {
-	var sb strings.Builder
-	for i := 0; i < len(data); i++ {
-		if data[i] != '(' {
-			continue
-		}
-		j := i + 1
-		var lit []byte
-		for j < len(data) {
-			if data[j] == '\\' && j+1 < len(data) {
-				lit = append(lit, data[j+1])
-				j += 2
-				continue
-			}
-			if data[j] == ')' {
-				break
-			}
-			lit = append(lit, data[j])
-			j++
-		}
-		sb.Write(lit)
-		sb.WriteByte('\n')
-		i = j
-	}
-	return sb.String()
 }

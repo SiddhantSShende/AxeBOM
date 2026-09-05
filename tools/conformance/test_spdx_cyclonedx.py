@@ -44,17 +44,40 @@ spdx_parser = pytest.importorskip(
 spdx_validator = pytest.importorskip("spdx_tools.spdx.validation.document_validator")
 
 
-def test_the_cyclonedx_golden_fixture_validates_against_the_official_schema():
+#: Every committed document, discovered rather than listed.
+#:
+#: ⚠ THIS USED TO NAME TWO FILES, AND BOTH WERE SOFTWARE BOMs. The CBOM, AIBOM
+#: and QBOM exports did not exist at all — SPDX and CycloneDX emitted a valid,
+#: EMPTY document for those three types — and when they were built, a
+#: hand-listed set here would have been the second place to forget them. A glob
+#: cannot be forgotten; a list can.
+CDX_GOLDENS = sorted(GOLDEN_DIR.glob("*.cdx.json"))
+SPDX_GOLDENS = sorted(GOLDEN_DIR.glob("*.spdx.json"))
+
+
+def test_the_golden_directory_is_not_empty():
+    """⚠ A GLOB THAT MATCHES NOTHING PARAMETRIZES ZERO TESTS AND REPORTS GREEN.
+
+    Every assertion below would silently stop running if the directory moved or
+    the naming changed, and the suite would keep passing. This is the check that
+    the checks are running.
+    """
+    assert len(CDX_GOLDENS) >= 4, f"only {len(CDX_GOLDENS)} CycloneDX goldens found"
+    assert len(SPDX_GOLDENS) >= 4, f"only {len(SPDX_GOLDENS)} SPDX goldens found"
+
+
+@pytest.mark.parametrize("path", CDX_GOLDENS, ids=lambda p: p.name)
+def test_the_cyclonedx_golden_fixture_validates_against_the_official_schema(path):
     validator = cyclonedx_validation.JsonStrictValidator(cyclonedx_schema.SchemaVersion.V1_6)
-    document = (GOLDEN_DIR / "fixture.cdx.json").read_text()
 
-    result = validator.validate_str(document)
+    result = validator.validate_str(path.read_text())
 
-    assert result is None, f"CycloneDX 1.6 schema violations:\n{result}"
+    assert result is None, f"{path.name}: CycloneDX 1.6 schema violations:\n{result}"
 
 
-def test_the_spdx_golden_fixture_validates_against_the_official_spec():
-    document = spdx_parser.parse_file(str(GOLDEN_DIR / "fixture.spdx.json"))
+@pytest.mark.parametrize("path", SPDX_GOLDENS, ids=lambda p: p.name)
+def test_the_spdx_golden_fixture_validates_against_the_official_spec(path):
+    document = spdx_parser.parse_file(str(path))
     errors = spdx_validator.validate_full_spdx_document(document)
 
-    assert not errors, "\n".join(str(e) for e in errors)
+    assert not errors, f"{path.name}:\n" + "\n".join(str(e) for e in errors)

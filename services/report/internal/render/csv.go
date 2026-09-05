@@ -1,3 +1,28 @@
+// CSV is NOT a format this product ships, and that is a decision rather than an
+// oversight.
+//
+// ⚠ `service.parseFormat` DELIBERATELY REJECTS "csv" — see its own test, which
+// asserts the rejection. There is no `csv` case in `worker.renderArtifact`, no
+// media type, no storage extension, and no entry in the frontend's Format
+// union. Nothing in the product can produce one of these files.
+//
+// So why is the writer here? Because the formula-injection contract it proves
+// is REAL and shared. `cell()` is what escapes a leading `=`/`+`/`-`/`@`, both
+// this writer and the XLSX writer call it, and CSV is the sharper half of the
+// problem — a `.xlsx` cell carries an explicit type, a CSV field carries
+// nothing, so whatever opens it decides. The tests in xlsx_test.go exercise
+// that path through this writer because it is the one with no type system to
+// hide behind.
+//
+// ⚠ IF YOU ARE HERE TO WIRE IT UP: that is a product decision, not a cleanup.
+// It needs parseFormat, renderArtifact, mediaType, StorageKey, the frontend
+// union, and an answer to "one file per sheet, so which sheet?" — a report is a
+// workbook and CSV is one table. If you are here to delete it, delete the
+// escaping tests' subject too, and be sure the XLSX-only versions still prove
+// invariant 8.
+//
+// What must not happen is it staying ambiguous. Well-written code wired to
+// nothing reads as a feature to a reviewer and as coverage to a maintainer.
 package render
 
 import (

@@ -430,7 +430,15 @@ func (w *Worker) renderArtifact(r store.Report, bom render.BOM) ([]byte, bool, s
 		// counted and carried into the report's note. A workbook that quietly
 		// rewrote its own contents is one nobody can reconcile against the
 		// database.
-		return buf.Bytes(), false, writerNote(result), nil
+		//
+		// ⚠ THE FLAG USED TO BE HARDCODED `false` WHILE THE NOTE SAID DATA WAS
+		// CUT. `report.reports.truncated` is what a client filters on, so a row
+		// could carry "N value(s) exceeded a spreadsheet cell's limit and were
+		// cut" and still answer "nothing was truncated" to the only question
+		// anybody asks programmatically. The file was honest; the database was
+		// not.
+		cellsCut := result.Total(func(s render.SheetResult) int { return s.Truncated })
+		return buf.Bytes(), cellsCut > 0, writerNote(result), nil
 
 	case "spdx", "cyclonedx":
 		doc, err := w.standardDocument(r, bom)
@@ -594,7 +602,217 @@ func toExportDocument(b render.BOM) export.Document {
 	}
 
 	appendHardware(&doc, b)
+	appendAIModels(&doc, b)
+	// ⚠ THE DEVICE FIRST, BECAUSE IT IS THE PARENT OF THE CRYPTO IT CARRIES.
+	// A QBOM's assets hang off its device; a CBOM's hang off a declared project
+	// subject. Same components, different parent, and the order is what makes
+	// the edges resolvable.
+	appendQuantumDevice(&doc, b)
+	if b.BOMType == model.BOMTypeCBOM && len(b.CryptoAssets) > 0 {
+		appendCryptoAssets(&doc, b, subjectKey(&doc, b))
+	}
 	return doc
+}
+
+// appendCryptoAssets, appendAIModels and appendQuantumDevice map the three
+// inventories that had no export path at all.
+//
+// ⚠ BEFORE THESE, SPDX AND CYCLONEDX EMITTED A VALID, EMPTY DOCUMENT FOR A
+// CBOM, AN AIBOM AND A QBOM — SIX DOWNLOADABLE ARTIFACTS THAT SAID NOTHING.
+//
+// `toExportDocument` read `b.Components`, which the Python canonical builders
+// never populate for those types (workers/cbom/normalize/pipeline.py writes
+// `crypto_assets`, workers/aibom writes `ai_models`, and a QBOM's document holds
+// one `quantum_components` row). So `loadComponents` correctly returned zero
+// rows, the loop above produced zero components, and `Serialize` returned a
+// document whose `packages`/`components` array was empty. It validated. The UI
+// offered both formats for every BOM type, so this was reachable, and the
+// failure mode is the worst kind: a customer hands an auditor a conformant file
+// that asserts their project contains nothing.
+//
+// This is the identical bug `appendHardware` above was written to fix, and its
+// own comment describes — fixed for HBOM only, and left live for the other
+// three for as long as no test rendered a populated fixture in every format.
+
+// subjectKey adds the component the document DESCRIBES, and returns its key.
+//
+// ⚠ CycloneDX AND SPDX BOTH REFUSE A ROOTLESS DOCUMENT — protobom fails with
+// "no root nodes found" — so something has to be the subject. For an SBOM it is
+// the root package; for an HBOM it is the device. A CBOM and an AIBOM have no
+// natural one: an algorithm is not what the BOM is about, it is what the BOM
+// contains.
+//
+// Declaring each asset a root instead LOOKS fine and is wrong in a way that
+// only shows up sometimes: with several assets protobom emits a headless
+// document (correct), and with exactly ONE it hoists that asset into
+// `metadata.component` — publishing that the thing this BOM describes is
+// RSA-2048. A project with one crypto asset is perfectly ordinary.
+//
+// So the subject is stated explicitly: the project, which is what the document
+// is actually about, and which we already carry.
+func subjectKey(doc *export.Document, b render.BOM) string {
+	const key = "subject"
+	name := b.ProjectName
+	if name == "" {
+		name = "project"
+	}
+	doc.Components = append(doc.Components, export.Component{
+		Key: key, Name: name, PrimaryPurpose: "application",
+		Properties: []export.Property{
+			{Name: "axebom:bom_type", Value: string(b.BOMType)},
+		},
+	})
+	doc.Roots = append(doc.Roots, key)
+	return key
+}
+
+// appendCryptoAssets emits the crypto inventory beneath a caller-chosen parent.
+//
+// ⚠ THE PARENT IS AN ARGUMENT BECAUSE IT DIFFERS BY BOM TYPE. A CBOM's assets
+// are contained by the project; a QBOM's are contained by the device they were
+// assessed for. Hardcoding either would produce a document asserting the wrong
+// containment for the other.
+func appendCryptoAssets(doc *export.Document, b render.BOM, parent string) {
+	for _, a := range b.CryptoAssets {
+		doc.Components = append(doc.Components, export.Component{
+			Key:  cryptoKey(a),
+			Name: a.Name,
+			// See export.purposeFor: CycloneDX's own `cryptographic-asset` type
+			// cannot be emitted by protobom, so this serializes as `data` and
+			// the real type travels as `certin:crypto:asset_type`.
+			PrimaryPurpose: "cryptographic-asset",
+			Properties:     cryptoProperties(a),
+		})
+		doc.Dependencies = append(doc.Dependencies, export.Dependency{
+			From: parent, To: cryptoKey(a), Kind: export.KindContains,
+		})
+	}
+}
+
+// cryptoKey is the export identity of one crypto asset.
+//
+// ⚠ ASSET TYPE PLUS NAME, NOT NAME ALONE. Table 9 is type-discriminated: a
+// protocol and a certificate can legitimately share a name, and collapsing them
+// would understate the inventory in exactly the way CLAUDE.md invariant 5
+// exists to prevent.
+func cryptoKey(a render.CryptoAsset) string {
+	return "crypto/" + a.AssetType + "/" + a.Name
+}
+
+func cryptoProperties(a render.CryptoAsset) []export.Property {
+	props := []export.Property{{Name: "certin:crypto:asset_type", Value: a.AssetType}}
+	add := func(name, value string) {
+		if value != "" {
+			props = append(props, export.Property{Name: name, Value: value})
+		}
+	}
+	add("certin:crypto:component_key", a.ComponentKey)
+	add("certin:crypto:algorithm_family", a.QuantumFamily)
+	add("certin:crypto:deprecation_status", a.DeprecationStatus)
+	add("certin:crypto:oid", a.OID)
+	add("certin:crypto:cert_subject", a.CertSubject)
+	add("certin:crypto:cert_issuer", a.CertIssuer)
+	add("axebom:qbom:readiness_group", a.QuantumReadinessGroup)
+	add("axebom:qbom:pqc_recommendation", a.PQCRecommendation)
+	if a.QuantumVulnerable {
+		add("axebom:qbom:quantum_vulnerable", "true")
+	}
+	return props
+}
+
+func appendAIModels(doc *export.Document, b render.BOM) {
+	if len(b.AIModels) == 0 {
+		return
+	}
+	subject := subjectKey(doc, b)
+
+	for _, m := range b.AIModels {
+		key := "ai-model/" + m.Name
+		props := []export.Property{}
+		// ⚠ FROM THE PROFILE, NOT A HAND-LISTED SET. Table 10's elements live in
+		// m.Fields keyed by profile-field id, so a CERT-In revision changes the
+		// YAML and this follows — no element list is written here (invariant 2).
+		for id, v := range m.Fields {
+			if v != "" {
+				props = append(props, export.Property{Name: "certin:aibom:" + id, Value: v})
+			}
+		}
+		if m.RiskScore != nil {
+			// Namespaced apart, because it is explicitly NOT a CERT-In element
+			// and is excluded from both coverage numbers — see render/aibom.go.
+			props = append(props, export.Property{
+				Name: "axebom:aibom:risk_score", Value: strconv.FormatFloat(*m.RiskScore, 'f', 2, 64),
+			})
+		}
+		if len(m.OwaspLLMTop10) > 0 {
+			props = append(props, export.Property{
+				Name: "axebom:aibom:owasp_llm_top10", Value: strings.Join(m.OwaspLLMTop10, ", "),
+			})
+		}
+
+		doc.Components = append(doc.Components, export.Component{
+			Key: key, Name: m.Name, PrimaryPurpose: "machine-learning-model",
+			Properties: props,
+		})
+		doc.Dependencies = append(doc.Dependencies, export.Dependency{
+			From: subject, To: key, Kind: export.KindContains,
+		})
+
+		for _, d := range m.Datasets {
+			dk := key + "/dataset/" + d.Name
+			doc.Components = append(doc.Components, export.Component{
+				Key: dk, Name: d.Name, VersionRaw: d.Version,
+				PrimaryPurpose: "data",
+				Properties: []export.Property{
+					{Name: "certin:aibom:dataset_source", Value: d.Source},
+					{Name: "certin:aibom:dataset_license", Value: d.License},
+				},
+			})
+			// A dataset is part OF the model, not a runtime dependency of it.
+			doc.Dependencies = append(doc.Dependencies, export.Dependency{
+				From: key, To: dk, Kind: export.KindContains,
+			})
+		}
+	}
+}
+
+func appendQuantumDevice(doc *export.Document, b render.BOM) {
+	d := b.QuantumDevice
+	if d == nil {
+		return
+	}
+	const key = "qbom/device"
+	props := []export.Property{}
+	add := func(name, value string) {
+		if value != "" {
+			props = append(props, export.Property{Name: name, Value: value})
+		}
+	}
+	add("certin:qbom:license_information", d.LicenseInfo)
+	add("certin:qbom:communication_protocol", d.CommunicationProtocol)
+	add("certin:qbom:hardware", d.Hardware)
+	add("certin:qbom:environmental_impact", d.EnvironmentalImpact)
+	add("certin:qbom:attestations", d.AttestationSignature)
+	if len(d.SoftwareDependencies) > 0 {
+		add("certin:qbom:software_dependencies", strings.Join(d.SoftwareDependencies, ", "))
+	}
+	// ⚠ NAMES THE LENDING DOCUMENT. A QBOM's crypto assets are the project's
+	// CBOM, re-grouped — an exported file with no provenance would read as this
+	// document's own discovery.
+	if b.CryptoAssetsFrom.Present() {
+		add("axebom:qbom:crypto_assets_from", b.CryptoAssetsFrom.DocumentID)
+		add("axebom:qbom:crypto_assets_generated_at", b.CryptoAssetsFrom.GeneratedAt)
+	}
+
+	doc.Components = append(doc.Components, export.Component{
+		Key: key, Name: d.ModelName, VersionRaw: d.Version,
+		Manufacturer: d.VendorOrigin, PrimaryPurpose: "device", Properties: props,
+	})
+	doc.Roots = append(doc.Roots, key)
+
+	// The device contains the cryptography assessed for it — and those assets
+	// have to be emitted as components too, or the edges point at nothing.
+	appendCryptoAssets(doc, b, key)
 }
 
 // appendHardware maps the hardware tree into the export document.

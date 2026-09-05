@@ -126,6 +126,16 @@ func WritePDF(w io.Writer, b BOM, opts PDFOptions) (PDFResult, error) {
 	r.engineCoveragePage()
 	r.practicesPage()
 
+	// ⚠ QBOM MUST NOT REACH componentPages(), AND IT USED TO.
+	//
+	// Sheets() states the rule and honours it: for a QBOM only componentSheet is
+	// replaced, "because Table 8 describes one piece of hardware, not a
+	// dependency tree, and componentSheet's identity columns do not mean
+	// anything for it". This switch had no QBOM case, so it fell to `default`
+	// and rendered a Components table with a header and zero rows — which
+	// bom.go:307 says in as many words reads as "the scan found nothing"
+	// rather than "this format does not apply here". The device page below then
+	// appeared underneath that phantom empty table.
 	switch b.BOMType {
 	case model.BOMTypeCBOM:
 		r.cryptoInventoryPage()
@@ -133,6 +143,8 @@ func WritePDF(w io.Writer, b BOM, opts PDFOptions) (PDFResult, error) {
 		r.aibomInventoryPage()
 	case model.BOMTypeHBOM:
 		r.hardwareInventoryPage()
+	case model.BOMTypeQBOM:
+		// quantumPage below is this type's inventory. Nothing else to render.
 	default:
 		r.componentPages()
 	}

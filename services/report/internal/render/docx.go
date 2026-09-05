@@ -89,19 +89,33 @@ func WriteDOCX(w io.Writer, b BOM, opts DOCXOptions) (DOCXResult, error) {
 	docxEngineCoveragePage(&doc, b)
 	docxPracticesPage(&doc, b)
 
+	// ⚠ SAME QBOM FALL-THROUGH THE PDF HAD. See pdf.go's comment on this switch:
+	// a QBOM landed in `default` and rendered an empty Components table that
+	// reads as "nothing was found".
 	switch b.BOMType {
 	case model.BOMTypeCBOM:
 		docxCryptoAssets(&doc, b.CryptoAssets, cap, &result)
 	case model.BOMTypeAIBOM:
-		docxAIModels(&doc, b.AIModels, cap, &result)
+		docxAIModels(&doc, b.AIModels, fields, cap, &result)
 	case model.BOMTypeHBOM:
 		docxHardware(&doc, b.Hardware, cap, &result)
+	case model.BOMTypeQBOM:
+		// docxQuantumDevice below is this type's inventory.
 	default:
 		docxComponents(&doc, b.Components, cap, &result)
 	}
 
-	if b.BOMType == model.BOMTypeQBOM && b.QuantumDevice != nil {
-		docxQuantumDevice(&doc, b.QuantumDevice)
+	// ⚠ NO `&& b.QuantumDevice != nil` GUARD — THAT WAS AN INVARIANT-3 BREACH.
+	//
+	// A project classified QBOM before anybody filled in the device form has
+	// genuinely recorded nothing, and invariant 3 says an unknown is reported
+	// explicitly, never omitted, because omission hides the gap. The PDF
+	// (qbom.go:274) and the XLSX (qbom.go:97) both render every element as
+	// `not-provided` with a stated reason. This renderer alone dropped the
+	// entire section, so the Word document was the one artifact where a missing
+	// device looked like a BOM type with no device concept at all.
+	if b.BOMType == model.BOMTypeQBOM {
+		docxQuantumDevice(&doc, b.QuantumDevice, b.CryptoAssets, QBOMCryptoSourceNote(b))
 	}
 
 	docxFindings(&doc, b.Findings, cap, &result)
@@ -164,8 +178,21 @@ func docxCoveragePage(doc *docxBuilder, b BOM, fields []model.ProfileField) {
 	doc.note(weightsNote)
 
 	// ⚠ CBOM HAS NO SINGLE FIELD SET (FieldsFor's own doc comment) — Table 9
-	// discriminates by asset type, so there is no flat breakdown to render
-	// here; docxCryptoAssets below is CBOM's own coverage-relevant detail.
+	// discriminates by asset type, so there is no FLAT breakdown to render.
+	//
+	// This used to `return` here, which left the Word document with two coverage
+	// percentages and nothing behind them — the one artifact where a reader
+	// could not see which fields those numbers came from. The XLSX has always
+	// had the per-asset-type sheet; it just was not shared.
+	if b.BOMType == model.BOMTypeCBOM {
+		doc.heading(3, "Per-field breakdown, by asset type")
+		doc.note("Table 9 defines four different field sets. Each asset type is " +
+			"scored against its own, because scoring a certificate against a " +
+			"key's fields reports a gap that is not there.")
+		rows := [][]string{CryptoFieldCoverageHeader}
+		doc.table(append(rows, CryptoFieldCoverageRows(b)...))
+		return
+	}
 	if len(fields) == 0 {
 		return
 	}
@@ -287,8 +314,30 @@ func docxCryptoAssets(doc *docxBuilder, assets []CryptoAsset, cap int, result *D
 	doc.table(rows)
 }
 
-func docxAIModels(doc *docxBuilder, models []AIModel, cap int, result *DOCXResult) {
+// docxAIModels renders CERT-In Table 10, then the two AxeBOM extensions.
+//
+// ⚠ IT USED TO RENDER ONLY THE EXTENSIONS. Every one of Table 10's elements
+// lives in m.Fields, and this function never touched that map — so the Word
+// version of an AIBOM carried exactly two values, and both were the ones
+// aibom.go:31 explicitly labels as NOT CERT-In fields, derived from a third
+// party's heuristics and excluded from both coverage numbers.
+//
+// A compliance artifact containing only the two things that do not count
+// towards compliance is worse than an empty one: it looks complete.
+//
+// Fields come from the profile, like the XLSX's inventory sheet — no element
+// list is written here, so a CERT-In revision changes the YAML and this
+// follows (invariant 2).
+func docxAIModels(doc *docxBuilder, models []AIModel, fields []model.ProfileField,
+	cap int, result *DOCXResult,
+) {
 	doc.heading(2, "AI models")
+	if len(models) == 0 {
+		// ⚠ SAID EXPLICITLY. Without this the heading stood alone and read as a
+		// rendering failure rather than an empty inventory.
+		doc.body("No AI models were recorded for this project.")
+		return
+	}
 	n := len(models)
 	if n > cap {
 		n = cap
@@ -296,10 +345,19 @@ func docxAIModels(doc *docxBuilder, models []AIModel, cap int, result *DOCXResul
 	}
 	for _, m := range models[:n] {
 		doc.heading(3, m.Name)
-		if m.RiskScore != nil {
-			doc.body(fmt.Sprintf("Risk score: %.2f", *m.RiskScore))
+
+		rows := [][]string{{"Element", "Value"}}
+		for _, f := range fields {
+			// Explicit, never blank — the same rule componentSheet applies: a
+			// blank cell reads as "we did not look".
+			rows = append(rows, []string{f.Name, orNotProvided(m.Fields[f.ID])})
 		}
-		doc.body("OWASP LLM Top 10: " + joinList(m.OwaspLLMTop10))
+		doc.table(rows)
+
+		if m.RiskScore != nil {
+			doc.body(fmt.Sprintf("Risk score (AxeBOM extension): %.2f", *m.RiskScore))
+		}
+		doc.body("OWASP LLM Top 10 (AxeBOM extension): " + joinList(m.OwaspLLMTop10))
 		if len(m.Datasets) > 0 {
 			rows := [][]string{{"Dataset", "Version", "License", "Source"}}
 			for _, d := range m.Datasets {
@@ -329,16 +387,44 @@ func docxHardware(doc *docxBuilder, tree []HardwareComponent, cap int, result *D
 	doc.table(rows)
 }
 
-func docxQuantumDevice(doc *docxBuilder, d *QuantumDevice) {
+// docxQuantumDevice renders Table 8 plus the readiness view a QBOM exists for.
+//
+// ⚠ IT USED TO HARDCODE SIX ELEMENTS AND TAKE ONLY THE DEVICE. Table 8 has
+// eleven, and `d == nil` is a legitimate state, so the Word document rendered
+// roughly half a QBOM on a good day and none of it on an ordinary one. Both
+// problems are fixed by not owning a field list here: QuantumDeviceRows is the
+// same profile-driven builder the XLSX uses, so the two cannot disagree.
+//
+// The readiness table is included because it is the *point* of a QBOM — the
+// device metadata is context for it. Without it the Word artifact carried the
+// least useful half.
+func docxQuantumDevice(doc *docxBuilder, d *QuantumDevice, assets []CryptoAsset, sourceNote string) {
 	doc.heading(2, "Quantum device")
-	doc.keyValues([][2]string{
-		{"Model", orNotProvided(d.ModelName)},
-		{"Version", orNotProvided(d.Version)},
-		{"Vendor / origin", orNotProvided(d.VendorOrigin)},
-		{"Communication protocol", orNotProvided(d.CommunicationProtocol)},
-		{"Hardware", orNotProvided(d.Hardware)},
-		{"Environmental impact", orNotProvided(d.EnvironmentalImpact)},
-	})
+	rows := [][]string{{"Element", "Value"}}
+	rows = append(rows, QuantumDeviceRows(d)...)
+	doc.table(rows)
+
+	doc.heading(2, "Quantum readiness")
+	if sourceNote != "" {
+		doc.body(sourceNote)
+	}
+
+	vulnerable, postQuantum, grover, unassessed := groupByReadiness(assets)
+	doc.body(readinessNote(len(vulnerable), len(postQuantum), len(grover), len(unassessed)))
+
+	readiness := [][]string{{"Bucket", "Asset", "Detail"}}
+	for _, g := range []struct {
+		label  string
+		assets []CryptoAsset
+	}{
+		{"Vulnerable to Shor's algorithm — migration required", vulnerable},
+		{"Already post-quantum (NIST PQC family in use)", postQuantum},
+		{"Symmetric, Grover note only — a sizing observation, NOT a vulnerability", grover},
+		{"Unassessed — matched no quantum rule", unassessed},
+	} {
+		readiness = append(readiness, readinessGroupRows(g.label, g.assets)...)
+	}
+	doc.table(readiness)
 }
 
 func docxFindings(doc *docxBuilder, findings []Finding, cap int, result *DOCXResult) {

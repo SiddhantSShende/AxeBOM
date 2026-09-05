@@ -87,9 +87,36 @@ type BOM struct {
 	// meaningless zero values, not "0%", and a caller persisting them (the
 	// worker, into report.reports) must store an absence, not a number.
 	CoverageComputed bool
+	// CryptoAssetsFrom names the OTHER document a QBOM's crypto assets were
+	// read from, and when that document was generated.
+	//
+	// ⚠ EMPTY FOR A CBOM, WHERE THE ASSETS ARE THE DOCUMENT'S OWN. It is set
+	// only when this report is displaying somebody else's inventory, which is
+	// exactly the case a reader must be told about: a QBOM's readiness view
+	// groups the CBOM's assets rather than discovering any of its own, so the
+	// figures are only as current as that CBOM. Undated, they would read as a
+	// statement about today.
+	CryptoAssetsFrom CryptoAssetSource
 	// Notes are methodology footnotes rendered verbatim.
 	Notes []string
 }
+
+// CryptoAssetSource records which document a borrowed crypto inventory came
+// from. Zero value means "not borrowed".
+type CryptoAssetSource struct {
+	// BOMType is the type of the lending document — "CBOM" in every case that
+	// exists today, named rather than assumed.
+	BOMType string
+	// DocumentID is the normalize.bom_documents id, so a reader can tie a
+	// readiness figure to an exact artifact.
+	DocumentID string
+	// GeneratedAt is that document's own generation time, RFC3339 with a
+	// literal Z. Never the render's time.
+	GeneratedAt string
+}
+
+// Present reports whether a borrowed inventory was actually resolved.
+func (s CryptoAssetSource) Present() bool { return s.DocumentID != "" }
 
 // Component is one row of the components sheet.
 type Component struct {
@@ -237,7 +264,11 @@ func TypeNotes(b BOM) []string {
 	case model.BOMTypeCBOM:
 		return []string{CBOMTypeDiscriminationNote}
 	case model.BOMTypeQBOM:
-		return []string{QBOMFormDisclosure}
+		// ⚠ TWO NOTES, AND THE SECOND ONE IS LOAD-BEARING. The disclosure says
+		// the device metadata comes from a form; the source note says whose
+		// crypto inventory the readiness table is showing. A QBOM is the one
+		// report that renders another document's data as its own.
+		return []string{QBOMFormDisclosure, QBOMCryptoSourceNote(b)}
 	case model.BOMTypeAIBOM:
 		return []string{AIBOMExtensionsNote}
 	case model.BOMTypeHBOM:

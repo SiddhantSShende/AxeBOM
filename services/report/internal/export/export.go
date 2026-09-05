@@ -624,6 +624,35 @@ func purposeFor(name string) (sbom.Purpose, bool) {
 		return sbom.Purpose_DEVICE, true
 	case "firmware":
 		return sbom.Purpose_FIRMWARE, true
+	case "application":
+		// The component a CBOM or AIBOM DESCRIBES — the project itself. See
+		// worker.subjectKey for why one has to be declared.
+		return sbom.Purpose_APPLICATION, true
+	case "machine-learning-model":
+		// CycloneDX `machine-learning-model`; SPDX has no equivalent purpose,
+		// so an SPDX package carries the Table 10 elements as properties and
+		// nothing else claims to type it.
+		return sbom.Purpose_MACHINE_LEARNING_MODEL, true
+	case "data":
+		// A training or evaluation dataset. Distinct from the model itself, and
+		// CycloneDX has the type for it.
+		return sbom.Purpose_DATA, true
+	case "cryptographic-asset":
+		// ⚠ THE CLOSEST HONEST ANSWER, NOT THE RIGHT ONE, AND THE DIFFERENCE IS
+		// RECORDED RATHER THAN HIDDEN.
+		//
+		// CycloneDX 1.6 has a `cryptographic-asset` component type and it is
+		// exactly what a CBOM contains. protobom v0.5.8's Purpose enum has no
+		// member for it and its writer's switch has no branch that emits it, so
+		// there is no way to ask for one.
+		//
+		// Leaving the purpose unset is worse than choosing: protobom then falls
+		// back to `application`, publishing that an RSA key is a runnable
+		// program. Purpose_OTHER serializes as CycloneDX `data`, which is at
+		// least true of a key or a certificate and is not an assertion about
+		// executability. The real type always travels as
+		// `certin:crypto:asset_type`, and docs/LIMITATIONS.md records the gap.
+		return sbom.Purpose_OTHER, true
 	case "":
 		return sbom.Purpose_UNKNOWN_PURPOSE, false
 	default:

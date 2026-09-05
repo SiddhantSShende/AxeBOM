@@ -96,6 +96,15 @@ describe('the honest label', () => {
   ];
   const negations = /\b(not|no|never|cannot|is a lie|rather than)\b/i;
 
+  // Denials: claims that HBOM cannot be scanned, which hbom-ecad made false.
+  const DENIALS = [
+    /there is no HBOM scanner/i,
+    /no scanner produces it/i,
+    /HBOM is (imported|import), not scanned/i,
+    /hardware is not scannable/i,
+    /cannot (be )?scan(ned)? .{0,20}\bhardware\b/i,
+  ];
+
   const flagged = (text: string) => claims.some((c) => c.test(text)) && !negations.test(text);
 
   it('no exported label or hint claims discovery', () => {
@@ -188,7 +197,13 @@ describe('the honest label', () => {
         // still reads every line, comments included — a docstring asserting
         // that we scan hardware is as false as a rendered one.
         const isComment = /^\s*(\/\/|\/\*|\*|\{\/\*)/.test(line);
-        if (!isComment && /there is no HBOM scanner|no scanner produces it/i.test(line)) {
+        // ⚠ A HAND-LISTED SET OF SENTENCES KEEPS MISSING THE NEXT ONE. The
+        // first version of this caught the registration wizard's "there is no
+        // HBOM scanner" and missed GenerateFlow's "HBOM is imported, not
+        // scanned", which was thrown at users for just as long. So the pattern
+        // is the SHAPE of the denial — HBOM plus a phrase asserting it is not
+        // scannable — rather than two exact strings.
+        if (!isComment && DENIALS.some((d) => d.test(line))) {
           denials.push(`${path.relative(root, file)}:${i + 1}: ${line.trim()}`);
         }
       });

@@ -141,6 +141,36 @@ func CBOMSheets(b BOM) []Sheet {
 // second implementation of the same rule, and the two would disagree the
 // first time one changed.
 func cryptoFieldCoverageSheet(b BOM) Sheet {
+	return Sheet{
+		Name: "Crypto Field Coverage",
+		Header: []string{
+			"Asset Type", "Field ID", "Field", "Weight",
+			"Substantive", "Declared (incl. " + model.NotProvided + ")", "Entities",
+			"Source",
+		},
+		Rows:  StaticRows(CryptoFieldCoverageRows(b)),
+		Width: 24,
+	}
+}
+
+// CryptoFieldCoverageHeader is the row every renderer of the breakdown starts
+// with. Exported alongside the rows so the Word document and the workbook
+// cannot label the same numbers differently.
+var CryptoFieldCoverageHeader = []string{
+	"Asset Type", "Field ID", "Field", "Weight",
+	"Substantive", "Declared (incl. " + model.NotProvided + ")", "Entities", "Source",
+}
+
+// CryptoFieldCoverageRows is Table 9's per-asset-type breakdown.
+//
+// ⚠ EXTRACTED BECAUSE THE WORD DOCUMENT HAD NO FIELD COVERAGE AT ALL.
+// docxCoveragePage renders a flat per-field table and returns early when the
+// field list is empty — which it always is for a CBOM, because Table 9 is
+// type-discriminated and FieldsFor deliberately refuses to flatten it
+// (invariant 5). The early return was correct; the missing alternative was not,
+// so a CBOM's Word artifact carried two coverage percentages and no way to see
+// where they came from.
+func CryptoFieldCoverageRows(b BOM) [][]string {
 	byID := make(map[string]FieldCoverage, len(b.Coverage.Fields))
 	for _, fc := range b.Coverage.Fields {
 		byID[fc.FieldID] = fc
@@ -163,16 +193,7 @@ func cryptoFieldCoverageSheet(b BOM) Sheet {
 		}
 	}
 
-	return Sheet{
-		Name: "Crypto Field Coverage",
-		Header: []string{
-			"Asset Type", "Field ID", "Field", "Weight",
-			"Substantive", "Declared (incl. " + model.NotProvided + ")", "Entities",
-			"Source",
-		},
-		Rows:  StaticRows(rows),
-		Width: 24,
-	}
+	return rows
 }
 
 // cryptoInventorySheet renders ONE asset type's assets against ONLY that

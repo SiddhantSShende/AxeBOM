@@ -76,6 +76,9 @@ func (s *Store) LoadBOM(ctx context.Context, r Report) (render.BOM, error) {
 		if err := loadCryptoAssets(ctx, tx, docID, &out); err != nil {
 			return err
 		}
+		if err := loadCompanionCryptoAssets(ctx, tx, r, &out); err != nil {
+			return err
+		}
 		if err := loadHardware(ctx, tx, docID, &out); err != nil {
 			return err
 		}
@@ -887,6 +890,82 @@ func resolveProjectIDForScan(ctx context.Context, tx db.Tx, scanID string) (stri
 	return projectID, nil
 }
 
+// loadCompanionCryptoAssets fills a QBOM's crypto inventory from the project's
+// CBOM, because a QBOM has none of its own and never did.
+//
+// ⚠ WITHOUT THIS, EVERY QBOM REPORT EVER RENDERED SAID "No cryptographic assets
+// were discovered" — IN EVERY FORMAT, REGARDLESS OF WHAT THE CBOM FOUND.
+//
+// A QBOM's document is written by the Table 8 device form
+// (services/project/internal/store/qbom.go) and holds exactly one row: the
+// device. Crypto assets only ever exist under the CBOM document — verified
+// against a live database, where all 214 of them carried bom_type = 'CBOM' and
+// no other type had a single one. `loadCryptoAssets` above is scoped
+// `WHERE bom_document_id = $1`, so for a QBOM it correctly returns nothing, and
+// `quantumReadinessSheet` then rendered its zero-asset branch every time.
+//
+// That branch's own words are what made this so damaging: "No cryptographic
+// assets were discovered … check Engine Coverage for whether a CBOM engine ran
+// at all." It sent the reader to look at the engine, when the engine had run
+// and found plenty.
+//
+// render.BOM's own doc comment has always said CryptoAssets is "READ (never
+// re-discovered) by a QBOM's readiness view". This is the read that was missing.
+//
+// ⚠ IT NEVER OVERWRITES. If the document somehow has its own assets, they win —
+// borrowing is the fallback, not the rule.
+func loadCompanionCryptoAssets(ctx context.Context, tx db.Tx, r Report, out *render.BOM) error {
+	if out.BOMType != model.BOMTypeQBOM || len(out.CryptoAssets) > 0 {
+		return nil
+	}
+
+	projectID, err := resolveProjectIDForScan(ctx, tx, r.ScanID)
+	if err != nil {
+		// No project, no companion. A QBOM with no readiness data is a
+		// legitimate state (nobody has run a CBOM yet); a failed render is not.
+		return nil //nolint:nilerr // absence is a valid outcome, see above
+	}
+
+	var docID, generatedAt string
+	err = tx.QueryRow(ctx, `
+		SELECT id, to_char(generated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+		  FROM normalize.bom_documents
+		 WHERE project_id = $1 AND bom_type = 'CBOM'
+		 ORDER BY generated_at DESC, normalization_version DESC
+		 LIMIT 1`, projectID).Scan(&docID, &generatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// ⚠ A SECOND LOOKUP, BY SCAN, BECAUSE project_id IS ONLY POPULATED FOR
+		// DOCUMENTS THAT NEEDED IT. Migrations 0012 and 0014 backfilled HBOM and
+		// QBOM — the two types whose scan_id literally held a project id. A CBOM
+		// comes from a real scan and keeps project_id NULL, so it is reachable
+		// only through the scans that belong to this project.
+		err = tx.QueryRow(ctx, `
+			SELECT d.id,
+			       to_char(d.generated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+			  FROM normalize.bom_documents d
+			  JOIN scan.scans s ON s.id = d.scan_id
+			 WHERE s.project_id = $1 AND d.bom_type = 'CBOM'
+			 ORDER BY d.generated_at DESC, d.normalization_version DESC
+			 LIMIT 1`, projectID).Scan(&docID, &generatedAt)
+	}
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("resolve companion CBOM document: %w", err)
+	}
+
+	if err := loadCryptoAssets(ctx, tx, docID, out); err != nil {
+		return err
+	}
+	out.CryptoAssetsFrom = render.CryptoAssetSource{
+		BOMType:     "CBOM",
+		DocumentID:  docID,
+		GeneratedAt: generatedAt,
+	}
+	return nil
+}
+
 // loadVEXStatementsForReport reads every VEX statement for a project.
 //
 // ⚠ ERRORS ARE SWALLOWED, DELIBERATELY — mirrors services/project's own
@@ -1080,6 +1159,47 @@ func loadPractices(ctx context.Context, tx db.Tx, scanID string, out *render.BOM
 	return nil
 }
 
+// flatInventoryLevelNote states that a level does not narrow a flat inventory.
+//
+// ⚠ CRYPTO ASSETS AND AI MODELS WERE PROJECTED BY NOTHING, AND THE REPORT SAID
+// NOTHING ABOUT IT. `level.Project` walks software components and
+// `applyLevelToHardware` walks the hardware tree; a CBOM's assets and an
+// AIBOM's models were simply rendered in full under a heading that said
+// "Top-Level", so the level label on those two report types meant nothing at
+// all.
+//
+// ⚠ THE FIX IS A STATEMENT, NOT AN INVENTED PROJECTION. Neither inventory has a
+// depth: Table 9's assets are attached to components when an engine could
+// attribute them and stand alone when it could not, and Table 10's models are a
+// flat list. Filtering them by some derived notion of "top level" would drop
+// rows on a rule this product made up, in a compliance document — far worse
+// than rendering all of them and saying why.
+//
+// This is the third entity kind the level has had to account for. If a fourth
+// arrives, it belongs here or in applyLevelToHardware, never in a new branch of
+// its own — that is how the first two came to disagree.
+func flatInventoryLevelNote(out *render.BOM, l level.Level) string {
+	if l != level.TopLevel {
+		return ""
+	}
+	switch {
+	case len(out.CryptoAssets) > 0 && out.BOMType == model.BOMTypeCBOM:
+		return fmt.Sprintf(
+			"All %d cryptographic asset(s) are listed. A CERT-In §3.1 level "+
+				"narrows a dependency tree by depth, and Table 9's assets have "+
+				"none — so Top-Level does not omit any of them here.",
+			len(out.CryptoAssets))
+	case len(out.AIModels) > 0:
+		return fmt.Sprintf(
+			"All %d AI model(s) are listed. A CERT-In §3.1 level narrows a "+
+				"dependency tree by depth, and Table 10's inventory is flat — so "+
+				"Top-Level does not omit any of them here.",
+			len(out.AIModels))
+	default:
+		return ""
+	}
+}
+
 // applyLevelToHardware narrows the hardware tree the same way.
 //
 // ⚠ WITHOUT THIS, A REPORT LABELLED "Top-Level" RENDERED THE ENTIRE ASSEMBLY.
@@ -1155,6 +1275,7 @@ func applyLevel(out *render.BOM) {
 	// lines down — which is exactly what happened the first time, and the test
 	// caught it. Filtering happens now; the note is appended at the end.
 	hardwareNote := applyLevelToHardware(out, l)
+	flatNote := flatInventoryLevelNote(out, l)
 
 	byKey := make(map[string]render.Component, len(out.Components))
 	projectable := make([]level.Component, 0, len(out.Components))
@@ -1171,6 +1292,7 @@ func applyLevel(out *render.BOM) {
 		// The hardware was still projected above, and its note must not be lost
 		// because the software projection refused a level it does not implement.
 		appendLevelNote(out, hardwareNote)
+		appendLevelNote(out, flatNote)
 		return
 	}
 
@@ -1183,6 +1305,7 @@ func applyLevel(out *render.BOM) {
 	out.Components = kept
 	out.LevelNote = projection.Note
 	appendLevelNote(out, hardwareNote)
+	appendLevelNote(out, flatNote)
 
 	// Findings for components the level dropped go with them; keeping them
 	// would list a vulnerability against a component the report does not

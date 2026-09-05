@@ -152,10 +152,19 @@ export function GenerateFlow() {
       const kind = project ? sourceKindFor(project.source_type) : null;
       if (!kind) {
         throw new Error(
+          // ⚠ THIS USED TO END "HBOM is imported, not scanned, so this flow
+          // cannot produce a BOM for it" — a sentence that stopped being true
+          // when hbom-ecad shipped and was still being thrown at users.
+          //
+          // The real condition has nothing to do with the BOM type: a project
+          // registered `manual` has no source for ANY family to scan. Naming
+          // HBOM sent the reader to the wrong conclusion — that hardware is
+          // second-class — when the fix is to connect a repository or upload
+          // the files.
           project
             ? `${project.name} has no scannable source (registered as ` +
-                `"${project.source_type}"). HBOM is imported, not scanned, so this ` +
-                'flow cannot produce a BOM for it.'
+                `"${project.source_type}"). Connect a repository or upload files ` +
+                'on the project, then run this again.'
             : 'No project selected.',
         );
       }
@@ -450,9 +459,7 @@ function Stepper({
               className="step-pip"
               data-state={s.id === current ? 'current' : done ? 'done' : 'todo'}
               data-invalid={hardStepErrors.length > 0 ? 'true' : undefined}
-              data-note={
-                hardStepErrors.length === 0 && stepErrors.length > 0 ? 'true' : undefined
-              }
+              data-note={hardStepErrors.length === 0 && stepErrors.length > 0 ? 'true' : undefined}
               disabled={!canReach}
               aria-current={s.id === current ? 'step' : undefined}
               onClick={() => onGoTo(s.id)}

@@ -60,6 +60,38 @@ const QBOMFormDisclosure = "There is no open-source scanner for quantum " +
 	"recorded as `" + model.NotProvided + "` and counted as a gap rather than " +
 	"hidden."
 
+// QBOMCryptoSourceNote states whose cryptographic inventory the readiness view
+// is grouping, and when it was produced.
+//
+// ⚠ A QBOM DISPLAYS ANOTHER DOCUMENT'S DATA, AND THE READER HAS TO BE TOLD.
+// The readiness figures are not this report's findings — they are the
+// project's CBOM, re-grouped by quantum-vulnerability rules. Undated, they read
+// as a statement about today; a CBOM from four months ago and one from this
+// morning produce the same-looking table.
+//
+// This also gives the empty case a real answer. `readinessNote` says "check
+// Engine Coverage for whether a CBOM engine ran at all", which was unhelpful
+// advice for as long as the loader never fetched the assets: the engine had run
+// and the report still said nothing was found.
+func QBOMCryptoSourceNote(b BOM) string {
+	if b.BOMType != model.BOMTypeQBOM {
+		return ""
+	}
+	if !b.CryptoAssetsFrom.Present() {
+		return "No " + string(model.BOMTypeCBOM) + " has been produced for this " +
+			"project yet, so the quantum readiness view below has nothing to " +
+			"group. It is empty because no cryptographic discovery has run — " +
+			"not because none was found."
+	}
+	return fmt.Sprintf(
+		"The cryptographic assets assessed below were read from this project's "+
+			"%s (document %s, generated %s) and re-grouped by quantum-"+
+			"vulnerability rules. They were not discovered by this report, and "+
+			"they are only as current as that document.",
+		b.CryptoAssetsFrom.BOMType, b.CryptoAssetsFrom.DocumentID,
+		b.CryptoAssetsFrom.GeneratedAt)
+}
+
 // QBOMSheets are the QBOM-specific sheets, appended in place of the generic
 // componentSheet Sheets() builds for every other type (fieldCoverageSheet
 // still runs for a QBOM — see Sheets — because Table 8 IS one flat field
@@ -92,6 +124,22 @@ func qbomFieldName(id string) string {
 // reads `not-provided`, and the reason is on the sheet, not left for the
 // reader to guess.
 func quantumDeviceSheet(d *QuantumDevice) Sheet {
+	return Sheet{
+		Name: "Quantum Device", Header: []string{"Element", "Value"},
+		Rows: StaticRows(QuantumDeviceRows(d)), Width: 50,
+	}
+}
+
+// QuantumDeviceRows builds Table 8's element/value rows once, for every
+// renderer that needs them.
+//
+// ⚠ EXTRACTED BECAUSE THE WORD RENDERER HAD ITS OWN SIX-FIELD HARDCODED LIST
+// AND DROPPED THE SECTION ENTIRELY WHEN THE DEVICE WAS NIL. Two renderers
+// hand-listing the same CERT-In table is how one of them silently stops
+// matching the profile — and the DOCX already had, rendering 6 of the 11
+// elements with no `not-provided` for the rest. One builder, one field order,
+// generated from the profile (invariant 2).
+func QuantumDeviceRows(d *QuantumDevice) [][]string {
 	var rows [][]string
 
 	if d == nil {
@@ -101,9 +149,7 @@ func quantumDeviceSheet(d *QuantumDevice) Sheet {
 		rows = append(rows, []string{"", ""}, []string{
 			"Gap", "No device metadata has been recorded for this project yet. " + QBOMFormDisclosure,
 		})
-		return Sheet{
-			Name: "Quantum Device", Header: []string{"Element", "Value"}, Rows: StaticRows(rows), Width: 50,
-		}
+		return rows
 	}
 
 	values := map[string]string{
@@ -134,9 +180,7 @@ func quantumDeviceSheet(d *QuantumDevice) Sheet {
 		},
 	)
 
-	return Sheet{
-		Name: "Quantum Device", Header: []string{"Element", "Value"}, Rows: StaticRows(rows), Width: 50,
-	}
+	return rows
 }
 
 // deviceFieldOrder is the nine free-form Table 8 elements this struct holds,
