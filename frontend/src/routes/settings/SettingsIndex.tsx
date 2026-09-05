@@ -15,6 +15,7 @@
 
 import { Link } from 'react-router';
 import { ThemeToggle } from '../../components/ThemeToggle';
+import { useDisconnectGitHub, useGitHubConnection } from '../../lib/projects';
 import { useAuth } from '../../lib/useAuth';
 
 export function SettingsIndex() {
@@ -112,6 +113,8 @@ export function SettingsIndex() {
         </Link>
       </section>
 
+      <GitHubConnectionPanel />
+
       <section className="panel" aria-labelledby="engines-heading">
         <h2 id="engines-heading">Engines</h2>
         <p className="field-hint">
@@ -123,5 +126,75 @@ export function SettingsIndex() {
         </Link>
       </section>
     </div>
+  );
+}
+
+/**
+ * GitHubConnectionPanel — where "connect once" is undone.
+ *
+ * ⚠ THE WIZARD TOLD PEOPLE TO COME HERE BEFORE THIS EXISTED. Its copy on the
+ * already-connected path reads "Disconnect from Settings to revoke it", and
+ * there was no such control anywhere — the three endpoints existed and only the
+ * registration screen used them. An instruction pointing at a screen that does
+ * not exist is worse than no instruction: it reads as the reader's failure to
+ * find it.
+ *
+ * ⚠ CONNECTING IS NOT OFFERED HERE, DELIBERATELY. The OAuth popup belongs where
+ * somebody is choosing a repository and can act on the result; a "Connect"
+ * button on a settings page authorises GitHub for no stated purpose. Revoking,
+ * by contrast, is exactly a settings action.
+ */
+function GitHubConnectionPanel() {
+  const connection = useGitHubConnection();
+  const disconnect = useDisconnectGitHub();
+
+  return (
+    <section className="panel" aria-labelledby="github-heading">
+      <h2 id="github-heading">GitHub</h2>
+
+      {connection.isPending ? (
+        <p className="field-hint">Checking…</p>
+      ) : connection.data?.connected ? (
+        <>
+          <p className="field-hint">
+            Connected as{' '}
+            <strong>{connection.data.github_login || 'an unnamed GitHub account'}</strong>. Every
+            project in this organisation can pick a repository without authorising again — the token
+            is held server-side and never reaches the browser.
+          </p>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => disconnect.mutate()}
+            disabled={disconnect.isPending}
+          >
+            {disconnect.isPending ? 'Disconnecting…' : 'Disconnect GitHub'}
+          </button>
+          {/* Says what survives, because "disconnect" reads as "revoke
+              everything" and that is not what happens. Projects already
+              connected hold their own copy of the credential, so their scans
+              keep working — see project.github_connections in 01-DATA-MODEL. */}
+          <p className="field-hint">
+            Projects already connected to a repository keep working: each holds its own credential.
+            Disconnecting stops new projects from picking a repository until GitHub is connected
+            again.
+          </p>
+        </>
+      ) : (
+        <p className="field-hint">
+          Not connected. Connect GitHub while registering a project — the authorisation is stored
+          once for the whole organisation, so later projects can pick a repository without another
+          GitHub window.
+        </p>
+      )}
+
+      {disconnect.error && (
+        <p className="status status-down" role="alert">
+          {disconnect.error instanceof Error
+            ? disconnect.error.message
+            : 'Could not disconnect GitHub.'}
+        </p>
+      )}
+    </section>
   );
 }

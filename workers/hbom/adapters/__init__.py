@@ -3,7 +3,7 @@
 ⚠ NO ADAPTER HERE LOOKS AT HARDWARE, AND NONE RUNS A CONTAINER.
 
 `hbom-ecad` parses design files the customer wrote and committed — KiCad
-schematics and netlists, BOM exports from KiCad/Altium/OrCAD. `hbom-cdxgen-host`
+schematics and netlists, EAGLE schematics, BOM exports from KiCad/Altium/OrCAD. `hbom-cdxgen-host`
 reads a CycloneDX inventory the customer generated on their own device with
 `cdxgen -t hbom`. `hbom-host-report` reads the same kind of inventory from the
 tools people actually have — lshw, dmidecode, fwupdmgr, PowerShell's CIM

@@ -113,7 +113,7 @@ Both emit CycloneDX 1.6, so merging is clean.
 
 | engine_id | Mode | Source kinds | Role |
 |---|---|---|---|
-| `hbom-ecad` | internal | `git`, `upload` | Parses the customer's own hardware **design files** — KiCad `.kicad_sch`, KiCad netlist XML, and BOM exports from KiCad/Altium/OrCAD |
+| `hbom-ecad` | internal | `git`, `upload` | Parses the customer's own hardware **design files** — KiCad `.kicad_sch`, KiCad netlist XML, EAGLE `.sch`, and BOM exports from KiCad/Altium/OrCAD |
 | `hbom-cdxgen-host` | internal | `upload` | Ingests a CycloneDX 1.7 **host inventory the customer generated themselves** with `cdxgen -t hbom` |
 | `hbom-host-report` | internal | `upload` | The same import, widened to the tools people actually have: **`axebom collect hardware`**, `lshw --json`, `dmidecode`, `fwupdmgr get-devices --json`, PowerShell's CIM cmdlets, a Redfish service's JSON |
 | `hbom-csv` | internal | *(none)* | The interactive REST import path, `POST /v1/hbom/{projectId}/import`. Not a scan job |
@@ -124,6 +124,30 @@ Both emit CycloneDX 1.6, so merging is clean.
 > This section used to say flatly that no HBOM scanner exists. That was right while every HBOM document came from a CSV or a form. `hbom-ecad` changed it: parsing a KiCad schematic the customer committed is a real scan of a document they wrote — the same act as reading a committed lockfile for an SBOM, and it produces real jobs on `scan.job.hbom`.
 >
 > **What has not changed is the claim that would still be false: nothing here inspects PHYSICAL HARDWARE.** No open-source tool looks at a device and enumerates its parts. A schematic is a drawing of an intent; a cdxgen document is a report the customer's own machine produced. Neither is AxeBOM having examined hardware, and no UI string may say otherwise. `workers/hbom/test_hbom.py`'s discovery-claim guard enforces exactly that line — it stopped forbidding "HBOM scan" (now true) and started catching "scans your hardware", "inspects the device" and "discovers hardware" (still false).
+
+> **EAGLE was the roster's widest gap, and the engine never said so.** Arduino,
+> SparkFun and Adafruit reference designs are published as EAGLE `.sch`, so a
+> customer with an EAGLE repository got `ENGINE_INPUT_MISSING` and a list of
+> searched extensions that did not include theirs. `.sch` is ambiguous — EAGLE,
+> gEDA and legacy KiCad all use it — so classification confirms `<eagle` in the
+> bytes rather than trusting the extension; a gEDA file stays unclassified
+> instead of reaching a parser that cannot read it.
+>
+> ⚠ **Drawing frames and supply symbols are `<part>` elements in EAGLE and are
+> not components.** Every sheet carries a frame from the `frames` library and
+> ground symbols from `supply1`/`supply2`, stored exactly like a resistor. A BOM
+> listing `FRAME_A_L` as a component is wrong in a way a customer notices
+> immediately; they are excluded and the exclusion is stated in a diagnostic
+> rather than silently changing the count. EAGLE's `populate="no"` is its DNP
+> flag and survives into the BOM, because a do-not-populate part listed as
+> orderable is how somebody buys a reel of parts the board never carries.
+>
+> **Every HBOM engine now publishes an `operator_action`**, asserted by
+> `TestEveryHBOMEngineTellsTheCustomerWhatToProduce`. HBOM is the one family
+> where the customer must produce something first — nothing here examines
+> hardware — so an engine that does not say what it needs leaves them to infer
+> a product limit from an empty scan. `hbom-ecad` and `hbom-csv` both published
+> nothing; the test found the second one.
 
 > **`hbom-csv` declares no source kind, and that is load-bearing.** `policy.Registry.Resolve` filters candidates on `Supports(kind)` alone — it does not consult `RequiresImport` — so the moment `hbom-ecad` made the family scannable, a declared `upload` would have published `scan.job.hbom` for an engine no worker implements, leaving a permanent `skipped`/`ENGINE_NOT_IMPLEMENTED` row in the Engine Coverage section of every HBOM scan. Filtering `RequiresImport` inside `Resolve` was **not** the fix: `github-dependency-graph-sbom` carries that same flag and is dispatched on every git SBOM scan. `RequiresImport` is an honest label about where data came from; an empty `SourceKinds` is the statement about dispatch.
 >

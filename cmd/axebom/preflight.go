@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"runtime"
@@ -77,6 +78,7 @@ func runPreflight(ctx context.Context, args []string) error {
 		checkGolangciLint(ctx),
 		checkCosign(ctx),
 		checkCloneImage(ctx),
+		checkNVDAPIKey(),
 	}
 	if runtime.GOOS == "windows" {
 		results = append(results, checkWSL(ctx))
@@ -235,6 +237,41 @@ func checkDocker(ctx context.Context) checkResult {
 // Java 1.8 on this machine is too old for Dependency-Check (11+) and cbomkit
 // (17+), but that is not a blocker: ADR-0002 runs every Java tool
 // container-only, precisely so the host JDK never matters.
+// checkNVDAPIKey reports whether hardware vulnerability matching can run.
+//
+// ⚠ CERT-In TABLE 11 ELEMENT 24 HAS REPORTED `not-attempted` IN EVERY HBOM
+// THIS PRODUCT HAS EVER GENERATED, and the only trace was a diagnostic inside
+// the report itself. `NVD_API_KEY` is set in no environment — not in `.env`,
+// which ships it empty, and not in CI — so `workers/hbom/vulnmatch.py` returns
+// "no lookup was performed" every time.
+//
+// It cannot be fixed in code: the key is a credential the operator obtains from
+// NVD. What CAN be fixed is that its absence was invisible until a compliance
+// document came back with a gap in it. Preflight is where "what is missing and
+// why it matters" belongs.
+//
+// ⚠ WARN, NOT FAIL. An SBOM, CBOM, QBOM or AIBOM needs nothing from NVD, and a
+// hardware BOM without vulnerability matching is still a valid hardware BOM
+// with one element honestly reported as not-attempted. Blocking `task dev` on
+// an optional credential would be worse than the gap it prevents.
+func checkNVDAPIKey() checkResult {
+	r := checkResult{name: "NVD API key"}
+
+	if strings.TrimSpace(os.Getenv("NVD_API_KEY")) != "" {
+		r.found = true
+		r.severity = sevOK
+		r.version = "set"
+		return r
+	}
+
+	r.severity = sevWarn
+	r.detail = "CERT-In Table 11's hardware vulnerability element reports " +
+		"`not-attempted` without it, and Dependency-Check is heavily throttled"
+	r.fix = "request a free key at https://nvd.nist.gov/developers/request-an-api-key " +
+		"and set NVD_API_KEY in deploy/compose/.env"
+	return r
+}
+
 // checkCloneImage reports whether the fetcher's clone image is present.
 //
 // ⚠ ITS ABSENCE KILLS EVERY SCAN, WHICH IS WHY IT IS SINGLED OUT FROM THE

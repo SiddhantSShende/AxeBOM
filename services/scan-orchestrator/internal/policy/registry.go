@@ -72,6 +72,22 @@ type Engine struct {
 	// RequiresImport: there is no HBOM scanner. It is a CSV/form import.
 	RequiresImport bool `json:"requires_import,omitempty"`
 
+	// Scaffold marks an engine that exists to exercise the machinery, not to
+	// scan anything. It is NEVER part of a family's default engine set.
+	//
+	// ⚠ `mock-engine` WAS IN THE DEFAULT SBOM SET AND RAN ON EVERY CUSTOMER
+	// SCAN. It is the Phase 6 fake — `workers/_mock/main.go` — and it is not
+	// deployed, so it left a permanent `skipped` row in the Engine Coverage
+	// section of every SBOM report: 20 of them in the dev database. That
+	// section exists to tell a customer what could not be seen (invariant 12),
+	// and a row naming a scanner that does not exist is the opposite of that.
+	//
+	// Get() still returns it, so a test that names it explicitly — or a tenant
+	// override — still resolves. Only ForFamily skips it, which is what makes
+	// it invisible to a real scan while staying usable by the tests that prove
+	// idempotency and status derivation against the same code path.
+	Scaffold bool `json:"-"`
+
 	// OperatorAction is what a PERSON has to do for this engine to have
 	// anything to read. Empty for every engine that just runs.
 	//
@@ -422,7 +438,16 @@ func DefaultRegistry() *Registry {
 			// `hardware` as COVERED, which is what stops that record turning
 			// into a false "no engine for this ecosystem" line (see
 			// Store.CoverageGaps).
-			ID:             "hbom-csv",
+			ID: "hbom-csv",
+			// Found by TestEveryHBOMEngineTellsTheCustomerWhatToProduce at the
+			// same time as hbom-ecad's: this engine is reached from the
+			// Hardware tab rather than from a scan, but the Engine Coverage
+			// section still names it, and a reader who sees it there needs to
+			// know it is a thing they DO rather than a scanner that failed.
+			OperatorAction: "Import your parts list from the project's Hardware tab — " +
+				"a CSV, TSV or Excel export from your PLM, ERP or spreadsheet. " +
+				"This is an import you perform, not a scan: AxeBOM reads the file " +
+				"you provide and never examines a physical device.",
 			Mode:           "internal",
 			Families:       []events.Family{events.FamilyHBOM},
 			SourceKinds:    nil,
@@ -436,8 +461,9 @@ func DefaultRegistry() *Registry {
 			// ⚠ NOT DISCOVERY OF A DEVICE. NOTHING HERE LOOKS AT HARDWARE.
 			//
 			// This parses the customer's OWN hardware DESIGN files — KiCad
-			// schematics and netlists, and BOM exports from KiCad, Altium and
-			// OrCAD — out of an upload or a connected repository. It is the
+			// schematics and netlists, EAGLE schematics, and BOM exports from
+			// KiCad, Altium and OrCAD — out of an upload or a connected
+			// repository. It is the
 			// exact analogue of parsing package-lock.json for an SBOM: a
 			// design artifact the customer wrote, read as data.
 			//
@@ -455,8 +481,21 @@ func DefaultRegistry() *Registry {
 			// `hardware` at create time; CoverageGaps only neutralises that
 			// with a matching available=true row, which comes from this
 			// engine's GenerateResult.ecosystems_covered.
-			ID:            "hbom-ecad",
-			Mode:          "internal",
+			ID:   "hbom-ecad",
+			Mode: "internal",
+			// ⚠ THE ENGINE READ FOUR FORMATS AND SAID SO NOWHERE. Every other
+			// HBOM engine publishes an OperatorAction telling the customer what
+			// to produce; this one — the only HBOM engine that reads a
+			// REPOSITORY rather than an upload — published nothing, so a
+			// customer whose design files were in an unsupported format saw
+			// only "no hardware design files were found" after the scan.
+			// Naming the formats before the scan is the difference between a
+			// gap they can close and one they conclude is a product limit.
+			OperatorAction: "Commit your hardware design files to the repository: a " +
+				"KiCad schematic (.kicad_sch) or netlist (.net/.xml), an EAGLE " +
+				"schematic (.sch), or a BOM export as CSV/TSV from KiCad, Altium " +
+				"or OrCAD. AxeBOM reads the design you committed — it never " +
+				"examines a physical board.",
 			Families:      []events.Family{events.FamilyHBOM},
 			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload},
 			Ecosystems:    []string{"hardware"},
@@ -543,6 +582,7 @@ func DefaultRegistry() *Registry {
 			// prove idempotency and status derivation run against the same code
 			// path a real engine will.
 			ID:            "mock-engine",
+			Scaffold:      true,
 			Mode:          "internal",
 			Families:      []events.Family{events.FamilySBOM},
 			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload, events.SourceImage},
@@ -580,7 +620,8 @@ func (r *Registry) IDs() []string {
 func (r *Registry) ForFamily(f events.Family) []Engine {
 	var out []Engine
 	for _, e := range r.engines {
-		if e.InFamily(f) {
+		// Scaffolds are reachable by id and never by default — see Engine.Scaffold.
+		if e.InFamily(f) && !e.Scaffold {
 			out = append(out, e)
 		}
 	}

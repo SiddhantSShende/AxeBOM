@@ -103,6 +103,13 @@ def classify(path: Path) -> str | None:
     suffix = path.suffix.lower()
     if suffix == ".kicad_sch":
         return "kicad-schematic"
+    if suffix == ".sch":
+        # ⚠ `.sch` IS AMBIGUOUS AND ALWAYS HAS BEEN. EAGLE, gEDA and KiCad's
+        # own legacy format all use it, so this is a guess that `_looks_like`
+        # must confirm against `<eagle` in the bytes. Only EAGLE is parsed
+        # today; the others fall out as unclassified rather than being handed
+        # to a parser that cannot read them.
+        return "eagle-schematic"
     if suffix in (".net", ".xml"):
         return "kicad-netlist"  # confirmed by content in `_looks_like`
     if suffix in (".csv", ".tsv"):
@@ -111,7 +118,7 @@ def classify(path: Path) -> str | None:
 
 
 #: What the walk looks for, published so an empty result can name it.
-SEARCHED_EXTENSIONS = (".kicad_sch", ".net", ".xml", ".csv", ".tsv")
+SEARCHED_EXTENSIONS = (".kicad_sch", ".sch", ".net", ".xml", ".csv", ".tsv")
 
 
 def walk(root: Path, subpath: str = "") -> Discovery:
@@ -243,6 +250,15 @@ def _looks_like(kind: str, data: bytes) -> bool:
     head = data[:4096].lstrip()
     if kind == "kicad-schematic":
         return head.startswith(b"(kicad_sch") or head.startswith(b"(export")
+    if kind == "eagle-schematic":
+        lowered = head.lower()
+        if b"<!doctype" in lowered or b"<!entity" in lowered:
+            return False
+        # `<eagle` is the root element and appears within the first bytes after
+        # the XML declaration. A gEDA or legacy-KiCad .sch has no such element,
+        # so it stays unclassified rather than reaching a parser that would
+        # report a confusing failure about a file it cannot read.
+        return b"<eagle" in lowered
     if kind == "kicad-netlist":
         lowered = head.lower()
         if b"<!doctype" in lowered or b"<!entity" in lowered:

@@ -8,7 +8,7 @@ A session that writes code but does not update this file has failed — the next
 
 **Last updated:** 2026-09-05
 **Current phase:** *Hardware as a first-class thing, and making every artifact actually contain its data*. 🟢 Track A rendering matrix (b); 🟢 B3 device register (c); 🟢 B1+B2 collectors and `axebom collect hardware` (d); 🟢 scans actually run (e); 🟢 **B4 the hardware screens** (f). **Track B is complete.** Not started: A6 (writerless tables), A7 (ecosystem coverage).
-**Next action:** Milestones 4–6 of the registration plan — the widened HBOM engine roster, frontend↔backend↔DB alignment, and live verification. Milestones 1–3 are done: the defect sweep, the BOM module seam (`services/project/internal/bommodule`), and registration reordered around the BOM type. ⚠ **The frontend is a container serving a built bundle** — `docker compose up -d --build frontend` before any e2e run, or the browser tests grade the previous version. 🟡 Carried forward: no Settings screen for disconnecting GitHub (the wizard's copy points at one); registration names per-type inputs and routes to them rather than collecting them inline (deliberate — three per-type form shapes are per-device, per-project and per-model); the interactive import has no path for CycloneDX or collector JSON; manufacturing fields are not in the generated form because their profile is not loaded in Go; `mock-engine` leaves a permanent `skipped` row; `alpine/git` is tag-pinned and `toolctl pin` does not exist; `raw_findings` and `licenses` remain deliberately writerless (see docs/LIMITATIONS.md); one pre-existing `AIBOM | url` project is left unmigrated. ⚠ **`NVD_API_KEY` is still set in no environment.**
+**Next action:** Milestones 5–6 — frontend↔backend↔DB alignment and live verification. Milestones 1–4 are done: the defect sweep, the BOM module seam, registration reordered around the BOM type, and the widened HBOM roster (EAGLE) with four bugs removed. ⚠ **The frontend is a container serving a built bundle** — `docker compose up -d --build frontend` before any e2e run. 🟡 Carried forward: `aibom-generator` and `cbomkit` remain dispatchable with no adapter (aibom-generator's stop is documented and deliberate — invariant 10); gEDA/LibrePCB/Horizon EDA/Fritzing unparsed; the interactive import has no path for CycloneDX or collector JSON; manufacturing fields are not in the generated form because their profile is not loaded in Go; `alpine/git` is tag-pinned and `toolctl pin` does not exist; `raw_findings` and `licenses` remain deliberately writerless; one pre-existing `AIBOM | url` project is left unmigrated. ⚠ **`NVD_API_KEY` is still set in no environment — but `task preflight` now says so.**
 
 > 🟢 **A REAL SCAN NOW NORMALIZES, LIVE, WITH NO MANUAL TRIGGER — THE
 > NORMALIZER'S DEPLOYED BOUNDARY FROM (e)/(k)/(l) IS CLOSED FOR SBOM.**
@@ -2265,6 +2265,96 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-09-05 (k) — Milestone 4: the roster widens, and four bugs come out
+
+#### The bugs
+
+- ⚠ **`mock-engine` ran on every customer SBOM scan and always failed.** It is
+  the Phase 6 fake (`workers/_mock/main.go`), it is deployed nowhere, and it was
+  in the DEFAULT SBOM engine set — so every SBOM report's Engine Coverage
+  section carried a `skipped` row for a scanner that does not exist. **20 such
+  rows in the dev database.** That section's entire job is telling a customer
+  what could not be seen (invariant 12); a row naming a fake engine inverts it.
+  New `Engine.Scaffold` excludes it from `ForFamily` while `Get` still resolves
+  it, so the dispatch tests that name it explicitly keep working. **Verified
+  live**: a fresh scan now dispatches 8 real engines and no fake.
+- ⚠ **The wizard told people to disconnect GitHub "from Settings" and there was
+  no such control.** My own bug from Milestone 3: the three endpoints existed
+  and only the registration screen used them. Settings now has a GitHub panel
+  that names the connected account, disconnects, and — because "disconnect"
+  reads as "revoke everything" — states what survives: projects already
+  connected hold their own credential and keep scanning.
+- ⚠ **`hbom-ecad` published no `operator_action` at all.** Every other HBOM
+  engine tells the customer what to produce; the only one that reads a
+  REPOSITORY told them nothing, so an unsupported design format surfaced as
+  "no hardware design files were found" *after* the scan. The new test found a
+  second: `hbom-csv` published nothing either.
+- ⚠ **`NVD_API_KEY` was invisible until a compliance document exposed it.**
+  CERT-In Table 11 element 24 has reported `not-attempted` in every HBOM this
+  product has generated, and the only trace was a diagnostic inside the report.
+  It cannot be fixed in code — the key is a credential the operator requests
+  from NVD — so `task preflight` now names it, says what it costs, and links the
+  request page. **Warn, not fail**: four of five BOM types need nothing from
+  NVD, and blocking `task dev` on an optional credential would be worse than the
+  gap.
+
+#### The roster: EAGLE
+
+`hbom-ecad` read KiCad schematics, KiCad netlists and BOM tables. ⚠ **EAGLE is
+the format open hardware is actually published in** — Arduino, SparkFun and
+Adafruit reference designs are EAGLE — so a customer with an EAGLE repository
+got `ENGINE_INPUT_MISSING` and a list of searched extensions that did not
+include theirs. The engine was working correctly and the roster was too narrow.
+
+`workers/hbom/adapters/eagle.py` returns `kicad.Part`, so the whole
+grouping/coalescing path downstream is shared rather than reimplemented. Two
+traps, both guarded by tests:
+
+- ⚠ **Drawing frames and supply symbols are `<part>` elements.** Every EAGLE
+  sheet carries a frame from the `frames` library and ground symbols from
+  `supply1`/`supply2`, stored exactly like a resistor. A BOM listing
+  `FRAME_A_L` as a component is wrong in a way a customer notices immediately.
+  Excluded, and the exclusion is *stated* in a diagnostic rather than silently
+  changing the count.
+- ⚠ **`populate="no"` is EAGLE's DNP flag.** A do-not-populate part listed as
+  orderable is how somebody buys a reel of parts the board never carries.
+
+`.sch` is ambiguous — EAGLE, gEDA and legacy KiCad all use it — so
+classification confirms `<eagle` in the bytes; a gEDA file stays unclassified
+rather than reaching a parser that cannot read it. The entity-declaration guard
+is repeated in `parse_schematic` for the reason `kicad.parse_netlist` already
+spells out: a security property that holds only because another function ran
+first is the "remember to sanitize" pattern, and this function is public.
+
+#### Verification
+
+`task verify` exits 0. 9 new EAGLE unit tests; an EAGLE schematic run through
+the real `ECADAdapter` end to end returns `succeeded` with `components=3` (one
+board plus two parts, frame and ground correctly excluded) and the two expected
+diagnostics. All 13 browser specs pass, including a new one asserting the
+Settings GitHub panel states its connection state.
+
+⚠ **The scaffold guard is vacuous alone and a mutation run proved it.** With the
+flag removed from `mock-engine` there are no scaffolds, the loop finds nothing,
+and `TestNoScaffoldEngineIsInAnyDefaultEngineSet` passes. Only the pair holds:
+that test says scaffolds are never in a default set, and
+`TestAScaffoldEngineIsStillReachableByID` says `mock-engine` is a scaffold.
+Deleting either leaves the regression reachable — recorded in the test's own
+comment.
+
+#### Owed
+
+- `aibom-generator` and `cbomkit` are still dispatchable with no adapter.
+  `aibom-generator`'s stop is **deliberate and documented** in
+  `workers/aibom/runner.py`: live-wiring it needs an answer to whether its
+  HTTP response becomes a stored raw artifact first, because re-normalizing
+  today would re-fetch from Hugging Face rather than replay history — a real
+  invariant-10 deviation. `cbomkit` has never run at all (0 rows);
+  `cbomkit-theia` covers CBOM.
+- gEDA, LibrePCB, Horizon EDA, Fritzing and native Altium/OrCAD binaries are
+  still unparsed. Altium and OrCAD reach the product through their BOM exports,
+  which is what the roster claims; the others are open, not rejected.
 
 ### 2026-09-05 (j) — Milestone 3: registration asks the BOM type first, and GitHub is connected once
 

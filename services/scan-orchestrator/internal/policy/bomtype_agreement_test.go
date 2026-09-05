@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/axebom/axebom/libs/go-shared/events"
@@ -111,4 +112,80 @@ func engineIDs(engines []Engine) string {
 		out += e.ID
 	}
 	return out
+}
+
+// TestNoScaffoldEngineIsInAnyDefaultEngineSet.
+//
+// ⚠ `mock-engine` RAN ON EVERY CUSTOMER SBOM SCAN AND ALWAYS FAILED. It is the
+// Phase 6 fake (`workers/_mock/main.go`), it is not deployed anywhere, and it
+// was in the default SBOM engine set — so every SBOM report's Engine Coverage
+// section carried a `skipped` row for a scanner that does not exist. The dev
+// database holds 20 of them. That section's whole job is telling a customer
+// what could not be seen (invariant 12); a row naming a fake engine is the
+// opposite of that.
+//
+// The flag is easy to forget on the next scaffold, so this asserts the property
+// rather than the one engine.
+//
+// ⚠ IT IS VACUOUS ON ITS OWN, AND THE TEST BELOW IS THE OTHER HALF. With the
+// flag removed from mock-engine there are no scaffolds at all, this loop finds
+// nothing, and it passes — which is exactly what a mutation run showed. The
+// pair is what holds: this one says scaffolds are never in a default set, and
+// TestAScaffoldEngineIsStillReachableByID says mock-engine is a scaffold.
+// Deleting either leaves the regression reachable.
+func TestNoScaffoldEngineIsInAnyDefaultEngineSet(t *testing.T) {
+	reg := DefaultRegistry()
+
+	for _, id := range reg.IDs() {
+		e, ok := reg.Get(id)
+		if !ok || !e.Scaffold {
+			continue
+		}
+		for _, f := range e.Families {
+			for _, got := range reg.ForFamily(f) {
+				if got.ID == id {
+					t.Errorf("scaffold engine %q is in the default set for family %s; "+
+						"every %s report would carry a coverage row for an engine "+
+						"that is not a scanner", id, f, f)
+				}
+			}
+		}
+	}
+}
+
+// A scaffold must still be reachable by id, or the tests that exercise the
+// dispatch machinery against it cannot resolve it and a tenant override naming
+// it would silently do nothing.
+func TestAScaffoldEngineIsStillReachableByID(t *testing.T) {
+	reg := DefaultRegistry()
+	e, ok := reg.Get("mock-engine")
+	if !ok {
+		t.Fatal("mock-engine is not resolvable by id; the dispatch tests cannot reach it")
+	}
+	if !e.Scaffold {
+		t.Error("mock-engine is not marked as a scaffold, so it is back in the default set")
+	}
+}
+
+// TestEveryHBOMEngineTellsTheCustomerWhatToProduce.
+//
+// ⚠ HBOM IS THE ONE FAMILY WHERE THE CUSTOMER HAS TO DO SOMETHING FIRST.
+// Nothing in AxeBOM examines hardware, so every HBOM engine reads a document
+// the customer produced — a committed design file, a collector's output, a
+// parts file. An engine that does not say what to produce leaves them to find
+// out from an empty scan, and "no hardware design files were found" reads as a
+// product limit rather than a gap they can close.
+//
+// `hbom-ecad` had no OperatorAction at all, which is how EAGLE went unnoticed:
+// the engine read four formats and named none of them anywhere a customer
+// looks.
+func TestEveryHBOMEngineTellsTheCustomerWhatToProduce(t *testing.T) {
+	reg := DefaultRegistry()
+
+	for _, e := range reg.ForFamily(events.FamilyHBOM) {
+		if strings.TrimSpace(e.OperatorAction) == "" {
+			t.Errorf("HBOM engine %q publishes no operator action; a customer has "+
+				"no way to learn what it needs before the scan reports nothing", e.ID)
+		}
+	}
 }

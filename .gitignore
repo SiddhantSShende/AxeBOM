@@ -99,3 +99,7 @@ test-results/
 
 # --- Genuinely generated, not committed ------------------------------------
 proto/gen/
+# The `axebom` CLI binary, if someone runs `go build ./cmd/...` from the repo
+# root. The CLI is invoked with `go run ./cmd/axebom`, so a committed binary is
+# always stale and platform-specific.
+axebom

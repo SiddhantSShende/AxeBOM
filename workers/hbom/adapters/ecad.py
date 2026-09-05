@@ -57,7 +57,7 @@ from axebom_shared.adapters.summary import summarize
 
 from ..csv_import import ColumnMapping, HBOMImportError, parse, parse_rows
 from ..model import HardwareComponent, normalize, to_dict
-from . import discovery, kicad
+from . import discovery, eagle, kicad
 
 SCHEMA_VERSION = "axebom-hbom-json-1"
 
@@ -143,7 +143,8 @@ class ECADAdapter(ToolAdapterBase):
                         # unsupported format, and they will assume the latter.
                         "hint": "searched for "
                         + ", ".join(found.searched)
-                        + " — a KiCad schematic or netlist, or a BOM export in CSV/TSV. "
+                        + " — a KiCad schematic or netlist, an EAGLE schematic, or a "
+                        "BOM export in CSV/TSV. "
                         "If the design lives in a subdirectory, set the project's "
                         "source subpath.",
                     },
@@ -164,6 +165,10 @@ class ECADAdapter(ToolAdapterBase):
                 parts, diags = kicad.parse_schematic(f.data)
                 placements.extend(parts)
                 record["placements"] = len(parts)
+            elif f.kind == "eagle-schematic":
+                parts, diags = eagle.parse_schematic(f.data)
+                placements.extend(parts)
+                record["placements"] = len(parts)
             elif f.kind == "kicad-netlist":
                 parts, diags = kicad.parse_netlist(f.data)
                 placements.extend(parts)
@@ -182,13 +187,13 @@ class ECADAdapter(ToolAdapterBase):
         # its own tree and is kept as its own root.
         if placements:
             roots.insert(0, _board_from_placements(placements, target))
-            if any(f.kind == "kicad-schematic" for f in found.files):
+            if any(f.kind in ("kicad-schematic", "eagle-schematic") for f in found.files):
                 diagnostics.append(
                     {
                         "severity": "info",
                         "code": "HBOM_HIERARCHY_FLAT",
-                        "message": "KiCad symbols were read as a flat parts list under one "
-                        "board assembly",
+                        "message": "schematic symbols were read as a flat parts list under "
+                        "one board assembly",
                         "hint": "a hierarchical schematic's sheet structure is a drawing "
                         "convenience, not an assembly hierarchy — inventing sub-assemblies "
                         "from it would assert a build structure the design does not state. "
