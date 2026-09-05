@@ -2266,6 +2266,65 @@ mind**, because a claim about limits should be falsifiable.
 
 ## Session log
 
+### 2026-09-05 (g) — Track A6 + A7: three tables that had readers and no writer, and an engine whose every component was thrown away
+
+**A6 — the writerless tables.** Five `normalize` tables had no writer. Three of
+them had consumers, and those three now have writers:
+
+- **`component_provenance`** — `services/project/internal/store/dependencies.go`
+  powers the per-component "where did this line in this report come from?"
+  panel. It returned an empty list for **every component of every report**, and
+  `loadComponentProvenanceEngines` swallowed its error with `//nolint:nilerr`,
+  so a broken query and an honestly-empty answer were indistinguishable from
+  outside. The data was already computed: `merge.MergedComponent.observed_by`
+  carries one `Observation` per engine — engine, version, native id, confidence
+  — and `as_dict()` has always serialised it. Nothing consumed it. The
+  `nilerr` suppression is gone, so a failure is a failure again.
+- **`component_candidate_identities`** — the alternate identities (CPE, SWID,
+  purl, hash, name) an engine asserted but that lost the merge. Same reader,
+  same silence.
+- **`license_refs`** — `Resolution.raw` was computed and discarded despite a
+  comment saying the row exists "so a human can map it later without re-running
+  the scan." Written now with `ON CONFLICT (tenant_id, slug) DO NOTHING`:
+  `first_seen_scan_id` means what it says, so a later scan re-reporting the same
+  slug must not overwrite where it first appeared.
+
+⚠ **`raw_findings` and `licenses` are still empty, deliberately** — see
+`docs/LIMITATIONS.md`. Neither has a reader; `raw_findings` is unbounded with no
+retention policy, and `normalize.licenses` would duplicate an in-code list into
+a table nothing queries. Left as a design decision rather than closed quietly.
+
+**A7 — purl normalisation across 15 ecosystems.** The audit found the
+normalisation itself correct everywhere (PEP 503, Go proxy `!x` escaping, Maven
+case-sensitivity, ecosystem aliases). It found two real defects:
+
+- **`cdxgen` had no normalizer parser at all.** A registered, dispatchable
+  engine whose 15.5 GB image runs on every scan, and every component it produced
+  was discarded with `NORMALIZE_NO_PARSER`. Its output is CycloneDX; the ingest
+  table simply had no entry for the key. A new test asserts **every engine that
+  can be dispatched has a parser**, so the next one cannot be added silently.
+- **31 purl-less `application` components were counted as dependencies.**
+  `trivy` emits one `application` component per manifest it targets, *named
+  after the file*, while `syft` catalogues the same lockfile as `type: file` and
+  was already excluded — so a `package-lock.json` was a dependency or not
+  depending on which engine happened to see it. A purl-less `application` is now
+  `excluded`, matching what `file` already did.
+
+**Verified live, not reasoned about.** On scan
+`01a071b0-2a65-7cb5-9084-9ab1b26de939`: 22 components (up from 13 — the cdxgen
+components now land), **47 provenance rows across 3 engines including cdxgen**,
+62 candidate identities, 8 `license_refs` (one per tenant, dedup working, all
+with `first_seen_scan_id` set), and 4 manifest pseudo-components correctly
+`excluded`. The reader's exact query returns provenance for all 22 of 22
+components; it returned nothing for any component before.
+
+⚠ **All 7 SBOM goldens changed, and completeness FELL** — `npm-simple` 11.49 →
+10.21, `maven-case` 12.77 → 11.70, `monorepo-multiroot` 8.78 → 7.18. That is
+correct and is the honest direction: an excluded component stays in the
+denominator while its name stops counting toward the numerator. The old number
+was inflated by counting manifest filenames as covered dependencies.
+
+
 ### 2026-09-05 (f) — Track B4: the hardware screens stop being a dead end
 
 #### The import screen accepted `.csv` and nothing else

@@ -25,7 +25,23 @@ def component(key: str, **kwargs) -> dict:
         "name": key.rsplit("/", 1)[-1],
         "version_raw": "1.0.0",
         "scope": "required",
-        "observed_by": [{"engine": "syft"}],
+        "observed_by": [{"engine": "syft", "engine_version": "1.51.0", "native_id": "pkg:1"}],
+        # ⚠ A LOW-CONFIDENCE CPE, WHICH IS EXACTLY WHAT THIS TABLE IS FOR.
+        # merge.py keeps a claim like this OFF the component so it cannot
+        # silently pull in another package's findings — and recording it is what
+        # lets a reviewer confirm or reject it later. Both
+        # normalize.component_provenance and
+        # normalize.component_candidate_identities had no writer at all until
+        # the batches existed, and both have live readers in
+        # services/project/internal/store/dependencies.go.
+        "candidate_identities": [
+            {
+                "kind": "cpe",
+                "value": "cpe:2.3:a:vendor:product:1.0.0:*:*:*:*:*:*:*",
+                "source_engine": "dependency-check",
+                "confidence": "low",
+            }
+        ],
         **kwargs,
     }
 

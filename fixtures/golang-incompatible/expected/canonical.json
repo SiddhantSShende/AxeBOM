@@ -20,6 +20,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "",
+      "license_refs": [],
       "license_rule": "none",
       "locations": [],
       "name": "/src/go.mod",
@@ -46,6 +47,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "",
+      "license_refs": [],
       "license_rule": "none",
       "locations": [],
       "name": "go.mod",
@@ -59,7 +61,7 @@
       ],
       "patch_status": "",
       "purl": "",
-      "scope": "required",
+      "scope": "excluded",
       "version_raw": ""
     },
     {
@@ -72,6 +74,7 @@
       "is_direct": true,
       "license_ambiguous": false,
       "license_effective": "",
+      "license_refs": [],
       "license_rule": "none",
       "locations": [],
       "name": "golang-incompatible",
@@ -111,6 +114,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
+      "license_refs": [],
       "license_rule": "concluded:spdx-noassertion",
       "locations": [
         {
@@ -162,6 +166,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
+      "license_refs": [],
       "license_rule": "concluded:spdx-noassertion",
       "locations": [
         {
@@ -200,6 +205,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "",
+      "license_refs": [],
       "license_rule": "none",
       "locations": [],
       "name": "toml",
@@ -239,6 +245,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
+      "license_refs": [],
       "license_rule": "concluded:spdx-noassertion",
       "locations": [
         {
@@ -359,6 +366,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "",
+      "license_refs": [],
       "license_rule": "none",
       "locations": [],
       "name": "v3",
@@ -398,6 +406,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
+      "license_refs": [],
       "license_rule": "concluded:spdx-noassertion",
       "locations": [
         {
@@ -434,31 +443,31 @@
     }
   ],
   "coverage": {
-    "completeness_numerator": 45,
-    "completeness_pct": 10.64,
-    "declaration_numerator": 57,
-    "declaration_pct": 13.48,
+    "completeness_numerator": 42,
+    "completeness_pct": 9.93,
+    "declaration_numerator": 54,
+    "declaration_pct": 12.77,
     "denominator": 423,
     "field_count": 21,
     "fields": [
       {
         "completeness_pct": 100.0,
         "declaration_pct": 100.0,
-        "declared": 8,
+        "declared": 7,
         "field_id": "certin.sbom.01.component_name",
         "name": "Component Name",
-        "present": 8,
-        "total": 8,
+        "present": 7,
+        "total": 7,
         "weight": 3
       },
       {
-        "completeness_pct": 75.0,
-        "declaration_pct": 75.0,
+        "completeness_pct": 85.71,
+        "declaration_pct": 85.71,
         "declared": 6,
         "field_id": "certin.sbom.02.component_version",
         "name": "Component Version",
         "present": 6,
-        "total": 8,
+        "total": 7,
         "weight": 3
       },
       {
@@ -468,7 +477,7 @@
         "field_id": "certin.sbom.03.component_description",
         "name": "Component Description",
         "present": 0,
-        "total": 8,
+        "total": 7,
         "weight": 1
       },
       {
@@ -478,17 +487,17 @@
         "field_id": "certin.sbom.04.component_supplier",
         "name": "Component Supplier",
         "present": 0,
-        "total": 8,
+        "total": 7,
         "weight": 3
       },
       {
         "completeness_pct": 0.0,
-        "declaration_pct": 50.0,
+        "declaration_pct": 57.14,
         "declared": 4,
         "field_id": "certin.sbom.05.component_license",
         "name": "Component License",
         "present": 0,
-        "total": 8,
+        "total": 7,
         "weight": 3
       },
       {
@@ -498,7 +507,7 @@
         "field_id": "certin.sbom.06.component_origin",
         "name": "Component Origin",
         "present": 0,
-        "total": 8,
+        "total": 7,
         "weight": 3
       },
       {
@@ -508,7 +517,7 @@
         "field_id": "certin.sbom.07.component_dependencies",
         "name": "Component Dependencies",
         "present": 0,
-        "total": 8,
+        "total": 7,
         "weight": 3
       },
       {
@@ -518,17 +527,17 @@
         "field_id": "certin.sbom.08.vulnerabilities",
         "name": "Vulnerabilities",
         "present": 0,
-        "total": 8,
+        "total": 7,
         "weight": 3
       },
       {
-        "completeness_pct": 12.5,
-        "declaration_pct": 12.5,
+        "completeness_pct": 14.29,
+        "declaration_pct": 14.29,
         "declared": 1,
         "field_id": "certin.sbom.09.patch_status",
         "name": "Patch Status",
         "present": 1,
-        "total": 8,
+        "total": 7,
         "weight": 3
       },
       {
@@ -538,7 +547,7 @@
         "field_id": "certin.sbom.10.release_date",
         "name": "Release Date",
         "present": 0,
-        "total": 8,
+        "total": 7,
         "weight": 1
       },
       {
@@ -548,7 +557,7 @@
         "field_id": "certin.sbom.11.eol_date",
         "name": "End-of-Life (EOL) Date",
         "present": 0,
-        "total": 8,
+        "total": 7,
         "weight": 1
       },
       {
@@ -558,7 +567,7 @@
         "field_id": "certin.sbom.12.criticality",
         "name": "Criticality",
         "present": 0,
-        "total": 8,
+        "total": 7,
         "weight": 3
       },
       {
@@ -568,7 +577,7 @@
         "field_id": "certin.sbom.13.usage_restrictions",
         "name": "Usage Restrictions",
         "present": 0,
-        "total": 8,
+        "total": 7,
         "weight": 1
       },
       {
@@ -578,7 +587,7 @@
         "field_id": "certin.sbom.14.checksums",
         "name": "Checksums or Hashes",
         "present": 0,
-        "total": 8,
+        "total": 7,
         "weight": 3
       },
       {
@@ -588,7 +597,7 @@
         "field_id": "certin.sbom.15.comments",
         "name": "Comments or Notes",
         "present": 0,
-        "total": 8,
+        "total": 7,
         "weight": 1
       },
       {
@@ -598,7 +607,7 @@
         "field_id": "certin.sbom.16.author_of_sbom_data",
         "name": "Author of SBOM Data",
         "present": 0,
-        "total": 8,
+        "total": 7,
         "weight": 3
       },
       {
@@ -608,7 +617,7 @@
         "field_id": "certin.sbom.17.timestamp",
         "name": "Timestamp",
         "present": 0,
-        "total": 8,
+        "total": 7,
         "weight": 3
       },
       {
@@ -618,7 +627,7 @@
         "field_id": "certin.sbom.18.executable_property",
         "name": "Executable Property",
         "present": 0,
-        "total": 8,
+        "total": 7,
         "weight": 1
       },
       {
@@ -628,7 +637,7 @@
         "field_id": "certin.sbom.19.archive_property",
         "name": "Archive Property",
         "present": 0,
-        "total": 8,
+        "total": 7,
         "weight": 1
       },
       {
@@ -638,7 +647,7 @@
         "field_id": "certin.sbom.20.structured_property",
         "name": "Structured Property",
         "present": 0,
-        "total": 8,
+        "total": 7,
         "weight": 1
       },
       {
@@ -648,13 +657,13 @@
         "field_id": "certin.sbom.21.unique_identifier",
         "name": "Unique Identifier",
         "present": 0,
-        "total": 8,
+        "total": 7,
         "weight": 3
       }
     ],
     "formula": "pct = 100 \u00d7 \u03a3_c \u03a3_f (w_f \u00d7 present(c,f)) / \u03a3_c \u03a3_f w_f",
     "scored_entities": 9,
-    "unidentified_count": 1
+    "unidentified_count": 2
   },
   "diagnostics": [
     {
@@ -700,7 +709,7 @@
     {
       "code": "NORMALIZE_UNIDENTIFIED_IN_DENOMINATOR",
       "hint": "they remain in the coverage denominator; dropping them would let a scan that understood almost nothing report a high percentage",
-      "message": "1 unidentified entities scored zero",
+      "message": "2 unidentified entities scored zero",
       "severity": "warn"
     }
   ],

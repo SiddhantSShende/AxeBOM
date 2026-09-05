@@ -245,8 +245,37 @@ def _cyclonedx_scope(entry: dict[str, Any]) -> str:
     declared = str(entry.get("scope", "")).strip().lower()
     if declared in ("required", "optional", "excluded"):
         return declared
-    if str(entry.get("type", "")).strip().lower() in _NON_DEPENDENCY_TYPES:
+
+    kind = str(entry.get("type", "")).strip().lower()
+    if kind in _NON_DEPENDENCY_TYPES:
         return "excluded"
+
+    # ⚠ AN `application` WITH NO PURL IS A MANIFEST ROOT, NOT A DEPENDENCY.
+    #
+    # cdxgen emits one `application` component per manifest it finds, named
+    # after the FILE — `package-lock.json`, `services/auth-svc/requirements.txt`,
+    # `services/ws-gateway/go.mod`. Found live: 31 such rows counted as
+    # `required` dependencies across this stack's scans, identified by NAME at
+    # LOW confidence because they have nothing else.
+    #
+    # They are the same kind of thing the `file` rule above already excludes —
+    # evidence the inventory was derived FROM — and the comment there applies
+    # verbatim: a customer asking "how many dependencies do I have?" does not
+    # want package-lock.json in that number.
+    #
+    # ⚠ THE `not purl` CONDITION IS LOAD-BEARING, not belt-and-braces. A
+    # genuinely bundled application IS a dependency and carries a purl; only the
+    # synthetic manifest roots lack one. Excluding every `application` would
+    # drop real components.
+    #
+    # ⚠ AND THIS CANNOT FLATTER A PERCENTAGE. An excluded component goes to
+    # `unidentified_count` and STAYS IN THE DENOMINATOR (§5.4) — so this changes
+    # the dependency count and the level projections, and moves neither coverage
+    # number. Verified before making the change, because "it improves the score"
+    # would have been a reason not to.
+    if kind == "application" and not str(entry.get("purl", "")).strip():
+        return "excluded"
+
     return "required"
 
 
@@ -1194,6 +1223,19 @@ FINDING_ENGINES = frozenset(
 
 _PARSERS = {
     "syft": _ingest_cyclonedx,
+    # ⚠ cdxgen RAN ON EVERY SCAN AND EVERY COMPONENT IT FOUND WAS DISCARDED.
+    #
+    # It is a registered, dispatchable SBOM engine that succeeds in about two
+    # seconds and writes a raw artifact — and it was absent from this map, so
+    # `ingest()` returned zero contributions and a NORMALIZE_NO_PARSER
+    # diagnostic. A 15.5 GB image pulled, stored and executed for nothing.
+    #
+    # Its native format is `cyclonedx-json-1.6`, which is exactly what
+    # `_ingest_cyclonedx` already handles for syft and both trivy modes. No new
+    # parser is written here for the same reason `github-dependency-graph-sbom`
+    # reuses `_ingest_spdx` below: a bespoke one would be unverified against any
+    # real captured fixture, and this document shape is already covered.
+    "cdxgen": _ingest_cyclonedx,
     "trivy-fs": _ingest_cyclonedx,
     "trivy-image": _ingest_cyclonedx,
     "syft-spdx": _ingest_spdx,

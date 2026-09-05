@@ -205,6 +205,26 @@ def write_bom_document(
         row = cur.fetchone()
         bom_document_id = str(row[0])
 
+        # ⚠ A PLAIN INSERT, NOT A CopyBatch, AND THE SCHEMA FORCES IT.
+        # normalize.license_refs is UNIQUE (tenant_id, slug) and COPY cannot
+        # express ON CONFLICT — so the second scan of a project with an
+        # unmappable licence would abort the whole normalization.
+        #
+        # ⚠ DO NOTHING, NOT DO UPDATE. `first_seen_scan_id` means what it says:
+        # a later scan re-reporting the same slug must not overwrite where it
+        # first appeared, or "when did we first see this?" stops being
+        # answerable — which is the question the column exists for.
+        for slug, raw_text in bulk.license_refs(canonical.get("components") or []):
+            cur.execute(
+                """
+                INSERT INTO normalize.license_refs
+                    (tenant_id, slug, raw_text, first_seen_scan_id)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (tenant_id, slug) DO NOTHING
+                """,
+                (tenant_id, slug, raw_text, scan_id),
+            )
+
         result = bulk.plan(canonical, tenant_id=tenant_id, bom_document_id=bom_document_id)
         if result.refused:
             # Raising inside the `with conn.transaction()` block rolls the

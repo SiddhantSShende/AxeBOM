@@ -20,6 +20,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "",
+      "license_refs": [],
       "license_rule": "none",
       "locations": [],
       "name": "/src/tools/build/pom.xml",
@@ -55,6 +56,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "",
+      "license_refs": [],
       "license_rule": "none",
       "locations": [],
       "name": "/src/libs/shared/go.mod",
@@ -90,6 +92,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "",
+      "license_refs": [],
       "license_rule": "none",
       "locations": [],
       "name": "/src/services/api/package-lock.json",
@@ -125,6 +128,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "",
+      "license_refs": [],
       "license_rule": "none",
       "locations": [],
       "name": "/src/services/worker/requirements.txt",
@@ -151,6 +155,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "",
+      "license_refs": [],
       "license_rule": "none",
       "locations": [],
       "name": "libs/shared/go.mod",
@@ -164,7 +169,7 @@
       ],
       "patch_status": "",
       "purl": "",
-      "scope": "required",
+      "scope": "excluded",
       "version_raw": ""
     },
     {
@@ -177,6 +182,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "",
+      "license_refs": [],
       "license_rule": "none",
       "locations": [],
       "name": "services/api/package-lock.json",
@@ -190,7 +196,7 @@
       ],
       "patch_status": "",
       "purl": "",
-      "scope": "required",
+      "scope": "excluded",
       "version_raw": ""
     },
     {
@@ -203,6 +209,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "",
+      "license_refs": [],
       "license_rule": "none",
       "locations": [],
       "name": "services/worker/requirements.txt",
@@ -216,7 +223,7 @@
       ],
       "patch_status": "",
       "purl": "",
-      "scope": "required",
+      "scope": "excluded",
       "version_raw": ""
     },
     {
@@ -229,6 +236,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "",
+      "license_refs": [],
       "license_rule": "none",
       "locations": [],
       "name": "tools/build/pom.xml",
@@ -242,7 +250,7 @@
       ],
       "patch_status": "",
       "purl": "",
-      "scope": "required",
+      "scope": "excluded",
       "version_raw": ""
     },
     {
@@ -255,6 +263,7 @@
       "is_direct": true,
       "license_ambiguous": false,
       "license_effective": "",
+      "license_refs": [],
       "license_rule": "none",
       "locations": [],
       "name": "shared",
@@ -294,6 +303,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
+      "license_refs": [],
       "license_rule": "concluded:spdx-noassertion",
       "locations": [
         {
@@ -405,6 +415,7 @@
       "is_direct": true,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
+      "license_refs": [],
       "license_rule": "concluded:spdx-noassertion",
       "locations": [
         {
@@ -462,6 +473,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
+      "license_refs": [],
       "license_rule": "concluded:spdx-noassertion",
       "locations": [
         {
@@ -519,6 +531,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
+      "license_refs": [],
       "license_rule": "concluded:spdx-noassertion",
       "locations": [
         {
@@ -570,6 +583,7 @@
       "is_direct": true,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
+      "license_refs": [],
       "license_rule": "concluded:spdx-noassertion",
       "locations": [
         {
@@ -661,6 +675,7 @@
       "is_direct": true,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
+      "license_refs": [],
       "license_rule": "concluded:spdx-noassertion",
       "locations": [
         {
@@ -758,6 +773,7 @@
       "is_direct": true,
       "license_ambiguous": false,
       "license_effective": "NOASSERTION",
+      "license_refs": [],
       "license_rule": "concluded:spdx-noassertion",
       "locations": [
         {
@@ -864,31 +880,31 @@
     }
   ],
   "coverage": {
-    "completeness_numerator": 66,
-    "completeness_pct": 8.78,
-    "declaration_numerator": 87,
-    "declaration_pct": 11.57,
+    "completeness_numerator": 54,
+    "completeness_pct": 7.18,
+    "declaration_numerator": 75,
+    "declaration_pct": 9.97,
     "denominator": 752,
     "field_count": 21,
     "fields": [
       {
         "completeness_pct": 100.0,
         "declaration_pct": 100.0,
-        "declared": 12,
+        "declared": 8,
         "field_id": "certin.sbom.01.component_name",
         "name": "Component Name",
-        "present": 12,
-        "total": 12,
+        "present": 8,
+        "total": 8,
         "weight": 3
       },
       {
-        "completeness_pct": 58.33,
-        "declaration_pct": 58.33,
+        "completeness_pct": 87.5,
+        "declaration_pct": 87.5,
         "declared": 7,
         "field_id": "certin.sbom.02.component_version",
         "name": "Component Version",
         "present": 7,
-        "total": 12,
+        "total": 8,
         "weight": 3
       },
       {
@@ -898,7 +914,7 @@
         "field_id": "certin.sbom.03.component_description",
         "name": "Component Description",
         "present": 0,
-        "total": 12,
+        "total": 8,
         "weight": 1
       },
       {
@@ -908,17 +924,17 @@
         "field_id": "certin.sbom.04.component_supplier",
         "name": "Component Supplier",
         "present": 0,
-        "total": 12,
+        "total": 8,
         "weight": 3
       },
       {
         "completeness_pct": 0.0,
-        "declaration_pct": 58.33,
+        "declaration_pct": 87.5,
         "declared": 7,
         "field_id": "certin.sbom.05.component_license",
         "name": "Component License",
         "present": 0,
-        "total": 12,
+        "total": 8,
         "weight": 3
       },
       {
@@ -928,7 +944,7 @@
         "field_id": "certin.sbom.06.component_origin",
         "name": "Component Origin",
         "present": 0,
-        "total": 12,
+        "total": 8,
         "weight": 3
       },
       {
@@ -938,7 +954,7 @@
         "field_id": "certin.sbom.07.component_dependencies",
         "name": "Component Dependencies",
         "present": 0,
-        "total": 12,
+        "total": 8,
         "weight": 3
       },
       {
@@ -948,17 +964,17 @@
         "field_id": "certin.sbom.08.vulnerabilities",
         "name": "Vulnerabilities",
         "present": 0,
-        "total": 12,
+        "total": 8,
         "weight": 3
       },
       {
-        "completeness_pct": 25.0,
-        "declaration_pct": 25.0,
+        "completeness_pct": 37.5,
+        "declaration_pct": 37.5,
         "declared": 3,
         "field_id": "certin.sbom.09.patch_status",
         "name": "Patch Status",
         "present": 3,
-        "total": 12,
+        "total": 8,
         "weight": 3
       },
       {
@@ -968,7 +984,7 @@
         "field_id": "certin.sbom.10.release_date",
         "name": "Release Date",
         "present": 0,
-        "total": 12,
+        "total": 8,
         "weight": 1
       },
       {
@@ -978,7 +994,7 @@
         "field_id": "certin.sbom.11.eol_date",
         "name": "End-of-Life (EOL) Date",
         "present": 0,
-        "total": 12,
+        "total": 8,
         "weight": 1
       },
       {
@@ -988,7 +1004,7 @@
         "field_id": "certin.sbom.12.criticality",
         "name": "Criticality",
         "present": 0,
-        "total": 12,
+        "total": 8,
         "weight": 3
       },
       {
@@ -998,7 +1014,7 @@
         "field_id": "certin.sbom.13.usage_restrictions",
         "name": "Usage Restrictions",
         "present": 0,
-        "total": 12,
+        "total": 8,
         "weight": 1
       },
       {
@@ -1008,7 +1024,7 @@
         "field_id": "certin.sbom.14.checksums",
         "name": "Checksums or Hashes",
         "present": 0,
-        "total": 12,
+        "total": 8,
         "weight": 3
       },
       {
@@ -1018,7 +1034,7 @@
         "field_id": "certin.sbom.15.comments",
         "name": "Comments or Notes",
         "present": 0,
-        "total": 12,
+        "total": 8,
         "weight": 1
       },
       {
@@ -1028,7 +1044,7 @@
         "field_id": "certin.sbom.16.author_of_sbom_data",
         "name": "Author of SBOM Data",
         "present": 0,
-        "total": 12,
+        "total": 8,
         "weight": 3
       },
       {
@@ -1038,7 +1054,7 @@
         "field_id": "certin.sbom.17.timestamp",
         "name": "Timestamp",
         "present": 0,
-        "total": 12,
+        "total": 8,
         "weight": 3
       },
       {
@@ -1048,7 +1064,7 @@
         "field_id": "certin.sbom.18.executable_property",
         "name": "Executable Property",
         "present": 0,
-        "total": 12,
+        "total": 8,
         "weight": 1
       },
       {
@@ -1058,7 +1074,7 @@
         "field_id": "certin.sbom.19.archive_property",
         "name": "Archive Property",
         "present": 0,
-        "total": 12,
+        "total": 8,
         "weight": 1
       },
       {
@@ -1068,7 +1084,7 @@
         "field_id": "certin.sbom.20.structured_property",
         "name": "Structured Property",
         "present": 0,
-        "total": 12,
+        "total": 8,
         "weight": 1
       },
       {
@@ -1078,13 +1094,13 @@
         "field_id": "certin.sbom.21.unique_identifier",
         "name": "Unique Identifier",
         "present": 0,
-        "total": 12,
+        "total": 8,
         "weight": 3
       }
     ],
     "formula": "pct = 100 \u00d7 \u03a3_c \u03a3_f (w_f \u00d7 present(c,f)) / \u03a3_c \u03a3_f w_f",
     "scored_entities": 16,
-    "unidentified_count": 4
+    "unidentified_count": 8
   },
   "diagnostics": [
     {
@@ -1151,7 +1167,7 @@
     {
       "code": "NORMALIZE_UNIDENTIFIED_IN_DENOMINATOR",
       "hint": "they remain in the coverage denominator; dropping them would let a scan that understood almost nothing report a high percentage",
-      "message": "4 unidentified entities scored zero",
+      "message": "8 unidentified entities scored zero",
       "severity": "warn"
     }
   ],

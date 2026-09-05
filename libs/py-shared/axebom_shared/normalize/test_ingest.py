@@ -8,7 +8,7 @@ Both were silently absent until this file existed: `_ingest_cyclonedx` parsed
 
 from __future__ import annotations
 
-from .ingest import ingest
+from .ingest import ingest, supported_engines
 
 
 def cyclonedx_component(ref: str, purl: str) -> dict:
@@ -448,3 +448,136 @@ def test_webrecon_fingerprint_is_a_finding_engine() -> None:
     from .ingest import FINDING_ENGINES
 
     assert "webrecon-fingerprint" in FINDING_ENGINES
+
+
+# ---------------------------------------------------------------------------
+# Manifest roots are evidence, not dependencies
+# ---------------------------------------------------------------------------
+
+
+def _cdx(components: list[dict]) -> dict:
+    return {"bomFormat": "CycloneDX", "specVersion": "1.6", "components": components}
+
+
+def test_a_purlless_application_component_is_a_manifest_root_not_a_dependency():
+    """⚠ FOUND LIVE: 31 ROWS COUNTED AS `required` DEPENDENCIES THAT WERE FILES.
+
+    cdxgen emits one `application` component per manifest it finds, named after
+    the file — `package-lock.json`, `services/auth-svc/requirements.txt`,
+    `services/ws-gateway/go.mod`. They have no purl, so they were identified by
+    NAME at LOW confidence and landed in the dependency list.
+
+    The `file` rule already excludes exactly this kind of thing, and its comment
+    applies verbatim: a customer asking "how many dependencies do I have?" does
+    not want package-lock.json in that number.
+    """
+    result = ingest(
+        "cdxgen",
+        _cdx(
+            [
+                {"type": "application", "name": "package-lock.json"},
+                {"type": "application", "name": "services/ws-gateway/go.mod"},
+            ]
+        ),
+        scan_id="01900000-0000-7000-8000-0000000000s1",
+    )
+
+    scopes = {c.identity.name: c.scope for c in result.contributions}
+    assert scopes, "the manifest roots were dropped entirely rather than excluded"
+    for name, scope in scopes.items():
+        assert scope == "excluded", f"{name} is counted as a {scope} dependency"
+
+
+def test_a_bundled_application_with_a_purl_is_still_a_dependency():
+    """⚠ THE `not purl` CONDITION IS LOAD-BEARING, NOT BELT-AND-BRACES.
+
+    A genuinely bundled application IS a dependency and carries a purl; only the
+    synthetic manifest roots lack one. Excluding every `application` would drop
+    real components out of the inventory — the failure mode that matters far
+    more than the one being fixed.
+    """
+    result = ingest(
+        "cdxgen",
+        _cdx(
+            [
+                {
+                    "type": "application",
+                    "name": "busybox",
+                    "version": "1.36.1",
+                    "purl": "pkg:apk/alpine/busybox@1.36.1",
+                }
+            ]
+        ),
+        scan_id="01900000-0000-7000-8000-0000000000s1",
+    )
+
+    assert result.contributions, "a real bundled application was dropped"
+    assert result.contributions[0].scope == "required", result.contributions[0].scope
+
+
+def test_an_explicit_scope_still_wins_over_the_type_rule():
+    """An engine that states a scope has said something; the inference is only
+    for when it has not."""
+    result = ingest(
+        "cdxgen",
+        _cdx([{"type": "application", "name": "package-lock.json", "scope": "required"}]),
+        scan_id="01900000-0000-7000-8000-0000000000s1",
+    )
+    assert result.contributions[0].scope == "required"
+
+
+def test_cdxgens_output_is_actually_parsed():
+    """⚠ cdxgen RAN ON EVERY SCAN AND EVERYTHING IT FOUND WAS DISCARDED.
+
+    It is a registered, dispatchable SBOM engine that succeeds in about two
+    seconds and writes a raw artifact — and it was absent from `_PARSERS`, so
+    every component it catalogued produced a NORMALIZE_NO_PARSER diagnostic and
+    reached `normalize.components` never. A 15.5 GB image pulled, stored and
+    executed for nothing.
+
+    Same class as `syft-spdx` being implemented and in no registry: work that
+    runs, costs, and is thrown away — visible only by looking at what actually
+    landed.
+    """
+    result = ingest(
+        "cdxgen",
+        _cdx([{"type": "library", "name": "left-pad", "purl": "pkg:npm/left-pad@1.3.0"}]),
+        scan_id="01900000-0000-7000-8000-0000000000s1",
+    )
+
+    codes = [d.get("code") for d in result.diagnostics]
+    assert "NORMALIZE_NO_PARSER" not in codes, codes
+    assert [c.identity.name for c in result.contributions] == ["left-pad"]
+
+
+def test_every_sbom_engine_that_can_be_dispatched_has_a_parser():
+    """⚠ THE GUARD, NOT THE OBSERVATION.
+
+    An engine reaching this map is the difference between a scan that produces
+    an inventory and one that burns compute and reports nothing. Two have gone
+    missing so far — `cdxgen` here, and `syft-spdx` from the Go registry — and
+    both were found by looking at output rather than by any test.
+
+    The list is written out rather than read from `OSINT/tools.manifest.yaml`
+    because that file declares no per-engine ecosystems or families this side
+    can key on, and a test that silently matched nothing would be worse than
+    none. If an engine is added, this fails until somebody decides whether its
+    output is meant to land.
+    """
+    must_parse = {
+        "syft",
+        "syft-spdx",
+        "cdxgen",
+        "trivy-fs",
+        "trivy-image",
+        "grype",
+        "osv-scanner",
+        "dependency-check",
+        "github-dependency-graph-sbom",
+        "webrecon-fingerprint",
+    }
+    missing = must_parse - set(supported_engines())
+    assert not missing, (
+        f"{sorted(missing)} can be dispatched but has no normalizer parser, so "
+        "everything it finds is discarded after the engine has already run"
+    )

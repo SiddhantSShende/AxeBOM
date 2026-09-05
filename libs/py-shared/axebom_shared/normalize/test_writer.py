@@ -798,3 +798,167 @@ def test_every_planned_hardware_column_exists_in_the_live_schema(
             f"{batch.table} declares columns {sorted(missing)} that do not exist in the "
             f"live schema — live columns are {sorted(live_columns)}"
         )
+
+
+def test_provenance_and_candidate_identities_actually_land(pg_conn, written):
+    """⚠ TWO TABLES WITH LIVE READERS AND NO WRITER AT ALL.
+
+    `services/project/internal/store/dependencies.go` reads both — the
+    per-component "where did this line in this report come from?" panel is what
+    makes a report defensible six months later — and it returned an empty list
+    for EVERY component in the product's history. `loadComponentProvenanceEngines`
+    swallows its error with a `//nolint:nilerr`, so a broken query and an honest
+    absence looked identical from the outside.
+
+    The data was never missing: `merge.MergedComponent.observed_by` and
+    `.candidate_identities` have always been computed and serialised into the
+    canonical document. Nothing consumed them.
+
+    This asserts against REAL POSTGRES, because "the batch has rows" was already
+    true of a plan that could never execute — see `_findings_batch`'s own comment
+    about three column names that did not exist.
+    """
+    tenant_id = str(uuid.uuid4())
+    canonical = canonical_model()
+
+    result = write_bom_document(
+        pg_conn,
+        tenant_id=tenant_id,
+        scan_id=str(uuid.uuid4()),
+        bom_type="SBOM",
+        normalization_version=1,
+        canonical=canonical,
+    )
+    written.append((tenant_id, result.bom_document_id))
+
+    cur = pg_conn.cursor()
+    # ⚠ SESSION SCOPE (`false`), NOT TRANSACTION SCOPE. The connection is in
+    # autocommit, so a `true` here applies to a transaction that ends before the
+    # next statement — and the read then fails with
+    # `invalid input syntax for type uuid: ""` because current_setting returns
+    # empty. The same trap this file's SBOM round-trip already documents.
+    cur.execute("SELECT set_config('app.current_tenant_id', %s, false)", (tenant_id,))
+    cur.execute(
+        "SELECT engine_id, engine_version, rule_id, confidence "
+        "  FROM normalize.component_provenance WHERE bom_document_id = %s",
+        (result.bom_document_id,),
+    )
+    provenance = cur.fetchall()
+    assert provenance, "no provenance was written; the panel stays empty"
+    engines = {row[0] for row in provenance}
+    assert engines == {"syft"}, engines
+    # The engine's own id for the component is what lets somebody go back to the
+    # raw artifact and find the row it came from.
+    assert all(row[2] for row in provenance), f"native ids were dropped: {provenance}"
+
+    cur.execute(
+        "SELECT kind, value, source_engine, confidence "
+        "  FROM normalize.component_candidate_identities WHERE bom_document_id = %s",
+        (result.bom_document_id,),
+    )
+    candidates = cur.fetchall()
+    assert candidates, "no candidate identity was written"
+    for kind, value, engine, confidence in candidates:
+        assert kind == "cpe"
+        assert value.startswith("cpe:2.3:")
+        assert engine == "dependency-check"
+        # ⚠ IT MUST STAY `low`. That is the whole reason this row is here
+        # rather than on the component: a low-confidence CPE must not merge and
+        # pull in another package's findings.
+        assert confidence == "low"
+
+
+def test_an_unknown_confidence_becomes_null_rather_than_aborting_the_copy(pg_conn, written):
+    """⚠ THE COLUMN'S CHECK ACCEPTS high/medium/low AND NOTHING ELSE.
+
+    An engine reporting "HIGH", or a value this codebase has not seen, would
+    abort the COPY and take the entire normalization with it — losing every
+    component to record one confidence nobody can use. NULL reads as "not
+    stated", which is what it is.
+    """
+    tenant_id = str(uuid.uuid4())
+    canonical = canonical_model()
+    canonical["components"][0]["observed_by"] = [
+        {"engine": "syft", "confidence": "VERY SURE INDEED"}
+    ]
+
+    result = write_bom_document(
+        pg_conn,
+        tenant_id=tenant_id,
+        scan_id=str(uuid.uuid4()),
+        bom_type="SBOM",
+        normalization_version=1,
+        canonical=canonical,
+    )
+    written.append((tenant_id, result.bom_document_id))
+
+    cur = pg_conn.cursor()
+    cur.execute("SELECT set_config('app.current_tenant_id', %s, false)", (tenant_id,))
+    cur.execute(
+        "SELECT confidence FROM normalize.component_provenance "
+        " WHERE bom_document_id = %s AND engine_id = 'syft'",
+        (result.bom_document_id,),
+    )
+    rows = cur.fetchall()
+    assert rows, "the write was lost entirely"
+    assert any(row[0] is None for row in rows), rows
+
+
+def test_an_unmappable_licence_keeps_its_raw_text(pg_conn, written):
+    """⚠ `Resolution.raw` EXISTS ONLY TO FILL THIS TABLE, AND NOTHING WROTE IT.
+
+    Its own comment says the text is "preserved for normalize.license_refs, so a
+    human can map it later without re-running the scan" — and it reached no
+    serialiser, so the table stayed empty and re-running the scan was the only
+    way to get the text back. The exact opposite of what the field is for.
+    """
+    tenant_id = str(uuid.uuid4())
+    scan_id = str(uuid.uuid4())
+    canonical = canonical_model()
+    canonical["components"][0]["license_refs"] = [
+        {"slug": "LicenseRef-acme-eula", "raw_text": "Acme Internal EULA v3, see LEGAL.txt"}
+    ]
+
+    result = write_bom_document(
+        pg_conn,
+        tenant_id=tenant_id,
+        scan_id=scan_id,
+        bom_type="SBOM",
+        normalization_version=1,
+        canonical=canonical,
+    )
+    written.append((tenant_id, result.bom_document_id))
+
+    cur = pg_conn.cursor()
+    cur.execute("SELECT set_config('app.current_tenant_id', %s, false)", (tenant_id,))
+    cur.execute(
+        "SELECT raw_text, first_seen_scan_id FROM normalize.license_refs "
+        " WHERE tenant_id = %s AND slug = %s",
+        (tenant_id, "LicenseRef-acme-eula"),
+    )
+    row = cur.fetchone()
+    assert row, "the unmappable licence text was thrown away"
+    assert row[0] == "Acme Internal EULA v3, see LEGAL.txt"
+    assert str(row[1]) == scan_id
+
+    # ⚠ A SECOND SCAN MUST NOT ABORT THE WRITE, and must not overwrite where the
+    # licence was FIRST seen. The table is UNIQUE (tenant_id, slug), so COPY
+    # could never have carried it — and DO UPDATE would make
+    # `first_seen_scan_id` mean "last seen", which is the question nobody asked.
+    second_scan = str(uuid.uuid4())
+    second = write_bom_document(
+        pg_conn,
+        tenant_id=tenant_id,
+        scan_id=second_scan,
+        bom_type="SBOM",
+        normalization_version=2,
+        canonical=canonical,
+    )
+    written.append((tenant_id, second.bom_document_id))
+
+    cur.execute(
+        "SELECT first_seen_scan_id FROM normalize.license_refs "
+        " WHERE tenant_id = %s AND slug = %s",
+        (tenant_id, "LicenseRef-acme-eula"),
+    )
+    assert str(cur.fetchone()[0]) == scan_id, "a re-scan overwrote the first sighting"

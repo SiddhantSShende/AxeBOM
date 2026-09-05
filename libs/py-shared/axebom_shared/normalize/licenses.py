@@ -513,6 +513,29 @@ class LicenseSet:
                 return resolution.value, f"{kind}:{resolution.rule}"
         return "", "none"
 
+    def unmapped(self) -> list[tuple[str, str]]:
+        """Every LicenseRef this set produced, as (slug, raw text).
+
+        ⚠ THE RAW TEXT WAS COMPUTED AND THEN THROWN AWAY. `Resolution.raw` says
+        it is "preserved for normalize.license_refs, so a human can map it later
+        without re-running the scan" — and it reached no serialiser, so the
+        table had no writer and re-scanning was the only way to get the text
+        back. That is the opposite of what the field exists for.
+
+        A LicenseRef is the honest end of the resolution pipeline: a licence
+        string this product could not map to SPDX, kept verbatim rather than
+        guessed at. Somebody has to read it eventually; this is what gives them
+        something to read.
+        """
+        out: list[tuple[str, str]] = []
+        for resolution in (self.concluded, self.declared, self.observed):
+            if resolution is None or not resolution.raw:
+                continue
+            if not resolution.value.startswith("LicenseRef-"):
+                continue
+            out.append((resolution.value, resolution.raw))
+        return out
+
     @property
     def ambiguous(self) -> bool:
         return any(

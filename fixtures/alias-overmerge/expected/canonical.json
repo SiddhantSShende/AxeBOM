@@ -11,6 +11,7 @@
       "is_direct": false,
       "license_ambiguous": false,
       "license_effective": "",
+      "license_refs": [],
       "license_rule": "none",
       "locations": [
         {
@@ -43,6 +44,7 @@
       "is_direct": true,
       "license_ambiguous": false,
       "license_effective": "",
+      "license_refs": [],
       "license_rule": "none",
       "locations": [
         {

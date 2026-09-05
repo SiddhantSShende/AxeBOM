@@ -135,6 +135,13 @@ class MergedComponent:
             "license_effective": value,
             "license_rule": rule,
             "license_ambiguous": self.licenses.ambiguous,
+            # ⚠ THE RAW TEXT OF ANYTHING THAT COULD NOT BE MAPPED TO SPDX.
+            # `normalize.license_refs` exists so a human can map it later
+            # WITHOUT re-running the scan — and until this line the text never
+            # left the resolver, so re-scanning was the only option.
+            "license_refs": [
+                {"slug": slug, "raw_text": raw} for slug, raw in self.licenses.unmapped()
+            ],
             "locations": [loc.as_dict() for loc in sorted(self.locations, key=Location.key)],
             "hashes": sorted(self.hashes, key=lambda h: (h.get("alg", ""), h.get("value", ""))),
             "observed_by": [o.as_dict() for o in sorted(self.observed_by, key=lambda o: o.engine)],

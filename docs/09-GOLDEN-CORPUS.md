@@ -148,3 +148,28 @@ task test:golden
 ```
 
 Expect diffs, and treat them as findings rather than noise. A changed component count after an engine bump is exactly the signal the corpus exists to produce: either the engine improved, or it regressed, and **either way somebody needs to look**. Record the outcome in the fixture README.
+
+
+## 2026-09-05 — every SBOM golden regenerated, for two reasons
+
+⚠ **A golden change needs a justification, so here is the whole of it.** Nothing
+about identity, dedup or the alias graph moved; no component was added or
+removed in any fixture.
+
+1. **`license_refs` is now emitted on every component**, empty unless a licence
+   string could not be mapped to SPDX. Purely additive — `Resolution.raw` was
+   computed and discarded, and `normalize.license_refs` (whose whole purpose is
+   letting a human map it later *without re-scanning*) had no writer at all.
+
+2. **Manifest pseudo-components moved `required` → `excluded`.** trivy emits one
+   `application` component per manifest it targets, named after the file, while
+   syft catalogues the same lockfile as `type: file` and was already excluded —
+   so a `package-lock.json` was a dependency or not depending on which engine
+   saw it. Affected exactly one component in most fixtures and **4 of
+   `monorepo-multiroot`'s 16**.
+
+   ⚠ **Completeness fell in every affected fixture** (`npm-simple` 11.49 →
+   10.21, `maven-case` 12.77 → 11.70, `monorepo-multiroot` 8.78 → 7.18). An
+   excluded component stays in the denominator, so the manifest's name no longer
+   counts toward the numerator. The old number was flattered by counting a
+   lockfile as an identified component; the new one is the truthful figure.

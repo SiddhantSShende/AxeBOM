@@ -454,10 +454,19 @@ func loadComponentProvenanceEngines(ctx context.Context, tx db.Tx, docID string)
 		 WHERE c.bom_document_id = $1
 		 ORDER BY cp.component_id, cp.engine_id`, docID)
 	if err != nil {
-		// A component with no provenance recorded is possible for an early
-		// or partial normalization; treat it as "nothing to report" rather
-		// than fail the whole listing.
-		return map[string][]string{}, nil //nolint:nilerr // see above
+		// ⚠ THIS USED TO SWALLOW THE ERROR AND RETURN AN EMPTY MAP.
+		//
+		// The reasoning — "a component with no provenance recorded is possible
+		// for an early or partial normalization" — described the wrong thing: a
+		// component with no provenance produces zero ROWS, not an error. What
+		// this branch actually hid was a failing QUERY, and it hid it for the
+		// entire time normalize.component_provenance had no writer at all, so
+		// an empty panel and a broken one were indistinguishable from outside.
+		//
+		// The table is written now (libs/py-shared/.../bulk.py's
+		// _provenance_batch), so an empty result is a real answer and a failure
+		// is a real failure. They must not look the same again.
+		return nil, fmt.Errorf("load component provenance engines: %w", err)
 	}
 	defer rows.Close()
 

@@ -310,6 +310,12 @@ Scoring a certificate against `key_size` (a Keys field) would report every CBOM 
 
 - `w = 3` for minimum-element / identity-bearing fields; `w = 1` for enrichment. Weights come from the profile YAML and are **AxeBOM's judgement, not CERT-In's** — the guideline does not rank its fields. Every report footer says so.
 - Components with `scope = excluded` or `identity_rule = opaque` go to `unidentified_count` and are **never silently dropped from the denominator.** Dropping them lets a bad scan report 100%.
+- **A manifest is evidence, not a dependency.** A CycloneDX component typed `file` — or typed `application` *with no purl* — is what the inventory was derived FROM, not a part of the product: a `package-lock.json`, a `requirements.txt` or a `pom.xml` anywhere in the tree. Both are `excluded`.
+  > ⚠ **The `application` half was missing, and the two engines disagreed.** syft catalogues a lockfile as `type: file` (excluded); trivy emits one `application` component per manifest it targets, named after the file, and those counted as **required dependencies**. The same lockfile was a dependency or not depending on which engine saw it. Found live: 31 such rows, and 4 of `monorepo-multiroot`'s 16 "components".
+  >
+  > The `no purl` condition is load-bearing: a genuinely bundled application *is* a dependency and carries a purl. Excluding every `application` would drop real components.
+  >
+  > ⚠ **This lowers `completeness_pct`, and that is the honest direction.** An excluded component stays in the denominator, so its name no longer counts toward the numerator — `npm-simple` moved 11.49% → 10.21%. The previous number was flattered by counting a lockfile as an identified component.
 - Always render a **per-field breakdown table** and the **Engine Coverage table** — including ecosystems detected with *no* available engine. That last row is the honest denominator most tools hide, and it is a genuine differentiator.
 
 ---

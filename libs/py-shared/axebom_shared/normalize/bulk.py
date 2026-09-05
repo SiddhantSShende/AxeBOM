@@ -218,6 +218,12 @@ def plan(
 
     out.batches.append(_components_batch(components, tenant_id, bom_document_id, component_ids))
     out.batches.append(_locations_batch(components, tenant_id, bom_document_id, component_ids))
+    # Both of these had no writer at all and two live readers — see each
+    # function's own comment for what that cost.
+    out.batches.append(_provenance_batch(components, tenant_id, bom_document_id, component_ids))
+    out.batches.append(
+        _candidate_identities_batch(components, tenant_id, bom_document_id, component_ids)
+    )
 
     findings_batch, findings_diagnostics = _findings_batch(
         findings, tenant_id, bom_document_id, component_ids
@@ -464,6 +470,184 @@ def _locations_batch(
             )
 
     return batch
+
+
+def _provenance_batch(
+    components: Sequence[dict[str, Any]],
+    tenant_id: str,
+    bom_document_id: str,
+    component_ids: dict[str, str],
+) -> CopyBatch:
+    """Which engine reported each component, and what it called it.
+
+    ⚠ THIS TABLE HAD NO WRITER AT ALL, AND IT HAS TWO LIVE READERS.
+
+    `services/project/internal/store/dependencies.go` powers the per-component
+    "where did this line in this report come from?" panel — the thing that makes
+    a report defensible six months later — and it returned an empty list for
+    EVERY component. Worse, `loadComponentProvenanceEngines` swallows its error
+    with a `//nolint:nilerr`, so an empty answer and a broken query looked
+    identical from the outside.
+
+    ⚠ THE DATA WAS ALREADY HERE. `merge.MergedComponent.observed_by` carries one
+    `Observation` per engine that saw the component — engine, version, native id
+    and confidence — and `as_dict()` has always serialised it into the canonical
+    document. Nothing consumed it. This is a write of facts the normalizer had
+    computed and then discarded.
+
+    ⚠ `observed_at` IS LEFT TO THE COLUMN DEFAULT ON PURPOSE. A normalization is
+    replayable (invariant 10): re-normalizing the same artifacts must produce the
+    same rows, and stamping a clock here would make every replay differ from the
+    last. The honest observation time is the SCAN's, which the bom_document
+    already carries.
+    """
+    batch = CopyBatch(
+        table="normalize.component_provenance",
+        columns=(
+            "tenant_id",
+            "bom_document_id",
+            "component_id",
+            "engine_id",
+            "engine_version",
+            "confidence",
+            "rule_id",
+        ),
+    )
+
+    for component in components:
+        key = _text(component.get("component_key"))
+        component_id = component_ids.get(key)
+        if component_id is None:
+            continue
+        for observation in component.get("observed_by") or []:
+            engine = _text(observation.get("engine"))
+            if not engine:
+                # An observation with no engine names nothing. Skipping it is
+                # right; recording it would put a blank row in the one table a
+                # customer consults to ask "who said this?".
+                continue
+            batch.rows.append(
+                (
+                    tenant_id,
+                    bom_document_id,
+                    component_id,
+                    engine,
+                    _text(observation.get("engine_version")) or None,
+                    _confidence(observation.get("confidence")),
+                    # The engine's OWN id for this component — syft's package
+                    # id, dependency-check's dependency ref. It is what lets
+                    # somebody go back to the raw artifact and find the row.
+                    _text(observation.get("native_id")) or None,
+                )
+            )
+
+    return batch
+
+
+def _candidate_identities_batch(
+    components: Sequence[dict[str, Any]],
+    tenant_id: str,
+    bom_document_id: str,
+    component_ids: dict[str, str],
+) -> CopyBatch:
+    """Identity claims recorded WITHOUT merging.
+
+    ⚠ THE POINT OF THIS TABLE IS THAT THESE CLAIMS DID NOT CHANGE ANYTHING.
+    A low-confidence CPE from dependency-check is real information a reviewer
+    may well confirm — and it must not silently pull in another component's
+    findings, which is why merge.py keeps it here instead of on the component.
+    Writing it is what lets a human make that call; not writing it threw the
+    evidence away and left the decision unmakeable.
+
+    Also writerless until now, with a live reader in dependencies.go.
+    """
+    batch = CopyBatch(
+        table="normalize.component_candidate_identities",
+        columns=(
+            "tenant_id",
+            "bom_document_id",
+            "component_id",
+            "kind",
+            "value",
+            "source_engine",
+            "confidence",
+        ),
+    )
+
+    for component in components:
+        key = _text(component.get("component_key"))
+        component_id = component_ids.get(key)
+        if component_id is None:
+            continue
+        for candidate in component.get("candidate_identities") or []:
+            kind = _text(candidate.get("kind"))
+            value = _text(candidate.get("value"))
+            engine = _text(candidate.get("source_engine"))
+            # ⚠ EVERY ONE OF THESE IS NOT NULL WITH A CHECK CONSTRAINT. A row
+            # missing any of them fails the COPY and takes the whole
+            # transaction with it — so an incomplete claim is dropped here,
+            # where it costs one candidate, rather than at execute time where
+            # it costs the entire normalization.
+            if not kind or not value or not engine:
+                continue
+            if kind not in _CANDIDATE_KINDS:
+                continue
+            batch.rows.append(
+                (
+                    tenant_id,
+                    bom_document_id,
+                    component_id,
+                    kind,
+                    value,
+                    engine,
+                    _confidence(candidate.get("confidence")) or "low",
+                )
+            )
+
+    return batch
+
+
+#: The CHECK constraint on component_candidate_identities.kind.
+_CANDIDATE_KINDS = frozenset({"cpe", "swid", "purl", "hash", "name"})
+
+
+def _confidence(value: Any) -> str | None:
+    """Map a confidence onto the CHECK constraint, or to NULL.
+
+    ⚠ THE COLUMN ALLOWS high/medium/low AND NOTHING ELSE. An engine that reports
+    "HIGH", or a value this codebase has not seen, would abort the COPY — so an
+    unrecognised confidence becomes NULL, which reads as "not stated" rather
+    than as a level nobody asserted.
+    """
+    text = _text(value).lower()
+    return text if text in ("high", "medium", "low") else None
+
+
+def license_refs(components: Sequence[dict[str, Any]]) -> list[tuple[str, str]]:
+    """Licence strings this product could not map to SPDX, deduped.
+
+    ⚠ NOT A CopyBatch, AND THAT IS FORCED BY THE SCHEMA. `normalize.license_refs`
+    is `UNIQUE (tenant_id, slug)` and COPY cannot express ON CONFLICT — so the
+    second scan of a project with an unmappable licence would abort the entire
+    normalization write. It goes through a plain INSERT in writer.py, the same
+    way bom_documents does.
+
+    ⚠ TENANT-SCOPED, NOT DOCUMENT-SCOPED. One unmapped licence string is one
+    thing a human maps ONCE, not once per scan.
+
+    ⚠ THE TABLE HAD NO WRITER AND `Resolution.raw` EXISTS ONLY TO FILL IT. Its
+    own comment says the text is "preserved for normalize.license_refs, so a
+    human can map it later without re-running the scan" — and it reached no
+    serialiser, so re-running the scan was the only way to get it back.
+    """
+    seen: dict[str, str] = {}
+    for component in components:
+        for ref in component.get("license_refs") or []:
+            slug = _text(ref.get("slug"))
+            raw = _text(ref.get("raw_text"))
+            if slug and raw:
+                seen.setdefault(slug, raw)
+    return sorted(seen.items())
 
 
 def _findings_batch(
