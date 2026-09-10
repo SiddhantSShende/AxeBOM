@@ -1,0 +1,141 @@
+# ============================================================================
+# AIBOM operational surface — what an AI system IS, beyond CERT-In Table 10
+#
+# ⚠ AN AxeBOM OPERATIONAL PROFILE, NOT A COMPLIANCE STANDARD.
+#
+# ⚠ NOTHING IN THIS FILE MAY EVER MOVE completeness_pct OR declaration_pct.
+#
+# Those two numbers answer "how much of what CERT-In requires is present". The
+# number this file produces answers "how much of the AI system's operational
+# shape did we manage to see". They are different questions with different
+# authorities behind them — CERT-In's, and ours — and merging them would let a
+# customer's diligence about vector stores raise a percentage they hand to a
+# regulator.
+#
+# ---------------------------------------------------------------------------
+# WHY THIS FILE EXISTS
+# ---------------------------------------------------------------------------
+# CERT-In Table 10 describes a MODEL: its name, version, developer, licence,
+# training data, metrics, intended use. That is most of what a compliance
+# reviewer asks about a model, and roughly half of what anyone needs to know
+# about a deployed AI SYSTEM.
+#
+# The other half is what the code around the model does. Three engines now
+# report it with file:line evidence — prompts, vector stores, RAG pipelines,
+# embeddings, the inference services the application talks to, the serialization
+# format the weights arrive in — and Table 10 has no element for any of it.
+# Before this profile the only options were to drop those findings or to invent
+# a CERT-In element for them. This is the third answer: score them, under their
+# own label, against nobody's standard but ours.
+#
+# ---------------------------------------------------------------------------
+# WHY SOME OBVIOUS FIELDS ARE ABSENT
+# ---------------------------------------------------------------------------
+# ⚠ EVERY ELEMENT BELOW IS SOMETHING A TOOL ACTUALLY REPORTS OR A PERSON
+# ACTUALLY ENTERS TODAY. A field nothing can fill scores zero for every customer
+# for ever, which does not measure the customer — it measures us, and reads as
+# the customer's failure. Fields that would need capabilities AxeBOM does not
+# have are named in the closing comment rather than added here to look thorough.
+#
+# See docs/06-COMPLIANCE-PROFILES.md for the profile mechanism, and
+# migrations/normalize/0018_ai_assets_and_provenance.sql for the columns.
+# ============================================================================
+
+profile:
+  id: aibom-operational-v1
+  name: AIBOM operational surface
+  version: "1"
+  revision: 1
+
+  # ⚠ THE FIELD THAT MAKES THE DISTINCTION MACHINE-READABLE. compliance.Lint
+  # branches on it, and an absent `kind` means "compliance" — so a profile that
+  # forgets to declare itself is held to every compliance check rather than
+  # quietly escaping them.
+  kind: operational
+  authority: AxeBOM
+
+  # No source_document, no source_pages, no all_entries_verified. There is no
+  # PDF to cite and no page an auditor can open. That absence is exactly what
+  # `kind: operational` declares, and lint asserts both halves.
+
+aibom_operational:
+  applies_to: ai_model
+  label: AI operational surface
+
+  elements:
+    # --- Identity and provenance, beyond the model's name -------------------
+    - {id: axebom.aibom.ops.01.model_key,        name: Resolved identity,        canonical_path: ai_model.model_key,           type: string,      weight: 3, status: extension, description: "The merge key the identity ladder produced — `purl:pkg:huggingface/org/name`, `api:openai/gpt-4o`, `hash:<sha256>`. A model with no resolvable identity cannot be deduplicated, enriched or attested, so this is the field every other one below depends on."}
+    - {id: axebom.aibom.ops.02.identity_confidence, name: Identity confidence,   canonical_path: ai_model.identity_confidence,  type: enum,        weight: 1, status: extension, values: [high, medium, low], description: "Which rung of the ladder fired. `low` is a real answer and counts as covered — knowing that an identity is weak is worth more than not knowing it is."}
+    - {id: axebom.aibom.ops.03.found_by,         name: Discovering engines,      canonical_path: "ai_model.found_by[]",        type: string_list, weight: 3, status: extension, description: "Which AIBOM engines reported this model. One engine or three is the most useful single fact for weighing a row: three converging is corroboration, one alone is a single point of failure."}
+    - {id: axebom.aibom.ops.04.evidence,         name: Source evidence,          canonical_path: "ai_model.evidence[]",        type: string_list, weight: 3, status: extension, description: "Where the reference was seen, as `path:line`. Never inferred — an engine that reported no position leaves this empty rather than being given a plausible one."}
+    - {id: axebom.aibom.ops.05.verified,         name: Upstream verification,    canonical_path: ai_model.verified,            type: boolean,     weight: 3, status: extension, description: "Whether an engine confirmed the model resolves upstream. `false` is an answer and counts as covered — coverage treats a boolean False as present, because 'we looked and it did not resolve' is a stated fact."}
+
+    # --- The software the model rests on ------------------------------------
+    - {id: axebom.aibom.ops.06.frameworks,       name: AI frameworks,            canonical_path: "ai_model.dependencies[]",     type: string_list, weight: 3, status: extension, description: "The AI libraries this model's usage rests on, linked to SBOM component keys where an SBOM catalogued them. Where no engine attributed a calling framework to a specific model, the list is the project's AI libraries and the report says so."}
+
+    # --- The things around the model that are not the model -----------------
+    #
+    # ⚠ THESE ARE SCORED PER MODEL AND POPULATED PER DOCUMENT. A prompt belongs
+    # to the repository, not to one model, so a project with prompts scores
+    # these for every model in it. That is the honest reading: the question is
+    # "did we see the AI system's operational shape", and the shape is shared.
+    - {id: axebom.aibom.ops.07.prompts,          name: Prompts,                  canonical_path: "ai_assets.prompt[]",         type: ref_list,    weight: 3, status: extension, description: "System prompts and prompt files found in source, with file:line. A prompt is the instruction the model is actually given, and it is invisible in every field Table 10 defines."}
+    - {id: axebom.aibom.ops.08.vector_stores,    name: Vector stores,            canonical_path: "ai_assets.vector_store[]",    type: ref_list,    weight: 3, status: extension, description: "Chroma, pgvector, Pinecone and the rest. A vector store holds the data retrieval puts in front of the model, so it is where a data-governance question actually lands."}
+    - {id: axebom.aibom.ops.09.rag_pipelines,    name: RAG pipelines,            canonical_path: "ai_assets.rag_pipeline[]",    type: ref_list,    weight: 1, status: extension, description: "Retrieval-augmented generation wiring. Its presence changes what the model can say, which is why it is worth recording separately from the store it reads."}
+    - {id: axebom.aibom.ops.11.agents_and_tools, name: Agents, tools, MCP servers, canonical_path: "ai_assets.agent[]",        type: ref_list,    weight: 1, status: extension, description: "Agent frameworks, callable tools and MCP servers — the surface through which a model takes ACTIONS rather than producing text. Covers `agent`, `tool` and `mcp_server` asset types together, because the governance question is the same for all three: `ai-bom` classifies MCP servers by name and the AIBOM extractor records them as assets so this element is fillable rather than permanently zero."}
+    - {id: axebom.aibom.ops.12.inference_endpoints, name: Inference services,    canonical_path: "ai_assets.endpoint[]",        type: ref_list,    weight: 3, status: extension, description: "The hosted services the application sends prompts to. An application calling `api.openai.com` sends data there, which is a transfer a reviewer needs to see; today only `cdxgen-ai` reports these."}
+
+    # --- Governance the operator declares ------------------------------------
+    #
+    # ⚠ NOT INFERRED, EVER. Whether a system is high-risk under the EU AI Act
+    # depends on what it is USED FOR, and no repository shows that. AxeBOM
+    # records what a named person declared — see libs/go-shared/model's
+    # aiframeworks.go — and scores whether they declared anything, never whether
+    # the declaration is right.
+    - {id: axebom.aibom.ops.13.eu_ai_act_tier,   name: EU AI Act risk tier,      canonical_path: ai_model.eu_ai_act_tier,       type: enum,        weight: 3, status: extension, values: [unacceptable, high, limited, minimal, undetermined], description: "Regulation (EU) 2024/1689. `undetermined` is a first-class value and counts as covered: 'somebody looked and could not decide' is a different state from 'nobody has looked', and only one of them is a task."}
+    - {id: axebom.aibom.ops.14.nist_ai_rmf,      name: NIST AI RMF functions,    canonical_path: "ai_model.nist_ai_rmf[]",      type: string_list, weight: 1, status: extension, description: "Which of GOVERN / MAP / MEASURE / MANAGE the operator says this system addresses. The framework has no conformance level and AxeBOM measures none."}
+    - {id: axebom.aibom.ops.15.iso_42001,        name: ISO/IEC 42001 controls,   canonical_path: "ai_model.iso_42001[]",        type: string_list, weight: 1, status: extension, description: "Annex A control CATEGORIES the operator says apply. Categories rather than numbered controls, deliberately: a control reference one digit wrong is a false citation, and unlike a missing value a plausible wrong one is invisible to the reader."}
+
+    # --- Attestation ---------------------------------------------------------
+    - {id: axebom.aibom.ops.16.attestation_result, name: Attestation verification, canonical_path: ai_model.attestation_verified, type: boolean,   weight: 3, status: extension, description: "Whether a recorded `model_signing` verification came back valid. ⚠ AxeBOM DID NOT RUN IT: verification needs the model files, which never reach this product. The customer runs the verifier where the artifact is and AxeBOM ingests the result — parsed, so a failure is recorded as a failure rather than quietly not mentioned."}
+
+# ⚠ WHAT IS DELIBERATELY NOT HERE, AND WHY
+#
+# Each of these appears in the AIBOM plan's capture list and would score zero
+# for every customer for ever, because nothing AxeBOM runs can fill it. A field
+# like that does not measure the customer — it measures us, and it reads on the
+# report as the customer's gap:
+#
+#   a separate "embeddings" element               removed after one live scan
+#                                                 reported 0 for a repository
+#                                                 that HAS an embedding model:
+#                                                 `airom` correctly types it as
+#                                                 a MODEL, so it is scored by
+#                                                 elements 01-06 already and a
+#                                                 second element for it was
+#                                                 double-counting that could
+#                                                 only ever read zero.
+#   serialization format (pickle vs safetensors)  needs the weights file; the
+#                                                 scan sees source, not models.
+#   checkpoint digest                             same.
+#   parent / base-model lineage                   the Hugging Face card's
+#                                                 `base_model` would supply it,
+#                                                 and nothing reads that field
+#                                                 yet. A real, small next step.
+#   training-code reference, hyperparameters      not in any engine's output.
+#   dataset PII / consent / preprocessing flags   the model card almost never
+#                                                 declares them, and inferring
+#                                                 them is exactly the
+#                                                 fabrication this product
+#                                                 forbids.
+#   runtime endpoints observed in production      needs the k8s-aibom ingest
+#                                                 path (M5), which is a document
+#                                                 the customer produces.
+#
+# They belong in revision 2, once something can answer them.
+
+# ⚠ A TRANSCRIPTION ASSERTION, NOT APPLICATION LOGIC — the one place a count
+# legitimately appears (docs/06-COMPLIANCE-PROFILES.md §2). Nothing in code, UI
+# copy or tests may write this number; it renders from the data.
+expected_counts:
+  aibom_operational_elements: 15

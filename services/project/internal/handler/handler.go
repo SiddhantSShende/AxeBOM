@@ -592,7 +592,8 @@ func (h *Handler) ListRepos(w http.ResponseWriter, r *http.Request) {
 	// The header path stays for the connect flow itself — the moment a token
 	// first arrives, before there is anything stored to read.
 	token := strings.TrimSpace(r.Header.Get("X-GitHub-Token"))
-	if token == "" {
+	fromStore := token == ""
+	if fromStore {
 		stored, err := h.svc.GitHubToken(r.Context(), tenantID)
 		if err != nil {
 			errs.Write(w, r, err)
@@ -611,6 +612,15 @@ func (h *Handler) ListRepos(w http.ResponseWriter, r *http.Request) {
 		IncludeArchived: r.URL.Query().Get("include_archived") == "true",
 	})
 	if err != nil {
+		// The client's 401 message tells the reader to reconnect, which is the
+		// right instruction ONLY for the stored credential. A token that came
+		// in on the header belongs to the connect flow that is running right
+		// now — telling that caller to repair a connection it has not finished
+		// making sends it to a screen that cannot help it.
+		if !fromStore && errs.Is(err, errs.AuthTokenInvalid) {
+			err = errs.New(errs.AuthTokenInvalid,
+				"GitHub rejected the token supplied with this request")
+		}
 		errs.Write(w, r, err)
 		return
 	}
@@ -929,8 +939,35 @@ func (h *Handler) ConnectGitHub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ⚠ THE TOKEN IS SPENT ONCE HERE BEFORE IT IS STORED, and req.Login is
+	// discarded in favour of what that call returns.
+	//
+	// Connecting used to write whatever string arrived straight to Vault. A
+	// credential GitHub had already rejected was therefore indistinguishable
+	// from a working one until the next repo listing — by which time the OAuth
+	// window is closed, the row says `connected: true`, and the only route back
+	// is a disconnect on a different screen. One request to /user turns that
+	// into a failure at the moment the user can still act on it.
+	//
+	// req.Login is a claim by the browser about an account it need not own, so
+	// it is never trusted; the login under the token is the only verified form.
+	//
+	// An ABSENT token skips the round trip and falls through to the service,
+	// whose "a GitHub token is required to connect" is the accurate answer for
+	// it — spending a request on the empty string to be told it is invalid
+	// would report a missing field as a rejected credential.
+	login := ""
+	if token := strings.TrimSpace(req.Token); token != "" {
+		verified, err := h.gh.CurrentLogin(r.Context(), token)
+		if err != nil {
+			errs.Write(w, r, err)
+			return
+		}
+		login = verified
+	}
+
 	status, err := h.svc.ConnectGitHub(r.Context(), tenantID,
-		ctxkey.UserID(r.Context()), req.Token, req.Login)
+		ctxkey.UserID(r.Context()), req.Token, login)
 	if err != nil {
 		errs.Write(w, r, err)
 		return

@@ -1,8 +1,10 @@
 package errs
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -153,5 +155,53 @@ func TestTenantContext(t *testing.T) {
 	got, ok := TenantIDFromContext(ctx)
 	if !ok || got != "tenant-a" {
 		t.Fatalf("got (%q,%v), want (tenant-a,true)", got, ok)
+	}
+}
+
+// ⚠ THIS GUARDS A PROMISE THE UI MAKES, NOT A LOGGING PREFERENCE.
+//
+// Every envelope Write produces carries a request_id, and the error card
+// renders it under "quote the code and request id above — they are what
+// identifies this exact failure in our logs". 4xx was logged at DEBUG while
+// services run at info, so for the entire class — 400, 401, 403, 404, 409,
+// 422 — that sentence was false and the id led to nothing. A 401 on a real
+// user's request could not be found afterwards by any means.
+func TestEveryEnvelopeIsLoggedWithItsRequestID(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		code Code
+		want slog.Level
+	}{
+		{"unauthorized", AuthTokenInvalid, slog.LevelWarn},
+		{"not found", NotFoundProject, slog.LevelWarn},
+		{"validation", ValidationFieldRequired, slog.LevelWarn},
+		{"ours", InternalDependency, slog.LevelError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			restore := slog.Default()
+			slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{
+				Level: slog.LevelInfo, // what the services actually run at
+			})))
+			t.Cleanup(func() { slog.SetDefault(restore) })
+
+			req := httptest.NewRequest(http.MethodGet, "/v1/github/repos", nil)
+			req = req.WithContext(WithRequestID(req.Context(), "req-abc"))
+			Write(httptest.NewRecorder(), req, New(tc.code, "nope"))
+
+			line := buf.String()
+			if line == "" {
+				t.Fatalf("%s was written to the client and logged nowhere", tc.code)
+			}
+			if !strings.Contains(line, "req-abc") {
+				t.Errorf("log line carries no request id: %s", line)
+			}
+			if !strings.Contains(line, string(tc.code)) {
+				t.Errorf("log line carries no code: %s", line)
+			}
+			if !strings.Contains(line, `"level":"`+tc.want.String()+`"`) {
+				t.Errorf("level = %s, want %s", line, tc.want)
+			}
+		})
 	}
 }

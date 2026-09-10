@@ -78,8 +78,27 @@ def ai_model(identity: str, **kwargs) -> dict:
         "_identity": identity,
         "_datasets": kwargs.pop("datasets", []),
         "_dependencies": kwargs.pop("dependencies", []),
+        # Which engines saw this model — `normalize.ai_model_provenance`, added
+        # with the second and third AIBOM discovery engines. Defaulted rather
+        # than optional so a fixture built from this exercises the table.
+        "_provenance": kwargs.pop(
+            "provenance",
+            [
+                {
+                    "engine_id": "ai-bom",
+                    "observed_name": identity,
+                    "confidence": "",
+                    "evidence": ["src/app.py:1"],
+                }
+            ],
+        ),
         "model_name": kwargs.pop("model_name", identity),
         "field_status": kwargs.pop("field_status", {}),
+        # Identity provenance, NOT NULL since migrations/normalize/0016. `model_key`
+        # is absent on purpose: bulk derives it from `_identity` above, so a fixture
+        # that set it could disagree with the id the same row is written under.
+        "identity_rule": kwargs.pop("identity_rule", "name"),
+        "identity_confidence": kwargs.pop("identity_confidence", "low"),
         **kwargs,
     }
 

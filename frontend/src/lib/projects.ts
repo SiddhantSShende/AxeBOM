@@ -356,6 +356,13 @@ export function useSaveGitHubConnection() {
       request<GitHubConnectionStatus>('/v1/github/connection', { method: 'PUT', body: input }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['github-connection'] });
+      // ⚠ THE REPO LISTINGS TOO. Its cache key is ['github-repos', query] and
+      // carries no token, by design — the token is a header, or nothing at all
+      // on the connect-once path. So a reconnect changes which credential the
+      // next request would use while changing nothing react-query can see, and
+      // a listing that failed against the replaced token would sit there
+      // showing the old error with a fresh authorisation already in place.
+      void qc.invalidateQueries({ queryKey: ['github-repos'] });
     },
   });
 }

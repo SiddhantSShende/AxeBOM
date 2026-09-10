@@ -37,6 +37,13 @@ type Profile struct {
 	// stylistic one — see OperationalSection.
 	HBOMManufacturing OperationalSection `yaml:"hbom_manufacturing"`
 
+	// AIBOMOperational is the second operational set, and its arrival is what
+	// turned the accessors below from a special case into a lookup. CERT-In
+	// Table 10 describes a MODEL; this describes the AI SYSTEM around it —
+	// prompts, vector stores, RAG pipelines, the services it calls — none of
+	// which any Table 10 element covers.
+	AIBOMOperational OperationalSection `yaml:"aibom_operational"`
+
 	ExpectedCounts map[string]int `yaml:"expected_counts"`
 }
 
@@ -95,16 +102,50 @@ type OperationalSection struct {
 	Elements []Field `yaml:"elements"`
 }
 
-// OperationalFields returns the scored fields of a named operational set.
-//
-// Only "hbom_manufacturing" exists today; the lookup is by name rather than a
-// direct field reference so a second operational profile needs no new
-// accessor.
-func (p *Profile) OperationalFields(set string) []Field {
-	if set == "hbom_manufacturing" {
-		return p.HBOMManufacturing.Elements
+// operationalSections maps a set name to its section. One place, so a third
+// operational profile is a row here and nothing else.
+func (p *Profile) operationalSections() map[string]*OperationalSection {
+	return map[string]*OperationalSection{
+		"hbom_manufacturing": &p.HBOMManufacturing,
+		"aibom_operational":  &p.AIBOMOperational,
 	}
-	return nil
+}
+
+// OperationalSetNames returns the operational sets this profile actually
+// defines, sorted.
+//
+// ⚠ DERIVED, NOT LISTED BY THE CALLER. `axebom profile gen` used to name
+// "hbom_manufacturing" as a literal, so a second operational profile generated
+// nothing and said nothing — the fields were authored, linted and scored while
+// no Go consumer could see them, which is the exact failure the CERT-In
+// generator exists to prevent.
+func (p *Profile) OperationalSetNames() []string {
+	var out []string
+	for name, section := range p.operationalSections() {
+		if len(section.Elements) > 0 {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// OperationalSectionFor returns a named operational section.
+func (p *Profile) OperationalSectionFor(set string) (OperationalSection, bool) {
+	section, ok := p.operationalSections()[set]
+	if !ok || len(section.Elements) == 0 {
+		return OperationalSection{}, false
+	}
+	return *section, true
+}
+
+// OperationalFields returns the scored fields of a named operational set.
+func (p *Profile) OperationalFields(set string) []Field {
+	section, ok := p.OperationalSectionFor(set)
+	if !ok {
+		return nil
+	}
+	return section.Elements
 }
 
 // Field is one required element.
@@ -125,6 +166,18 @@ type Field struct {
 	Values        []string `yaml:"values"`
 	Scope         string   `yaml:"scope"`
 	Scored        *bool    `yaml:"scored"`
+	// UserSupplied marks an element NO TOOL CAN REPORT — it describes intent or
+	// policy (what a model is for, what it must not be used for, what security
+	// requirements apply) rather than anything discoverable from code or a model
+	// card, so it is collected from the operator.
+	//
+	// ⚠ IT LIVES HERE BECAUSE IT KEPT DRIFTING WHEN IT DID NOT. Go and Python
+	// each hardcoded their own list; they disagreed by one element
+	// (`environmental_impact`), so that element was reachable by no form and
+	// populated by no tool while a test asserted the Go list was "exactly four".
+	// One declaration, both languages generated from it — invariant 2's whole
+	// mechanism, applied to a fact about fields rather than a count of them.
+	UserSupplied bool `yaml:"user_supplied"`
 	// Binding for per-project settings rather than per-component fields.
 	AxeBOMBinding string `yaml:"axebom_binding"`
 }
@@ -274,7 +327,19 @@ func (p *Profile) AllFields() []Field {
 	// path and weight checked. It reaches no CERT-In accessor — see
 	// OperationalSection and FieldsForBOMType, which is deliberately untouched.
 	out = append(out, p.HBOMManufacturing.Elements...)
+	out = append(out, p.AIBOMOperational.Elements...)
 	return out
+}
+
+// countUserSupplied counts the elements no tool can report.
+func countUserSupplied(fields []Field) int {
+	n := 0
+	for _, f := range fields {
+		if f.UserSupplied {
+			n++
+		}
+	}
+	return n
 }
 
 func (p *Profile) cryptoTypeNames() []string {
@@ -290,13 +355,20 @@ func (p *Profile) cryptoTypeNames() []string {
 // against the declared expected_counts.
 func (p *Profile) ActualCounts() map[string]int {
 	counts := map[string]int{
-		"sbom_minimum_element_categories":   len(p.SBOM.MinimumElementCategories),
-		"sbom_data_fields":                  len(p.SBOM.DataFields),
-		"sbom_levels":                       len(p.SBOM.Levels),
-		"sbom_classifications":              len(p.SBOM.Classifications),
-		"qbom_elements":                     len(p.QBOM.Elements),
-		"crypto_asset_types":                len(p.CryptoAsset.Types),
-		"aibom_elements":                    len(p.AIBOM.Elements),
+		"sbom_minimum_element_categories": len(p.SBOM.MinimumElementCategories),
+		"sbom_data_fields":                len(p.SBOM.DataFields),
+		"sbom_levels":                     len(p.SBOM.Levels),
+		"sbom_classifications":            len(p.SBOM.Classifications),
+		"qbom_elements":                   len(p.QBOM.Elements),
+		"crypto_asset_types":              len(p.CryptoAsset.Types),
+		"aibom_elements":                  len(p.AIBOM.Elements),
+		// ⚠ A TRANSCRIPTION ASSERTION, THE ONE LEGITIMATE PLACE FOR A COUNT
+		// (docs/06-COMPLIANCE-PROFILES.md §2). It exists because this exact set
+		// drifted silently: Go's copy had four ids, Python's had five, and a test
+		// pinned the wrong number so the disagreement stayed green for a phase.
+		// If an element gains or loses `user_supplied`, `task profile:lint` fails
+		// and a human decides whether the guideline changed or the edit was wrong.
+		"aibom_user_supplied_elements":      countUserSupplied(p.AIBOM.Elements),
 		"hbom_table11_elements":             len(p.HBOM.Elements),
 		"hbom_additional_required_elements": len(p.HBOM.AdditionalRequiredElements.Elements),
 		"hbom_total_elements": len(p.HBOM.Elements) +
@@ -304,6 +376,7 @@ func (p *Profile) ActualCounts() map[string]int {
 		"vex_statuses":                 len(p.VEX.Statuses),
 		"secure_distribution_controls": len(p.SecureDistribution.Controls),
 		"hbom_manufacturing_elements":  len(p.HBOMManufacturing.Elements),
+		"aibom_operational_elements":   len(p.AIBOMOperational.Elements),
 	}
 
 	for _, c := range p.SBOM.MinimumElementCategories {

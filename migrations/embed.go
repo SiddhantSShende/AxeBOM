@@ -18,7 +18,7 @@ import "embed"
 // would skip.
 //
 //go:embed all:bootstrap all:auth all:project all:scan all:normalize
-//go:embed all:report all:campaign all:comment all:notify
+//go:embed all:aibom all:report all:campaign all:comment all:notify
 var FS embed.FS
 
 // SeedFS holds development seed data.

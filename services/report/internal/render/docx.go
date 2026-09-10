@@ -556,6 +556,11 @@ func docxMethodologyPage(doc *docxBuilder, b BOM, result DOCXResult) {
 	for _, n := range append(append([]string{}, b.Notes...), TypeNotes(b)...) {
 		doc.body("• " + n)
 	}
+
+	// What normalization could not do — same lines, same reasoning as the PDF.
+	for _, n := range NormalizeDiagnosticLines(b) {
+		doc.body("• " + n)
+	}
 	doc.body("• " + weightsNote)
 	doc.body("• Two identifiers are reported per component and they are not " +
 		"interchangeable. The PURL is the canonical ecosystem identifier every " +

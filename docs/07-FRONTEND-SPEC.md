@@ -152,7 +152,32 @@ Reconnect with exponential backoff, capped, showing a "reconnecting" state rathe
 Cards or table. Each shows name, BOM-type chips, owner, validity window (with an expiry warning inside 30 days), last scan status, open critical count. Filter by classification, owner, status.
 
 ### Connect / register wizard
-Four steps, **BOM types first**: **BOM types** (what this project should produce, its unmet derivations, and what each type will still need) → **source** (narrowed to what those types' engines can read: GitHub repo picker with search, or upload archive/manifest/lockfile/image ref, or fully manual) → **owner & validity** (name, email, GitHub, phone; validity window) → **practices** (SDLC stage and the CERT-In practices fields).
+Four or five steps, **BOM types first**: **BOM types** (what this project should produce, its unmet derivations, and what each type will still need) → **source** (narrowed to what those types' engines can read: GitHub repo picker with search, or upload archive/manifest/lockfile/image ref, or fully manual) → **what it needs** (the inputs particular to the chosen types — present only when a chosen type asks for any) → **owner & validity** (name, email, GitHub, phone; validity window) → **practices** (SDLC stage and the CERT-In practices fields).
+
+⚠ **Registration asks each BOM type for what that type actually needs, and it
+used to ask all five the same things.** Name, source, owner, validity and
+practices are identical for an SBOM and an HBOM, and the inputs particular to a
+type lived on screens reachable only once the project existed. A QBOM was
+therefore created with none of Table 8's device metadata — the one part of a
+QBOM that no scan can produce — and an HBOM with no device, which on a `manual`
+project is the only thing that will ever produce a document. Both surfaced later
+as checklist items on a project already made, which is the wrong moment: the
+person who knows the answers is the one filling in the form.
+
+The step renders from the server's `at_registration` flag on each requirement,
+never from a list of BOM-type names in the frontend — the modules
+(`services/project/internal/bommodule`) decide what can be asked for up front,
+and a requirement the UI has no form for still renders as its title and detail
+rather than disappearing. That flag is also why AIBOM has no step here: its
+Table 10 user-supplied elements are per-**model**, and no model exists until a
+scan has found one, so a registration form for them would have no rows to
+attach to. It stays listed on step 1 as something the project will need later.
+
+⚠ **The step gates nothing.** These inputs are required for the BOM type to
+produce a document, not for the project to exist — an HBOM project whose device
+is registered next week is a real and supported state, and the requirement stays
+listed on the project. Blocking the wizard on them would turn "your HBOM will be
+empty until you do this" into "you may not register this project".
 
 ⚠ **The order is the feature, and it used to be the other way round.** Source was
 step 1 and classification step 3, so an incompatible pairing — an AIBOM project

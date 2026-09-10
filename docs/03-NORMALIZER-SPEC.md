@@ -88,6 +88,106 @@ Group by `component_key`, then:
 
 **Container layers.** The same package in three layers is one component. Layer is a location attribute.
 
+### 1.5 The `model_key` chain — AI models
+
+An AI model is not a package, and identifying it as one is how `normalize.ai_models`
+came to hold three rows for a single model. `component_key` rule 6 above reserves its
+lowest-confidence tier for "AIBOM model lists"; this is the ladder that feeds it.
+
+First rule that produces a value wins. **Always record which rule fired in
+`identity_rule`** — it drives `identity_confidence` and appears in provenance.
+Implementation: `workers/aibom/identity.py`.
+
+| # | Rule | Key form | Typical origin | Confidence |
+|---|---|---|---|---|
+| 1 | HF repo + revision | `purl:pkg:huggingface/<org>/<name>@<sha>` | ai-bom, airom, cdxgen `-t ai` | high |
+| 2 | Weight digest | `hash:<sha256>` | safetensors / gguf header, `model_signing` | high |
+| 3 | OCI digest | `oci:<digest>` | model images, Ollama | high |
+| 4 | Hosted API model | `api:<provider>/<model>@<version>` | OpenAI, Anthropic, Bedrock, Vertex | medium |
+| 5 | Local checkpoint | `file:<rel-path>@<sha256>` | a committed weights file | low |
+| 6 | Name | `name:<provider>/<name>@<version>` | a bare reference in source | low |
+| 7 | Opaque | `opaque:<uuidv5(scan, bom_ref + purl)>` | last resort | low |
+
+**Every tier is prefixed, and the prefix is load-bearing.** It is what stops a weight
+digest from colliding with a name somebody typed.
+
+**Rule 4 never merges across providers.** `openai/gpt-4o` and `azure/gpt-4o` are
+billed, governed, versioned and deprecated separately; folding them together
+attributes one provider's terms to the other — the same error class as merging
+`pkg:npm/lodash` with `pkg:maven/lodash`.
+
+**Rule 7 never merges with anything, including another opaque model.** Two models we
+cannot identify are two models. Collapsing them under-reports an inventory, which is
+the direction of error a compliance document must not take.
+
+#### The classification rule that precedes the ladder
+
+**A component whose purl is an ordinary package purl (`pkg:pypi/…`, `pkg:npm/…`,
+`pkg:maven/…`) is a framework, whatever `type` the engine declared** — unless it also
+carries a resolvable model reference, which is positive evidence that outranks the
+purl.
+
+This is not defensive coding; it is a measured defect. ai-bom 3.1.0 labels the
+`transformers` PyPI library `type: machine-learning-model` with
+`purl: pkg:pypi/transformers`. A purl minted by a package ecosystem is that
+ecosystem's own assertion about what the thing *is*, and it outranks a type field a
+scanner guessed. `pkg:huggingface` is excluded from the rule: that one does name a
+model.
+
+**A reclassification is always reported** (`AIBOM_MODEL_RECLASSIFIED`). A model count
+that changes with no diagnostic beside it is a number nobody can account for.
+
+**A purl is validated before it is trusted as identity.** ai-bom emits purls containing
+literal spaces (`pkg:pypi/huggingface transformers`, verbatim from captured output).
+Such a value is dropped, not stored: a malformed merge key matches nothing and dedups
+against nothing while looking exactly like a real identifier in the report.
+
+#### The alias fold that follows the ladder
+
+**A `name:`-tier model folds into a stronger one asserting the same model id.**
+
+Measured live on a real three-engine scan: `gpt-4o` was stored **twice**. ai-bom puts
+the *calling framework* in its provider property — its real values are `LangChain`,
+`HuggingFace`, `ChromaDB` — so its sighting keyed as `name:langchain/gpt-4o`, while
+airom and cdxgen-ai both report the actual serving provider and keyed as
+`api:openai/gpt-4o`. One model, two rows in a Table 10 inventory, and the row count is
+a headline number a reviewer reads. Adding engines multiplied the defect the ladder was
+introduced to stop.
+
+The fold is deliberately narrow, because merging two models that are not the same model
+is worse than listing one twice:
+
+- only a **low-confidence `name:` key** is ever absorbed; a strong key is never folded
+  into anything;
+- the **asserted model ids** must match exactly, case-insensitively — the display name
+  is never a fallback, because folding on `LangChain Model` would merge every model one
+  framework loads into a single row;
+- and **exactly one** strong candidate may claim it. Two candidates means the name is
+  ambiguous — `gpt-4o` from two providers is two models — so nothing is folded and
+  `NORMALIZE_IDENTITY_AMBIGUOUS` is reported instead.
+
+A fold is always reported (`NORMALIZE_IDENTITY_ALIAS_FOLDED`), and it is counted
+separately from ordinary duplicate-sighting merges: "one model referenced from three
+files" and "two engines disagreed about a provider" are different facts, and one number
+covering both would attribute the second to the first.
+
+#### Evidence paths are relative to the repository root
+
+Every sandboxed engine sees the tree at `/src`, because that is where the runner mounts
+it. ai-bom echoes that prefix into its evidence and airom does not — so a model both
+engines found came out carrying `/src/app.py:17` **and** `src/app.py:17`, which reads as
+two files, the first of which reads as a path outside the repository. The mount is
+stripped once, in `workers/aibom/discovery.repo_path`, so a fourth engine cannot forget.
+
+#### AI assets have their own key, and the discriminator depends on the kind
+
+Prompts, vector stores, RAG pipelines and inference endpoints are merged across engines
+into `normalize.ai_assets` on `<asset_type>:<discriminator>`. **A prompt keys on its
+location** — a prompt IS a piece of text at a place, and airom names every system prompt
+`system-prompt`. **Everything else keys on its provider or name** — Chroma is one Chroma
+however many files mention it. Keying both on location splits one vector store in two;
+keying both on name collapses every system prompt in a repository into one.
+
 ---
 
 ## 2. Vulnerability identity — the alias transitive closure

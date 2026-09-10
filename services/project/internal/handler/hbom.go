@@ -359,6 +359,26 @@ func (h *Handler) ComponentForm(w http.ResponseWriter, r *http.Request) {
 	errs.WriteJSON(w, http.StatusOK, map[string]any{"fields": hbom.ComponentFormFields()})
 }
 
+// DeviceForm handles GET /v1/hbom/device-form.
+//
+// ⚠ THE SAME FIELDS ListDevices ALREADY RETURNS, REACHABLE WITHOUT A PROJECT.
+//
+// The device form travelled only alongside a project's device LIST, which
+// means the one screen that cannot ask for it is the registration wizard —
+// there is no project id until the create call returns. Registration therefore
+// asked every BOM type the same questions and left "which device is this?" to
+// a checklist item discovered later, on a project already created.
+//
+// Generated from the profile like every other form here, so this stays one
+// field list with two routes rather than two lists that drift (invariant 2).
+func (h *Handler) DeviceForm(w http.ResponseWriter, r *http.Request) {
+	if _, err := auth.RequireTenant(r.Context()); err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	errs.WriteJSON(w, http.StatusOK, map[string]any{"fields": hbom.DeviceFormFields()})
+}
+
 // ReadImportHeaders handles POST /v1/hbom/headers.
 //
 // Returns the column names, the format the file was recognised as, and a

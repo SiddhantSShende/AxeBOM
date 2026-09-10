@@ -40,6 +40,42 @@ type AIModel struct {
 	RiskScore     *float64
 	OwaspLLMTop10 []string
 
+	// ModelKey is the identity ladder's merge key — `purl:pkg:huggingface/…`,
+	// `api:openai/gpt-4o`. Stable across normalizations, which a row id is not,
+	// so it is what the ML-BOM's bom-refs and every cross-document reference are
+	// built from.
+	ModelKey string
+
+	// FoundBy names every AIBOM engine that reported this model, from
+	// normalize.ai_model_provenance.
+	//
+	// ⚠ ONE ENGINE OR THREE IS THE MOST USEFUL SINGLE FACT ON THE ROW, and it
+	// was invisible before AxeBOM ran more than one AI discovery engine. Three
+	// engines agreeing on `meta-llama/Llama-3-8B` and one engine alone reporting
+	// `sentence-transformers/all-MiniLM-L6-v2` are different degrees of evidence,
+	// and a reviewer weighing a Table 10 row is entitled to see which they have.
+	FoundBy []string
+
+	// Evidence is where the model was referenced, as `path:line`. Empty when no
+	// engine reported a position — never a guessed one.
+	Evidence []string
+
+	// Verified is true only when an engine confirmed the model resolves
+	// upstream.
+	//
+	// ⚠ IT NEVER DEFAULTS TO TRUE, and the report has to say which it is. A
+	// model nobody could confirm is not a model somebody confirmed, and a Table
+	// 10 inventory that renders both identically hides the difference that
+	// matters most to a reviewer.
+	Verified bool
+
+	// IdentityRule and IdentityConfidence are which rung of the identity ladder
+	// fired and what that is worth (03-NORMALIZER-SPEC §1.5). A `purl:` key at
+	// high confidence and a `name:` key at low confidence are different degrees
+	// of evidence for the same-looking row.
+	IdentityRule       string
+	IdentityConfidence string
+
 	// Fields holds the 19 Table 10 profile-field values keyed by
 	// model.ProfileField.ID — same convention as Component.Fields, so a
 	// CERT-In revision changes the profile, never this struct.
@@ -55,6 +91,31 @@ const AIBOMExtensionsNote = "Risk Score and OWASP LLM Top-10 are AxeBOM " +
 	"because letting a third party's heuristic move a customer's compliance " +
 	"percentage would tie that percentage to a rule this product does not own."
 
+// AIAsset is one AI component that is NOT a model and NOT a software
+// dependency — a prompt, a vector store, a RAG pipeline, an inference endpoint.
+//
+// ⚠ IT HAS ITS OWN SHEET BECAUSE IT HAS NO HOME IN TABLE 10. CERT-In Table 10
+// asks about MODELS; none of its 19 elements is a prompt or a vector store. That
+// is a limit of the guideline, not of the scan — `airom` and `cdxgen-ai` find
+// these with file:line evidence, and a report that stored them and rendered
+// nothing would be the silence invariant 12 exists to prevent. They are
+// inventory and evidence, and they are deliberately NOT scored into either
+// coverage number: see normalize/pipeline.py.
+type AIAsset struct {
+	// Type is one of normalize.ai_assets' closed set — prompt, vector_store,
+	// rag_pipeline, embedding, agent, tool, mcp_server, endpoint, dataset.
+	Type string
+	// Key is the merge key the normalizer minted — `prompt:src/app.py:9`. It is
+	// what a bom-ref is built from in the ML-BOM export: a ref derived from a
+	// display name would not survive two prompts sharing one.
+	Key         string
+	Name        string
+	Provider    string
+	Evidence    []string
+	ServesModel string
+	FoundBy     []string
+}
+
 // AIBOMSheets are the AIBOM-specific sheets, appended in place of the
 // generic componentSheet Sheets() builds for every other type.
 func AIBOMSheets(b BOM, fields []model.ProfileField) []Sheet {
@@ -62,7 +123,30 @@ func AIBOMSheets(b BOM, fields []model.ProfileField) []Sheet {
 		aiModelInventorySheet(b.AIModels, fields),
 		aiDatasetSheet(b.AIModels),
 		aiDependencySheet(b.AIModels),
+		aiAssetSheet(b.AIAssets),
 	}
+}
+
+// aiAssetSheet lists the prompts, vector stores, RAG pipelines and inference
+// endpoints the AI engines found.
+//
+// ⚠ AN EMPTY SHEET IS STILL RENDERED, DELIBERATELY. A reader who sees no sheet
+// cannot tell "this repository has no prompts" from "this product does not look
+// for prompts". The sheet with a header and no rows says the first.
+func aiAssetSheet(assets []AIAsset) Sheet {
+	header := []string{"Type", "Name", "Provider", "Serves Model", "Evidence", "Found By"}
+	rows := RowSource(func(emit func([]string) error) error {
+		for _, a := range assets {
+			if err := emit([]string{
+				orNotProvided(a.Type), orNotProvided(a.Name), orNotProvided(a.Provider),
+				orNotProvided(a.ServesModel), joinList(a.Evidence), joinList(a.FoundBy),
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return Sheet{Name: "AI Assets", Header: header, Rows: rows, Width: 26}
 }
 
 func aiModelInventorySheet(models []AIModel, fields []model.ProfileField) Sheet {
@@ -70,7 +154,15 @@ func aiModelInventorySheet(models []AIModel, fields []model.ProfileField) Sheet 
 	for _, f := range fields {
 		header = append(header, f.Name)
 	}
-	header = append(header, "Risk Score (AxeBOM extension)", "OWASP LLM Top-10 (AxeBOM extension)")
+	header = append(header,
+		// ⚠ NOT A TABLE 10 ELEMENT, AND NOT AN AxeBOM HEURISTIC EITHER — it is
+		// a plain record of which engines reported this row. Three engines
+		// agreeing and one engine alone are different degrees of evidence.
+		"Found By (engines)",
+		"Evidence",
+		"Identity",
+		"Verified upstream",
+		"Risk Score (AxeBOM extension)", "OWASP LLM Top-10 (AxeBOM extension)")
 
 	rows := RowSource(func(emit func([]string) error) error {
 		for _, m := range models {
@@ -80,7 +172,14 @@ func aiModelInventorySheet(models []AIModel, fields []model.ProfileField) Sheet 
 				// identical line: a blank cell reads as "we did not look".
 				row = append(row, orNotProvided(m.Fields[f.ID]))
 			}
-			row = append(row, riskScoreText(m.RiskScore), joinList(m.OwaspLLMTop10))
+			row = append(row,
+				joinList(m.FoundBy), joinList(m.Evidence),
+				identityText(m),
+				// ⚠ RENDERED AS "no", NOT LEFT BLANK. An unverified model and a
+				// verified one must not look the same, and a blank cell reads as
+				// a rendering gap rather than as an answer.
+				boolText(m.Verified),
+				riskScoreText(m.RiskScore), joinList(m.OwaspLLMTop10))
 			if err := emit(row); err != nil {
 				return err
 			}
@@ -89,6 +188,18 @@ func aiModelInventorySheet(models []AIModel, fields []model.ProfileField) Sheet 
 	})
 
 	return Sheet{Name: "AI Models", Header: header, Rows: rows, Width: 22}
+}
+
+// identityText says which rung of the ladder produced this row's key.
+func identityText(m AIModel) string {
+	switch {
+	case m.IdentityRule == "" && m.IdentityConfidence == "":
+		return model.NotProvided
+	case m.IdentityConfidence == "":
+		return m.IdentityRule
+	default:
+		return m.IdentityRule + " (" + m.IdentityConfidence + " confidence)"
+	}
 }
 
 func riskScoreText(v *float64) string {

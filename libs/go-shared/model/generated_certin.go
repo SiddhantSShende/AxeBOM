@@ -34,6 +34,15 @@ type ProfileField struct {
 	// validation error, and workers/hbom/model.py CRITICALITY_VALUES. Two of
 	// them had already drifted apart.
 	Values []string
+	// UserSupplied marks an element NO TOOL CAN REPORT — it describes intent or
+	// policy rather than anything discoverable from code or a model card, so it
+	// is collected from the operator.
+	//
+	// ⚠ IT LIVES IN THE PROFILE BECAUSE IT DRIFTED WHEN IT DID NOT. Go and
+	// Python each kept their own list and disagreed by one element
+	// (environmental_impact), so that element was reachable by no form and
+	// populated by no tool — while a test asserted the Go list was complete.
+	UserSupplied bool
 }
 
 // ProfileID identifies the standard these fields come from.
@@ -241,14 +250,14 @@ var AIBOMFields = []ProfileField{
 	{ID: FieldCertinAibom09DataSource, Ordinal: 0, Name: "Data Source", CanonicalPath: "ai_model.data_source", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 3, Required: false, Scored: true, SourcePage: 54, Status: "verified"},
 	{ID: FieldCertinAibom10DataSets, Ordinal: 0, Name: "Data Sets", CanonicalPath: "ai_model.data_sets[]", CycloneDXPath: "", SPDXPath: "", Type: "ref_list", Weight: 3, Required: false, Scored: true, SourcePage: 55, Status: "verified"},
 	{ID: FieldCertinAibom11Hardware, Ordinal: 0, Name: "Hardware", CanonicalPath: "ai_model.hardware", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 1, Required: false, Scored: true, SourcePage: 55, Status: "verified"},
-	{ID: FieldCertinAibom12SecurityRequirements, Ordinal: 0, Name: "Security Requirements", CanonicalPath: "ai_model.security_requirements", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 3, Required: false, Scored: true, SourcePage: 55, Status: "verified"},
+	{ID: FieldCertinAibom12SecurityRequirements, Ordinal: 0, Name: "Security Requirements", CanonicalPath: "ai_model.security_requirements", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 3, Required: false, Scored: true, SourcePage: 55, Status: "verified", UserSupplied: true},
 	{ID: FieldCertinAibom13Input, Ordinal: 0, Name: "Input", CanonicalPath: "ai_model.input", CycloneDXPath: "", SPDXPath: "", Type: "string", Weight: 3, Required: false, Scored: true, SourcePage: 55, Status: "verified"},
 	{ID: FieldCertinAibom14Output, Ordinal: 0, Name: "Output", CanonicalPath: "ai_model.output", CycloneDXPath: "", SPDXPath: "", Type: "string", Weight: 3, Required: false, Scored: true, SourcePage: 55, Status: "verified"},
-	{ID: FieldCertinAibom15IntendedUsage, Ordinal: 0, Name: "Intended Usage", CanonicalPath: "ai_model.intended_usage", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 3, Required: false, Scored: true, SourcePage: 55, Status: "verified"},
-	{ID: FieldCertinAibom16OutOfScopeUsage, Ordinal: 0, Name: "Out of Scope Usage", CanonicalPath: "ai_model.out_of_scope_usage", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 3, Required: false, Scored: true, SourcePage: 55, Status: "verified"},
-	{ID: FieldCertinAibom17EnvironmentalImpact, Ordinal: 0, Name: "Environmental Impact", CanonicalPath: "ai_model.environmental_impact", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 1, Required: false, Scored: true, SourcePage: 55, Status: "verified"},
+	{ID: FieldCertinAibom15IntendedUsage, Ordinal: 0, Name: "Intended Usage", CanonicalPath: "ai_model.intended_usage", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 3, Required: false, Scored: true, SourcePage: 55, Status: "verified", UserSupplied: true},
+	{ID: FieldCertinAibom16OutOfScopeUsage, Ordinal: 0, Name: "Out of Scope Usage", CanonicalPath: "ai_model.out_of_scope_usage", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 3, Required: false, Scored: true, SourcePage: 55, Status: "verified", UserSupplied: true},
+	{ID: FieldCertinAibom17EnvironmentalImpact, Ordinal: 0, Name: "Environmental Impact", CanonicalPath: "ai_model.environmental_impact", CycloneDXPath: "", SPDXPath: "", Type: "text", Weight: 1, Required: false, Scored: true, SourcePage: 55, Status: "verified", UserSupplied: true},
 	{ID: FieldCertinAibom18Vulnerabilities, Ordinal: 0, Name: "Vulnerabilities", CanonicalPath: "ai_model.findings[]", CycloneDXPath: "", SPDXPath: "", Type: "ref_list", Weight: 3, Required: false, Scored: true, SourcePage: 55, Status: "verified"},
-	{ID: FieldCertinAibom19Attestations, Ordinal: 0, Name: "Attestations", CanonicalPath: "ai_model.attestation_signature", CycloneDXPath: "", SPDXPath: "", Type: "signature", Weight: 3, Required: false, Scored: true, SourcePage: 55, Status: "verified"},
+	{ID: FieldCertinAibom19Attestations, Ordinal: 0, Name: "Attestations", CanonicalPath: "ai_model.attestation_signature", CycloneDXPath: "", SPDXPath: "", Type: "signature", Weight: 3, Required: false, Scored: true, SourcePage: 55, Status: "verified", UserSupplied: true},
 }
 
 // HBOMFields are the scored required elements for a HBOM.

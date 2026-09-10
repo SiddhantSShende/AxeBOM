@@ -94,8 +94,7 @@ export function BomTypeHome({ family }: { family: BomType }) {
         </p>
       ) : (
         <p className="field-hint">
-          Which engines run for {meta.label} is configured under Settings by an organisation
-          admin.
+          Which engines run for {meta.label} is configured under Settings by an organisation admin.
         </p>
       )}
     </div>

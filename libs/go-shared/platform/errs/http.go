@@ -36,8 +36,27 @@ func Write(w http.ResponseWriter, r *http.Request, err error) {
 	status := e.HTTPStatus()
 	reqID := RequestIDFromContext(r.Context())
 
-	// 5xx is our fault and is logged at error; 4xx is the caller's and is logged
-	// at debug so a scanner hammering 404s cannot flood the error log.
+	// ⚠ EVERY ENVELOPE THIS FUNCTION WRITES IS LOGGED, 4xx INCLUDED.
+	//
+	// 4xx used to be logged at DEBUG, and services run at info — so the whole
+	// class was invisible. That is not merely thin logging: the body written
+	// immediately below carries a request_id, and the UI renders it under
+	// "quote the code and request id above — they are what identifies this
+	// exact failure in our logs" (frontend/src/components/States.tsx). For
+	// every 400, 401, 403, 404, 409 and 422 the product has ever returned,
+	// that sentence was false, and the id it told the user to quote appeared
+	// in no log line anywhere. A support instruction that cannot be honoured
+	// is worse than none: it sends someone to collect evidence that was
+	// discarded before they read the message.
+	//
+	// The flood the old comment guarded against is real but is the rate
+	// limiter's problem, not something to solve by dropping the record: a
+	// scanner hammering 404s costs exactly as many lines as one hammering
+	// 200s, which are logged at info already.
+	//
+	// WARN, not INFO, for 4xx: it is the caller's fault rather than ours, so
+	// it does not belong in the error log next to the failures we must act on,
+	// but it is the line somebody goes looking for with an id in their hand.
 	logAttrs := []any{
 		"code", string(e.Code),
 		"status", status,
@@ -51,7 +70,7 @@ func Write(w http.ResponseWriter, r *http.Request, err error) {
 	if status >= 500 {
 		slog.ErrorContext(r.Context(), e.Message, logAttrs...)
 	} else {
-		slog.DebugContext(r.Context(), e.Message, logAttrs...)
+		slog.WarnContext(r.Context(), e.Message, logAttrs...)
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

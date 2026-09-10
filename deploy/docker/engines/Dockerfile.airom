@@ -1,0 +1,47 @@
+# AIROM engine wrapper — AI asset discovery over a source tree.
+#
+# ⚠ THIS IS NOT ONE OF AXEBOM'S OWN SERVICES. It packages a THIRD-PARTY SCANNER
+# that `workers/aibom/adapters/airom.py` runs in the scan sandbox over untrusted
+# customer source (CLAUDE.md invariant 7: --network=none, read-only rootfs,
+# cap-drop ALL, non-root, quotas — all imposed by libs/go-shared/sandbox at
+# container-CREATE time, regardless of anything declared here). Same category and
+# same reasoning as Dockerfile.ai-bom beside it.
+#
+# WHY THIS DOCKERFILE HAS TO EXIST
+#
+# airom (https://github.com/airomhq/airom, Apache-2.0) publishes no container
+# image — only PyPI wheels wrapping a Go static binary. `ManifestResolver` can
+# build a sandboxed invocation only from a container, so as a `pip:` entry this
+# engine could never actually run. This Dockerfile IS the "upstream image"
+# OSINT/tools.manifest.yaml's `airom.container` entry points at.
+#
+# ⚠ TAG-PINNED, NOT DIGEST-PINNED, AND THAT IS HONEST HERE — same as
+# Dockerfile.ai-bom: there is no upstream digest for a locally built image to pin
+# against. `SandboxedAdapter.classify()` reports ENGINE_IMAGE_DIGEST_UNKNOWN
+# rather than claiming a pin it does not have.
+#
+# Build (from the repo root):
+#   task osint:build-airom
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# --require-hashes over the FULL closure — which for airom is a single wheel,
+# because the tool is a Go static binary with no Python dependencies at all.
+COPY deploy/docker/engines/airom-requirements.lock.txt /tmp/airom-requirements.lock.txt
+RUN pip install --require-hashes -r /tmp/airom-requirements.lock.txt \
+    && rm /tmp/airom-requirements.lock.txt
+
+# Non-root. Belt-and-suspenders: libs/go-shared/sandbox/policy.go forces
+# `--user 65534:65534` at container-CREATE time regardless of what an image
+# declares, so this is defense in depth, not the control itself.
+RUN useradd --uid 65532 --no-create-home --shell /usr/sbin/nologin airom
+USER airom
+
+# The installed console script. AiromAdapter.build_argv() supplies the
+# subcommand and flags at run time — the same convention as syft/grype/trivy,
+# whose ENTRYPOINT is the tool and whose adapters never repeat the binary name.
+ENTRYPOINT ["airom"]

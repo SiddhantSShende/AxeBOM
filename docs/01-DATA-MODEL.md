@@ -307,8 +307,9 @@ Feeds the **Engine Coverage** report section and auto-seeds `project.practices.k
 | `ruleset_version` | TEXT NOT NULL | e.g. `2026.08.1` |
 | `alias_snapshot_id` | UUID **NULL**, FK → `normalize.alias_snapshot.id` | which alias graph produced this. **Nullable with a real FK since migration `0012`** — resolved the gap this row used to describe. It was `NOT NULL` with *no* FK, the weakest possible pairing: it enforced "some uuid is present" and nothing about whether it meant anything, so `qbom.go`/`hbom.go` and the CBOM/AIBOM pipelines all minted a throwaway to satisfy it. Now: **NULL** for the BOM types that run no alias closure (CBOM, AIBOM, QBOM, HBOM) — declining to assert, where a fabricated id asserted to anyone joining `bom_documents → alias_snapshot` that a snapshot had been consulted — and a real, resolvable id for SBOM, which `writer.write_bom_document` **refuses to write without**. Same gap migration `0007` closed for `findings.cluster_id`. |
 | `spdx_license_list_version` | TEXT NOT NULL | ids get deprecated; a report must say which list it validated against |
-| `project_id` | UUID NULL | HBOM's second lineage key, added in migration `0012`. `services/project` has always borrowed `scan_id` for the project id on imported hardware BOMs (an import has no scan to point at, and `scan_id` has no FK by design). Once `hbom-ecad` produces real scans both meanings are live in that one column — they cannot collide, but resolving by `scan_id` would find only half of them. Both writers set `project_id`; `resolveHBOMDocument` reads it, ordering **newest-first** rather than highest-version-first, because `normalization_version` counts within a lineage and an import at v3 would otherwise outrank a fresh scan at v1. NULL for every other BOM type. |
+| `project_id` | UUID NULL | HBOM's second lineage key, added in migration `0012`. ⚠ **AIBOM documents now set it too, since M2.** The normalize consumer runs as `axebom_normalize_writer`, scoped to the `normalize` schema, so it cannot read `scan.scans` at all — and without a project id on the document there is no way for it to find the operator-supplied Table 10 values entered against the project's PREVIOUS AIBOM. Every re-normalization therefore overwrote them with `not-provided`, deleting the customer's own answers and the coverage they earned. `services/project`'s read path is unaffected: it still resolves by scan id, in two queries across two schemas, because invariant 11 forbids the JOIN. `services/project` has always borrowed `scan_id` for the project id on imported hardware BOMs (an import has no scan to point at, and `scan_id` has no FK by design). Once `hbom-ecad` produces real scans both meanings are live in that one column — they cannot collide, but resolving by `scan_id` would find only half of them. Both writers set `project_id`; `resolveHBOMDocument` reads it, ordering **newest-first** rather than highest-version-first, because `normalization_version` counts within a lineage and an import at v3 would otherwise outrank a fresh scan at v1. NULL for every other BOM type. |
 | `supplementary_coverage` | JSONB NOT NULL DEFAULT `{}` | scored field sets that are **not** compliance, keyed by profile id. HBOM's manufacturing readiness today (`hbom-manufacturing-v1`); the shape carries its own `label` and an `is_compliance: false` flag so no consumer has to know which profile ids are standards. ⚠ A keyed JSONB rather than another pair of `numeric` columns **on purpose**: `completeness_pct`/`declaration_pct` are load-bearing precisely *because* they are the compliance numbers, and giving a non-compliance percentage the same column shape one schema-tab away is how it eventually gets picked up by a query that meant the other one. |
+| `normalize_diagnostics` | JSONB NOT NULL DEFAULT `[]` | **what normalization could not do, in this document.** Added by migration `0017`, and it closed a product-wide invariant-12 hole: `workers/{aibom,cbom,hbom}/normalize_consumer.py` have always ended by setting `canonical["diagnostics"]`, and `writer.write_bom_document` never read the key — so every statement the normalizer made about what it could **not** resolve died at that function boundary, inside a process that had already exited. Two reachable losses it was hiding: `AIBOM_MODEL_RECLASSIFIED` (a component the engine called a model, stored as a dependency instead — the reason a customer's model count changes) and `AIBOM_DEPENDENCY_NOT_IN_SBOM` (a dependency `link_dependencies` drops rather than stores). On real `ai-bom` output those two together mean two libraries appear in **neither** list, with nothing saying so. ⚠ **Not an error log** — these are claims about the BOM's own completeness, so they belong to the document; engine-level diagnostics stay on `scan.engine_runs` and render in Engine Coverage. Written once with the row: a re-normalization writes a new version rather than updating this. |
 | `completeness_pct` | NUMERIC(5,2) | substantive values only — **the honest signal** |
 | `declaration_pct` | NUMERIC(5,2) | includes explicit `not-provided` — a representation check |
 | `coverage_breakdown` | JSONB | per-field presence counts, rendered as a table |
@@ -477,13 +478,87 @@ Unrecognized license text becomes `LicenseRef-AxeBOM-<slug>` with the raw text p
 > Populated by **form/import**, not discovery. There is no quantum-hardware scanner. Crypto assets are derived from CBOM discovery with quantum-vulnerability rules applied.
 
 ### `normalize.ai_models`  ← Table 10 (p.54–55)
-`(id, tenant_id, bom_document_id, model_name, model_version, model_type, model_developer, licensing, ml_models_algorithms TEXT[], performance_metrics JSONB, data_source, hardware, security_requirements, input, output, intended_usage, out_of_scope_usage, environmental_impact, attestation_signature, risk_score NUMERIC, owasp_llm_top10 TEXT[], field_status JSONB)`
+`(id, tenant_id, bom_document_id, model_key, identity_rule, identity_confidence, source_engine, evidence JSONB, verified BOOLEAN, model_name, model_version, model_type, model_developer, licensing, ml_models_algorithms TEXT[], performance_metrics JSONB, data_source, hardware, security_requirements, input, output, intended_usage, out_of_scope_usage, environmental_impact, attestation_signature, risk_score NUMERIC, owasp_llm_top10 TEXT[], field_status JSONB)`
+
+> ⚠ **`model_key` is the merge key, and this table went its whole life without one.**
+> Every other canonical table stores what it merges on — `components.component_key`,
+> `crypto_assets.component_key`. `ai_models` stored only `model_name`, so the merge key
+> existed for the length of one Python dictionary and was then discarded, leaving
+> nothing in the database able to say whether two rows were the same model.
+>
+> Measured on real data before migration `0016`: one repository using
+> `meta-llama/Llama-3-8B` produced **three** rows — `transformers`,
+> `HuggingFace Transformers` and `HuggingFace Transformers Model`. Those are three
+> labels the engine gave one Python library, and the model itself was in none of them.
+>
+> The ladder that produces it is `03-NORMALIZER-SPEC.md` §1.5, mirroring the
+> `component_key` chain. Every tier is prefixed, so `hash:` and `name:` keys cannot
+> collide even with identical payloads. **Not unique** — the same model legitimately
+> appears in many documents and at successive normalization versions; uniqueness
+> belongs to `(bom_document_id, model_key)`, which is what the row's uuid5 surrogate
+> already derives from. `bulk.py` writes the column from the same `_identity` value it
+> mints the id from, so the two cannot drift.
+>
+> `evidence` is where each engine says it saw the model, verbatim — never a path we
+> inferred. `verified` is true **only** when an engine confirmed the model resolves
+> upstream; it never defaults to true, because a model nobody could confirm is not a
+> model somebody confirmed.
 
 Plus `normalize.ai_datasets` `(id, ai_model_id, name, version, format, limitations, license, source)` and `normalize.ai_model_dependencies` `(ai_model_id, component_key)`.
 
 > `component_key` is a plain `text` column, **not** a foreign key into `normalize.components` — the referenced SBOM component usually lives in a different `bom_document_id` (a different `bom_type` document entirely) than this AIBOM, so there is no in-transaction id to reference. A reader resolves the join by string match at read time, the same situation as `crypto_assets.component_key` above.
 
 `risk_score` and `owasp_llm_top10` are AxeBOM extensions from Trusera ai-bom — excluded from coverage scoring.
+
+### `normalize.ai_model_provenance`
+`(id, tenant_id, ai_model_id, engine_id, observed_name, confidence, evidence JSONB)` — UNIQUE `(ai_model_id, engine_id)`.
+
+> ⚠ **`ai_models.source_engine` IS SINGULAR AND THE ANSWER IS NOT.** Three AIBOM
+> discovery engines run independently and converge on the same `model_key`, so "which
+> engine found this model" has up to three answers and a `text` column holds one. This
+> is the AI counterpart of `normalize.component_provenance`, which has recorded exactly
+> this for SBOM components since migration `0001` — one row per `(model, engine)`,
+> never a delimited list in a scalar.
+>
+> `observed_name` is what THAT engine called the model, verbatim, because the engines
+> disagree in ways worth being able to read afterwards: for one model on one tree,
+> `ai-bom` said `HuggingFace Transformers Model`, `airom` said `meta-llama/llama-3-8b`
+> and `cdxgen-ai` said `Llama-3-8B`. `confidence` is the engine's own figure —
+> **evidence, never scored**; a third party changing its heuristics must not move a
+> compliance percentage.
+>
+> A model found by one engine and missed by two is the single most useful fact for a
+> reviewer weighing how much to trust a Table 10 row, and it is invisible without this
+> table.
+
+### `normalize.ai_assets`
+`(id, tenant_id, bom_document_id, asset_type, asset_key, name, provider, evidence JSONB, serves_model_key, attributes JSONB)` — UNIQUE `(bom_document_id, asset_key)`.
+
+> ⚠ **NOTHING IN CERT-In TABLE 10 COVERS ANY OF THESE, AND THEY ARE STILL REPORTED.**
+> Table 10 asks about models. `airom` and `cdxgen-ai` report prompts, vector stores,
+> RAG pipelines and the inference services a repository talks to, each with `file:line`
+> evidence — six of them on one small real tree. Before migration `0018` there was
+> nowhere to put any of them: the engines would have run, found them, and produced a
+> report that mentioned none of it, which invariant 12 rates as worse than not looking.
+>
+> `asset_type` is a **closed set**, CHECKed in the migration and mirroring
+> `workers/aibom/discovery.ASSET_TYPES` exactly: `prompt`, `vector_store`,
+> `rag_pipeline`, `embedding`, `agent`, `tool`, `mcp_server`, `endpoint`, `dataset`.
+> Type-aware for the same reason Table 9's crypto types are (invariant 5) — a prompt, a
+> vector store and an endpoint have different meaningful fields.
+>
+> `asset_key` is prefixed with the type, so a prompt named `chroma` and a vector store
+> named `chroma` can never collide. **The discriminator depends on the kind**: a prompt
+> IS a piece of text at a place, so it keys on its location; a vector store is a service
+> the application talks to, so it keys on its provider. Keying both on location splits
+> one Chroma in two; keying both on name collapses every system prompt in a repository
+> into one.
+>
+> ⚠ **Scored into NEITHER coverage number.** Letting these rows move
+> `completeness_pct` would change a compliance percentage using something the guideline
+> never asked for. They are inventory and evidence; the operational profile
+> (`reference/aibom-operational-v1.yaml`) is where they are scored, under its own label
+> — the same separation `hbom-manufacturing-v1.yaml` already has.
 
 ### `normalize.hardware_components`  ← Table 11 (p.60–61) + §10.4.1.4 (p.62)
 
@@ -539,6 +614,97 @@ Plus three columns on `hardware_components`: `vuln_match_status`, `cpe23_candida
 > ⚠ **Element 24 scores "a vulnerability reference is present", not "we checked", and the arithmetic is counter-intuitive because the guideline's field is.** It is a `ref_list`, and `coverage.is_substantive([])` is `False` — so a component with **no** known vulnerability scores **zero** on element 24 while a vulnerable one scores full marks. Widening `is_substantive` is *not* the fix: it is the most sensitive function in the codebase and would change what `not-provided` means for every BOM type at once. The arithmetic stays honest and **the report says so in words**, beside the number (`render.vulnerabilityNote`).
 
 **These severities are never summed into the counts an SBOM report quotes.** One blended figure, part fact and part guess, with nothing saying which, is worse than two honest numbers.
+
+---
+
+## 6a. AI governance — schema `aibom`
+
+> ⚠ **THE WHOLE POINT OF THIS SCHEMA IS THAT `normalize.ai_models` STOPS BEING
+> UPDATED.** `services/project` collected the operator-supplied half of Table 10
+> and wrote it with `UPDATE normalize.ai_models SET intended_usage = …` — a
+> mutation of normalized data, which CLAUDE.md invariant 10 says never happens.
+> It survived only because the AIBOM normalize consumer read the PREVIOUS
+> document's values back before writing a new one, which is a rescue for a write
+> that should not exist; anything the rescue missed — a model whose identity
+> changed between passes, a first normalization after somebody answered — lost
+> the answer silently.
+>
+> Operator input is not a normalization output. Held here, keyed by
+> `(tenant, project, model_key)`, it outlives every re-normalization **by
+> construction**. The normalizer reads it (`axebom_normalize_writer` holds
+> SELECT on this schema and no write grant at all) and writes it into the new
+> document.
+>
+> ⚠ **Keyed by `model_key`, never by an `ai_models` row id.** Every
+> re-normalization writes new rows, so a row id is valid for exactly one
+> document and an answer attached to one is orphaned by the next scan. And never
+> a foreign key: this schema must not reference `normalize.*` (invariant 11), and
+> an answer recorded for a model a later scan no longer finds is kept rather than
+> cascaded away — the operator said something true about a model that was there.
+
+### `aibom.model_user_values`
+`(id, tenant_id, project_id, model_key, security_requirements, intended_usage, out_of_scope_usage, environmental_impact, attestation_signature, updated_by, created_at, updated_at)` — UNIQUE `(tenant_id, project_id, model_key)`.
+
+> One column per element, not a JSONB bag: which elements are operator-supplied
+> is declared once in `reference/certin-v2.0.yaml` (`user_supplied: true`), and a
+> bag would let the database accept an id the profile does not define. Named
+> columns make a profile revision a migration — the visible, reviewable form of
+> that change.
+>
+> Empty means empty here; the `not-provided` sentinel belongs to the normalized
+> document. Storing it in the operator's own table would make "they cleared the
+> field" and "they typed the word" indistinguishable.
+
+### `aibom.project_policy`
+`(tenant_id, project_id, llm_enrich_enabled, cisco_enabled, consent_recorded_by, consent_recorded_at, created_at, updated_at)` — PK `(tenant_id, project_id)`.
+
+> Both switches send **customer source code to a third-party LLM** —
+> `ai-bom --llm-enrich` and `cisco-aibom --llm-model`. Both default off, and who
+> turned one on is recorded, because "we consented" is a claim somebody has to be
+> able to check. `consent_recorded_by` is set only when something is turned ON:
+> attributing a withdrawal as a consent would leave a record saying the opposite
+> of what happened.
+>
+> ⚠ **Consent does not turn an engine on.** Scan engines run `--network=none` and
+> there is no egress allowlist yet, so today this records an intent the platform
+> still refuses to act on. The API returns `effective: false` with the blocker,
+> and no UI may imply otherwise.
+
+### `aibom.compliance_tags`
+`(id, tenant_id, project_id, model_key, eu_ai_act_tier, nist_ai_rmf TEXT[], iso_42001 TEXT[], rationale, declared_by, created_at, updated_at)` — UNIQUE `(tenant_id, project_id, model_key)`.
+
+> ⚠ **The operator's classification, never AxeBOM's.** Whether a system is
+> high-risk under the EU AI Act depends on what it is USED FOR — the sector, the
+> deployment context, whether a human is in the loop — none of which is visible
+> in a repository. Inferring a tier from an import statement would manufacture a
+> legal conclusion out of a dependency graph, and a customer would carry it into
+> an audit.
+>
+> An empty `model_key` tags the whole project; a per-model tag is the more
+> specific statement and wins. `eu_ai_act_tier` is CHECKed against a closed set
+> that includes `undetermined` as a **first-class value** — "somebody looked and
+> could not decide" is a different state from "nobody has looked", and only one of
+> them is a task. The vocabularies are in `libs/go-shared/model/aiframeworks.go`,
+> and ISO/IEC 42001 is offered as Annex A **categories** rather than numbered
+> controls: a control reference one digit wrong is a false citation, and unlike a
+> missing value a plausible wrong one is invisible to the reader.
+
+### `aibom.attestations`
+`(id, tenant_id, project_id, model_key, verified, method, signer_identity, signer_issuer, digest, failure_reason, raw JSONB, verified_at, recorded_by, created_at)`.
+
+> ⚠ **A verification RESULT, not a signature, and AxeBOM did not run it.**
+> `model_signing verify` recomputes the digest of every model FILE; AxeBOM never
+> holds customer model weights — the sandbox sees a source tree and the enrichment
+> plane sees a model identifier. This is the `hbom-host-report` shape: the customer
+> runs the verifier where the artifact is, and AxeBOM ingests and PARSES what it
+> returned. What that buys over the free-text element 19 field is that `verified`
+> is read rather than typed and a failure is recorded as a failure; what it does
+> not buy is AxeBOM having checked a signature.
+>
+> `verified` never defaults to true, the same rule `normalize.ai_models.verified`
+> carries. **Appends, never upserts**: verification is a statement about a moment,
+> so re-verifying adds a row and the newest is the current answer — overwriting
+> would erase the history that makes a *changed* answer legible.
 
 ---
 

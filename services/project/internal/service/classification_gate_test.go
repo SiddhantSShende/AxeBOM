@@ -10,7 +10,11 @@ import (
 
 // bomModuleFiles are the per-BOM-type service files. A BOM type that gains its
 // own file belongs in this list.
-var bomModuleFiles = []string{"hbom.go", "qbom.go", "ai_models.go"}
+// ⚠ `ai_models.go` LEFT THIS LIST WHEN THE AI WRITE PATH LEFT THIS SERVICE.
+// It moved to services/aibom, which carries its own copy of this guard
+// (`services/aibom/classification_gate_test.go`) over its own store — the rule
+// travelled with the code rather than being quietly dropped with it.
+var bomModuleFiles = []string{"hbom.go", "qbom.go"}
 
 // creationPrefixes name the methods that bring NEW data into existence.
 //

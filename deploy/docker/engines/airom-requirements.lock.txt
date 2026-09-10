@@ -1,0 +1,18 @@
+# AIROM — hash-pinned, verified with `pip install --require-hashes`.
+#
+# ⚠ ONE LINE, AND THAT IS NOT AN OVERSIGHT. airom is a Go static binary shipped
+# inside a platform wheel, so its Python dependency closure is EMPTY — unlike
+# ai-bom, whose 23 packages fill its sibling lock file. `pip download` for
+# airom==0.4.4 resolves exactly one artifact.
+#
+# Regenerate (repeat, do not hand-edit):
+#
+#   docker run --rm -v /tmp/out:/out python:3.12-slim \
+#     bash -c "pip download --no-cache-dir -d /out 'airom==<version>'"
+#   docker run --rm -v /tmp/out:/wheels python:3.12-slim \
+#     bash -c "cd /wheels && for f in *.whl; do pip hash \"\$f\"; done"
+#
+# Platform-specific by construction: the wheel is
+# manylinux_2_17_x86_64. A different build architecture needs its own hash.
+airom==0.4.4 \
+    --hash=sha256:916f9d6bb7b7b6cdab96e91fa3ded6321cef405a2b047b8c9551cd7e5a694e8a

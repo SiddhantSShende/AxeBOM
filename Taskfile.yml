@@ -585,6 +585,7 @@ tasks:
       # compliance rules it has no authority behind — and, conversely, what
       # makes the checker refuse it if it ever grows a CERT-In section.
       - go run ./cmd/axebom profile lint docs/reference/hbom-manufacturing-v1.yaml
+      - go run ./cmd/axebom profile lint docs/reference/aibom-operational-v1.yaml
 
   profile:gen:
     desc: Regenerate Go and Python models from the compliance profile
@@ -592,6 +593,13 @@ tasks:
     # the drift check compares like with like.
     cmds:
       - go run ./cmd/axebom profile gen
+      # ⚠ EACH OPERATIONAL PROFILE IS GENERATED TOO, AND SEPARATELY. A field set
+      # that is authored, linted and scored but has no generated Go consumer is
+      # invisible in every screen and every report that reads `model.*Fields` —
+      # exactly the failure the CERT-In generator exists to prevent, and exactly
+      # what happened to hbom_manufacturing before it was generated.
+      - go run ./cmd/axebom profile gen --profile docs/reference/hbom-manufacturing-v1.yaml
+      - go run ./cmd/axebom profile gen --profile docs/reference/aibom-operational-v1.yaml
       - cmd: '{{.PY}} -m ruff format libs/py-shared/axebom_shared/model'
         ignore_error: true
 
@@ -628,12 +636,28 @@ tasks:
     cmds:
       - docker build -f deploy/docker/engines/Dockerfile.ai-bom -t axebom/ai-bom-engine:dev .
 
+  osint:build-airom:
+    desc: Build the local airom engine image (upstream ships a PyPI wheel, not a container)
+    # Same shape as osint:build-ai-bom above, and the same reason: airom
+    # (airomhq/airom) publishes a Go static binary as a platform wheel on PyPI
+    # and no container image, while AiromAdapter runs it in the scan sandbox
+    # over untrusted customer code — which the sandbox can only do to a
+    # container. `toolctl pull` cannot fetch this image from any registry
+    # because it exists on none, so this runs first and `osint:pull` depends
+    # on it.
+    #
+    # There is no `osint:build-cdxgen-ai`: `cdxgen-ai` is the SAME
+    # digest-pinned upstream image as `cdxgen`, invoked with `-t ai` — the
+    # `syft-spdx` precedent. `toolctl pull` fetches it once.
+    cmds:
+      - docker build -f deploy/docker/engines/Dockerfile.airom -t axebom/airom-engine:dev .
+
   osint:pull:
     desc: Pre-pull every container-mode engine image (REQUIRED before scanning)
     # Engines run with --network=none, so a container cannot fetch its own
     # image. Without this every container engine reports "No such image" as an
     # honest but entirely avoidable gap.
-    deps: [osint:build-ai-bom]
+    deps: [osint:build-ai-bom, osint:build-airom]
     cmds:
       - go run ./cmd/axebom toolctl pull {{.CLI_ARGS}}
 

@@ -142,6 +142,34 @@ func (h *Handler) GetQBOMForm(w http.ResponseWriter, r *http.Request) {
 		errs.Write(w, r, err)
 		return
 	}
+	h.writeQBOMForm(w, r)
+}
+
+// GetQBOMRegistrationForm handles GET /v1/qbom/form.
+//
+// ⚠ THE PROJECT-LESS TWIN OF THE ROUTE ABOVE, AND IT EXISTS FOR THE ONE CALLER
+// THAT HAS NO PROJECT ID: the registration wizard. Table 8's elements are the
+// only part of a QBOM no scan can produce, and they were asked for on a screen
+// reachable only AFTER the project existed — so registration asked a QBOM
+// project exactly the same questions as an SBOM one, and the form a QBOM
+// cannot do without became a checklist item read later, if at all.
+//
+// Both routes render the same generated list. GetQBOMForm keeps its projectId
+// for the reason its own comment gives (somewhere for a future per-PROJECT
+// profile override to hang); a per-TENANT override, which is the only kind that
+// could apply before a project exists, has the tenant from the token either way.
+func (h *Handler) GetQBOMRegistrationForm(w http.ResponseWriter, r *http.Request) {
+	if _, err := auth.RequireTenant(r.Context()); err != nil {
+		errs.Write(w, r, err)
+		return
+	}
+	h.writeQBOMForm(w, r)
+}
+
+// writeQBOMForm is the one body both routes return. Two handlers assembling the
+// same JSON by hand is how the registration form and the project form would
+// come to disagree about what Table 8 contains.
+func (h *Handler) writeQBOMForm(w http.ResponseWriter, _ *http.Request) {
 	form := h.svc.GetQBOMForm()
 	errs.WriteJSON(w, http.StatusOK, map[string]any{
 		"fields":     toFormFieldDTOs(form.Fields),

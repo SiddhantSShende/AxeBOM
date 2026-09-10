@@ -129,6 +129,20 @@ linters:
           allow: [github.com/axebom/axebom/services/webrecon]
           deny: *cross-service-deny
 
+        # ⚠ services/aibom READS `normalize.*` AND `project.*` IN SQL, and that
+        # is not what this rule is about. Cross-schema READS are sanctioned
+        # (invariant 11 forbids cross-schema JOINs and importing another
+        # service's Go packages, not reading a table). What this rule stops is
+        # `import ".../services/project/internal/bommodule"` — reaching for a
+        # helper across a boundary, which is the first step in making the
+        # boundary notional. The AIBOM classification gate is a local query for
+        # exactly that reason.
+        service-boundaries-aibom:
+          list-mode: lax
+          files: ["**/services/aibom/**"]
+          allow: [github.com/axebom/axebom/services/aibom]
+          deny: *cross-service-deny
+
         # ------------------------------------------------------------------
         # Workers are scan engines. They run untrusted code in a sandbox and
         # hold no credentials (ADR-0008), so they must not reach into service

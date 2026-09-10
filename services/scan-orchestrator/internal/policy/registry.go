@@ -142,6 +142,50 @@ type Engine struct {
 	// inside a sandboxed container job of its own); this is the dispatch-time
 	// instruction "wire this specific artifact into this specific job."
 	ConsumesNativeSBOM bool `json:"consumes_native_sbom,omitempty"`
+
+	// Disabled marks an engine that is REGISTERED AND NEVER DISPATCHED.
+	//
+	// ⚠ NOT THE SAME THING AS Scaffold, AND NOT THE SAME THING AS OMITTING IT.
+	//
+	// `cisco-aibom` is the case. It is a real, Apache-2.0, AI-BOM generator, and
+	// its `analyze` command ALWAYS requires `--llm-model`: it resolves ambiguous
+	// AI usage by sending code context to a third-party LLM. That needs egress
+	// and an API key, and scan engines run `--network=none` holding no
+	// credentials (CLAUDE.md invariant 7). There is no egress proxy yet.
+	//
+	// Leaving it out of the registry would make it impossible for a reader to
+	// tell "AxeBOM does not know about this tool" from "AxeBOM chose not to run
+	// it and here is why". Listing it, with the reason, is the honest answer —
+	// `GET /v1/scans/engines` returns it and the engine-policy screen shows it.
+	//
+	// ⚠ AND IT MUST NOT BECOME AN ENGINE RUN. A permanent `unavailable` row on
+	// every AIBOM scan would make `DeriveScanStatus` return
+	// `completed_with_errors` for every one of them — training a reader to
+	// ignore the status that actually matters. A policy decision is not a scan
+	// error. So ForFamily excludes it, Resolve refuses to dispatch it even when
+	// a tenant override names it, and Resolution.Disabled carries it for
+	// reporting instead.
+	Disabled bool `json:"disabled,omitempty"`
+
+	// DisabledReason is why, in the product's own voice. Rendered wherever
+	// Disabled is. Never empty when Disabled is set — see TestEveryDisabledEngineSaysWhy.
+	DisabledReason string `json:"disabled_reason,omitempty"`
+
+	// JobSubject overrides where this engine's jobs are published.
+	//
+	// ⚠ EMPTY MEANS `scan.job.<family>`, WHICH IS RIGHT FOR EVERY ENGINE BUT ONE.
+	// An engine normally belongs to the worker that owns its family. `aibom-generator`
+	// belongs to the AIBOM family for REPORTING — it is an AIBOM engine and its
+	// status belongs in that family's Engine Coverage — while being consumed by a
+	// separate deployable, because it is the only part of the AI path that touches
+	// the network and keeping it out of the image that processes customer
+	// repositories is the point of splitting it.
+	//
+	// `scan.job.aibom.enrich` is four tokens, so the AIBOM worker's exact-match
+	// `scan.job.aibom` filter never receives it — verified against the live
+	// server, not assumed — and both consumers coexist on the WorkQueue stream
+	// with non-overlapping filters.
+	JobSubject string `json:"job_subject,omitempty"`
 }
 
 // Supports reports whether this engine can read a source kind.
@@ -378,14 +422,31 @@ func DefaultRegistry() *Registry {
 			DefaultWeight: 2,
 		},
 		{
-			ID:            "aibom-generator",
-			Mode:          "pip",
-			Families:      []events.Family{events.FamilyAIBOM},
-			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload},
-			Ecosystems:    []string{"huggingface", "pypi"},
-			Produces:      []string{"ai_models"},
-			NativeFormat:  "cyclonedx-json-1.6",
-			DefaultWeight: 3,
+			// ⚠ THIS ENGINE REPORTED `skipped` ON EVERY SCAN UNTIL M2, because it
+			// was dispatchable to `scan.job.aibom` and the AIBOM worker has no
+			// adapter for it — a registry row with no adapter is a permanent
+			// ENGINE_NOT_IMPLEMENTED.
+			//
+			// It is not a sandboxed engine at all: it asks a public API about a
+			// model IDENTIFIER, never about customer code, so it runs outside the
+			// sandbox in `workers/aienrich` — the one component in the AI path
+			// with outbound network (docs/04-OSINT-INTEGRATION.md §2).
+			//
+			// ConsumesOutputOf gives it the ordering for free: FanOut holds it
+			// back, releaseDependents publishes it once ai-bom has produced the
+			// discovery it enriches, and skipDependent marks it `skipped` with a
+			// stated cause if ai-bom produced nothing. JobSubject sends that job
+			// to the enrichment worker instead of the AIBOM worker.
+			ID:               "aibom-generator",
+			Mode:             "pip",
+			Families:         []events.Family{events.FamilyAIBOM},
+			SourceKinds:      []events.SourceKind{events.SourceGit, events.SourceUpload},
+			Ecosystems:       []string{"huggingface", "pypi"},
+			Produces:         []string{"ai_models"},
+			NativeFormat:     "cyclonedx-json-1.6",
+			DefaultWeight:    3,
+			ConsumesOutputOf: "ai-bom",
+			JobSubject:       "scan.job.aibom.enrich",
 		},
 		{
 			// ⚠ "container", NOT "pip", AND THE REGISTRY WAS THE ONE THAT WAS
@@ -407,6 +468,137 @@ func DefaultRegistry() *Registry {
 			Produces:      []string{"ai_models"},
 			NativeFormat:  "cyclonedx-json-1.6",
 			DefaultWeight: 2,
+		},
+		{
+			// ⚠ THE WIDEST AI DISCOVERY SURFACE OF THE THREE, MEASURED — not
+			// claimed. On one real tree (workers/aibom/testdata/ai-langchain,
+			// captured in airom-ai-langchain.cdx.json) airom is the ONLY engine
+			// that reports the embedding model, the system prompt at
+			// src/app.py:9, the prompt file, the Chroma vector store and the RAG
+			// pipeline. ai-bom and cdxgen-ai report none of those five.
+			//
+			// Ecosystems are DISCOVERY SURFACES, not package ecosystems — the
+			// same distinction ai-bom's Capabilities records. Saying `pypi` here
+			// would make Engine Coverage claim airom scanned the Python
+			// dependency tree; it looked for AI usage in it.
+			ID:            "airom",
+			Mode:          "container",
+			Families:      []events.Family{events.FamilyAIBOM},
+			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload},
+			Ecosystems:    []string{"model-refs", "embeddings", "prompts", "vector-stores", "rag-pipelines"},
+			Produces:      []string{"ai_models", "ai_dependencies", "ai_assets"},
+			NativeFormat:  "cyclonedx-json-1.6",
+			DefaultWeight: 2,
+		},
+		{
+			// The SAME digest-pinned image and binary as `cdxgen`, invoked with
+			// `-t ai` — the `syft-spdx` precedent, and a separate engine id for
+			// the same reason: the tool writes ONE document to stdout and the
+			// sandbox has no writable host mount to collect a second from.
+			//
+			// It is the only engine that emits a correctly-cased
+			// `pkg:huggingface/…` purl (tier 1 of the identity ladder) and the
+			// only one that reports the inference services a repository talks to.
+			ID:            "cdxgen-ai",
+			Mode:          "container",
+			Families:      []events.Family{events.FamilyAIBOM},
+			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload},
+			Ecosystems:    []string{"model-refs", "inference-services", "prompts"},
+			Produces:      []string{"ai_models", "ai_assets"},
+			NativeFormat:  "cyclonedx-json-1.6",
+			DefaultWeight: 4,
+		},
+		{
+			// A DECLARATION THE CUSTOMER COMMITTED, parsed where it lives.
+			//
+			// `0disoft/ai-bom-generator` discovers nothing — it renders an
+			// `aibom.toml` somebody wrote. That makes this an engine anyway,
+			// because parsing a committed file is a scan in exactly the sense
+			// parsing a committed lockfile is; the same line that made
+			// `hbom-ecad` a scan and left `hbom-csv` an import.
+			//
+			// ⚠ RequiresImport IS TRUE AND SourceKinds IS NOT EMPTY, and both are
+			// right. The flag is the honest label — what it reports is the
+			// customer's own claim, not an observation — while the source kinds
+			// are the dispatch fact: unlike `hbom-csv`, this IS dispatched, over a
+			// source tree, and finds its own input. `github-dependency-graph-sbom`
+			// already carries exactly that combination.
+			ID:             "aibom-toml",
+			Mode:           "internal",
+			Families:       []events.Family{events.FamilyAIBOM},
+			SourceKinds:    []events.SourceKind{events.SourceGit, events.SourceUpload},
+			Ecosystems:     []string{"declared-models"},
+			Produces:       []string{"ai_models", "ai_assets"},
+			NativeFormat:   "axebom-aibom-json-1",
+			DefaultWeight:  1,
+			RequiresImport: true,
+			OperatorAction: "Commit an `aibom.toml` describing the models this " +
+				"project uses (the 0disoft/ai-bom-generator format). AxeBOM finds " +
+				"and parses it; it does not run that tool.",
+		},
+		{
+			// A RUNNING CLUSTER, WHICH NO SOURCE SCAN CAN SEE.
+			//
+			// `GoogleCloudPlatform/k8s-aibom` is a Kubernetes controller
+			// installed by Helm. It has no scan CLI, it needs cluster credentials
+			// AxeBOM must not hold (invariant 7), and running it would document
+			// nothing the customer asked about. They install it, export the
+			// `AIBOM` custom resource, and upload that.
+			ID:             "aibom-k8s-runtime",
+			Mode:           "internal",
+			Families:       []events.Family{events.FamilyAIBOM},
+			SourceKinds:    []events.SourceKind{events.SourceUpload},
+			Ecosystems:     []string{"model-refs", "runtime-deployments"},
+			Produces:       []string{"ai_models", "ai_assets"},
+			NativeFormat:   "cyclonedx-json-1.6",
+			DefaultWeight:  2,
+			RequiresImport: true,
+			OperatorAction: "Install GoogleCloudPlatform/k8s-aibom in the cluster " +
+				"you want documented, export the AIBOM custom resource it emits, " +
+				"and upload that file. AxeBOM does not reach your cluster.",
+		},
+		{
+			// A TRAINING RUN, TRACED BY A TOOL AxeBOM MAY NEVER RUN.
+			//
+			// `roar` wraps and EXECUTES the user's own training command, which
+			// invariant 7 forbids outright, and produces nothing without network
+			// access to glaas.ai — where the BOM is generated server-side, behind
+			// a web-UI download, by software with no public repository.
+			ID:             "aibom-glaas",
+			Mode:           "internal",
+			Families:       []events.Family{events.FamilyAIBOM},
+			SourceKinds:    []events.SourceKind{events.SourceUpload},
+			Ecosystems:     []string{"model-refs", "training-runs"},
+			Produces:       []string{"ai_models", "ai_assets"},
+			NativeFormat:   "cyclonedx-json-1.6",
+			DefaultWeight:  2,
+			RequiresImport: true,
+			OperatorAction: "Trace your training run with `roar run <command>` " +
+				"(set ROAR_NO_TELEMETRY=1), download the AI-BOM GLaaS generates, " +
+				"and upload it. AxeBOM cannot run roar: it executes your own " +
+				"command, which scan engines are forbidden from doing.",
+		},
+		{
+			// ⚠ REGISTERED, NEVER DISPATCHED — see Engine.Disabled for the full
+			// reasoning, including why this is NOT an `unavailable` engine run.
+			//
+			// It is here so a reader can tell "AxeBOM does not know about this
+			// tool" from "AxeBOM chose not to run it, and here is why". The
+			// engine list endpoint returns it with the reason attached.
+			ID:            "cisco-aibom",
+			Mode:          "pip",
+			Families:      []events.Family{events.FamilyAIBOM},
+			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload},
+			Ecosystems:    []string{"model-refs"},
+			Produces:      []string{"ai_models"},
+			NativeFormat:  "cyclonedx-json-1.6",
+			DefaultWeight: 5,
+			Disabled:      true,
+			DisabledReason: "cisco-aibom `analyze` always requires `--llm-model`, which sends " +
+				"code context to a third-party LLM and needs both network egress and an API " +
+				"key. Scan engines run with no network and hold no credentials by design, and " +
+				"no egress allowlist exists yet. Enabling it is a per-project decision that " +
+				"has to be made and audited, not a default.",
 		},
 		{
 			// HONEST LABEL: not a scanner. A structured CSV/form import plus a
@@ -621,7 +813,9 @@ func (r *Registry) ForFamily(f events.Family) []Engine {
 	var out []Engine
 	for _, e := range r.engines {
 		// Scaffolds are reachable by id and never by default — see Engine.Scaffold.
-		if e.InFamily(f) && !e.Scaffold {
+		// Disabled engines are reachable by id and never dispatched at all — see
+		// Engine.Disabled.
+		if e.InFamily(f) && !e.Scaffold && !e.Disabled {
 			out = append(out, e)
 		}
 	}
@@ -776,6 +970,16 @@ type Resolution struct {
 	// legitimate request that simply excludes trivy-fs, and the exclusion must
 	// reach the Engine Coverage section rather than vanishing.
 	SkippedForSource []OffendingPair
+
+	// Disabled are registered engines in a requested family that AxeBOM
+	// deliberately does not run, with the reason for each.
+	//
+	// Populated only when a tenant override NAMED one — the default set never
+	// contains them (ForFamily filters them out). An override naming a disabled
+	// engine is a request that has to be answered, not silently granted: this is
+	// what turns it into a stated refusal instead of a dispatched job for an
+	// engine no worker implements.
+	Disabled []OffendingPair
 }
 
 // Resolve turns requested families into the engines that will run.
@@ -798,9 +1002,23 @@ func (r *Registry) Resolve(families []events.Family, kind events.SourceKind,
 		if ids, ok := overrides[f]; ok {
 			candidates = nil
 			for _, id := range ids {
-				if e, found := r.Get(id); found {
-					candidates = append(candidates, e)
+				e, found := r.Get(id)
+				if !found {
+					continue
 				}
+				// ⚠ AN OVERRIDE CANNOT RE-ENABLE A DISABLED ENGINE. This branch
+				// reads the registry by id, bypassing ForFamily's filter — so
+				// without this a tenant policy naming `cisco-aibom` would publish
+				// a job for an engine no worker implements, leaving a permanent
+				// `skipped`/ENGINE_NOT_IMPLEMENTED row in the one section that
+				// promises to be precise (invariant 12).
+				if e.Disabled {
+					res.Disabled = append(res.Disabled, OffendingPair{
+						Engine: e.ID, SourceKind: string(kind), Reason: e.DisabledReason,
+					})
+					continue
+				}
+				candidates = append(candidates, e)
 			}
 		}
 

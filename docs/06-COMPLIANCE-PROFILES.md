@@ -174,7 +174,14 @@ Step 5 is the payoff of the replayable-normalization design (ADR-0003): a standa
 
 ## 11. Operational profiles — scored, but never compliance
 
-A profile can also describe a field set **AxeBOM** defined, rather than one a standard requires. The first is `reference/hbom-manufacturing-v1.yaml`: reference designators, footprints, quantities, supplier SKUs, alternates, prices, DNP flags, assembly type and lifecycle status.
+A profile can also describe a field set **AxeBOM** defined, rather than one a standard requires. There are two:
+
+- `reference/hbom-manufacturing-v1.yaml` — reference designators, footprints, quantities, supplier SKUs, alternates, prices, DNP flags, assembly type and lifecycle status. *How buildable and buyable is this parts list.*
+- `reference/aibom-operational-v1.yaml` — resolved model identity and its confidence, which engines found it, file:line evidence, upstream verification, the AI frameworks it rests on, and the prompts / vector stores / RAG pipelines / agents / inference services around it, plus the operator's own EU AI Act, NIST AI RMF and ISO/IEC 42001 declarations and any recorded attestation result. *How much of this AI system's operational shape did we manage to see.*
+
+> **The AIBOM one exists because CERT-In Table 10 describes a MODEL and an AI system is more than its model.** Three engines report prompts, vector stores, RAG pipelines and inference endpoints with file:line evidence, and Table 10 has no element for any of them. Before this profile the choice was between dropping those findings and inventing a CERT-In element for them; this is the third answer.
+>
+> ⚠ **Every element in it is something that can actually be filled today.** A field nothing can answer scores zero for every customer for ever, which does not measure the customer — it measures us, and reads on the report as the customer's gap. One element (`embeddings`) was removed after a live scan reported 0 for a repository that *has* an embedding model: `airom` correctly types it as a MODEL, so it was already scored by the identity elements and the separate element could only ever read zero. The profile's own closing comment names what else was deliberately left out, and why.
 
 These are scored — that is the whole point of them — but into their **own number, under their own label**, never into `completeness_pct` or `declaration_pct`.
 
@@ -184,7 +191,7 @@ These are scored — that is the whole point of them — but into their **own nu
 
 **1. `profile.kind`.** `operational` marks it; an absent `kind` means `compliance`. The default is the safe direction — a new profile that forgets to declare itself is held to every compliance check rather than quietly escaping them.
 
-**2. A distinct top-level key.** The fields live under `hbom_manufacturing:`, never a second `hbom:`. Every CERT-In accessor in `libs/go-shared/compliance` reads the named sections — `FieldsForBOMType`, the guardrail's field counts, the evidence pack's HBOM section, and the code generator that produces `HBOM_FIELDS`. A different key means not one of them can return an AxeBOM field by accident. `TestOperationalFieldsNeverReachACertInAccessor` asserts that against both files, and it is mutation-verified: widening `FieldsForBOMType("HBOM")` to include the manufacturing set makes it fail by name.
+**2. A distinct top-level key.** The fields live under `hbom_manufacturing:` / `aibom_operational:`, never a second `hbom:` or `aibom:`. Every CERT-In accessor in `libs/go-shared/compliance` reads the named sections — `FieldsForBOMType`, the guardrail's field counts, the evidence pack's HBOM section, and the code generator that produces `HBOM_FIELDS`. A different key means not one of them can return an AxeBOM field by accident. `TestOperationalFieldsNeverReachACertInAccessor` asserts that against both files, and it is mutation-verified: widening `FieldsForBOMType("HBOM")` to include the manufacturing set makes it fail by name.
 
 **3. Inverted and added lint rules**, all gated on `Meta.IsCompliance()`:
 
@@ -195,10 +202,16 @@ These are scored — that is the whole point of them — but into their **own nu
 | `all_entries_verified` | must match the `assumed` count | **refused** — a provenance claim with nothing behind it |
 | Defining `sbom:`/`hbom:`/`crypto_asset:` | expected | **refused** — those blocks are read as a standard by every accessor in the package |
 
+### Where the number goes
+
+Both land in `normalize.bom_documents.supplementary_coverage`, keyed by profile id, each carrying its own `label` and an `is_compliance` flag — so a consumer never has to know which profile ids are standards; the flag is checkable, a naming convention is not.
+
+> ⚠ **They were computed and stored for a whole phase with no reader.** The HBOM manufacturing score has been written to that column since migration `0011` and appeared in no report, no export and no screen. A number a customer cannot see is a number that does not exist — the same class of loss invariant 12 names for engine gaps, one layer up. Both now render on the report's Summary sheet and in the JSON export, each under its own label and beside a sentence naming AxeBOM as the authority: a percentage on a compliance document is read as a compliance percentage unless something says otherwise, so rendering the number without that sentence would be worse than omitting it.
+
 ### What deliberately does *not* change
 
 - **`FieldsForBOMType` is untouched.** That one function feeds `HBOM_FIELDS` → `workers/hbom/normalize.py`'s `_SCORED` → `completeness_pct`. Leaving it alone *is* the separation.
-- **`axebom profile gen` takes a different path for an operational profile, not no path.** It used to refuse one outright, for two reasons. The first still holds: `GenerateGo` emits package-level `ProfileID`/`ProfileRevision`/`ProfileAllVerified` and the `ProfileField` type, so a second profile through it is four duplicate declarations and a compile error — which is why `GenerateGoOperational` writes a **separate file** (`generated_operational.go`) carrying only the field list and its own id constants. The second reason — "nothing in Go needs the list, Python reads it at runtime" — was true when written and went stale: `hbom.ComponentFormFields` builds the hardware component form from the **generated** `model.HBOMFields`, and `compliance.Load` reads from disk, which no service container has a copy of. So the manufacturing elements were authored, linted, scored and reported while being invisible in the one screen where a person could enter them.
+- **`axebom profile gen` takes a different path for an operational profile, not no path.** It used to refuse one outright, for two reasons. The first still holds: `GenerateGo` emits package-level `ProfileID`/`ProfileRevision`/`ProfileAllVerified` and the `ProfileField` type, so a second profile through it is four duplicate declarations and a compile error — which is why `GenerateGoOperational` writes a **separate file per set** (`generated_operational_<set>.go`) carrying only the field list and its own id constants. ⚠ It writes one file **per set**, and it used to write one file full stop — correct while exactly one operational profile existed, and a silent overwrite the moment a second was generated. `axebom profile gen` likewise used to name `hbom_manufacturing` as a literal, so the second profile generated nothing and reported success; it now derives the sets from the profile (`OperationalSetNames`), because a field set that is authored, linted and scored but has no generated Go consumer is invisible in every screen and every report — exactly the failure the generator exists to prevent, and exactly what happened to `hbom_manufacturing` before it was generated. The second reason — "nothing in Go needs the list, Python reads it at runtime" — was true when written and went stale: `hbom.ComponentFormFields` builds the hardware component form from the **generated** `model.HBOMFields`, and `compliance.Load` reads from disk, which no service container has a copy of. So the manufacturing elements were authored, linted, scored and reported while being invisible in the one screen where a person could enter them.
 - ⚠ **The generator emits each field's closed `values` list, and it used not to.**
   The profile has always carried `values:` — criticality's `[critical, high,
   medium, low]` is transcribed verbatim from p.23 — but `ProfileField` had no

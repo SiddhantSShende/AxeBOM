@@ -62,6 +62,13 @@ _DIMENSION_OF: dict[str, str | None] = {
     # fields docs/02-CONTRACTS.md §6 defines.
     "ai_models": "components",
     "ai_dependencies": "components",
+    # ⚠ SO ARE AI ASSETS, AND THAT IS NOT A SHRUG. A prompt, a vector store and
+    # a RAG pipeline each arrive from airom as one CycloneDX component — typed
+    # `data` or `application`, which is exactly why the ADAPTER dispatches on
+    # `airom:kind` and not on the CycloneDX type. `count_cyclonedx` counts the
+    # array, so mapping this token anywhere else would either double-count them
+    # or drop them from the headline figure a reader compares between engines.
+    "ai_assets": "components",
     "hardware_components": "components",
     # ⚠ DELIBERATELY UNMAPPED. A leaked secret is a finding, not an inventory
     # count, and folding it into `vulnerabilities` would put a number in a

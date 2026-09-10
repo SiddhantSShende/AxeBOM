@@ -144,6 +144,24 @@ class BusConfig:
     #: Bounds the initial connection, in seconds.
     connect_timeout: int = 10
 
+    # ⚠ SUBJECT OVERRIDES, FOR THE ONE CONSUMER THAT IS NOT A FAMILY WORKER.
+    #
+    # Every worker but one consumes `scan.job.<family>` and reports on
+    # `scan.result.<family>`, so the four helpers below derive everything from
+    # `family` and nothing needs to say it twice. `workers/aienrich` is the
+    # exception: it consumes `scan.job.aibom.enrich` — a subject the AIBOM
+    # worker's own exact-match filter does not receive (verified against the
+    # live server: a `scan.job.aibom` consumer's pending count does not move
+    # when a message lands on the four-token subject) — while still REPORTING
+    # as `scan.result.aibom`, because `aibom-generator` is an AIBOM engine and
+    # belongs in that family's Engine Coverage.
+    #
+    # Empty means "derive from family", so every existing caller is unchanged.
+    job_subject_override: str = ""
+    result_subject_override: str = ""
+    dlq_subject_override: str = ""
+    durable_override: str = ""
+
 
 class WorkerBus:
     """Consumes scan jobs for one family and publishes results."""
@@ -153,6 +171,22 @@ class WorkerBus:
         self._nc: Any = None
         self._js: JetStreamContext | None = None
         self._stopping = asyncio.Event()
+
+    @property
+    def _job_subject(self) -> str:
+        return self._cfg.job_subject_override or job_subject(self._cfg.family)
+
+    @property
+    def _result_subject(self) -> str:
+        return self._cfg.result_subject_override or result_subject(self._cfg.family)
+
+    @property
+    def _dlq_subject(self) -> str:
+        return self._cfg.dlq_subject_override or dlq_subject(self._cfg.family)
+
+    @property
+    def _durable(self) -> str:
+        return self._cfg.durable_override or durable_name(self._cfg.family)
 
     def _jetstream(self) -> JetStreamContext:
         """The JetStream handle, or a clear error.
@@ -198,7 +232,6 @@ class WorkerBus:
         topology for everyone.
         """
         js = self._jetstream()
-        family = self._cfg.family
 
         await self._await_stream()
 
@@ -206,8 +239,8 @@ class WorkerBus:
             await js.add_consumer(
                 STREAM_JOBS,
                 ConsumerConfig(
-                    durable_name=durable_name(family),
-                    filter_subject=job_subject(family),
+                    durable_name=self._durable,
+                    filter_subject=self._job_subject,
                     ack_wait=ACK_WAIT_SECONDS,
                     max_deliver=MAX_DELIVER,
                     # ⚠ NO CONSUMER-LEVEL `backoff`, DELIBERATELY.
@@ -250,8 +283,8 @@ class WorkerBus:
             # ("filtered consumer not unique on workqueue stream") is accurate
             # and says nothing about what to do.
             raise RuntimeError(
-                f"could not attach consumer {durable_name(family)!r} to "
-                f"{job_subject(family)!r}: {exc}. A WorkQueue stream permits ONE "
+                f"could not attach consumer {self._durable!r} to "
+                f"{self._job_subject!r}: {exc}. A WorkQueue stream permits ONE "
                 f"consumer per filter subject — check whether the Go mock engine "
                 f"or a previous fleet still holds it"
             ) from exc
@@ -259,8 +292,8 @@ class WorkerBus:
         log.info(
             "consumer ready",
             extra={
-                "durable": durable_name(family),
-                "subject": job_subject(family),
+                "durable": self._durable,
+                "subject": self._job_subject,
                 "max_ack_pending": self._cfg.max_ack_pending,
             },
         )
@@ -297,8 +330,8 @@ class WorkerBus:
         family = self._cfg.family
 
         sub = await js.pull_subscribe(
-            job_subject(family),
-            durable=durable_name(family),
+            self._job_subject,
+            durable=self._durable,
             stream=STREAM_JOBS,
         )
 
@@ -338,8 +371,8 @@ class WorkerBus:
                     try:
                         await self.ensure_consumer()
                         sub = await js.pull_subscribe(
-                            job_subject(family),
-                            durable=durable_name(family),
+                            self._job_subject,
+                            durable=self._durable,
                             stream=STREAM_JOBS,
                         )
                         consecutive_failures = 0
@@ -429,7 +462,7 @@ class WorkerBus:
         payload = json.dumps(result, separators=(",", ":")).encode("utf-8")
 
         await js.publish(
-            result_subject(self._cfg.family),
+            self._result_subject,
             payload,
             headers={"Nats-Msg-Id": job_id} if job_id else None,
         )
@@ -443,7 +476,7 @@ class WorkerBus:
         js = self._jetstream()
         try:
             await js.publish(
-                dlq_subject(self._cfg.family),
+                self._dlq_subject,
                 msg.data,
                 headers={
                     "Axebom-Dlq-Reason": _sanitize_header(reason),

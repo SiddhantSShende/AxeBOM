@@ -98,6 +98,56 @@ export const EMPTY_DEVICE: DeviceInput = {
   notes: '',
 };
 
+/**
+ * useDeviceForm is the same generated field list, before a project exists.
+ *
+ * ⚠ FOR THE REGISTRATION WIZARD. The device form travelled only alongside a
+ * project's device LIST, so the one screen that could not ask for it was the
+ * one where somebody is describing the project — there is no id until the
+ * create call returns. Registration therefore asked an HBOM project exactly the
+ * same questions as an SBOM one and left "which device is this?" to a checklist
+ * item on a project already created.
+ */
+export function useDeviceForm(enabled: boolean) {
+  return useQuery({
+    queryKey: ['hbom-device-form'],
+    queryFn: ({ signal }) =>
+      request<{ fields: DeviceFormField[] }>('/v1/hbom/device-form', { signal }),
+    enabled,
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * hasDeviceValues reports whether anything was actually typed.
+ *
+ * ⚠ `name` ALONE DECIDES IT, because the server requires it and nothing else.
+ * A device carrying a location and no name is not a partially-filled device —
+ * it is a request the API will refuse, and submitting one at the end of a
+ * wizard would fail the registration over an optional field somebody typed
+ * into by accident.
+ */
+export function hasDeviceValues(d: DeviceInput): boolean {
+  return d.name.trim() !== '';
+}
+
+/**
+ * useRegisterDevice creates a device on a project created moments ago.
+ *
+ * The project id arrives with the variables rather than at hook-creation time —
+ * the shape useSetPractices, useConnectRepo and useUploadFile already use,
+ * because the wizard renders long before the id exists.
+ */
+export function useRegisterDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, input }: { projectId: string; input: DeviceInput }) =>
+      request<HardwareDevice>(`/v1/hbom/${projectId}/devices`, { method: 'POST', body: input }),
+    onSuccess: (_data, { projectId }) =>
+      void qc.invalidateQueries({ queryKey: ['hbom', projectId, 'devices'] }),
+  });
+}
+
 export function useDevices(projectId: string) {
   return useQuery({
     queryKey: ['hbom', projectId, 'devices'],

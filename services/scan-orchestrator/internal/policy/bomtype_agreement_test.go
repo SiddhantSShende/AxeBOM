@@ -220,10 +220,63 @@ func TestTheEngineListingAndTheDispatchSetAgree(t *testing.T) {
 		if dispatchable[id] {
 			continue
 		}
+		// ⚠ A DISABLED ENGINE IS THE THIRD CASE, AND IT IS NOT A SCAFFOLD.
+		//
+		// A scaffold is not part of the product and is hidden. A disabled engine
+		// is a real tool AxeBOM knows about and deliberately does not run —
+		// `cisco-aibom`, which cannot run without egress and an API key it is
+		// not allowed to have. It IS listed, precisely so a reader can tell that
+		// decision from ignorance, and the endpoint labels it. What it must
+		// never be is silently offered as configurable, which is what this test
+		// has always been about — and `Registry.Resolve` refuses to dispatch it
+		// even when a tenant override names it.
+		if e.Disabled {
+			if e.DisabledReason == "" {
+				t.Errorf("engine %q is disabled with no stated reason; a refusal a "+
+					"reader cannot see the grounds for is indistinguishable from "+
+					"the engine simply being missing", id)
+			}
+			continue
+		}
 		if !e.Scaffold {
 			t.Errorf("engine %q is in no family's dispatch set but is not marked as a "+
 				"scaffold; the engines endpoint would offer a configurable engine "+
 				"that can never run", id)
 		}
+	}
+}
+
+// TestATenantOverrideCannotResurrectADisabledEngine.
+//
+// ⚠ Resolve's OVERRIDE BRANCH READS THE REGISTRY BY ID, BYPASSING ForFamily.
+// That is what makes an override an override — and it is also the hole through
+// which a tenant policy naming `cisco-aibom` would have published a job for an
+// engine no worker implements, leaving a permanent `skipped` /
+// ENGINE_NOT_IMPLEMENTED row in the Engine Coverage section of every AIBOM scan
+// that used it. That section is the one place invariant 12 promises is precise.
+func TestATenantOverrideCannotResurrectADisabledEngine(t *testing.T) {
+	reg := DefaultRegistry()
+
+	res := reg.Resolve(
+		[]events.Family{events.FamilyAIBOM},
+		events.SourceGit,
+		map[events.Family][]string{events.FamilyAIBOM: {"cisco-aibom", "ai-bom"}},
+	)
+
+	for _, e := range res.Engines {
+		if e.ID == "cisco-aibom" {
+			t.Fatal("a tenant override dispatched a disabled engine")
+		}
+	}
+	if len(res.Disabled) != 1 || res.Disabled[0].Engine != "cisco-aibom" {
+		t.Fatalf("the refusal was not recorded for reporting: %+v", res.Disabled)
+	}
+	if res.Disabled[0].Reason == "" {
+		t.Error("the refusal carries no reason to render")
+	}
+	// The rest of the override still stands — one refused engine must not
+	// discard the engines the tenant legitimately asked for.
+	if len(res.Engines) != 1 || res.Engines[0].ID != "ai-bom" {
+		t.Errorf("the remaining override engines were lost: %+v", res.Engines)
 	}
 }

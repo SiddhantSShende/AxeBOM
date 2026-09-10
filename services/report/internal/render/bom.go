@@ -74,6 +74,11 @@ type BOM struct {
 	// (name, developer, licence) has no PURL/Depth/Scope, the SBOM concepts
 	// those generic sheets are built around — see AIBOMSheets.
 	AIModels []AIModel
+	// AIAssets is everything an AI scan found that is NOT a model and NOT a
+	// software dependency — prompts, vector stores, RAG pipelines, inference
+	// endpoints. CERT-In Table 10 has no element for any of them, so they are
+	// inventory and evidence rather than a scored field: see AIAsset.
+	AIAssets []AIAsset
 	Findings []Finding
 	Licenses []License
 	Engines  []EngineCoverage
@@ -82,6 +87,10 @@ type BOM struct {
 	EcosystemsWithNoEngine []string
 	Practices              []Practice
 	Coverage               Coverage
+	// SupplementaryCoverage holds the scored, non-compliance field sets — the
+	// AI operational surface, the HBOM manufacturing readiness. Sorted by
+	// profile id so a re-render is byte-identical.
+	SupplementaryCoverage []SupplementaryCoverage
 	// CoverageComputed is false when the underlying BOM document has never had
 	// its coverage scored — Coverage.CompletenessPct/DeclarationPct are then
 	// meaningless zero values, not "0%", and a caller persisting them (the
@@ -99,6 +108,18 @@ type BOM struct {
 	CryptoAssetsFrom CryptoAssetSource
 	// Notes are methodology footnotes rendered verbatim.
 	Notes []string
+
+	// NormalizeDiagnostics are the normalizer's own statements about what it
+	// could not resolve in THIS document — a component it declined to record as
+	// a model, a dependency the SBOM never catalogued, an identity it could not
+	// form. Engine Coverage answers "which engines ran"; this answers "what did
+	// normalization do with what they returned".
+	//
+	// ⚠ RENDERED, NOT LOGGED. Until migration 0017 this list was computed by
+	// every normalize consumer and persisted by none, so it existed only inside
+	// a Python process that had already exited. A count that changes with no
+	// stated reason is the failure invariant 12 exists to prevent.
+	NormalizeDiagnostics []NormalizeDiagnostic
 }
 
 // CryptoAssetSource records which document a borrowed crypto inventory came
@@ -231,6 +252,36 @@ type Coverage struct {
 	Fields  []FieldCoverage
 }
 
+// SupplementaryCoverage is a SCORED field set that is NOT a compliance standard.
+//
+// ⚠ IT MUST NEVER BE RENDERED AS "COVERAGE" WITHOUT ITS LABEL. `Coverage`
+// answers "how much of what CERT-In requires is present" and is what a customer
+// hands to a regulator; these answer questions AxeBOM asked on its own
+// authority — how buildable a parts list is, how much of an AI system's
+// operational shape was visible. A reader who cannot tell them apart has been
+// misled about which number carries a standard behind it, so `Label` and
+// `IsCompliance` travel with the number rather than being inferred from the
+// profile id by whoever renders it.
+//
+// ⚠ THESE WERE COMPUTED AND STORED FOR A WHOLE PHASE WITH NO READER. The HBOM
+// manufacturing score has been written to `bom_documents.supplementary_coverage`
+// since migration 0011 and appeared in no report — a number nobody could see is
+// a number that does not exist, which is the same class of loss invariant 12
+// names for engine gaps.
+type SupplementaryCoverage struct {
+	ProfileID       string
+	ProfileRevision int
+	// Label is what a report calls this number. Carried as data so no renderer
+	// hardcodes the string and none can mislabel it.
+	Label string
+	// IsCompliance is false for every one of these, and it is stored rather
+	// than assumed so a consumer never has to know which profile ids are
+	// standards — the flag is checkable, a naming convention is not.
+	IsCompliance    bool
+	CompletenessPct float64
+	DeclarationPct  float64
+}
+
 // FieldCoverage is one profile field's counts.
 type FieldCoverage struct {
 	FieldID string
@@ -239,6 +290,39 @@ type FieldCoverage struct {
 	// Declared counts entities holding any value, `not-provided` included.
 	Declared int
 	Total    int
+}
+
+// NormalizeDiagnostic is one statement about what normalization could not do.
+type NormalizeDiagnostic struct {
+	Severity string
+	Code     string
+	Message  string
+}
+
+// NormalizeDiagnosticLines renders the normalizer's diagnostics as prose bullets.
+//
+// ⚠ SHARED, NOT COPIED INTO EACH RENDERER — TypeNotes' comment above records what
+// happened the last time a caveat was built inline in one format: it reached the
+// XLSX, the JSON and the Word document, and was absent from the PDF, which is the
+// artifact most likely to be forwarded to somebody who reads only that. These lines
+// say why a model count changed; that is exactly the sentence a reader of a single
+// format must not be missing.
+func NormalizeDiagnosticLines(b BOM) []string {
+	if len(b.NormalizeDiagnostics) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(b.NormalizeDiagnostics))
+	for _, d := range b.NormalizeDiagnostics {
+		line := d.Message
+		if d.Code != "" {
+			line = d.Code + ": " + line
+		}
+		if d.Severity == "warn" || d.Severity == "error" {
+			line = strings.ToUpper(d.Severity) + " — " + line
+		}
+		out = append(out, line)
+	}
+	return out
 }
 
 // TypeNotes are the honesty labels a BOM type must carry, whatever format the
@@ -430,6 +514,26 @@ func summarySheet(b BOM) Sheet {
 		{"Produced by", strings.TrimSpace(b.ToolName + " " + b.ToolVersion)},
 	}
 
+	// ⚠ SCORED FIELD SETS THAT ARE NOT COMPLIANCE, LABELLED AS SUCH, AND NEXT
+	// TO THE NUMBERS THEY MUST NOT BE CONFUSED WITH.
+	//
+	// The two percentages above answer "how much of what CERT-In requires is
+	// present". These answer questions AxeBOM asked on its own authority — how
+	// buildable a parts list is, how much of an AI system's operational shape
+	// was visible. Rendering them here, each under its own label and with its
+	// own profile named, is what stops a reader taking one for the other; the
+	// alternative is a separate sheet nobody opens, which is how the HBOM
+	// manufacturing score managed to be computed for a whole phase and appear
+	// in no report at all.
+	for _, sc := range b.SupplementaryCoverage {
+		rows = append(rows,
+			[]string{"", ""},
+			[]string{sc.Label + " %", pct(sc.CompletenessPct)},
+			[]string{"  — profile", fmt.Sprintf("%s revision %d", sc.ProfileID, sc.ProfileRevision)},
+			[]string{"  — authority", supplementaryAuthorityNote(sc)},
+		)
+	}
+
 	if b.LevelNote != "" {
 		rows = append(rows, []string{"", ""}, []string{"BOM level note", b.LevelNote})
 	}
@@ -451,6 +555,25 @@ func summarySheet(b BOM) Sheet {
 		Rows:   StaticRows(rows),
 		Width:  48,
 	}
+}
+
+// supplementaryAuthorityNote says, in the report, whose question a number
+// answers.
+//
+// ⚠ THE SENTENCE MATTERS MORE THAN THE NUMBER. A percentage on a compliance
+// document is read as a compliance percentage unless something says otherwise,
+// and "AxeBOM's own" is the entire difference between a figure a customer can
+// hand to a regulator and one they cannot.
+func supplementaryAuthorityNote(sc SupplementaryCoverage) string {
+	if sc.IsCompliance {
+		// Not reachable from any profile that exists — every operational profile
+		// declares `kind: operational` and lint refuses one that also defines a
+		// CERT-In section. Handled rather than assumed away: the flag is carried
+		// in the data precisely so no renderer has to know the profile ids.
+		return "an external standard; see the profile named above"
+	}
+	return "AxeBOM's own operational measure, not a compliance standard — it " +
+		"does not contribute to the completeness or declaration percentages above"
 }
 
 // ─── Engine coverage ────────────────────────────────────────────────────────
@@ -848,7 +971,7 @@ func licenseSheet(b BOM) Sheet {
 // ─── Notes ──────────────────────────────────────────────────────────────────
 
 func notesSheet(b BOM) Sheet {
-	rows := make([][]string, 0, len(b.Notes)+4)
+	rows := make([][]string, 0, len(b.Notes)+len(b.NormalizeDiagnostics)+4)
 	rows = append(rows, []string{"Weighting", weightsNote})
 	if b.LevelNote != "" {
 		rows = append(rows, []string{"BOM level", b.LevelNote})
@@ -861,6 +984,34 @@ func notesSheet(b BOM) Sheet {
 	for _, n := range b.Notes {
 		rows = append(rows, []string{"Methodology", n})
 	}
+
+	// ⚠ WHAT NORMALIZATION COULD NOT DO, IN THE CUSTOMER'S OWN REPORT.
+	//
+	// Engine Coverage above says which engines ran and what they covered. These
+	// say what the normalizer did with the result — a component it declined to
+	// record as a model and why, a dependency the SBOM never catalogued. Before
+	// migration 0017 they were computed on every AIBOM, CBOM and HBOM
+	// normalization and persisted by none, so a model count could change with
+	// nothing anywhere accounting for it.
+	//
+	// Rendered even when empty-severity or unknown-code: an entry we cannot
+	// classify is still an entry the reader is entitled to see.
+	for _, d := range b.NormalizeDiagnostics {
+		topic := "Normalization"
+		if d.Severity == "warn" || d.Severity == "error" {
+			topic = "Normalization (" + d.Severity + ")"
+		}
+		message := d.Message
+		if d.Code != "" {
+			message = d.Code + ": " + message
+		}
+		rows = append(rows, []string{topic, message})
+	}
+	// ⚠ The XLSX keeps its own two-column shape rather than reusing
+	// NormalizeDiagnosticLines: a sheet has a Topic column that prose bullets do
+	// not, and folding the severity into the message would lose the sortable
+	// column a reader actually filters on. Both paths render the same set, and
+	// TestEveryFormatCarriesTheNormalizeDiagnostics holds them together.
 
 	return Sheet{
 		Name:   "Notes",

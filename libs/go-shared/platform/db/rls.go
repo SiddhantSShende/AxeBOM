@@ -19,7 +19,7 @@ import (
 
 // TenantSchemas are the schemas whose tables are expected to be tenant-scoped.
 var TenantSchemas = []string{
-	"auth", "project", "scan", "normalize", "report", "campaign", "comment", "notify",
+	"auth", "project", "scan", "normalize", "aibom", "report", "campaign", "comment", "notify",
 }
 
 // exemption is a table that is deliberately NOT tenant-scoped.

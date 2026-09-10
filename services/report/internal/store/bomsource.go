@@ -85,6 +85,9 @@ func (s *Store) LoadBOM(ctx context.Context, r Report) (render.BOM, error) {
 		if err := loadQuantumDevice(ctx, tx, docID, &out); err != nil {
 			return err
 		}
+		if err := loadAIAssets(ctx, tx, docID, &out); err != nil {
+			return err
+		}
 		if err := loadAIModels(ctx, tx, docID, &out); err != nil {
 			return err
 		}
@@ -194,14 +197,18 @@ func loadDocumentMeta(ctx context.Context, tx db.Tx, docID string, out *render.B
 		generatedAt               time.Time
 		completeness, declaration *float64
 		breakdown                 []byte
+		normalizeDiagnostics      []byte
+		supplementary             []byte
 	)
 
 	err := tx.QueryRow(ctx, `
 		SELECT generated_at, completeness_pct, declaration_pct, coverage_breakdown,
-		       ruleset_version, normalization_version
+		       ruleset_version, normalization_version, normalize_diagnostics,
+		       supplementary_coverage
 		  FROM normalize.bom_documents WHERE id = $1`, docID).
 		Scan(&generatedAt, &completeness, &declaration, &breakdown,
-			&out.RulesetVersion, &out.NormalizationVersion)
+			&out.RulesetVersion, &out.NormalizationVersion, &normalizeDiagnostics,
+			&supplementary)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
@@ -220,6 +227,16 @@ func loadDocumentMeta(ctx context.Context, tx db.Tx, docID string, out *render.B
 	// have no "unscored" state of their own, so CoverageComputed is what lets
 	// a caller further downstream (the worker, persisting to report.reports)
 	// tell the two apart rather than storing a lying zero.
+	// ⚠ WHAT NORMALIZATION COULD NOT DO, CARRIED INTO THE REPORT. Until
+	// migration 0017 this column did not exist and the list was discarded at
+	// writer.write_bom_document, so a customer's model count could change with
+	// nothing anywhere explaining why. CLAUDE.md invariant 12 requires the
+	// report to state what it could not see; these are that statement for the
+	// normalizer, as Engine Coverage is for the engines.
+	out.NormalizeDiagnostics = decodeNormalizeDiagnostics(normalizeDiagnostics)
+
+	out.SupplementaryCoverage = decodeSupplementaryCoverage(supplementary)
+
 	out.CoverageComputed = completeness != nil || declaration != nil
 	if completeness != nil {
 		out.Coverage.CompletenessPct = *completeness
@@ -229,6 +246,59 @@ func loadDocumentMeta(ctx context.Context, tx db.Tx, docID string, out *render.B
 	}
 
 	return applyCoverageBreakdown(breakdown, out)
+}
+
+// decodeSupplementaryCoverage reads the scored, NON-compliance field sets.
+//
+// ⚠ THESE WERE WRITTEN FOR A WHOLE PHASE AND READ BY NOTHING. The HBOM
+// manufacturing score has been in this column since migration 0011 and appeared
+// in no report; the AI operational surface joined it. A number a customer cannot
+// see is a number that does not exist.
+//
+// ⚠ MALFORMED JSON COSTS THE SUPPLEMENTARY NUMBERS, NEVER THE REPORT. These are
+// additional context; the compliance numbers and the inventory are the report.
+// Failing the render because an extra score would not parse would trade the
+// whole document for a footnote.
+func decodeSupplementaryCoverage(raw []byte) []render.SupplementaryCoverage {
+	if len(raw) == 0 {
+		return nil
+	}
+	var sets map[string]struct {
+		ProfileID       string  `json:"profile_id"`
+		ProfileRevision int     `json:"profile_revision"`
+		Label           string  `json:"label"`
+		IsCompliance    bool    `json:"is_compliance"`
+		CompletenessPct float64 `json:"completeness_pct"`
+		DeclarationPct  float64 `json:"declaration_pct"`
+	}
+	if err := json.Unmarshal(raw, &sets); err != nil {
+		return nil
+	}
+
+	out := make([]render.SupplementaryCoverage, 0, len(sets))
+	for key, v := range sets {
+		id := v.ProfileID
+		if id == "" {
+			// The map key IS the profile id (the normalizer writes it that way);
+			// the nested field is belt and braces. An entry with neither is
+			// unrenderable — a number with no name is worse than no number.
+			id = key
+		}
+		if id == "" || v.Label == "" {
+			continue
+		}
+		out = append(out, render.SupplementaryCoverage{
+			ProfileID:       id,
+			ProfileRevision: v.ProfileRevision,
+			Label:           v.Label,
+			IsCompliance:    v.IsCompliance,
+			CompletenessPct: v.CompletenessPct,
+			DeclarationPct:  v.DeclarationPct,
+		})
+	}
+	// Sorted so a re-render of the same document is byte-identical (ADR-0003).
+	sort.Slice(out, func(i, j int) bool { return out[i].ProfileID < out[j].ProfileID })
+	return out
 }
 
 // applyCoverageBreakdown reads the per-field counts the normalizer wrote.
@@ -560,23 +630,37 @@ func loadCryptoAssets(ctx context.Context, tx db.Tx, docID string, out *render.B
 // loadAIModels reads the current AIBOM model inventory for this document,
 // including each model's datasets and SBOM dependency references.
 //
-// ⚠ THREE OF THE 19 TABLE 10 FIELDS HAVE NO normalize.ai_models COLUMN AT
-// ALL: `software_dependencies` and `vulnerabilities` (elements 6, 18) are
-// computed by workers/aibom/normalize/ai.py from the raw discovered model,
-// which is never persisted; `data_sets` (element 10) IS derivable, from
-// this same document's ai_datasets rows, and is filled in below. The first
-// two render `not-provided` here honestly — nothing in this schema has
-// anywhere to read them back from today, a real gap tracked in
-// docs/STATE.md, not a rendering shortcut.
+// ⚠ THREE TABLE 10 ELEMENTS HAVE NO normalize.ai_models COLUMN, BY DESIGN, AND
+// TWO OF THEM ARE STILL ANSWERABLE.
+//
+// `software_dependencies` (6) and `data_sets` (10) are RELATIONS in this schema —
+// ai_model_dependencies and ai_datasets — not text blobs duplicated onto the
+// model row. Both are derived below from rows this function already loads.
+// Element 6 used to render `not-provided` in every report while its own
+// dependency list sat in the adjacent variable.
+//
+// ⚠ `vulnerabilities` (18) IS STILL `not-provided`, AND THAT IS AN OPEN
+// QUESTION RATHER THAN AN OVERSIGHT. An AI model has no findings of its own:
+// AxeBOM matches no advisories against model weights, and there is no feed that
+// would. What exists is findings against the model's DEPENDENCIES, which live on
+// the project's SBOM document, not this one. Copying them here would assert that
+// a vulnerability in `transformers` is a vulnerability OF `Llama-3-8B` — a
+// defensible reading of element 18 and a decision with compliance consequences,
+// so it is made deliberately (M4, with attestations) rather than by whoever
+// happened to write this query. Until then the element is honestly absent and
+// scores zero.
 func loadAIModels(ctx context.Context, tx db.Tx, docID string, out *render.BOM) error {
 	rows, err := tx.Query(ctx, `
-		SELECT id, model_name, COALESCE(model_version,''), COALESCE(model_type,''),
+		SELECT id, COALESCE(model_key,''), COALESCE(identity_rule,''),
+		       COALESCE(identity_confidence,''), verified,
+		       model_name, COALESCE(model_version,''), COALESCE(model_type,''),
 		       COALESCE(model_developer,''), COALESCE(licensing,''),
 		       ml_models_algorithms, performance_metrics, COALESCE(data_source,''),
 		       COALESCE(hardware,''), COALESCE(security_requirements,''),
 		       COALESCE(input,''), COALESCE(output,''), COALESCE(intended_usage,''),
 		       COALESCE(out_of_scope_usage,''), COALESCE(environmental_impact,''),
-		       COALESCE(attestation_signature,''), risk_score, owasp_llm_top10
+		       COALESCE(attestation_signature,''), risk_score, owasp_llm_top10,
+		       evidence
 		  FROM normalize.ai_models
 		 WHERE bom_document_id = $1
 		 ORDER BY model_name`, docID)
@@ -587,6 +671,8 @@ func loadAIModels(ctx context.Context, tx db.Tx, docID string, out *render.BOM) 
 
 	type modelRow struct {
 		id                                                  string
+		modelKey, identityRule, identityConfidence          string
+		verified                                            bool
 		name, version, mtype, developer, licensing          string
 		algorithms                                          []string
 		metricsJSON                                         []byte
@@ -595,19 +681,27 @@ func loadAIModels(ctx context.Context, tx db.Tx, docID string, out *render.BOM) 
 		attestation                                         string
 		riskScore                                           *float64
 		owaspTop10                                          []string
+		evidence                                            []string
 	}
 	var loaded []modelRow
 	for rows.Next() {
 		var m modelRow
+		var evidenceJSON []byte
 		if err := rows.Scan(
-			&m.id, &m.name, &m.version, &m.mtype, &m.developer, &m.licensing,
+			&m.id, &m.modelKey, &m.identityRule, &m.identityConfidence, &m.verified,
+			&m.name, &m.version, &m.mtype, &m.developer, &m.licensing,
 			&m.algorithms, &m.metricsJSON, &m.dataSource,
 			&m.hardware, &m.securityReqs,
 			&m.input, &m.output, &m.intendedUsage,
 			&m.outOfScope, &m.envImpact, &m.attestation, &m.riskScore, &m.owaspTop10,
+			&evidenceJSON,
 		); err != nil {
 			return fmt.Errorf("scan ai model: %w", err)
 		}
+		// file:line, exactly as an engine reported it. A malformed array is
+		// dropped rather than failing the report — the model row is worth more
+		// than its evidence list.
+		_ = json.Unmarshal(evidenceJSON, &m.evidence)
 		loaded = append(loaded, m)
 	}
 	if err := rows.Err(); err != nil {
@@ -624,23 +718,42 @@ func loadAIModels(ctx context.Context, tx db.Tx, docID string, out *render.BOM) 
 			return err
 		}
 
+		foundBy, err := loadAIModelProvenance(ctx, tx, m.id)
+		if err != nil {
+			return err
+		}
+
 		datasetNames := make([]string, 0, len(datasets))
 		for _, d := range datasets {
 			datasetNames = append(datasetNames, d.Name)
 		}
 
 		out.AIModels = append(out.AIModels, render.AIModel{
-			Name:          m.name,
-			Datasets:      datasets,
-			Dependencies:  deps,
-			RiskScore:     m.riskScore,
-			OwaspLLMTop10: m.owaspTop10,
+			Name:               m.name,
+			ModelKey:           m.modelKey,
+			IdentityRule:       m.identityRule,
+			IdentityConfidence: m.identityConfidence,
+			Verified:           m.verified,
+			Datasets:           datasets,
+			Dependencies:       deps,
+			FoundBy:            foundBy,
+			Evidence:           m.evidence,
+			RiskScore:          m.riskScore,
+			OwaspLLMTop10:      m.owaspTop10,
 			Fields: map[string]string{
-				model.FieldCertinAibom01ModelName:            m.name,
-				model.FieldCertinAibom02ModelVersion:         m.version,
-				model.FieldCertinAibom03ModelType:            m.mtype,
-				model.FieldCertinAibom04ModelDeveloper:       m.developer,
-				model.FieldCertinAibom05Licensing:            m.licensing,
+				model.FieldCertinAibom01ModelName:      m.name,
+				model.FieldCertinAibom02ModelVersion:   m.version,
+				model.FieldCertinAibom03ModelType:      m.mtype,
+				model.FieldCertinAibom04ModelDeveloper: m.developer,
+				model.FieldCertinAibom05Licensing:      m.licensing,
+				// ⚠ ELEMENT 6 RENDERED `not-provided` IN EVERY REPORT EVER
+				// GENERATED, and the data was already in hand. It is derived from
+				// this model's own `ai_model_dependencies` rows — exactly as
+				// element 10 is derived from its `ai_datasets` rows two lines
+				// below — rather than from a column, because the schema
+				// deliberately represents a dependency as a relation and not as a
+				// text blob duplicated onto the model.
+				model.FieldCertinAibom06SoftwareDependencies: strings.Join(deps, ", "),
 				model.FieldCertinAibom07MlModelsAlgorithms:   strings.Join(m.algorithms, ", "),
 				model.FieldCertinAibom08PerformanceMetrics:   metricsText(m.metricsJSON),
 				model.FieldCertinAibom09DataSource:           m.dataSource,
@@ -657,6 +770,79 @@ func loadAIModels(ctx context.Context, tx db.Tx, docID string, out *render.BOM) 
 		})
 	}
 	return nil
+}
+
+// loadAIModelProvenance returns every AIBOM engine that reported this model.
+//
+// ⚠ THE ROW'S `source_engine` COLUMN IS SINGULAR AND THE ANSWER IS NOT. Three
+// AI discovery engines run independently and converge on the same model_key, so
+// "who found this" has up to three answers — and one engine alone versus three
+// agreeing is the most useful single fact a reviewer has for weighing a Table 10
+// row. See migration 0018.
+func loadAIModelProvenance(ctx context.Context, tx db.Tx, aiModelID string) ([]string, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT engine_id
+		  FROM normalize.ai_model_provenance
+		 WHERE ai_model_id = $1
+		 ORDER BY engine_id`, aiModelID)
+	if err != nil {
+		return nil, fmt.Errorf("load ai model provenance: %w", err)
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var engineID string
+		if err := rows.Scan(&engineID); err != nil {
+			return nil, fmt.Errorf("scan ai model provenance: %w", err)
+		}
+		out = append(out, engineID)
+	}
+	return out, rows.Err()
+}
+
+// loadAIAssets reads the prompts, vector stores, RAG pipelines and inference
+// endpoints this document recorded.
+//
+// ⚠ NONE OF THESE IS A CERT-In TABLE 10 ELEMENT, AND THEY ARE STILL REPORTED.
+// Table 10 asks about models. `airom` and `cdxgen-ai` find prompts, vector
+// stores, RAG pipelines and the inference services a repository talks to, with
+// file:line evidence — six of them on one small real tree. Storing those and
+// rendering nothing is the silence invariant 12 exists to prevent, and scoring
+// them into `completeness_pct` would move a compliance percentage using
+// something the guideline never asked for. So: rendered, in their own section,
+// scored into neither number.
+func loadAIAssets(ctx context.Context, tx db.Tx, docID string, out *render.BOM) error {
+	rows, err := tx.Query(ctx, `
+		SELECT asset_type, asset_key, name, COALESCE(provider,''),
+		       COALESCE(serves_model_key,''), evidence, attributes
+		  FROM normalize.ai_assets
+		 WHERE bom_document_id = $1
+		 ORDER BY asset_type, name`, docID)
+	if err != nil {
+		return fmt.Errorf("load ai assets: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var a render.AIAsset
+		var evidenceJSON, attributesJSON []byte
+		if err := rows.Scan(
+			&a.Type, &a.Key, &a.Name, &a.Provider, &a.ServesModel, &evidenceJSON, &attributesJSON,
+		); err != nil {
+			return fmt.Errorf("scan ai asset: %w", err)
+		}
+		// Malformed JSON drops that one field rather than failing the report:
+		// an asset with no evidence list is still an asset that was found.
+		_ = json.Unmarshal(evidenceJSON, &a.Evidence)
+		var attributes struct {
+			FoundBy []string `json:"found_by"`
+		}
+		_ = json.Unmarshal(attributesJSON, &attributes)
+		a.FoundBy = attributes.FoundBy
+		out.AIAssets = append(out.AIAssets, a)
+	}
+	return rows.Err()
 }
 
 func loadAIDatasets(ctx context.Context, tx db.Tx, aiModelID string) ([]render.AIDataset, error) {
@@ -1676,6 +1862,38 @@ func decodeStringMap(raw []byte) map[string]string {
 	var out map[string]string
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil
+	}
+	return out
+}
+
+// decodeNormalizeDiagnostics turns the stored jsonb into renderable lines.
+//
+// ⚠ A MALFORMED VALUE YIELDS NOTHING, NEVER AN ERROR. A report must still
+// render when this column holds something unexpected — losing the whole
+// document because its footnotes did not parse would be a far worse failure
+// than losing the footnotes.
+func decodeNormalizeDiagnostics(raw []byte) []render.NormalizeDiagnostic {
+	if len(raw) == 0 {
+		return nil
+	}
+	var entries []struct {
+		Severity string `json:"severity"`
+		Code     string `json:"code"`
+		Message  string `json:"message"`
+	}
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		return nil
+	}
+	out := make([]render.NormalizeDiagnostic, 0, len(entries))
+	for _, e := range entries {
+		if e.Code == "" && e.Message == "" {
+			continue
+		}
+		out = append(out, render.NormalizeDiagnostic{
+			Severity: e.Severity,
+			Code:     e.Code,
+			Message:  e.Message,
+		})
 	}
 	return out
 }

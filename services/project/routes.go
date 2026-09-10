@@ -146,6 +146,11 @@ func registerRoutes(mux *http.ServeMux, d *deps) {
 	// describes the form, not anybody's data.
 	mux.Handle("GET /v1/hbom/component-form",
 		guard(authz.ResourceHardware, authz.ActionRead, h.ComponentForm))
+	// The device form, unscoped, for the registration wizard — which has no
+	// project id yet and so cannot reach the identical list that travels with
+	// GET /v1/hbom/{projectId}/devices. A read: it describes the form.
+	mux.Handle("GET /v1/hbom/device-form",
+		guard(authz.ResourceHardware, authz.ActionRead, h.DeviceForm))
 	mux.Handle("GET /v1/hbom/provider",
 		guard(authz.ResourceHardware, authz.ActionRead, h.PartProvider))
 
@@ -206,6 +211,14 @@ func registerRoutes(mux *http.ServeMux, d *deps) {
 	// discovery tool. See internal/qbom's package doc. Mounted the same
 	// shape as hardware BOM above: a form-definition route, a read, and a
 	// save that always creates a new normalization version.
+	//
+	// ⚠ `/v1/qbom/form` IS A LITERAL AND `/v1/qbom/{projectId}` IS A WILDCARD,
+	// so ServeMux prefers the literal and the two cannot collide — the same
+	// arrangement /v1/hbom/provider already relies on. It exists for the
+	// registration wizard, which needs Table 8's field list before there is a
+	// project id to put in a path.
+	mux.Handle("GET /v1/qbom/form",
+		guard(authz.ResourceQuantumDevice, authz.ActionRead, h.GetQBOMRegistrationForm))
 	mux.Handle("GET /v1/qbom/{projectId}/form",
 		guard(authz.ResourceQuantumDevice, authz.ActionRead, h.GetQBOMForm))
 	mux.Handle("GET /v1/qbom/{projectId}",
@@ -213,16 +226,29 @@ func registerRoutes(mux *http.ServeMux, d *deps) {
 	mux.Handle("POST /v1/qbom/{projectId}/device",
 		guard(authz.ResourceQuantumDevice, authz.ActionCreate, h.SaveQuantumDevice))
 
-	// --- AI models (AIBOM) ---------------------------------------------------
-	// Discovered by workers/aibom/normalize/pipeline.py, read cross-schema —
-	// see internal/store/ai_models.go. Table 10's four user-supplied elements
-	// (security requirements, intended usage, out-of-scope usage,
-	// attestation) are this service's one write path onto an otherwise
-	// Python-normalized row; see internal/aibom's package doc.
-	mux.Handle("GET /v1/projects/{id}/ai-models",
-		guard(authz.ResourceAIModel, authz.ActionList, h.ListAIModels))
-	mux.Handle("GET /v1/aibom/{projectId}/form",
-		guard(authz.ResourceAIModel, authz.ActionRead, h.GetAIModelForm))
-	mux.Handle("POST /v1/projects/{id}/ai-models/{modelId}/fields",
-		guard(authz.ResourceAIModel, authz.ActionUpdate, h.UpdateAIModelUserFields))
+	// --- AI models (AIBOM) — MOVED TO services/aibom -------------------------
+	//
+	// ⚠ THREE ROUTES USED TO LIVE HERE, AND ONE OF THEM WROTE INTO `normalize`.
+	//
+	//	GET  /v1/projects/{id}/ai-models
+	//	GET  /v1/aibom/{projectId}/form
+	//	POST /v1/projects/{id}/ai-models/{modelId}/fields
+	//
+	// The last one ran `UPDATE normalize.ai_models SET intended_usage = …` — a
+	// mutation of normalized data, which CLAUDE.md invariant 10 says never
+	// happens. It survived only because the AIBOM normalize consumer learned to
+	// read the previous document's values back before writing a new one, a
+	// rescue for a write that should not exist; anything that rescue missed lost
+	// the operator's answer silently.
+	//
+	// They are now `GET /v1/aibom/{projectId}/models`, `GET
+	// /v1/aibom/{projectId}/form` and `PUT
+	// /v1/aibom/{projectId}/models/{modelKey}/fields` in services/aibom, which
+	// stores operator input in its OWN schema and lets the normalizer read it.
+	// The gateway refuses a prefix claimed by two upstreams, so this removal and
+	// that service's `/v1/aibom` claim are one fact stated twice.
+	//
+	// ⚠ AND THE KEY CHANGED: `{modelKey}`, not `{modelId}`. Every
+	// re-normalization writes new rows, so a row id is valid for exactly one
+	// document and an answer attached to one is orphaned by the next scan.
 }

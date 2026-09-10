@@ -258,3 +258,54 @@ func TestNoRequirementWritesAFieldCount(t *testing.T) {
 func renderedFromProfile(bt model.BOMType, id string) bool {
 	return bt == model.BOMTypeAIBOM && id == "aibom.user_fields"
 }
+
+// TestOnlyWhatTheWizardCanActuallyCollectIsMarkedAtRegistration.
+//
+// ⚠ THE DIVIDING LINE IS SHAPE, NOT IMPORTANCE. All three requirements are
+// Required; only two of them can be asked for while somebody is registering.
+//
+//	QBOM  Table 8 is per-PROJECT and derives from nothing that must exist
+//	      first, so every fact is available in the wizard.
+//	HBOM  a device is per-project too — and on a `manual` project it is the
+//	      only thing that will ever produce a document.
+//	AIBOM Table 10's user-supplied elements are per-MODEL, and no model exists
+//	      until a scan has found one. A registration form for them would have
+//	      no rows to attach to.
+//
+// Flipping AIBOM to true would put a form in the wizard that cannot know what
+// it is describing; flipping either of the others to false is what made
+// registration ask all five types the same questions.
+func TestOnlyWhatTheWizardCanActuallyCollectIsMarkedAtRegistration(t *testing.T) {
+	r := Default()
+	want := map[string]bool{
+		"qbom.device_metadata": true,
+		"hbom.device":          true,
+		"aibom.user_fields":    false,
+	}
+
+	seen := map[string]bool{}
+	for _, bt := range model.AllBOMTypes() {
+		m, ok := r.For(bt)
+		if !ok {
+			continue
+		}
+		for _, req := range m.Requirements() {
+			expected, known := want[req.ID]
+			if !known {
+				t.Errorf("%s: requirement %q is new — decide whether the wizard can "+
+					"collect it and add it here", bt, req.ID)
+				continue
+			}
+			seen[req.ID] = true
+			if req.AtRegistration != expected {
+				t.Errorf("%s: requirement %q AtRegistration = %v, want %v",
+					bt, req.ID, req.AtRegistration, expected)
+			}
+		}
+	}
+	for id := range want {
+		if !seen[id] {
+			t.Errorf("requirement %q was expected and no module produced it", id)
+		}
+	}
+}

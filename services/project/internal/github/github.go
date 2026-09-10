@@ -90,6 +90,49 @@ type ListOptions struct {
 
 const maxPerPage = 100
 
+// CurrentLogin returns the login of the account a token belongs to.
+//
+// ⚠ THIS IS THE ONLY CALL THAT PROVES A TOKEN WORKS, and it exists because
+// storing one without making it is how a credential that GitHub has already
+// rejected becomes a tenant-wide connection: the row says `connected: true`
+// for as long as it exists, the settings screen says so too, and every repo
+// listing afterwards fails with a 401 that names no way out. A token is worth
+// exactly one round trip at the moment somebody is standing in front of the
+// OAuth window able to try again.
+//
+// The login is the second reason. project.github_connections.github_login was
+// filled from a field the BROWSER supplied, which the wizard never sent — so
+// it was empty on every row, and both screens that render it fell back to "an
+// unnamed GitHub account". A login read back from GitHub under the token is
+// the only form of it that is worth storing anyway: the other kind is a claim
+// by the caller about an account it may not own.
+func (c *Client) CurrentLogin(ctx context.Context, token string) (string, error) {
+	if token == "" {
+		return "", errs.New(errs.AuthTokenInvalid, "no GitHub token was supplied")
+	}
+
+	var u struct {
+		Login string `json:"login"`
+	}
+	if _, err := c.get(ctx, token, "/user", &u); err != nil {
+		if errs.Is(err, errs.AuthTokenInvalid) {
+			// get's 401 message says "the STORED token" and tells the reader to
+			// reconnect. That is the LISTING path's situation. Here nothing is
+			// stored yet and the authorisation has just come back from GitHub,
+			// so "reconnect" would send someone to repair a connection that was
+			// never made. The CODE is unchanged — the UI branches on that.
+			return "", errs.New(errs.AuthTokenInvalid,
+				"GitHub did not accept this authorisation; try connecting again")
+		}
+		return "", err
+	}
+	if u.Login == "" {
+		return "", errs.New(errs.AuthProviderError,
+			"GitHub returned no account for this token")
+	}
+	return u.Login, nil
+}
+
 // ListRepos returns repositories the token can see.
 func (c *Client) ListRepos(ctx context.Context, token string, opts ListOptions) (Page, error) {
 	if token == "" {

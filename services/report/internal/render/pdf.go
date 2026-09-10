@@ -604,6 +604,12 @@ func (r *pdfRender) methodologyPage() {
 		r.body("• " + n)
 	}
 
+	// What normalization could not do — the same lines the XLSX Notes sheet and
+	// the JSON bundle carry. See NormalizeDiagnosticLines.
+	for _, n := range NormalizeDiagnosticLines(r.bom) {
+		r.body("• " + n)
+	}
+
 	r.body("• " + weightsNote)
 	r.body("• Two identifiers are reported per component and they are not " +
 		"interchangeable. The PURL is the canonical ecosystem identifier every " +

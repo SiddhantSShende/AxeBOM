@@ -30,6 +30,7 @@ import {
   type DeviceInput,
   type HardwareDevice,
 } from '../../lib/devices';
+import { DeviceFieldGroups } from './DeviceFields';
 
 export function DeviceRegister({ projectId }: { projectId: string }) {
   const { data, isPending, isError, error, refetch } = useDevices(projectId);
@@ -233,12 +234,6 @@ function DeviceForm({
   onCancel: () => void;
   onSubmit: () => void;
 }) {
-  const set = (attr: string, value: string) => onChange({ ...draft, [attr]: value });
-  const value = (attr: string) => (draft as unknown as Record<string, string>)[attr] ?? '';
-
-  const certin = fields.filter((f) => f.certin);
-  const ours = fields.filter((f) => !f.certin);
-
   return (
     <form
       className="panel"
@@ -247,34 +242,9 @@ function DeviceForm({
         onSubmit();
       }}
     >
-      <fieldset>
-        {/* ⚠ NO TABLE NUMBER AND NO COUNT. `task profile:guardrails` caught
-            "Table 11" here — 11 is also the QBOM element count — and it was
-            right to: a literal reference to the guideline's own numbering goes
-            stale exactly as a field count does, and nothing fails when it
-            happens. Each input carries its own page citation, rendered from the
-            profile, which is both more precise and self-updating. */}
-        <legend>CERT-In elements</legend>
-        {/* These score. The group below does not, and saying so is the point. */}
-        <div className="field-grid">
-          {certin.map((f) => (
-            <Field key={f.attr} field={f} value={value(f.attr)} onChange={set} />
-          ))}
-        </div>
-      </fieldset>
-
-      <fieldset>
-        <legend>Asset management</legend>
-        <p className="field-hint">
-          AxeBOM additions, not CERT-In elements. They help you find a device again; they do not
-          move any coverage number.
-        </p>
-        <div className="field-grid">
-          {ours.map((f) => (
-            <Field key={f.attr} field={f} value={value(f.attr)} onChange={set} />
-          ))}
-        </div>
-      </fieldset>
+      {/* The inputs live in DeviceFields.tsx because the registration wizard
+          draws the same generated form for a project that does not exist yet. */}
+      <DeviceFieldGroups fields={fields} draft={draft} onChange={onChange} />
 
       <div className="panel-actions">
         <button type="button" className="btn" onClick={onCancel}>
@@ -285,60 +255,6 @@ function DeviceForm({
         </button>
       </div>
     </form>
-  );
-}
-
-function Field({
-  field,
-  value,
-  onChange,
-}: {
-  field: DeviceFormField;
-  value: string;
-  onChange: (attr: string, value: string) => void;
-}) {
-  if (field.values) {
-    return (
-      <label className="field">
-        <span>
-          {field.name}
-          {field.required && ' *'}
-        </span>
-        <select value={value} onChange={(e) => onChange(field.attr, e.target.value)}>
-          <option value="">—</option>
-          {field.values.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
-        </select>
-        {field.source_page ? <small>CERT-In p.{field.source_page}</small> : null}
-      </label>
-    );
-  }
-
-  return (
-    <label className="field">
-      <span>
-        {field.name}
-        {field.required && ' *'}
-      </span>
-      {field.multiline ? (
-        <textarea
-          rows={3}
-          value={value}
-          required={field.required}
-          onChange={(e) => onChange(field.attr, e.target.value)}
-        />
-      ) : (
-        <input
-          value={value}
-          required={field.required}
-          onChange={(e) => onChange(field.attr, e.target.value)}
-        />
-      )}
-      {field.source_page ? <small>CERT-In p.{field.source_page}</small> : null}
-    </label>
   );
 }
 

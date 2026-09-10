@@ -1,0 +1,579 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:fa327783-0ca9-4e07-8778-f9f4901f933d",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-09-06T21:27:50Z",
+    "lifecycles": [
+      {
+        "phase": "pre-build"
+      }
+    ],
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "airom",
+          "version": "0.4.4"
+        }
+      ]
+    },
+    "component": {
+      "bom-ref": "airom:11fef602d22ad49b",
+      "type": "application",
+      "name": "src",
+      "properties": [
+        {
+          "name": "airom:confidence",
+          "value": "0"
+        },
+        {
+          "name": "airom:kind",
+          "value": "application"
+        }
+      ]
+    },
+    "properties": [
+      {
+        "name": "airom:assurance.confidenceModel",
+        "value": "evidence-weighted/1; not empirically calibrated"
+      },
+      {
+        "name": "airom:assurance.cve.enabled",
+        "value": "true"
+      },
+      {
+        "name": "airom:assurance.cve.unchecked",
+        "value": "4"
+      },
+      {
+        "name": "airom:assurance.eol.enabled",
+        "value": "true"
+      },
+      {
+        "name": "airom:eol.catalog",
+        "value": "builtin"
+      },
+      {
+        "name": "airom:rules.hash",
+        "value": "ee621a8b1d35b075c890ccd72829b74aebcc75470af97a6f2dbcf2be5b0043dc"
+      },
+      {
+        "name": "airom:rules.version",
+        "value": "builtin"
+      },
+      {
+        "name": "airom:source.target",
+        "value": "/src"
+      },
+      {
+        "name": "airom:source.type",
+        "value": "dir"
+      },
+      {
+        "name": "airom:tool.commit",
+        "value": "aa56852"
+      },
+      {
+        "name": "airom:unknowns",
+        "value": "0"
+      }
+    ]
+  },
+  "components": [
+    {
+      "bom-ref": "airom:0c70f96ec3738a5b",
+      "type": "data",
+      "name": "system-prompt",
+      "properties": [
+        {
+          "name": "airom:confidence",
+          "value": "0.6"
+        },
+        {
+          "name": "airom:kind",
+          "value": "prompt"
+        }
+      ],
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "src/app.py",
+            "line": 9,
+            "additionalContext": "SYSTEM_PROMPT = \"\"\"You are a helpful support assistant."
+          }
+        ]
+      },
+      "data": [
+        {
+          "type": "other",
+          "name": "system-prompt"
+        }
+      ]
+    },
+    {
+      "bom-ref": "airom:0edfb677d0cc0659",
+      "type": "machine-learning-model",
+      "name": "sentence-transformers/all-minilm-l6-v2",
+      "properties": [
+        {
+          "name": "airom:confidence",
+          "value": "0.85"
+        },
+        {
+          "name": "airom:kind",
+          "value": "embedding-model"
+        },
+        {
+          "name": "airom:model.id",
+          "value": "sentence-transformers/all-minilm-l6-v2"
+        },
+        {
+          "name": "airom:model.provider",
+          "value": "sentence-transformers"
+        },
+        {
+          "name": "airom:model.provider",
+          "value": "sentence-transformers"
+        }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "name",
+            "confidence": 0.85,
+            "concludedValue": "sentence-transformers/all-MiniLM-L6-v2",
+            "methods": [
+              {
+                "technique": "source-code-analysis",
+                "confidence": 0.85
+              }
+            ]
+          }
+        ],
+        "occurrences": [
+          {
+            "location": "src/app.py",
+            "line": 14,
+            "additionalContext": "embedder = SentenceTransformer(\"sentence-transformers/all-MiniLM-L6-v2\")"
+          },
+          {
+            "location": "src/app.py",
+            "line": 14,
+            "additionalContext": "embedder = SentenceTransformer(\"sentence-transformers/all-MiniLM-L6-v2\")"
+          }
+        ]
+      }
+    },
+    {
+      "bom-ref": "airom:113e832148731168",
+      "type": "library",
+      "name": "sentence-transformers",
+      "version": "3.0.1",
+      "purl": "pkg:pypi/sentence-transformers@3.0.1",
+      "properties": [
+        {
+          "name": "airom:confidence",
+          "value": "0.95"
+        },
+        {
+          "name": "airom:kind",
+          "value": "library"
+        },
+        {
+          "name": "airom:provider",
+          "value": "huggingface"
+        }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "version",
+            "confidence": 0.95,
+            "concludedValue": "3.0.1",
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.95
+              }
+            ]
+          }
+        ],
+        "occurrences": [
+          {
+            "location": "requirements.txt",
+            "line": 5,
+            "additionalContext": "sentence-transformers==3.0.1"
+          }
+        ]
+      }
+    },
+    {
+      "bom-ref": "airom:1d7789e0b7e68c35",
+      "type": "application",
+      "name": "rag-pipeline",
+      "properties": [
+        {
+          "name": "airom:confidence",
+          "value": "0.6"
+        },
+        {
+          "name": "airom:kind",
+          "value": "rag-pipeline"
+        },
+        {
+          "name": "airom:rel.contains",
+          "value": "airom:3e3a9735550d6b44@0.6"
+        },
+        {
+          "name": "airom:rel.embeds-with",
+          "value": "airom:0edfb677d0cc0659@0.6"
+        }
+      ],
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "src/app.py",
+            "line": 14
+          }
+        ]
+      }
+    },
+    {
+      "bom-ref": "airom:3e3a9735550d6b44",
+      "type": "application",
+      "name": "chroma",
+      "version": "0.5.5",
+      "properties": [
+        {
+          "name": "airom:confidence",
+          "value": "0.95"
+        },
+        {
+          "name": "airom:kind",
+          "value": "vector-db"
+        },
+        {
+          "name": "airom:provider",
+          "value": "chroma"
+        }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "version",
+            "confidence": 0.95,
+            "concludedValue": "0.5.5",
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.95
+              }
+            ]
+          },
+          {
+            "field": "name",
+            "confidence": 0.95,
+            "concludedValue": "chromadb",
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.95
+              }
+            ]
+          }
+        ],
+        "occurrences": [
+          {
+            "location": "requirements.txt",
+            "line": 4,
+            "additionalContext": "chromadb==0.5.5"
+          }
+        ]
+      }
+    },
+    {
+      "bom-ref": "airom:6184fa2013f6c1d1",
+      "type": "framework",
+      "name": "transformers",
+      "version": "4.44.2",
+      "purl": "pkg:pypi/transformers@4.44.2",
+      "properties": [
+        {
+          "name": "airom:confidence",
+          "value": "0.9858"
+        },
+        {
+          "name": "airom:kind",
+          "value": "framework"
+        },
+        {
+          "name": "airom:provider",
+          "value": "huggingface"
+        }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "version",
+            "confidence": 0.95,
+            "concludedValue": "4.44.2",
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.95
+              }
+            ]
+          }
+        ],
+        "occurrences": [
+          {
+            "location": "requirements.txt",
+            "line": 3,
+            "additionalContext": "transformers==4.44.2"
+          },
+          {
+            "location": "src/app.py",
+            "line": 6,
+            "additionalContext": "from transformers import AutoModelForCausalLM, AutoTokenizer"
+          },
+          {
+            "location": "src/app.py",
+            "line": 17,
+            "additionalContext": "tokenizer = AutoTokenizer.from_pretrained(\"meta-llama/Llama-3-8B\")"
+          },
+          {
+            "location": "src/app.py",
+            "line": 18,
+            "additionalContext": "local = AutoModelForCausalLM.from_pretrained(\"meta-llama/Llama-3-8B\")"
+          }
+        ]
+      }
+    },
+    {
+      "bom-ref": "airom:6ed15db34c48ea41",
+      "type": "framework",
+      "name": "langchain",
+      "version": "0.3.7",
+      "purl": "pkg:pypi/langchain@0.3.7",
+      "properties": [
+        {
+          "name": "airom:confidence",
+          "value": "0.9858"
+        },
+        {
+          "name": "airom:kind",
+          "value": "framework"
+        },
+        {
+          "name": "airom:provider",
+          "value": "langchain"
+        }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "version",
+            "confidence": 0.95,
+            "concludedValue": "0.3.7",
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.95
+              }
+            ]
+          }
+        ],
+        "occurrences": [
+          {
+            "location": "requirements.txt",
+            "line": 1,
+            "additionalContext": "langchain==0.3.7"
+          },
+          {
+            "location": "src/app.py",
+            "line": 4,
+            "additionalContext": "from langchain_openai import ChatOpenAI"
+          },
+          {
+            "location": "src/app.py",
+            "line": 5,
+            "additionalContext": "from langchain_community.vectorstores import Chroma"
+          },
+          {
+            "location": "src/app.py",
+            "line": 12,
+            "additionalContext": "llm = ChatOpenAI(model=\"gpt-4o\", temperature=0.2, max_tokens=1024)"
+          }
+        ]
+      }
+    },
+    {
+      "bom-ref": "airom:756d9b95f8a56fae",
+      "type": "machine-learning-model",
+      "name": "meta-llama/llama-3-8b",
+      "properties": [
+        {
+          "name": "airom:confidence",
+          "value": "0.8575"
+        },
+        {
+          "name": "airom:kind",
+          "value": "hosted-llm"
+        },
+        {
+          "name": "airom:model.id",
+          "value": "meta-llama/llama-3-8b"
+        },
+        {
+          "name": "airom:model.provider",
+          "value": "huggingface"
+        },
+        {
+          "name": "airom:model.provider",
+          "value": "huggingface"
+        }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "name",
+            "confidence": 0.85,
+            "concludedValue": "meta-llama/Llama-3-8B",
+            "methods": [
+              {
+                "technique": "source-code-analysis",
+                "confidence": 0.85
+              }
+            ]
+          }
+        ],
+        "occurrences": [
+          {
+            "location": "src/app.py",
+            "line": 17,
+            "additionalContext": "tokenizer = AutoTokenizer.from_pretrained(\"meta-llama/Llama-3-8B\")"
+          },
+          {
+            "location": "src/app.py",
+            "line": 18,
+            "additionalContext": "local = AutoModelForCausalLM.from_pretrained(\"meta-llama/Llama-3-8B\")"
+          }
+        ]
+      }
+    },
+    {
+      "bom-ref": "airom:91e505cba56acc91",
+      "type": "machine-learning-model",
+      "name": "gpt-4o",
+      "properties": [
+        {
+          "name": "airom:confidence",
+          "value": "0.85"
+        },
+        {
+          "name": "airom:kind",
+          "value": "hosted-llm"
+        },
+        {
+          "name": "airom:model.id",
+          "value": "gpt-4o"
+        },
+        {
+          "name": "airom:model.provider",
+          "value": "openai"
+        },
+        {
+          "name": "airom:model.provider",
+          "value": "openai"
+        }
+      ],
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "src/app.py",
+            "line": 12,
+            "additionalContext": "llm = ChatOpenAI(model=\"gpt-4o\", temperature=0.2, max_tokens=1024)"
+          }
+        ]
+      }
+    },
+    {
+      "bom-ref": "airom:f6e04204c73ae3dd",
+      "type": "framework",
+      "name": "langchain-openai",
+      "version": "0.2.8",
+      "purl": "pkg:pypi/langchain-openai@0.2.8",
+      "properties": [
+        {
+          "name": "airom:confidence",
+          "value": "0.95"
+        },
+        {
+          "name": "airom:kind",
+          "value": "framework"
+        },
+        {
+          "name": "airom:provider",
+          "value": "langchain"
+        }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "version",
+            "confidence": 0.95,
+            "concludedValue": "0.2.8",
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.95
+              }
+            ]
+          }
+        ],
+        "occurrences": [
+          {
+            "location": "requirements.txt",
+            "line": 2,
+            "additionalContext": "langchain-openai==0.2.8"
+          }
+        ]
+      }
+    },
+    {
+      "bom-ref": "airom:fc1d012fac99e2a6",
+      "type": "data",
+      "name": "classifier.txt",
+      "properties": [
+        {
+          "name": "airom:confidence",
+          "value": "0.6"
+        },
+        {
+          "name": "airom:dataset.types",
+          "value": "prompt"
+        },
+        {
+          "name": "airom:kind",
+          "value": "prompt"
+        }
+      ],
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "prompts/classifier.txt"
+          }
+        ]
+      },
+      "data": [
+        {
+          "type": "other",
+          "name": "classifier.txt"
+        }
+      ]
+    }
+  ]
+}

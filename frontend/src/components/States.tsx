@@ -20,6 +20,15 @@ interface ErrorStateProps {
   /** What the user was trying to do, e.g. "load your projects". */
   action?: string;
   onRetry?: () => void;
+  /**
+   * The label for onRetry, when "Try again" is the wrong promise.
+   *
+   * Some failures are not retryable and are repairable instead: a credential
+   * the provider has rejected does not come back by pressing the same button,
+   * and offering "Try again" for one invites the user to prove that twice
+   * before concluding the product is broken.
+   */
+  retryLabel?: string;
 }
 
 /**
@@ -39,7 +48,7 @@ interface ErrorStateProps {
  * A user who can quote a code and a request id gets help in one exchange. A
  * user with a screenshot of "Something went wrong" gets three.
  */
-export function ErrorState({ error, action, onRetry }: ErrorStateProps) {
+export function ErrorState({ error, action, onRetry, retryLabel }: ErrorStateProps) {
   const api = error instanceof ApiError ? error : null;
   const code = api?.code ?? 'INTERNAL_UNEXPECTED';
   const message =
@@ -72,7 +81,7 @@ export function ErrorState({ error, action, onRetry }: ErrorStateProps) {
       <div className="state-actions">
         {onRetry && (
           <button type="button" className="btn" onClick={onRetry}>
-            Try again
+            {retryLabel ?? 'Try again'}
           </button>
         )}
         <a className="btn btn-quiet" href={`/docs/errors#${code.toLowerCase()}`}>
@@ -104,6 +113,22 @@ function hintFor(code: string): string {
       return 'It may have been deleted, or the link may be wrong.';
     case 'AUTH_TOKEN_EXPIRED':
       return 'Your session expired. Signing in again will resume where you left off.';
+    // ⚠ ONE CODE, TWO SITUATIONS, AND THE GENERIC HINT SUITED NEITHER.
+    //
+    // AUTH_TOKEN_INVALID covers both "your AxeBOM session is not valid" and
+    // "the credential we hold for an external provider was rejected by that
+    // provider" — the second being what a GitHub repo listing returns once
+    // the stored authorisation stops working. Falling through to "quote the
+    // code and request id" answered a question nobody had: this failure is
+    // self-service, and the sentence that resolves it is the one naming the
+    // authorisation as the thing to replace.
+    case 'AUTH_TOKEN_INVALID':
+      return (
+        'A credential was rejected — either your sign-in, or an authorisation ' +
+        'AxeBOM holds for another service. Signing in again fixes the first; ' +
+        'reconnecting the account fixes the second, and does not affect ' +
+        'projects that are already connected.'
+      );
     case 'REPORT_TOO_LARGE_FOR_PDF':
       return (
         'This BOM is too large to render as a PDF. The XLSX and JSON exports ' +

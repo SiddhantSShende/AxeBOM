@@ -149,6 +149,21 @@ var services = []serviceSpec{
 	// widening the fetcher's. Holds NO credential — unlike the fetcher, a
 	// url source is never authenticated, so there is nothing to hold.
 	{"webrecon", "Subdomain discovery and JS-library fingerprinting for URL-registered projects; holds no credential.", 8099, 17},
+	// ⚠ SEPARATE FROM project ON PURPOSE, AND THE REASON IS invariant 10.
+	//
+	// `services/project` collected the operator-supplied half of CERT-In Table 10
+	// and wrote it with `UPDATE normalize.ai_models SET intended_usage = …` — a
+	// mutation of normalized data, which never happens. It survived only because
+	// the AIBOM normalize consumer read the previous document's values back
+	// before writing a new one, a rescue for a write that should not exist.
+	//
+	// Operator input is not a normalization output: it is durable state a person
+	// entered, and it belongs in a schema owned by the service that collects it.
+	// This service also owns the two consent switches that would send customer
+	// code to a third-party LLM, the operator's own EU AI Act / NIST AI RMF /
+	// ISO 42001 classification, and the attestation VERIFICATION records that
+	// make element 19 checkable instead of merely typed.
+	{"aibom", "AI BOM: operator-supplied Table 10 elements, AI policy consent, compliance tagging, attestation verification.", 8100, 12},
 }
 
 // generated files are always rewritten; preserved files are written once.

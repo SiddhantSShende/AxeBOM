@@ -60,6 +60,20 @@ export interface ActivityItem {
   engine: string | null;
   phase: string;
   message: string | null;
+  /**
+   * What this engine found, keyed by kind — `{ai_models: 3, 'ai_asset.prompt': 2}`.
+   *
+   * ⚠ COUNTS AND KINDS ONLY, AND THE SERVER GUARANTEES IT. BOM content is
+   * confidential (CERT-In §5.3) and an advisory event stream is the wrong place
+   * for it, so the keys go through the same gate as `message` server-side
+   * (`events.SanitizeDiscoveries`) — no path, no URL, nothing out of the scanned
+   * code. Renderers here must treat a key as an opaque label and never
+   * reconstruct a filename from one.
+   *
+   * Empty for an engine that reported nothing finer than the four summary
+   * dimensions, and for every event that is not an engine result.
+   */
+  metrics: Record<string, number>;
   /** ISO timestamp. */
   ts: string;
 }
@@ -391,9 +405,30 @@ function readEvent(raw: Record<string, unknown>): ParsedFrame | null {
       engine: typeof raw.engine === 'string' ? raw.engine : null,
       phase,
       message: typeof raw.message === 'string' ? raw.message : null,
+      metrics: readMetrics(raw.metrics),
       ts: typeof raw.ts === 'string' ? raw.ts : new Date().toISOString(),
     },
   };
+}
+
+/**
+ * readMetrics reads events.ScanEventV1.Metrics.
+ *
+ * ⚠ THE SERVER ALREADY SANITISED THE KEYS AND THIS STILL CHECKS THE VALUES.
+ * Not distrust of the orchestrator — a saved frame replayed from an older build,
+ * or any future publisher, reaches this function too, and a NaN rendered into a
+ * count reads as a broken page rather than a missing number. A non-integer or
+ * negative value is dropped rather than coerced: `-1 → 0` would claim the engine
+ * looked and found none.
+ */
+function readMetrics(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: Record<string, number> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) continue;
+    out[key] = Math.floor(value);
+  }
+  return out;
 }
 
 /**

@@ -623,7 +623,25 @@ func (o *Orchestrator) publishJob(ctx context.Context, job events.ScanJobV1) err
 	// job_id as the dedup key: an orchestrator that crashes after publishing
 	// but before recording it republishes the same id, and JetStream drops the
 	// duplicate rather than running the job twice.
-	return o.bus.Publish(ctx, job.Subject(), job.JobID, payload)
+	return o.bus.Publish(ctx, o.jobSubject(job), job.JobID, payload)
+}
+
+// jobSubject is where this engine's jobs go.
+//
+// ⚠ ALMOST ALWAYS `scan.job.<family>`, AND THE EXCEPTION IS DELIBERATE. An engine
+// normally belongs to the worker that owns its family. `aibom-generator` belongs
+// to AIBOM for reporting — its status has to appear in that family's Engine
+// Coverage — while being consumed by `workers/aienrich`, the only part of the AI
+// path with outbound network. See policy.Engine.JobSubject.
+//
+// The envelope's own Subject() stays the family default: an engine that declares
+// no override is unaffected, and the job a worker receives is unchanged either
+// way, so nothing downstream has to know this happened.
+func (o *Orchestrator) jobSubject(job events.ScanJobV1) string {
+	if e, ok := o.registry.Get(job.Engine); ok && e.JobSubject != "" {
+		return e.JobSubject
+	}
+	return job.Subject()
 }
 
 // outputPrefix builds the artifact path.
@@ -747,6 +765,12 @@ func (o *Orchestrator) HandleResult(ctx context.Context, result events.ScanResul
 			Engine: result.Engine, Phase: phase,
 			Pct:     Progress(runs),
 			Message: fmt.Sprintf("%s %s", result.Engine, result.Status),
+			// ⚠ THE FIELD EXISTED SINCE PHASE 6 AND NO PUBLISHER FILLED IT.
+			// `ScanEventV1.Metrics` was defined, carried through the WebSocket
+			// and rendered by nothing, so a customer watching a scan saw a
+			// percentage and an engine name and no idea what was being found.
+			// This is the moment an engine's real numbers first exist.
+			Metrics: eventMetrics(result),
 		})
 	}
 
@@ -758,6 +782,46 @@ func (o *Orchestrator) HandleResult(ctx context.Context, result events.ScanResul
 	// turn a correctly-derived scan status into a retried one.
 	o.maybeTriggerNormalize(ctx, result)
 	return nil
+}
+
+// eventMetrics turns one engine's result into the live feed's numbers.
+//
+// ⚠ COUNTS ONLY, AND THAT IS A SECURITY BOUNDARY RATHER THAN A STYLE CHOICE.
+// `ScanEventV1` reaches browsers and logs and is treated as public: `Message` has
+// been forbidden from carrying a path, a URL or anything from the scanned code
+// since Phase 6, and metrics are held to the same rule. Integers cannot carry
+// content, and `events.SanitizeDiscoveries` drops any KEY that is not a plain
+// lowercase identifier — a key built from a filename would have walked straight
+// past the guard on Message.
+//
+// ⚠ IT PREFERS THE ENGINE'S OWN BREAKDOWN AND FALLS BACK TO THE SUMMARY. An
+// AIBOM engine reports `ai_asset.vector_store: 1`, which is what somebody
+// watching a scan wants; syft reports nothing finer than `components: 21`, which
+// is the honest whole of what it measured. Neither is padded with the other's
+// shape.
+//
+// ⚠ A `nil` SUMMARY FIELD IS OMITTED, NOT ZEROED. `ScanResultV1.Summary`'s
+// pointers mean "not measured", and publishing 0 for one would tell a live feed
+// that grype found no licences — which grype never looked for.
+func eventMetrics(result events.ScanResultV1) map[string]int64 {
+	if len(result.Discoveries) > 0 {
+		return result.Discoveries
+	}
+	out := map[string]int64{}
+	for name, value := range map[string]*int{
+		"components":      result.Summary.Components,
+		"vulnerabilities": result.Summary.Vulnerabilities,
+		"licenses":        result.Summary.Licenses,
+		"crypto_assets":   result.Summary.CryptoAssets,
+	} {
+		if value != nil {
+			out[name] = int64(*value)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // RecomputeScanStatus derives and writes the scan's status.

@@ -50,11 +50,16 @@ var (
 // Kept in sync with docs/01-DATA-MODEL.md; an unknown prefix usually means a
 // typo or a field that was never modelled.
 var knownEntities = map[string]bool{
-	"component":          true,
-	"bom_document":       true,
-	"crypto_asset":       true,
-	"quantum_component":  true,
-	"ai_model":           true,
+	"component":         true,
+	"bom_document":      true,
+	"crypto_asset":      true,
+	"quantum_component": true,
+	"ai_model":          true,
+	// `normalize.ai_assets` — prompts, vector stores, RAG pipelines, agents,
+	// tools, MCP servers, inference endpoints and datasets. Added with the
+	// second discovery engine, which is the first thing that could report any
+	// of them; no CERT-In table has an element for one.
+	"ai_assets":          true,
 	"hardware_component": true,
 	"vex_statement":      true,
 	"csaf_advisory":      true,

@@ -62,6 +62,15 @@ type ProfileField struct {
 	// validation error, and workers/hbom/model.py CRITICALITY_VALUES. Two of
 	// them had already drifted apart.
 	Values []string
+	// UserSupplied marks an element NO TOOL CAN REPORT — it describes intent or
+	// policy rather than anything discoverable from code or a model card, so it
+	// is collected from the operator.
+	//
+	// ⚠ IT LIVES IN THE PROFILE BECAUSE IT DRIFTED WHEN IT DID NOT. Go and
+	// Python each kept their own list and disagreed by one element
+	// (environmental_impact), so that element was reachable by no form and
+	// populated by no tool — while a test asserted the Go list was complete.
+	UserSupplied bool
 }
 
 `)
@@ -182,6 +191,11 @@ func writeGoField(b *bytes.Buffer, f Field) {
 		goConstName(f.ID), f.Ordinal, f.Name, f.CanonicalPath,
 		f.CycloneDXPath, f.SPDXPath, f.Type, f.Weight, f.Required,
 		f.IsScored(), f.SourcePage, f.Status)
+	// Emitted only when true, so the generated file does not grow
+	// `UserSupplied: false` on every one of the fields a tool does report.
+	if f.UserSupplied {
+		b.WriteString(", UserSupplied: true")
+	}
 	// Emitted only when the profile declares one, so the generated file does
 	// not grow `Values: nil` on every non-enum field.
 	if len(f.Values) > 0 {
@@ -282,6 +296,14 @@ class ProfileField:
     #:
     #: A trailing default so every positional construction above keeps working.
     values: tuple[str, ...] = ()
+    #: True for an element NO TOOL CAN REPORT — it describes intent or policy
+    #: rather than anything discoverable from code or a model card, so it is
+    #: collected from the operator.
+    #:
+    #: ⚠ DECLARED IN THE PROFILE, NOT IN EITHER LANGUAGE. Go and Python each
+    #: kept their own list and disagreed by one element, so that element was
+    #: reachable by no form and populated by no tool.
+    user_supplied: bool = False
 
 
 PROFILE_ID = %q
@@ -360,6 +382,12 @@ func writePyField(b *bytes.Buffer, f Field, indent string) {
 		}
 		b.WriteString(")")
 	}
+	// ⚠ KEYWORD, NOT POSITIONAL. `values` above is emitted only for enum fields,
+	// so a positional argument after it would land in the wrong slot on every
+	// field that has no values list.
+	if f.UserSupplied {
+		b.WriteString(", user_supplied=True")
+	}
 	b.WriteString("),\n")
 }
 
@@ -414,10 +442,11 @@ func SortedKeys[V any](m map[string]V) []string {
 // generated var is named for its set, never merged into HBOMFields, and every
 // consumer has to opt in by naming it.
 func GenerateGoOperational(p *Profile, setName, outDir string) (string, error) {
-	fields := p.OperationalFields(setName)
-	if len(fields) == 0 {
+	section, ok := p.OperationalSectionFor(setName)
+	if !ok {
 		return "", fmt.Errorf("profile %q declares no operational field set %q", p.Meta.ID, setName)
 	}
+	fields := section.Elements
 
 	varName := goOperationalVarName(setName)
 
@@ -430,7 +459,7 @@ func GenerateGoOperational(p *Profile, setName, outDir string) (string, error) {
 // Carried as data so no renderer hardcodes the string and none can mislabel it.
 const %sLabel = %q
 
-`, varName, varName, p.HBOMManufacturing.Label)
+`, varName, varName, section.Label)
 
 	// ⚠ THE ID CONSTANTS ARE EMITTED HERE TOO, and they must be: writeGoField
 	// references a field by its constant, and the CERT-In generated file
@@ -462,7 +491,12 @@ var %s = []ProfileField{
 	if err != nil {
 		return "", fmt.Errorf("generated Go does not parse: %w", err)
 	}
-	path := filepath.Join(outDir, "generated_operational.go")
+	// ⚠ ONE FILE PER SET. This used to be a single `generated_operational.go`,
+	// which was correct while exactly one operational profile existed and
+	// becomes a silent overwrite the moment a second one is generated — the
+	// second run would leave a file whose name says "operational" and whose
+	// contents are one arbitrary set's.
+	path := filepath.Join(outDir, "generated_operational_"+setName+".go")
 	if err := os.MkdirAll(outDir, 0o750); err != nil {
 		return "", err
 	}
@@ -477,7 +511,7 @@ func goOperationalVarName(setName string) string {
 	out := ""
 	for _, part := range strings.Split(setName, "_") {
 		switch part {
-		case "hbom", "sbom", "cbom", "qbom", "aibom":
+		case "hbom", "sbom", "cbom", "qbom", "aibom", "ai":
 			out += strings.ToUpper(part)
 		case "":
 		default:

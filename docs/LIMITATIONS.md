@@ -140,6 +140,93 @@ knows to look for.
   with no engine. An SBOM that quietly drops an ecosystem is worse than no SBOM:
   it converts an unknown into a false negative you trust.
 
+## What an AI BOM actually establishes, and what it does not
+
+- **Discovery reads your source; it never runs your model.** Three engines
+  (`ai-bom`, `airom`, `cdxgen-ai`) parse the repository for model references,
+  prompts, vector stores, RAG pipelines and the inference services the code
+  talks to. AxeBOM does not evaluate a model, test it for bias, audit it, or
+  execute it. A model named in code that is never actually loaded still appears,
+  because a reference is what the source establishes.
+- **Enrichment asks a public API about a model IDENTIFIER.** `aibom-generator`
+  and the Hugging Face Hub are asked about `meta-llama/Llama-3-8B`, never about a
+  line of your code. A model that does not resolve on the Hub — private, gated,
+  renamed, or hosted somewhere else entirely — keeps its enrichment-only
+  elements as `not-provided`, and Engine Coverage says which and why.
+- **`verified` means an engine confirmed the model resolves upstream.** It never
+  defaults to true. It is not a statement that the model is safe, licensed for
+  your use, or the one that will be loaded at runtime.
+- **Two of the tool's own answers are not used, because they are wrong.**
+  `owasp-aibom-generator` re-parses the rendered model card and returns the
+  licence with the next word of the page glued on (`mit ---`) and "training
+  datasets" that are English words lifted out of a sentence (`consisting`, `one`,
+  `a`). Both fields are taken from the model card's structured front matter
+  instead, and a diagnostic records every value declined. Anything else that tool
+  reports — architecture, task, metrics, the revision-pinned purl — is used as
+  given.
+- **Prompts, vector stores, RAG pipelines and inference endpoints are inventory,
+  not compliance.** CERT-In Table 10 has no element for any of them, so they are
+  reported in their own section and scored into **neither** coverage number.
+  Moving a compliance percentage with something the guideline never asked for
+  would be the same mistake as omitting them.
+- **Software dependencies are attributed per model only where an engine said
+  so.** Where none did, a model's dependency list is the project's AI libraries,
+  and the report states that scope rather than implying evidence it does not
+  have.
+- **`cisco-ai-defense/aibom` is registered and deliberately never run.** Its
+  `analyze` command always requires `--llm-model`: it resolves ambiguous AI usage
+  by sending your code to a third-party LLM, which needs egress and an API key
+  that scan engines are not allowed to hold. It is listed with that reason
+  attached rather than omitted, so you can tell "AxeBOM does not know about this
+  tool" from "AxeBOM chose not to run it".
+- **`--llm-enrich` and any other flag that ships code to a third party stays
+  off.** Turning one on is a per-project decision, surfaced in the UI and
+  audited — never a default discovered afterwards in an egress log. ⚠ And
+  consenting does not currently turn anything on: scan engines run with no
+  network and there is no egress allowlist, so AxeBOM records the decision and
+  the engines stay off. The API says so (`effective: false`, with the blocker
+  named) and no screen may imply otherwise.
+- **AxeBOM does not verify a model signature; it records a verification you
+  ran.** `model_signing verify` recomputes the digest of every model file, and
+  AxeBOM never holds your model weights — the scan sandbox sees a source tree
+  and the enrichment plane sees a model identifier. So attestation follows the
+  same shape as a host hardware inventory: you run the verifier where the
+  artifact is, and AxeBOM ingests and **parses** the result. That is worth more
+  than the free-text field it replaces — `verified` is read rather than typed, a
+  failure is recorded as a failure, and the signer identity and digest land on
+  the record — and it is not AxeBOM having checked a signature. Whoever produced
+  that output could have written anything in it; the record is evidence of a
+  claim, at a moment, attributed to the person who uploaded it.
+- **An EU AI Act tier, a NIST AI RMF function or an ISO 42001 category is
+  something a named person declared.** AxeBOM never infers one. Whether a system
+  is high-risk depends on what it is used for — the sector, the deployment
+  context, whether a human is in the loop — and none of that is visible in a
+  repository. `undetermined` is a real answer and is offered as one: "somebody
+  looked and could not decide" is a different state from "nobody has looked".
+  ISO/IEC 42001 is offered as Annex A **categories**, not numbered controls,
+  because a control reference one digit wrong is a false citation and, unlike a
+  missing value, a plausible wrong one is invisible to the reader.
+- **The ML-BOM is downloadable; the SPDX 3.0 AI document is a converter you
+  run.** `format: mlbom` produces a CycloneDX 1.6 ML-BOM with populated
+  `modelCard` blocks, validated against CycloneDX's own schema. SPDX 3.0's AI
+  profile is written by `spdx-tools`, which is Python, and the report service is
+  a Go binary — so that one is
+  `python -m workers.aibom.spdx3 --in <mlbom> --out <file>` today rather than a
+  download. It writes SPDX **3.0.0**, not 3.0.1.
+- **`mlbomdoc` is not wired in, deliberately.** It reads a finished ML-BOM and
+  reformats it to console, markdown, JSON or PDF via `lib4sbom` and `sbom2doc`.
+  AxeBOM already renders PDF, DOCX, XLSX and JSON for every BOM type from the
+  **canonical model**, which carries strictly more than the ML-BOM does —
+  coverage numbers, Engine Coverage, normalization diagnostics. Running it would
+  take our own document, hand it back to us with less in it, and add a
+  dependency chain to the report path to do so. It is cited as the reference for
+  what an ML-BOM summary should contain.
+- **The AI operational score is ours, not a standard's.** Alongside the two
+  CERT-In percentages a report carries an "AI operational surface" number — how
+  much of the AI system's shape the engines could see. It is scored, labelled,
+  and contributes to **neither** compliance percentage. Nobody's regulator asks
+  for it.
+
 ## Vulnerability data is only as current as its feed
 
 Findings come from Grype, Trivy, OSV-Scanner and Dependency-Check against their

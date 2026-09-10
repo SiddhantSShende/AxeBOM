@@ -438,3 +438,64 @@ describe('the handshake credential', () => {
     dispose();
   });
 });
+
+describe('discovery counts on a live event', () => {
+  it('carries what the engine reported', () => {
+    const frame = parseFrame(
+      JSON.stringify({
+        type: 'event',
+        event: {
+          phase: 'engine_done',
+          engine: 'airom',
+          ts: '2026-01-01T00:00:00Z',
+          metrics: { ai_models: 3, 'ai_asset.vector_store': 1 },
+        },
+      }),
+    );
+    expect(frame?.kind).toBe('event');
+    if (frame?.kind !== 'event') return;
+    expect(frame.activity.metrics).toEqual({ ai_models: 3, 'ai_asset.vector_store': 1 });
+  });
+
+  it('is an empty object, never undefined, when the event carries none', () => {
+    // Every phase transition reaches this path. A renderer reading
+    // `Object.keys(item.metrics)` must not have to null-check per call site —
+    // one missed check is a blank progress page for a running scan.
+    const frame = parseFrame(
+      JSON.stringify({ type: 'event', event: { phase: 'queued', ts: '2026-01-01T00:00:00Z' } }),
+    );
+    if (frame?.kind !== 'event') throw new Error('expected an event frame');
+    expect(frame.activity.metrics).toEqual({});
+  });
+
+  it('drops a value that is not a usable count', () => {
+    // ⚠ DROPPED, NOT COERCED. `-1 → 0` would say the engine looked for prompts
+    // and found none; a NaN rendered into a chip reads as a broken page. A
+    // replayed frame from an older build reaches this function too.
+    const frame = parseFrame(
+      JSON.stringify({
+        type: 'event',
+        event: {
+          phase: 'engine_done',
+          ts: '2026-01-01T00:00:00Z',
+          metrics: { good: 2, negative: -1, text: '4', nothing: null },
+        },
+      }),
+    );
+    if (frame?.kind !== 'event') throw new Error('expected an event frame');
+    expect(frame.activity.metrics).toEqual({ good: 2 });
+  });
+
+  it('survives metrics arriving as something other than an object', () => {
+    for (const metrics of [null, 'ai_models=3', ['ai_models', 3], 7]) {
+      const frame = parseFrame(
+        JSON.stringify({
+          type: 'event',
+          event: { phase: 'engine_done', ts: '2026-01-01T00:00:00Z', metrics },
+        }),
+      );
+      if (frame?.kind !== 'event') throw new Error('expected an event frame');
+      expect(frame.activity.metrics).toEqual({});
+    }
+  });
+});

@@ -60,6 +60,13 @@ COPY docs/reference/certin-v2.0.yaml ./docs/reference/certin-v2.0.yaml
 # the first HBOM trigger raises FileNotFoundError inside the container rather
 # than failing the build.
 COPY docs/reference/hbom-manufacturing-v1.yaml ./docs/reference/hbom-manufacturing-v1.yaml
+# ⚠ AND MANDATORY FOR THE AIBOM CONSUMER, FOR THE IDENTICAL REASON.
+# workers/aibom/profile.py reads this at runtime to score the AI operational
+# surface — prompts, vector stores, RAG pipelines, the services the code calls,
+# and the operator's own EU AI Act / NIST / ISO classification. None of it is a
+# CERT-In element, all of it is scored, and the score lands in
+# `bom_documents.supplementary_coverage` under its own label.
+COPY docs/reference/aibom-operational-v1.yaml ./docs/reference/aibom-operational-v1.yaml
 
 # ---------------------------------------------------------------------------
 # Non-root, unlike Dockerfile.worker (which runs root only for the Docker

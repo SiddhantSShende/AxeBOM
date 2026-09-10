@@ -3,6 +3,7 @@ module github.com/axebom/axebom
 go 1.26.2
 
 require (
+	github.com/CycloneDX/cyclonedx-go v0.11.0
 	github.com/coder/websocket v1.8.15
 	github.com/containerd/errdefs v1.0.0
 	github.com/docker/docker v28.5.2+incompatible
@@ -33,7 +34,6 @@ require (
 )
 
 require (
-	github.com/CycloneDX/cyclonedx-go v0.11.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/anchore/go-struct-converter v0.1.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect

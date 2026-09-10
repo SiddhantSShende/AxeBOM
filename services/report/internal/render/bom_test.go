@@ -587,3 +587,50 @@ func nameOf(t *testing.T, fieldID string) string {
 	t.Fatalf("no profile field %q", fieldID)
 	return ""
 }
+
+// TestSupplementaryCoverageIsRenderedAndLabelledAsNotCompliance.
+//
+// ⚠ IT WAS COMPUTED FOR A WHOLE PHASE AND READ BY NOTHING. The HBOM
+// manufacturing score has been written to
+// `normalize.bom_documents.supplementary_coverage` since migration 0011 and
+// appeared in no report, no export and no screen. A number a customer cannot
+// see is a number that does not exist — the same class of loss invariant 12
+// names for engine gaps, one layer up.
+//
+// ⚠ AND THE LABEL IS THE POINT. A percentage on a compliance document is read
+// as a compliance percentage unless something says otherwise, so the profile's
+// own label, its id, and the sentence naming AxeBOM as the authority all render
+// together. Rendering the number without them would be worse than omitting it.
+func TestSupplementaryCoverageIsRenderedAndLabelledAsNotCompliance(t *testing.T) {
+	b := sampleBOM()
+	b.SupplementaryCoverage = []SupplementaryCoverage{{
+		ProfileID:       "aibom-operational-v1",
+		ProfileRevision: 1,
+		Label:           "AI operational surface",
+		IsCompliance:    false,
+		CompletenessPct: 62.5,
+	}}
+
+	sheets, err := Sheets(b)
+	if err != nil {
+		t.Fatalf("building sheets: %v", err)
+	}
+	joined := flatten(collect(t, findSheet(t, sheets, "Summary")))
+
+	for _, want := range []string{
+		"AI operational surface %",
+		"62.5",
+		"aibom-operational-v1 revision 1",
+		"not a compliance standard",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("the Summary sheet does not carry %q", want)
+		}
+	}
+	// ⚠ AND IT SAYS SO ABOUT THE TWO NUMBERS IT MUST NOT BE MISTAKEN FOR.
+	if !strings.Contains(joined, "does not contribute to the completeness") {
+		t.Error("the Summary sheet does not say that this number is excluded " +
+			"from the compliance percentages, which is the only thing that " +
+			"stops a reader treating it as one")
+	}
+}

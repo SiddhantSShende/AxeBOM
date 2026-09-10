@@ -63,12 +63,37 @@ from axebom_shared.logging import get_logger
 from axebom_shared.worker_runtime import run_worker
 
 from ..sbom.runner import SBOMWorker
-from .adapters import AIBomAdapter
+from .adapters import (
+    AIBomAdapter,
+    AIBOMTomlAdapter,
+    AiromAdapter,
+    CdxgenAIAdapter,
+    GLaaSImportAdapter,
+    K8sAIBOMImportAdapter,
+)
 
 log = get_logger("aibom-worker")
 
+#: ⚠ THREE INDEPENDENT DISCOVERY ENGINES OVER ONE TREE, AND THE DISAGREEMENTS
+#: ARE THE POINT — the same reasoning the SBOM family records for running syft
+#: and cdxgen together. Measured on `testdata/ai-langchain`, each of the three
+#: sees something the others do not: airom alone reports the embedding model,
+#: the prompts, the vector store and the RAG pipeline; cdxgen-ai alone emits a
+#: correctly-cased `pkg:huggingface/…` purl and the inference services; ai-bom
+#: alone names the calling framework per model. They converge on the same
+#: `model_key` for the models they share, which is what makes the union safe
+#: rather than a triple-count.
 ADAPTERS: dict[str, type] = {
     "ai-bom": AIBomAdapter,
+    "airom": AiromAdapter,
+    "cdxgen-ai": CdxgenAIAdapter,
+    # ⚠ THE THREE BELOW ARE NOT SANDBOXED, AND NOT BECAUSE THEY ARE TRUSTED.
+    # They run no third-party binary at all: two parse a document the customer
+    # uploaded and one parses a file they committed. There is nothing to isolate
+    # — the sandbox exists to contain code we execute, and these execute none.
+    "aibom-toml": AIBOMTomlAdapter,
+    "aibom-k8s-runtime": K8sAIBOMImportAdapter,
+    "aibom-glaas": GLaaSImportAdapter,
 }
 
 DEPENDS_ON: dict[str, str] = {}

@@ -36,7 +36,8 @@ from axebom_shared.normalize.coverage import CoverageResult, Field, score
 
 from .. import merge
 from ..adapters.aibom_generator import ModelCard
-from .ai import link_dependencies, normalize_model
+from ..profile import operational_fields, operational_meta
+from .ai import dependency_scope, link_dependencies, normalize_model
 
 #: Bumped whenever a rule change in THIS package (`ai.py`'s `normalize_model`,
 #: `../merge.py`, or this module's assembly) alters output for unchanged input.
@@ -81,13 +82,82 @@ def _flatten(row: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+#: Resolved once at import. The profile is a file on disk that does not change
+#: between triggers, and re-reading it per document would put a filesystem read
+#: in the hot path for a value that cannot have moved.
+_OPERATIONAL_META = operational_meta()
+
+
+def _flatten_operational(
+    row: dict[str, Any],
+    assets: list[dict[str, Any]],
+    governance: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """One model's row for the OPERATIONAL score.
+
+    ⚠ THE ASSETS ARE DOCUMENT-LEVEL AND ARE SCORED PER MODEL ON PURPOSE. A
+    prompt belongs to the repository, not to one model — nothing in any engine's
+    output says which model a given prompt is fed to. So a project with prompts
+    scores that element for every model in it, which is the honest reading of the
+    question being asked: "did we see this AI system's operational shape", where
+    the shape is shared. Attributing a prompt to one model would be inventing a
+    relationship no tool reported.
+    """
+    by_type: dict[str, list[str]] = {}
+    for asset in assets:
+        by_type.setdefault(str(asset.get("asset_type") or ""), []).append(
+            str(asset.get("name") or asset.get("asset_key") or "")
+        )
+
+    # ⚠ THE PROJECT-WIDE DECLARATION IS THE FALLBACK, NOT THE DEFAULT. An
+    # operator who classified the whole project has said something true about
+    # every model in it; one who classified a specific model has said something
+    # more specific, and that wins. The empty key is where the consumer puts the
+    # project-wide entry.
+    declared = governance.get(str(row.get("_identity") or "")) or governance.get("") or {}
+
+    return {
+        "ai_model.model_key": row.get("_identity"),
+        "ai_model.identity_confidence": row.get("identity_confidence"),
+        "ai_model.found_by": [
+            p.get("engine_id") for p in (row.get("_provenance") or []) if p.get("engine_id")
+        ],
+        "ai_model.evidence": row.get("evidence"),
+        # ⚠ A BOOLEAN False IS A STATED FACT AND COUNTS AS COVERED —
+        # `coverage.is_substantive` treats it that way deliberately. "We looked
+        # and it did not resolve upstream" is knowledge; absence is not.
+        "ai_model.verified": row.get("verified"),
+        "ai_model.dependencies": row.get("_dependencies"),
+        "ai_assets.prompt": by_type.get("prompt"),
+        "ai_assets.vector_store": by_type.get("vector_store"),
+        "ai_assets.rag_pipeline": by_type.get("rag_pipeline"),
+        # One element covers agents, tools and MCP servers together: the
+        # governance question — "through what can this model take an action" —
+        # is the same for all three, and three near-empty elements would report
+        # three gaps where there is one.
+        "ai_assets.agent": (
+            (by_type.get("agent") or [])
+            + (by_type.get("tool") or [])
+            + (by_type.get("mcp_server") or [])
+        )
+        or None,
+        "ai_assets.endpoint": by_type.get("endpoint"),
+        "ai_model.eu_ai_act_tier": declared.get("eu_ai_act_tier"),
+        "ai_model.nist_ai_rmf": declared.get("nist_ai_rmf"),
+        "ai_model.iso_42001": declared.get("iso_42001"),
+        "ai_model.attestation_verified": declared.get("attestation_verified"),
+    }
+
+
 def build_canonical_aibom(
     discovery: dict[str, Any],
     cards: dict[str, ModelCard],
     *,
     sbom_component_keys: set[str] | None = None,
     user_values_by_identity: dict[str, dict[str, Any]] | None = None,
+    governance_by_identity: dict[str, dict[str, Any]] | None = None,
     ruleset_version: str = RULESET_VERSION,
+    scan_id: str = "",
 ) -> dict[str, Any]:
     """Turn discovery + enrichment output into a canonical AIBOM document
     shaped for `axebom_shared.normalize.writer.write_bom_document`.
@@ -111,9 +181,9 @@ def build_canonical_aibom(
     `user_values_by_identity` carries the four user-supplied Table 10
     elements per model, keyed by `merge.identity()`.
 
-    ⚠ EACH MODEL ROW CARRIES THREE UNDERSCORE-PREFIXED KEYS
-    (`_identity`, `_datasets`, `_dependencies`) THAT ARE NOT `normalize
-    .ai_models` COLUMNS. `bulk._ai_models_batch` must exclude them from the
+    ⚠ EACH MODEL ROW CARRIES FOUR UNDERSCORE-PREFIXED KEYS
+    (`_identity`, `_datasets`, `_dependencies`, `_provenance`) THAT ARE NOT
+    `normalize.ai_models` COLUMNS. `bulk._ai_models_batch` must exclude them from the
     columns it writes; `bulk._ai_datasets_batch`/`_ai_model_dependencies_batch`
     read them back off the SAME row list to build their own tables' rows,
     exactly the way `bulk._locations_batch` reads `component.get("locations")`
@@ -128,9 +198,21 @@ def build_canonical_aibom(
     """
     sbom_component_keys = sbom_component_keys or set()
     user_values_by_identity = user_values_by_identity or {}
+    # What a PERSON declared about each model — the EU AI Act tier, the NIST
+    # functions, the ISO categories, whether a recorded attestation verified.
+    # Held by `services/aibom` and read by the consumer; never inferred here.
+    governance_by_identity = governance_by_identity or {}
     frameworks = discovery.get("frameworks") or []
+    # ⚠ THE THINGS THAT ARE NEITHER MODELS NOR DEPENDENCIES, AND THEY USED TO
+    # HAVE NOWHERE TO GO. airom and cdxgen-ai report prompts, vector stores, RAG
+    # pipelines and inference endpoints; before `normalize.ai_assets` existed
+    # (migration 0018) they were extracted and dropped, which invariant 12 rates
+    # as worse than not looking. Merged across engines here, on a per-kind key —
+    # see `merge.merge_assets` for why a prompt keys on WHERE and a vector store
+    # keys on WHAT.
+    ai_assets = merge.merge_assets(discovery.get("assets") or [])
 
-    merged, diagnostics = merge.merge(discovery.get("models") or [], cards)
+    merged, diagnostics = merge.merge(discovery.get("models") or [], cards, scan_id=scan_id)
     # Discovery-level diagnostics (malformed component entries, and so on)
     # must not be silently dropped just because this function's job is
     # normalization, not discovery — a reader of THIS output has no other
@@ -139,7 +221,12 @@ def build_canonical_aibom(
 
     models: list[dict[str, Any]] = []
     for model in merged:
-        identity = merge.identity(model)
+        # ⚠ READ, NOT RECOMPUTED. `merge` already derived this and merged on it;
+        # deriving it a second time here is what made an opaque-tier model merge
+        # under one key and store under another.
+        identity = model["_model_key"]
+        rule = model["_identity_rule"]
+        confidence = model["_identity_confidence"]
         row, datasets, _gaps = normalize_model(
             model, user_values=user_values_by_identity.get(identity)
         )
@@ -147,9 +234,36 @@ def build_canonical_aibom(
             {**model, "frameworks": frameworks}, sbom_component_keys
         )
 
+        # ⚠ THE MERGE KEY IS NOW STORED, NOT JUST USED. `_identity` used to be
+        # transport-only — `bulk.py` read it to mint the row id and then dropped it,
+        # so nothing in the database could say whether two rows were the same model.
+        # `bulk._ai_models_batch` now persists it as `model_key`; the rule and
+        # confidence that produced it are recorded here beside it, because only the
+        # ladder knows which tier fired. See migrations/normalize/0016.
+        row["identity_rule"] = rule
+        row["identity_confidence"] = confidence
+        # ⚠ SINGULAR HERE, PLURAL IN `normalize.ai_model_provenance`. This names
+        # the engine whose observation this row was BUILT from — the first
+        # sighting, which supplied the fields the later ones only confirmed. It
+        # is not the whole answer to "who found this model" and must never be
+        # rendered as if it were: three engines converge on the same key for the
+        # same model, and the provenance table is where all three are recorded.
+        row["source_engine"] = model.get("source_engine") or ""
+        row["evidence"] = list(model.get("locations") or [])
+        # ⚠ NEVER DEFAULTS TO TRUE. `verified` means an engine confirmed the model
+        # resolves upstream — today only enrichment can establish that, and
+        # enrichment sets it. An unenriched model is unverified, not presumed real.
+        row["verified"] = bool(model.get("enriched"))
+
         row["_identity"] = identity
         row["_datasets"] = datasets
         row["_dependencies"] = linked
+        # ⚠ EVERY ENGINE THAT SAW THIS MODEL, NOT JUST THE ONE THAT BUILT THE ROW.
+        # Written to `normalize.ai_model_provenance` by `bulk`. Without this key
+        # the table stays empty and `source_engine` is the only answer available —
+        # which is one answer to a question that has up to three.
+        row["_provenance"] = list(model.get("_provenance") or [])
+        row["_dependency_scope"] = dependency_scope(model)
         models.append(row)
 
         if unlinked:
@@ -169,11 +283,66 @@ def build_canonical_aibom(
                 }
             )
 
+    # ⚠ SAY WHICH KIND OF CLAIM ELEMENT 06 IS MAKING. When no engine attributed
+    # a calling framework to any model, every model's dependency list IS the
+    # project's AI library set — which is useful and is not the same statement as
+    # "the engine saw this model use these". One diagnostic per document rather
+    # than one per model: it is a property of the scan, and repeating it per row
+    # would bury the per-model findings around it.
+    project_scoped = [m for m in models if m.get("_dependency_scope") == "project"]
+    if project_scoped and any(m.get("_dependencies") for m in project_scoped):
+        diagnostics.append(
+            {
+                "severity": "info",
+                "code": "AIBOM_DEPENDENCY_SCOPE_PROJECT",
+                "message": (
+                    f"no engine attributed a calling framework to "
+                    f"{len(project_scoped)} of {len(models)} model(s), so their "
+                    f"software dependencies are the project's AI libraries rather "
+                    f"than libraries observed calling that specific model"
+                ),
+                "hint": (
+                    "the dependency is real and present in this project; what is "
+                    "not established is which model uses it"
+                ),
+            }
+        )
+
     coverage: CoverageResult = score([_flatten(m) for m in models], FIELDS)
+
+    # ⚠ A SECOND NUMBER, AND IT MUST NEVER TOUCH THE FIRST. `coverage` answers
+    # "how much of what CERT-In requires is present". This answers "how much of
+    # the AI system's operational shape did we manage to see" — a different
+    # question with a different authority behind it (ours, not CERT-In's), and
+    # merging them would let a customer's diligence about vector stores raise a
+    # percentage they hand to a regulator.
+    operational = score(
+        [_flatten_operational(m, ai_assets, governance_by_identity) for m in models],
+        operational_fields(),
+    )
 
     return {
         "ai_models": models,
+        # ⚠ NOT SCORED INTO `coverage`, DELIBERATELY. CERT-In Table 10 asks about
+        # MODELS; a prompt or a vector store is not one of its elements, and
+        # letting these rows move `completeness_pct` would change a compliance
+        # percentage by finding something the guideline does not ask for. They
+        # are inventory and evidence, rendered in their own section. The
+        # operational profile (`aibom-operational-v1.yaml`, M4) is where they
+        # will be scored, under its own label and never into these two numbers.
+        "ai_assets": ai_assets,
         "coverage": coverage.as_dict(),
+        # ⚠ A DIFFERENT NUMBER, UNDER A DIFFERENT KEY, CARRYING ITS OWN LABEL AND
+        # AN `is_compliance` FLAG. Keyed by profile id, so a third operational
+        # profile needs no schema change, and flagged so no consumer has to know
+        # which profile ids are standards. Same shape HBOM's manufacturing score
+        # already uses.
+        "supplementary_coverage": {
+            _OPERATIONAL_META["profile_id"]: {
+                **_OPERATIONAL_META,
+                **operational.as_dict(),
+            }
+        },
         "ruleset_version": ruleset_version,
         # AIBOM carries no SPDX license-list concept of its own — `licensing`
         # is a free-text Table 10 element, not an SPDX expression. Empty

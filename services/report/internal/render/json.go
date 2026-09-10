@@ -48,6 +48,19 @@ type Bundle struct {
 	Documents BundleDocuments `json:"documents"`
 
 	Notes []string `json:"notes"`
+
+	// NormalizeDiagnostics is what normalization could not resolve in this
+	// document. Structured rather than folded into Notes, because a machine
+	// consumer of the JSON bundle should be able to act on the code without
+	// parsing prose. See migrations/normalize/0017.
+	NormalizeDiagnostics []BundleDiagnostic `json:"normalize_diagnostics,omitempty"`
+}
+
+// BundleDiagnostic is one normalization diagnostic in the JSON bundle.
+type BundleDiagnostic struct {
+	Severity string `json:"severity,omitempty"`
+	Code     string `json:"code,omitempty"`
+	Message  string `json:"message,omitempty"`
 }
 
 // BundleReport is the report's own metadata.
@@ -100,6 +113,18 @@ type BundleCanonical struct {
 	CryptoAssets  []CryptoAsset  `json:"crypto_assets,omitempty"`
 	QuantumDevice *QuantumDevice `json:"quantum_device,omitempty"`
 	AIModels      []AIModel      `json:"ai_models,omitempty"`
+	// AIAssets carries the prompts, vector stores, RAG pipelines and inference
+	// endpoints no CERT-In Table 10 element covers. Present in the JSON export
+	// specifically BECAUSE it is the machine-readable one: a consumer building
+	// its own view of an AI surface should not have to read a spreadsheet to
+	// learn a repository ships six of them.
+	AIAssets []AIAsset `json:"ai_assets,omitempty"`
+	// SupplementaryCoverage carries the scored, NON-compliance field sets, each
+	// with its own label and an `is_compliance` flag. Present in the JSON export
+	// specifically because it is the machine-readable one: a consumer
+	// aggregating coverage across projects must be able to tell which number
+	// carries a standard behind it, and a naming convention is not checkable.
+	SupplementaryCoverage []SupplementaryCoverage `json:"supplementary_coverage,omitempty"`
 	// Hardware carries the assembly tree with its manufacturing and
 	// procurement columns.
 	//
@@ -163,18 +188,21 @@ func WriteJSON(b BOM, spdx, cyclonedx []byte) ([]byte, error) {
 		},
 		Practices: b.Practices,
 		Canonical: BundleCanonical{
-			Components:    b.Components,
-			Findings:      b.Findings,
-			Licenses:      b.Licenses,
-			CryptoAssets:  b.CryptoAssets,
-			QuantumDevice: b.QuantumDevice,
-			AIModels:      b.AIModels,
-			Hardware:      b.Hardware,
+			Components:            b.Components,
+			Findings:              b.Findings,
+			Licenses:              b.Licenses,
+			CryptoAssets:          b.CryptoAssets,
+			QuantumDevice:         b.QuantumDevice,
+			AIModels:              b.AIModels,
+			AIAssets:              b.AIAssets,
+			SupplementaryCoverage: b.SupplementaryCoverage,
+			Hardware:              b.Hardware,
 		},
 		// ⚠ TypeNotes, NOT JUST b.Notes. The honesty label for this BOM type
 		// used to be appended only inside Sheets(), so it reached the XLSX
 		// and never this bundle — see render.TypeNotes.
-		Notes: orEmpty(append(append([]string{}, b.Notes...), TypeNotes(b)...)),
+		Notes:                orEmpty(append(append([]string{}, b.Notes...), TypeNotes(b)...)),
+		NormalizeDiagnostics: bundleDiagnostics(b.NormalizeDiagnostics),
 	}
 
 	if len(spdx) > 0 {
@@ -216,4 +244,18 @@ func orEmpty(items []string) []string {
 		return []string{}
 	}
 	return items
+}
+
+// bundleDiagnostics converts render diagnostics into the bundle's shape.
+func bundleDiagnostics(in []NormalizeDiagnostic) []BundleDiagnostic {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]BundleDiagnostic, 0, len(in))
+	for _, d := range in {
+		// A direct conversion: the two shapes are deliberately identical, and the
+		// compiler is what keeps them that way if either gains a field.
+		out = append(out, BundleDiagnostic(d))
+	}
+	return out
 }

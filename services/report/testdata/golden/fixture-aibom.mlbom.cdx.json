@@ -1,0 +1,245 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-09-05T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "AxeBOM",
+          "version": "0.1.0"
+        }
+      ]
+    },
+    "component": {
+      "bom-ref": "axebom:project",
+      "type": "application",
+      "name": "matrix-fixture"
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "axebom:model:purl:pkg:huggingface/matrix/aibom-model",
+      "type": "machine-learning-model",
+      "authors": [
+        {
+          "name": "Matrix Systems"
+        }
+      ],
+      "name": "matrix-aibom-model",
+      "version": "1.0",
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:huggingface/matrix/aibom-model",
+      "properties": [
+        {
+          "name": "axebom:aibom:evidence",
+          "value": "src/app.py:17"
+        },
+        {
+          "name": "axebom:aibom:found_by",
+          "value": "ai-bom, airom"
+        },
+        {
+          "name": "axebom:aibom:identity_confidence",
+          "value": "high"
+        },
+        {
+          "name": "axebom:aibom:identity_rule",
+          "value": "hf_repo"
+        },
+        {
+          "name": "axebom:aibom:model_key",
+          "value": "purl:pkg:huggingface/matrix/aibom-model"
+        },
+        {
+          "name": "axebom:aibom:owasp_llm_top10",
+          "value": "LLM01"
+        },
+        {
+          "name": "axebom:aibom:risk_score",
+          "value": "7.50"
+        },
+        {
+          "name": "axebom:aibom:verified",
+          "value": "true"
+        },
+        {
+          "name": "certin.aibom.01.model_name",
+          "value": "matrix-aibom-model"
+        },
+        {
+          "name": "certin.aibom.02.model_version",
+          "value": "1.0"
+        },
+        {
+          "name": "certin.aibom.03.model_type",
+          "value": "text-generation"
+        },
+        {
+          "name": "certin.aibom.04.model_developer",
+          "value": "Matrix Systems"
+        },
+        {
+          "name": "certin.aibom.05.licensing",
+          "value": "Apache-2.0"
+        },
+        {
+          "name": "certin.aibom.07.ml_models_algorithms",
+          "value": "MatrixForCausalLM"
+        },
+        {
+          "name": "certin.aibom.11.hardware",
+          "value": "not-provided"
+        },
+        {
+          "name": "certin.aibom.12.security_requirements",
+          "value": "runs inside the VPC"
+        },
+        {
+          "name": "certin.aibom.13.input",
+          "value": "text"
+        },
+        {
+          "name": "certin.aibom.14.output",
+          "value": "text"
+        },
+        {
+          "name": "certin.aibom.15.intended_usage",
+          "value": "internal triage only"
+        },
+        {
+          "name": "certin.aibom.16.out_of_scope_usage",
+          "value": "never for medical advice"
+        }
+      ],
+      "modelCard": {
+        "bom-ref": "axebom:model:purl:pkg:huggingface/matrix/aibom-model:card",
+        "modelParameters": {
+          "task": "text-generation",
+          "modelArchitecture": "MatrixForCausalLM",
+          "datasets": [
+            {
+              "ref": "axebom:model:purl:pkg:huggingface/matrix/aibom-model:dataset:matrix-dataset"
+            }
+          ],
+          "inputs": [
+            {
+              "format": "text"
+            }
+          ],
+          "outputs": [
+            {
+              "format": "text"
+            }
+          ]
+        },
+        "considerations": {
+          "useCases": [
+            "internal triage only"
+          ],
+          "technicalLimitations": [
+            "Out of scope: never for medical advice",
+            "Security requirements: runs inside the VPC"
+          ]
+        }
+      }
+    },
+    {
+      "bom-ref": "axebom:model:purl:pkg:huggingface/matrix/aibom-model:dataset:matrix-dataset",
+      "type": "data",
+      "name": "matrix-dataset",
+      "licenses": [
+        {
+          "license": {
+            "name": "CC-BY-4.0"
+          }
+        }
+      ],
+      "data": [
+        {
+          "bom-ref": "axebom:model:purl:pkg:huggingface/matrix/aibom-model:dataset:matrix-dataset:data",
+          "type": "dataset",
+          "name": "matrix-dataset",
+          "contents": {
+            "url": "https://example.test/matrix-dataset"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "axebom:asset:prompt:src/app.py:9",
+      "type": "data",
+      "name": "system-prompt",
+      "properties": [
+        {
+          "name": "axebom:aibom:asset_type",
+          "value": "prompt"
+        },
+        {
+          "name": "axebom:aibom:evidence",
+          "value": "src/app.py:9"
+        }
+      ]
+    },
+    {
+      "bom-ref": "axebom:asset:vector_store:chroma",
+      "type": "application",
+      "name": "chroma",
+      "properties": [
+        {
+          "name": "axebom:aibom:asset_type",
+          "value": "vector_store"
+        },
+        {
+          "name": "axebom:aibom:provider",
+          "value": "chroma"
+        }
+      ]
+    }
+  ],
+  "services": [
+    {
+      "bom-ref": "axebom:service:endpoint:openai",
+      "provider": {
+        "name": "openai"
+      },
+      "name": "OpenAI API",
+      "properties": [
+        {
+          "name": "axebom:aibom:asset_type",
+          "value": "endpoint"
+        },
+        {
+          "name": "axebom:aibom:serves_model",
+          "value": "gpt-4o"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "axebom:model:purl:pkg:huggingface/matrix/aibom-model",
+      "dependsOn": [
+        "axebom:model:purl:pkg:huggingface/matrix/aibom-model:dataset:matrix-dataset",
+        "purl:pkg:pypi/transformers@4.44.2"
+      ]
+    },
+    {
+      "ref": "axebom:project",
+      "dependsOn": [
+        "axebom:asset:prompt:src/app.py:9",
+        "axebom:asset:vector_store:chroma",
+        "axebom:model:purl:pkg:huggingface/matrix/aibom-model"
+      ]
+    }
+  ]
+}

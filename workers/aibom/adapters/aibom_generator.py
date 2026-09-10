@@ -29,6 +29,13 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+#: The two keys of the enrichment envelope — aibom-generator's own CycloneDX
+#: document, and what the Hugging Face Hub itself said. Declared here, beside the
+#: parser that reads them, and imported by the fetcher that writes them, so the
+#: two halves of one contract cannot drift apart.
+_GENERATOR_KEY = "aibom_generator"
+_HUB_KEY = "huggingface"
+
 #: How long a cached model card stays fresh.
 #:
 #: ⚠ THE SAME BASE MODEL APPEARS ACROSS MANY PROJECTS, and a model card changes
@@ -58,6 +65,11 @@ class ModelCard:
     #: into our coverage number — it scores a different thing against different
     #: rules.
     source_completeness: float | None = None
+    #: What could not be established, in the publisher's terms, ready to become
+    #: diagnostics. A value this parser DECLINED to use belongs here rather than
+    #: nowhere: a field that quietly stays `not-provided` because we distrusted
+    #: the number is invisible, and invariant 12 exists to stop exactly that.
+    notes: tuple[str, ...] = ()
 
 
 class Fetcher(Protocol):
@@ -196,6 +208,18 @@ def enrich_models(
         card = parse_model_card(ref, revision, raw)
         cache.put(ref, revision, card)
         out.cards[ref] = card
+        # ⚠ A VALUE THIS PARSER DECLINED TO USE IS REPORTED, NOT DROPPED. The
+        # model enriched; one of its elements still came back `not-provided`
+        # because the only source for it was a scrape of English prose. Saying so
+        # is what stops that gap reading as "the publisher declared nothing".
+        for note in card.notes:
+            out.diagnostics.append(
+                {
+                    "severity": "info",
+                    "code": "AIBOM_ENRICHMENT_VALUE_REJECTED",
+                    "message": note,
+                }
+            )
 
     out.cache_hits = cache.hits
     out.cache_misses = cache.misses
@@ -210,24 +234,149 @@ def parse_model_card(model_ref: str, revision: str, raw: dict[str, Any]) -> Mode
     honest response is `not-provided` in the report rather than a plausible
     default here.
     """
-    component = _first_model_component(raw)
+    generated, hub = _split_envelope(raw)
+    card_data = hub.get("card_data") if isinstance(hub.get("card_data"), dict) else {}
+
+    component = _first_model_component(generated)
     props = _properties(component)
     model_card = _model_card_section(component)
+
+    notes: list[str] = []
+    license_value = _resolved_license(component, card_data, model_ref, notes)
+    datasets = _resolved_datasets(model_card, card_data, model_ref, notes)
 
     return ModelCard(
         model_ref=model_ref,
         revision=revision or _string(component.get("version")),
         name=_string(component.get("name")) or model_ref,
         developer=_developer(component, props),
-        license=_license(component),
-        model_type=props.get("model_type", "") or _string(model_card.get("modelType")),
+        license=license_value,
+        model_type=_model_type(model_card, props),
         architectures=_list(props.get("architectures")),
-        datasets=_datasets(model_card),
+        datasets=datasets,
         performance_metrics=_metrics(model_card),
         input_modality=_modality(model_card, "inputs"),
         output_modality=_modality(model_card, "outputs"),
         source_completeness=_float(props.get("completeness_score")),
+        notes=tuple(notes),
     )
+
+
+def _split_envelope(raw: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Accept both the two-source envelope and a bare aibom-generator document.
+
+    ⚠ THE BARE FORM IS NOT LEGACY TOLERANCE, IT IS REPLAY. Raw artifacts are
+    immutable (invariant 10), so every enrichment response captured before the
+    envelope existed is still on disk and still has to normalize — under the same
+    rules, minus the half it does not carry.
+    """
+    generated = raw.get(_GENERATOR_KEY)
+    hub = raw.get(_HUB_KEY)
+    if isinstance(generated, dict):
+        return generated, hub if isinstance(hub, dict) else {}
+    return raw, {}
+
+
+def _resolved_license(
+    component: dict[str, Any],
+    card_data: dict[str, Any],
+    model_ref: str,
+    notes: list[str],
+) -> str:
+    """CERT-In Table 10's licence element, from the source that gets it right.
+
+    ⚠ THE HUB'S OWN FIELD, NOT AIBOM-GENERATOR'S PARSE OF THE PROSE.
+
+    aibom-generator re-reads the rendered model card and returns the licence with
+    the next word of the document glued to it. Measured against the Hub's own
+    `card_data.license` for three real models in this session:
+
+        distilbert-base-uncased   "apache-2.0 datasets"  vs  apache-2.0
+        gpt2                      "mit ---"              vs  mit
+        all-MiniLM-L6-v2          "apache-2.0 library"   vs  apache-2.0
+
+    Every one of those is wrong, and a wrong licence in a compliance document is
+    worse than an absent one — a reader acts on it. So the structured field wins
+    outright when it is there.
+
+    When it is not, aibom-generator's value is used only if it is a single token:
+    the observed corruption is always "identifier + stray word", so whitespace is
+    the signal that we are looking at the corruption rather than at a licence.
+    (A genuine multi-part expression — `Apache-2.0 OR MIT` — arrives through
+    CycloneDX's `expression` field, which `_license` returns before it ever looks
+    at `license.name`.)
+    """
+    hub_license = _string(card_data.get("license"))
+    if hub_license:
+        return hub_license
+
+    generated_license = _license(component)
+    if not generated_license or " " not in generated_license:
+        return generated_license
+
+    notes.append(
+        f"{model_ref}: aibom-generator reported the licence as "
+        f"{generated_license!r}, which is its parse of the card's prose rather "
+        f"than a licence identifier, and the model card declares none in its "
+        f"structured metadata — so the licence is recorded as not-provided"
+    )
+    return ""
+
+
+def _resolved_datasets(
+    model_card: dict[str, Any],
+    card_data: dict[str, Any],
+    model_ref: str,
+    notes: list[str],
+) -> list[dict[str, str]]:
+    """The training datasets a publisher actually DECLARED.
+
+    ⚠ AIBOM-GENERATOR'S DATASET LIST IS SCRAPED OUT OF ENGLISH PROSE AND IS NOT
+    USABLE. Real output, this session:
+
+        distilbert-base-uncased   ["consisting"]  vs  bookcorpus, wikipedia
+        gpt2                      ["one", "a"]    vs  (none declared)
+        all-MiniLM-L6-v2          ["given"]       vs  21 real dataset ids
+
+    `consisting`, `one`, `a` and `given` are words from a sentence. Writing them
+    into Table 10 as a model's training data is fabrication in the precise sense
+    the product forbids, and the tool tells us so itself: it sets
+    `genai:aibom:trainingDataAvailable = "false"` and attaches a warning saying
+    the datasets "could not be verified on Hugging Face Hub".
+
+    The model card's `datasets:` front matter is the declaration — machine-written
+    by the publisher, and a list of real Hub dataset ids. It is used when present;
+    otherwise nothing is recorded and the gap is stated.
+    """
+    declared = card_data.get("datasets")
+    if isinstance(declared, str):
+        declared = [declared]
+    if isinstance(declared, list):
+        out = [
+            {
+                "name": name,
+                "type": "dataset",
+                "license": "",
+                "source": f"https://huggingface.co/datasets/{name}",
+            }
+            for name in (_string(d) for d in declared)
+            if name
+        ]
+        if out:
+            return out
+
+    scraped = _datasets(model_card)
+    if not scraped:
+        return []
+
+    notes.append(
+        f"{model_ref}: aibom-generator named "
+        f"{', '.join(repr(d['name']) for d in scraped[:5])} as training data by "
+        f"reading the card's prose, and reports it could not verify them on "
+        f"Hugging Face; the model card declares no datasets in its structured "
+        f"metadata, so none are recorded"
+    )
+    return []
 
 
 def _first_model_component(raw: dict[str, Any]) -> dict[str, Any]:
@@ -241,6 +390,36 @@ def _first_model_component(raw: dict[str, Any]) -> dict[str, Any]:
         }:
             return c
     return {}
+
+
+def _model_type(model_card: dict[str, Any], props: dict[str, str]) -> str:
+    """CERT-In Table 10 element 03 — the model's TYPE, in CERT-In's own sense.
+
+    ⚠ THE TASK, NOT THE ARCHITECTURE FAMILY, AND THE ORDER USED TO BE BACKWARDS.
+    Table 10's own examples for this element are `text-generation`,
+    `image-processing`, `image-classifier` — all of them TASKS. Real
+    aibom-generator output for `distilbert-base-uncased` carries
+    `modelParameters.task = "fill-mask"` and a vendor property
+    `model_type = "distilbert"`; reading the property first put the architecture
+    family in the element CERT-In defines by task, and `distilbert` is not one of
+    the things Table 10 is asking about.
+
+    It was also the third copy of a fact already recorded twice: `architectures`
+    (`DistilBertForMaskedLM`) feeds element 07, and `modelArchitecture` says it
+    again. The vendor property stays as the last fallback — a card that gives
+    nothing else is better described by it than by nothing.
+    """
+    parameters = model_card.get("modelParameters")
+    if isinstance(parameters, dict):
+        task = _string(parameters.get("task"))
+        if task:
+            return task
+
+    declared = _string(model_card.get("modelType"))
+    if declared:
+        return declared
+
+    return props.get("model_type", "")
 
 
 def _model_card_section(component: dict[str, Any]) -> dict[str, Any]:

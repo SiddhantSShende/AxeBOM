@@ -2,6 +2,8 @@ package events_test
 
 import (
 	"encoding/json"
+	"fmt"
+	"maps"
 	"strings"
 	"testing"
 	"time"
@@ -569,4 +571,84 @@ func TestNegativeCountsAreRejected(t *testing.T) {
 	if !strings.Contains(err.Error(), "summary.components") {
 		t.Errorf("the error does not name the field: %v", err)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Discovery metrics
+// ---------------------------------------------------------------------------
+
+// TestADiscoveryKeyIsHeldToTheSameStandardAsTheMessage.
+//
+// ⚠ `Message` HAS BEEN GUARDED SINCE PHASE 6 AND `Metrics` NEVER WAS, because
+// until now nothing filled it. A key is as much of a string as a message is, and
+// an engine that built one out of a filename would put a customer's path into a
+// browser through the one field the guard did not cover. BOM content is
+// confidential under CERT-In §5.3; the live feed carries counts and kinds only.
+func TestADiscoveryKeyIsHeldToTheSameStandardAsTheMessage(t *testing.T) {
+	t.Run("a key carrying a path is dropped, not published", func(t *testing.T) {
+		got, dropped := events.SanitizeDiscoveries(map[string]int64{
+			"ai_models":                  2,
+			"model:/src/secret/app.py":   1,
+			"C:\\Users\\acme\\train.py":  1,
+			"models found":               3,
+			"https://internal.acme/repo": 1,
+		})
+		if got["ai_models"] != 2 {
+			t.Errorf("the legitimate key did not survive: %v", got)
+		}
+		if len(got) != 1 {
+			t.Errorf("a key with a path, a space or a URL reached the feed: %v", got)
+		}
+		if dropped != 4 {
+			t.Errorf("dropped = %d, want 4 — the caller cannot say so if we do not count", dropped)
+		}
+	})
+
+	t.Run("a negative count is not a count", func(t *testing.T) {
+		got, dropped := events.SanitizeDiscoveries(map[string]int64{"ai_models": -1})
+		if got != nil || dropped != 1 {
+			t.Errorf("got %v / %d, want nil / 1", got, dropped)
+		}
+	})
+
+	t.Run("a measured zero is kept", func(t *testing.T) {
+		got, _ := events.SanitizeDiscoveries(map[string]int64{"ai_models": 0})
+		if v, present := got["ai_models"]; !present || v != 0 {
+			t.Errorf("got %v — 0 means 'looked, found none' and must survive", got)
+		}
+	})
+
+	t.Run("an engine emitting a key per finding is capped, deterministically", func(t *testing.T) {
+		// An engine keyed by finding rather than by kind turns an advisory event
+		// into an unbounded frame. The cap makes that a truncation; sorting
+		// makes the truncation the same on a redelivery.
+		in := map[string]int64{}
+		for i := range events.MaxDiscoveryKeys * 2 {
+			in[fmt.Sprintf("finding.%03d", i)] = 1
+		}
+		first, dropped := events.SanitizeDiscoveries(in)
+		if len(first) != events.MaxDiscoveryKeys {
+			t.Fatalf("len = %d, want %d", len(first), events.MaxDiscoveryKeys)
+		}
+		if dropped != events.MaxDiscoveryKeys {
+			t.Errorf("dropped = %d, want %d", dropped, events.MaxDiscoveryKeys)
+		}
+		second, _ := events.SanitizeDiscoveries(in)
+		if !maps.Equal(first, second) {
+			t.Error("two runs kept different keys; a redelivered event would " +
+				"disagree with the one before it")
+		}
+	})
+
+	t.Run("Sanitize runs the metrics through it", func(t *testing.T) {
+		// The guard has to be ON the envelope, not merely available next to it.
+		e := events.ScanEventV1{Metrics: map[string]int64{"/etc/passwd": 1, "components": 4}}
+		e.Sanitize()
+		if _, present := e.Metrics["/etc/passwd"]; present {
+			t.Error("Sanitize did not gate the metric keys")
+		}
+		if e.Metrics["components"] != 4 {
+			t.Errorf("Sanitize discarded a good key: %v", e.Metrics)
+		}
+	})
 }

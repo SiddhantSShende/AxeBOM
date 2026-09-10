@@ -551,6 +551,20 @@ func (h *Handler) Engines(w http.ResponseWriter, r *http.Request) {
 			// instruction only where one exists.
 			row["operator_action"] = e.OperatorAction
 		}
+		if e.Disabled {
+			// ⚠ LISTED, AND LABELLED — the opposite of the scaffold rule above,
+			// deliberately. A scaffold is not part of the product and must not
+			// appear; a disabled engine IS a real tool AxeBOM knows about and
+			// has decided not to run, and the decision is the thing worth
+			// showing. Without these two fields a reader cannot tell "AxeBOM
+			// does not know about this tool" from "AxeBOM chose not to run it".
+			//
+			// The UI must render it as a stated refusal with its reason, never
+			// as a toggle: Registry.Resolve refuses to dispatch it even when a
+			// tenant policy names it.
+			row["disabled"] = true
+			row["disabled_reason"] = e.DisabledReason
+		}
 		if run, ok := latest[e.ID]; ok {
 			row["last_run"] = map[string]any{
 				"scan_id":     run.ScanID,

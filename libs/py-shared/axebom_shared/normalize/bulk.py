@@ -274,6 +274,12 @@ def plan(
     out.batches.append(
         _ai_model_dependencies_batch(ai_models, tenant_id, bom_document_id, ai_model_ids)
     )
+    out.batches.append(
+        _ai_model_provenance_batch(ai_models, tenant_id, bom_document_id, ai_model_ids)
+    )
+    out.batches.append(
+        _ai_assets_batch(canonical.get("ai_assets") or [], tenant_id, bom_document_id)
+    )
 
     return out
 
@@ -1058,6 +1064,16 @@ def _ai_model_ids(models: Sequence[dict[str, Any]], bom_document_id: str) -> dic
 #: of their own on `ai_models` — writing them again here would just be a
 #: second, driftable copy of the same fact.
 _AI_MODEL_COLUMNS: tuple[str, ...] = (
+    # ⚠ IDENTITY FIRST, AND IT USED NOT TO BE HERE AT ALL. The merge key lived only
+    # in the transport-only `_identity` key this function reads and drops, so nothing
+    # in the database could say whether two rows were the same model — which is how
+    # one model became three. See migrations/normalize/0016.
+    "model_key",
+    "identity_rule",
+    "identity_confidence",
+    "source_engine",
+    "evidence",
+    "verified",
     "model_name",
     "model_version",
     "model_type",
@@ -1114,6 +1130,20 @@ def _ai_models_batch(
                 row.append(json.dumps(model.get("field_status") or {}))
             elif column == "performance_metrics":
                 row.append(json.dumps(model.get("performance_metrics") or {}))
+            elif column == "model_key":
+                # ⚠ DERIVED FROM `_identity`, NEVER A SECOND COPY OF IT. `_identity`
+                # already mints this row's surrogate id (`_ai_model_id`), so reading
+                # the same value here makes the stored key and the id agree by
+                # construction. Two independently-written fields that must match are
+                # two fields that will eventually not match.
+                row.append(_text(model.get("_identity")))
+            elif column == "evidence":
+                # Where each engine says it saw this model, verbatim. jsonb, because
+                # it grows a shape (engine, path, line) as engines that report one
+                # land; a text[] would have to be migrated to gain it.
+                row.append(json.dumps(_text_list(model.get("evidence"))))
+            elif column == "verified":
+                row.append(bool(model.get("verified")))
             elif column == "risk_score":
                 row.append(_numeric_or_none(model.get("risk_score")))
             elif column in _AI_MODEL_ARRAY_COLUMNS:
@@ -1233,6 +1263,123 @@ def _ai_model_dependencies_batch(
             if not key:
                 continue
             batch.rows.append((tenant_id, model_id, key))
+
+    return batch
+
+
+def _ai_model_provenance_batch(
+    models: Sequence[dict[str, Any]],
+    tenant_id: str,
+    bom_document_id: str,
+    ai_model_ids: dict[str, str],
+) -> CopyBatch:
+    """Plan the `normalize.ai_model_provenance` batch — which engines saw each model.
+
+    ⚠ `ai_models.source_engine` IS SINGULAR AND THE ANSWER IS NOT. Three AIBOM
+    engines discover independently and converge on the same `model_key`, so a
+    model legitimately has three finders — and "found by one engine, missed by
+    two" is the single most useful fact for a reviewer weighing how much to trust
+    a row. This is the AI counterpart of `_provenance_batch` above, which has
+    recorded exactly this for SBOM components since migration 0001.
+
+    Reads the pipeline-attached `_provenance` list, the same not-a-column
+    convention `_datasets` and `_dependencies` use.
+    """
+    batch = CopyBatch(
+        table="normalize.ai_model_provenance",
+        columns=(
+            "tenant_id",
+            "ai_model_id",
+            "engine_id",
+            "observed_name",
+            "confidence",
+            "evidence",
+        ),
+    )
+
+    for model in models:
+        model_id = ai_model_ids[_text(model.get("_identity"))]
+        seen: set[str] = set()
+        for entry in model.get("_provenance") or []:
+            engine_id = _text(entry.get("engine_id"))
+            # UNIQUE (ai_model_id, engine_id). One engine reporting the same
+            # model twice in one document is a duplicate sighting, already
+            # folded by `merge._absorb_usage`; this guards the constraint
+            # rather than relying on that.
+            if not engine_id or engine_id in seen:
+                continue
+            seen.add(engine_id)
+            batch.rows.append(
+                (
+                    tenant_id,
+                    model_id,
+                    engine_id,
+                    _text(entry.get("observed_name")) or None,
+                    _text(entry.get("confidence")) or None,
+                    json.dumps(list(entry.get("evidence") or [])),
+                )
+            )
+
+    return batch
+
+
+def _ai_assets_batch(
+    assets: Sequence[dict[str, Any]],
+    tenant_id: str,
+    bom_document_id: str,
+) -> CopyBatch:
+    """Plan the `normalize.ai_assets` batch — prompts, vector stores, RAG
+    pipelines, inference endpoints.
+
+    ⚠ WITHOUT THIS, THREE REAL DISCOVERIES ARE COMPUTED AND DROPPED. airom and
+    cdxgen-ai both report AI components that are neither models nor software
+    dependencies, and before migration 0018 there was nowhere to put any of
+    them — the engines would have run, found them, and produced a report that
+    mentioned none of it (CLAUDE.md invariant 12).
+
+    ⚠ NO CLIENT-MINTED ID, UNLIKE `_ai_models_batch`. Nothing in this write
+    references an asset's row, so `normalize.ai_assets.id` keeps its schema
+    DEFAULT — the same reasoning `_crypto_assets_batch` records.
+    """
+    batch = CopyBatch(
+        table="normalize.ai_assets",
+        columns=(
+            "tenant_id",
+            "bom_document_id",
+            "asset_type",
+            "asset_key",
+            "name",
+            "provider",
+            "evidence",
+            "serves_model_key",
+            "attributes",
+        ),
+    )
+
+    seen: set[str] = set()
+    for asset in assets:
+        asset_key = _text(asset.get("asset_key"))
+        asset_type = _text(asset.get("asset_type"))
+        name = _text(asset.get("name"))
+        # NOT NULL columns, and a UNIQUE (bom_document_id, asset_key). The
+        # normalizer mints the key, so an empty one means a bug upstream — skip
+        # rather than fail the whole write, which would lose the models too.
+        if not asset_key or not asset_type or not name or asset_key in seen:
+            continue
+        seen.add(asset_key)
+        batch.rows.append(
+            (
+                tenant_id,
+                bom_document_id,
+                asset_type,
+                asset_key,
+                name,
+                _text(asset.get("provider")) or None,
+                json.dumps(list(asset.get("evidence") or [])),
+                _text(asset.get("serves_model_key")) or None,
+                json.dumps(dict(asset.get("attributes") or {})),
+            )
+        )
 
     return batch
 

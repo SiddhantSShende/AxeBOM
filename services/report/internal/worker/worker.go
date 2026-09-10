@@ -447,6 +447,18 @@ func (w *Worker) renderArtifact(r store.Report, bom render.BOM) ([]byte, bool, s
 		}
 		return doc, false, "", nil
 
+	case "mlbom":
+		// ⚠ A DIFFERENT SERIALIZER, NOT A DIFFERENT FLAG. protobom cannot emit
+		// `modelCard` at all, so the generic CycloneDX path above produces a
+		// valid document in which every AI model is an unremarkable component —
+		// see export/mlbom.go's header.
+		doc, err := export.SerializeMLBOM(toMLDocument(bom))
+		if err != nil {
+			return nil, false, "", errs.Wrap(err, errs.ReportRenderFailed,
+				"serializing the ML-BOM")
+		}
+		return doc, false, "", nil
+
 	case "json":
 		spdx, err := export.Serialize(toExportDocument(bom), export.SPDX23JSON)
 		if err != nil {
@@ -776,6 +788,143 @@ func appendAIModels(doc *export.Document, b render.BOM) {
 	}
 }
 
+// toMLDocument maps the canonical AIBOM onto the ML-BOM serializer's input.
+//
+// ⚠ THIS IS THE SECOND MAPPING FOR ONE BOM TYPE, AND BOTH ARE WANTED.
+// `toExportDocument` produces the generic SPDX/CycloneDX view every BOM type
+// gets — an inventory of components. This produces the ML view: the same models
+// carrying `modelCard`, their datasets as `data` components, the inference
+// services as `services[]`. A consumer asking "what software is in this project"
+// wants the first; one asking "what is this model" wants the second, and neither
+// can be derived from the other.
+func toMLDocument(b render.BOM) export.MLDocument {
+	doc := export.MLDocument{
+		GeneratedAt: b.GeneratedAt,
+		DocumentID:  b.ReportID,
+		ProjectName: b.ProjectName,
+		ToolName:    b.ToolName,
+		ToolVersion: b.ToolVersion,
+	}
+
+	for _, m := range b.AIModels {
+		fields := m.Fields
+		datasets := make([]export.MLDataset, 0, len(m.Datasets))
+		for _, d := range m.Datasets {
+			datasets = append(datasets, export.MLDataset{
+				Name: d.Name, Version: d.Version, License: d.License,
+				Source: d.Source, Format: d.Format,
+			})
+		}
+		doc.Models = append(doc.Models, export.MLModel{
+			// ⚠ THE MODEL KEY, NOT THE DISPLAY NAME. It is what every other
+			// document about this model is keyed by; a bom-ref built from a name
+			// would not survive a model being renamed between scans.
+			Key:  mlModelKey(m),
+			Name: m.Name,
+			// ⚠ EVERY ONE OF THESE GOES THROUGH notProvidedToEmpty. A live
+			// export leaked `task: "not-provided"` into the ML-BOM and onward
+			// into SPDX 3.0's `typeOfModel`, because only licence and developer
+			// were filtered — the sentinel is how OUR document shows a gap, and
+			// exporting it asserts it as the answer to every tool that reads one.
+			Version: notProvidedToEmpty(fields[model.FieldCertinAibom02ModelVersion]),
+			Purl:    mlPurl(m),
+			Task:    notProvidedToEmpty(fields[model.FieldCertinAibom03ModelType]),
+			Licenses: strings.TrimSpace(
+				notProvidedToEmpty(fields[model.FieldCertinAibom05Licensing])),
+			Author: notProvidedToEmpty(fields[model.FieldCertinAibom04ModelDeveloper]),
+			Architectures: splitList(
+				notProvidedToEmpty(fields[model.FieldCertinAibom07MlModelsAlgorithms])),
+			Inputs:               notProvidedToEmpty(fields[model.FieldCertinAibom13Input]),
+			Outputs:              notProvidedToEmpty(fields[model.FieldCertinAibom14Output]),
+			Datasets:             datasets,
+			Dependencies:         m.Dependencies,
+			Evidence:             m.Evidence,
+			FoundBy:              m.FoundBy,
+			Verified:             m.Verified,
+			IdentityRule:         m.IdentityRule,
+			IdentityConfidence:   m.IdentityConfidence,
+			IntendedUsage:        fields[model.FieldCertinAibom15IntendedUsage],
+			OutOfScopeUsage:      fields[model.FieldCertinAibom16OutOfScopeUsage],
+			SecurityRequirements: fields[model.FieldCertinAibom12SecurityRequirements],
+			EnvironmentalImpact:  fields[model.FieldCertinAibom17EnvironmentalImpact],
+			Fields:               fields,
+			RiskScore:            m.RiskScore,
+			OwaspLLMTop10:        m.OwaspLLMTop10,
+		})
+	}
+
+	for _, a := range b.AIAssets {
+		doc.Assets = append(doc.Assets, export.MLAsset{
+			Type: a.Type, Key: a.Key, Name: a.Name, Provider: a.Provider,
+			ServesModel: a.ServesModel, Evidence: a.Evidence,
+		})
+	}
+	return doc
+}
+
+// mlModelKey is the stable identity a bom-ref is built from.
+//
+// The render layer does not carry `model_key` on an AIModel today — the AIBOM
+// screens read it from services/aibom — so the name is the fallback, and it is
+// an honest one: within a single document the model names are already distinct
+// (they come from rows keyed by model_key).
+func mlModelKey(m render.AIModel) string {
+	// ⚠ THE MERGE KEY FIRST. Two scans of one project produce two documents; a
+	// bom-ref built from a display name would not survive the model being
+	// renamed upstream, and would collide the moment two models shared a name.
+	if m.ModelKey != "" {
+		return m.ModelKey
+	}
+	if m.Name != "" {
+		return m.Name
+	}
+	return "unnamed"
+}
+
+// mlPurl returns a real package URL for a model, or "".
+//
+// ⚠ ONLY THE `purl:` TIER OF THE IDENTITY LADDER IS ONE. A model identified as
+// `api:openai/gpt-4o`, `name:huggingface/distilbert-base-uncased` or
+// `opaque:<uuid>` has no package URL at all, and minting one would put an
+// identifier in the field a consumer RESOLVES, pointing at nothing — with the
+// resolution failing later reading as our document being wrong, which it would
+// be. The full key travels on `axebom:aibom:model_key` regardless.
+func mlPurl(m render.AIModel) string {
+	const prefix = "purl:"
+	if strings.HasPrefix(m.ModelKey, prefix) {
+		return strings.TrimPrefix(m.ModelKey, prefix)
+	}
+	return ""
+}
+
+// notProvidedToEmpty drops the explicit sentinel.
+//
+// ⚠ INVARIANT 3 REQUIRES THE GAP TO BE VISIBLE IN *OUR* DOCUMENT, and the
+// sentinel is how it is. Emitting the literal string "not-provided" as a
+// model's licence in a CycloneDX file would assert that as the licence to every
+// tool that reads it; absence is how the standard says "not stated".
+func notProvidedToEmpty(v string) string {
+	if strings.EqualFold(strings.TrimSpace(v), model.NotProvided) {
+		return ""
+	}
+	return v
+}
+
+// splitList turns a rendered comma-separated cell back into a list.
+func splitList(v string) []string {
+	if strings.TrimSpace(v) == "" {
+		return nil
+	}
+	parts := strings.Split(v, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func appendQuantumDevice(doc *export.Document, b render.BOM) {
 	d := b.QuantumDevice
 	if d == nil {
@@ -994,6 +1143,10 @@ func mediaType(format string) string {
 	case "spdx":
 		return export.SPDX23JSON.MediaType()
 	case "cyclonedx":
+		return export.CycloneDX16JSON.MediaType()
+	case "mlbom":
+		// The same media type as any other CycloneDX 1.6 document, because it IS
+		// one. What makes it an ML-BOM is its contents.
 		return export.CycloneDX16JSON.MediaType()
 	default:
 		return render.JSONMediaType

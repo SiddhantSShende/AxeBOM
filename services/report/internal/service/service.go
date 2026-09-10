@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/axebom/axebom/libs/go-shared/model"
@@ -185,16 +187,28 @@ func parseLevel(raw string) (level.Level, error) {
 		"level %q is not a CERT-In BOM level", raw)
 }
 
+// Formats are every renderable report format, as DATA.
+//
+// ⚠ IT USED TO BE A `switch` AND THE DATABASE DISAGREED WITH IT. `report.reports`
+// carries a CHECK constraint over the same set; adding `mlbom` to the Go switch
+// and not to the constraint produced a 500 at INSERT — the API accepted a format
+// nothing could store. A closed set in Go and a closed set in SQL are two
+// statements of one rule, and they drift the moment only one is updated.
+//
+// `TestTheRenderableFormatsMatchTheDatabaseConstraint` compares this slice with
+// the migration's CHECK, so the next format is a failing test rather than a
+// runtime error a customer finds.
+var Formats = []string{"pdf", "docx", "xlsx", "json", "spdx", "cyclonedx", "mlbom"}
+
 func parseFormat(raw string) (string, error) {
-	switch raw {
-	case "pdf", "docx", "xlsx", "json", "spdx", "cyclonedx":
-		return raw, nil
-	case "":
+	if raw == "" {
 		return "", errs.New(errs.ValidationFieldRequired, "format is required")
-	default:
-		return "", errs.Newf(errs.ValidationFieldInvalid,
-			"format %q is not produced; want one of pdf, docx, xlsx, json, spdx, cyclonedx", raw)
 	}
+	if slices.Contains(Formats, raw) {
+		return raw, nil
+	}
+	return "", errs.Newf(errs.ValidationFieldInvalid,
+		"format %q is not produced; want one of %s", raw, strings.Join(Formats, ", "))
 }
 
 // parseStandard derives the standard when the format already implies it.
@@ -206,6 +220,12 @@ func parseStandard(raw, format string) (string, error) {
 	implied := map[string]string{
 		"spdx":      "SPDX",
 		"cyclonedx": "CycloneDX",
+		// ⚠ AN ML-BOM IS CycloneDX. It is the same specification, the same
+		// schema and the same validator — what makes it an ML-BOM is that the
+		// components carry `modelCard`, which is a content difference, not a
+		// format one. Treating it as its own standard would invite a caller to
+		// believe there is a second schema to validate against.
+		"mlbom": "CycloneDX",
 	}[format]
 
 	if raw == "" {
@@ -388,6 +408,11 @@ func StorageKey(tenantID, reportID, format string) string {
 		ext = "spdx.json"
 	case "cyclonedx":
 		ext = "cdx.json"
+	case "mlbom":
+		// A distinct extension, because it is a distinct document with distinct
+		// contents — a customer with both downloaded needs to be able to tell
+		// them apart without opening either.
+		ext = "mlbom.cdx.json"
 	}
 	return fmt.Sprintf("reports/%s/%s.%s", tenantID, reportID, ext)
 }

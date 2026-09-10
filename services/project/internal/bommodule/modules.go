@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/axebom/axebom/libs/go-shared/model"
-	"github.com/axebom/axebom/services/project/internal/aibom"
 )
 
 // The five modules.
@@ -65,6 +64,13 @@ func (qbomModule) Sources() []string { return model.RegistrationSources(model.BO
 // nothing anywhere saying why.
 func (qbomModule) DependsOn() []model.BOMType { return []model.BOMType{model.BOMTypeCBOM} }
 
+// ⚠ AtRegistration, BECAUSE THE WIZARD CAN ACTUALLY ASK FOR THIS AND USED NOT
+// TO. Table 8's elements are per-PROJECT and depend on nothing that has to
+// exist first — no scan, no discovered model, no imported row — so every fact
+// the form needs is available while somebody is filling in the registration.
+// Deferring it made registration identical for all five types and turned the
+// one input a QBOM cannot do without into a checklist item read later, if at
+// all.
 func (qbomModule) Requirements() []Requirement {
 	return []Requirement{{
 		ID:    "qbom.device_metadata",
@@ -72,7 +78,8 @@ func (qbomModule) Requirements() []Requirement {
 		Detail: "CERT-In Table 8's device elements are the one part of a QBOM " +
 			"that no scan can produce — there is no quantum-hardware scanner. " +
 			"Until the form is filled, this project has no QBOM document at all.",
-		Required: true,
+		AtRegistration: true,
+		Required:       true,
 	}}
 }
 
@@ -89,7 +96,7 @@ func (aibomModule) Requirements() []Requirement {
 	// CERT-In revision that adds a user-supplied Table 10 element changes this
 	// sentence with no Go change; writing "four" here is exactly how a product
 	// ships a false claim when the guideline is revised.
-	n := len(aibom.UserSuppliedFormFields())
+	n := len(model.UserSuppliedAIBOMFields())
 	return []Requirement{{
 		ID:    "aibom.user_fields",
 		Title: "Complete the Table 10 elements no tool reports",
@@ -99,7 +106,16 @@ func (aibomModule) Requirements() []Requirement {
 				"are recorded per model, on the model itself, once a scan has "+
 				"found it. Until then they count as not-provided and reduce "+
 				"completeness.", n),
-		Required: true,
+		// ⚠ DELIBERATELY NOT AtRegistration, AND THIS IS THE ONE THAT CANNOT
+		// MOVE. These elements are recorded per MODEL, and no model exists
+		// until a scan has discovered one — so a registration form for them
+		// would have no rows to attach to and could only ask the customer to
+		// describe models they have not been told they have. QBOM's and HBOM's
+		// requirements are per-project and therefore askable up front; this one
+		// stays a task on the project, which is a fact about Table 10's shape
+		// rather than an omission.
+		AtRegistration: false,
+		Required:       true,
 	}}
 }
 
@@ -125,6 +141,13 @@ func (hbomModule) Requirements() []Requirement {
 			"device you register, a parts file you import, design files in the " +
 			"repository, or a collector you ran on the machine yourself — so " +
 			"until one of those exists this project has no hardware to report.",
-		Required: true,
+		// ⚠ AtRegistration EVEN THOUGH THE OTHER THREE PATHS ARE NOT THE
+		// WIZARD'S. Registering the device is, and it is the one of the four
+		// that always applies: an imported parts file, a parsed schematic and a
+		// collector report all describe a device, so asking which device this
+		// project is about is never wasted work — and on a `manual` project it
+		// is the only thing that will ever produce a document.
+		AtRegistration: true,
+		Required:       true,
 	}}
 }

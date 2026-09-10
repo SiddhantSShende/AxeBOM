@@ -30,6 +30,35 @@ Every envelope carries `schema_version` as `<name>/v<N>`. Rules:
 
 `<family>` ∈ `fetch`, `webrecon`, `sbom`, `cbom`, `qbom`, `aibom`, `hbom`.
 
+> **One engine's jobs go to a longer subject: `scan.job.aibom.enrich`.**
+> `aibom-generator` belongs to the `aibom` family for REPORTING — it is an AIBOM
+> engine and its status has to appear in that family's Engine Coverage — but it is
+> consumed by `workers/aienrich`, a separate deployable, because it is the only
+> part of the AI path that touches the network and keeping it out of the image
+> that processes customer repositories is the point of splitting it (it asks a
+> public API about a model *identifier*; it never sees customer source).
+>
+> Four tokens, so `workers/aibom`'s exact-match `scan.job.aibom` filter never
+> receives it — **verified against the running server**, not assumed: a
+> `scan.job.aibom` consumer's `num_pending` does not move when a message lands on
+> the four-token subject, and both consumers coexist on the WorkQueue stream with
+> non-overlapping filters. It still REPORTS on `scan.result.aibom`, which the
+> orchestrator's existing `orchestrator-aibom` durable already consumes, so
+> nothing downstream needs to know this happened.
+>
+> The subject is declared once, on `policy.Engine.JobSubject`; every engine that
+> declares none is published to its family's own subject exactly as before. Its
+> DLQ is `scan.dlq.aibom.enrich`, matched by `scan.dlq.>`.
+>
+> **Ordering is the existing dependent mechanism, not a new one.**
+> `aibom-generator` sets `ConsumesOutputOf: "ai-bom"`, so `FanOut` holds it back,
+> `releaseDependents` publishes it once ai-bom has produced the discovery it
+> enriches, and `skipDependent` marks it `skipped` with a stated cause if ai-bom
+> produced nothing — the same path grype takes behind syft. Because its run is
+> not terminal until enrichment reports, `familyTerminal` is false and the
+> AIBOM `NormalizeTriggerV1` does not fire early. That is what makes enrichment
+> land in the FIRST normalization rather than needing a second version.
+
 > **`webrecon` is `fetch`'s sibling, not a variant of it.** `CreateScan` publishes `scan.job.webrecon` INSTEAD of `scan.job.fetch` when `source_kind == url` — services/webrecon (subdomain discovery + JS fingerprinting, project-registration plan Milestone 5) materializes a url source's input the way the fetcher materializes a git/upload source's, but produces a native discovery document instead of a source archive. Both are "producer" families: `ScanJobV1.Validate` exempts only these two from requiring `workspace.artifact_uri`/`workspace.native_sbom_ref` to already be set on THEIR OWN job.
 
 > **`SCAN_EVENTS` is advisory and lossy-tolerant. The database is the source of truth.** If the WebSocket drops or an event is lost, a page refresh reads state from Postgres and is correct. **No event is ever required for correctness** — building progress logic that depends on receiving every event is a bug.
@@ -285,7 +314,33 @@ The normalize consumer is the **only** worker-side process that holds a Postgres
 
 Adapters are keyed on a stable `engine_id`. **The unit is (tool, mode), not tool** — `trivy fs` and `trivy image` have different capabilities and different parsers, so they are different engines.
 
-`syft` · `trivy-fs` · `trivy-image` · `grype` · `osv-scanner` · `dependency-check` · `github-dependency-graph-sbom` · `cbomkit-theia` · `cbomkit` · `aibom-generator` · `ai-bom` · `hbom-csv`
+`syft` · `syft-spdx` · `cdxgen` · `trivy-fs` · `trivy-image` · `grype` · `osv-scanner` · `dependency-check` · `github-dependency-graph-sbom` · `webrecon-fingerprint` · `cbomkit-theia` · `cbomkit` · `ai-bom` · `airom` · `cdxgen-ai` · `cisco-aibom` · `aibom-generator` · `hbom-csv` · `hbom-ecad` · `hbom-cdxgen-host` · `hbom-host-report`
+
+> **Two ids can share one image and one binary.** `syft`/`syft-spdx` and
+> `cdxgen`/`cdxgen-ai` each name one upstream artifact invoked two ways. They are
+> separate ids because a tool writes ONE document to stdout and the sandbox has no
+> writable host mount to collect a second from — and because the two passes cover
+> different things and can fail independently, which Engine Coverage has to report
+> separately.
+>
+> **An engine may be registered and never dispatched.** `cisco-aibom` carries
+> `disabled: true` and a stated `disabled_reason`: its `analyze` command always
+> requires `--llm-model`, which needs egress, an API key, and customer source sent
+> to a third-party LLM. `GET /v1/scans/engines` returns it with the reason, so a
+> reader can tell "AxeBOM does not know about this tool" from "AxeBOM chose not to
+> run it" — and `Registry.Resolve` refuses to dispatch it even when a tenant
+> override names it. It is deliberately **not** an `unavailable` engine RUN: a
+> permanent degraded row on every AIBOM scan would make `DeriveScanStatus` return
+> `completed_with_errors` for all of them, which trains a reader to ignore the
+> status that matters.
+>
+> **Some engines run nothing at all, and `mode: internal` says so.** `aibom-toml`
+> parses a file the customer committed; `aibom-k8s-runtime` and `aibom-glaas`
+> parse a document they uploaded. There is no container, binary or pip package to
+> resolve — pointing `upstream` at the tool whose FORMAT they read would make the
+> availability probe report them unavailable while they work perfectly, showing
+> in Engine Coverage as a false gap. The format reference lives in
+> `format_reference`, which nothing probes.
 
 Each declares:
 
@@ -335,11 +390,25 @@ GET /projects/{id}/dependencies?limit=100&cursor=<opaque>
 
 `total_estimate` is explicitly an estimate; an exact count over a partitioned table is too expensive to promise.
 
+**Report formats.** `pdf`, `docx`, `xlsx`, `json`, `spdx`, `cyclonedx`, `mlbom`. The set is DATA (`service.Formats`), and `report.reports` carries a CHECK over the same values — a format added to one and not the other produces an endpoint that validates the request and then 500s at INSERT, which is exactly how `mlbom` first behaved. `TestTheRenderableFormatsMatchTheDatabaseConstraint` compares the two.
+
+> `mlbom` is CycloneDX 1.6 and maps onto the CycloneDX standard rather than a second one: what makes it an ML-BOM is that its components carry `modelCard`, which is a **content** difference, not a format one.
+
 **Idempotency.** `POST` endpoints that create work accept `Idempotency-Key`. Replaying within 24 h returns the original response.
 
 **Filtering.** `?filter[severity]=critical,high&filter[license]=GPL-3.0-only&filter[direct]=true`. Unknown filter keys are a 422, not silently ignored — silent ignoring produces a result set the user believes is filtered.
 
 **Rate limits.** `X-RateLimit-Limit` / `-Remaining` / `-Reset`. 429 carries `Retry-After`.
+
+**A key in a path stays percent-encoded, end to end.** Component keys and AI
+model keys are purls — `purl:pkg:pypi/langchain@0.3.7`,
+`purl:pkg:huggingface/meta-llama/Llama-3-8B` — so a route pattern with a
+single-segment wildcard only matches when `%2F` survives the hop. The gateway's
+`Rewrite` hook trims the `/api` prefix from **both** `URL.Path` and
+`URL.RawPath`; it used to clear RawPath, which decoded every escaped slash into
+a real separator and made every purl-keyed detail endpoint 404 through the
+gateway while matching perfectly against the service directly. See
+`TestAPercentEncodedSlashSurvivesTheProxy`.
 
 ### Surface
 
@@ -392,7 +461,21 @@ GET    /vex/:id/csaf
 GET    /campaigns                    POST /campaigns
 PATCH  /campaigns/:id                POST /campaigns/:id/run-now
 GET    /campaigns/:id/runs
+
+# services/aibom — the whole /v1/aibom prefix. Moved off services/project, which
+# used to serve /v1/aibom/:projectId/form AND write operator answers onto
+# normalize.ai_models with an UPDATE. See docs/01-DATA-MODEL.md's `aibom` schema.
+GET    /aibom/:projectId/form        GET  /aibom/:projectId/models
+PUT    /aibom/:projectId/models/:modelKey/fields                # :modelKey is a purl; see the escaping rule above
+GET    /aibom/:projectId/policy      PUT  /aibom/:projectId/policy
+GET    /aibom/:projectId/tags        PUT  /aibom/:projectId/tags
+GET    /aibom/:projectId/attestations  POST /aibom/:projectId/attestations
 ```
+
+> **`/v1/aibom` is served by `services/aibom`, and a prefix may be claimed by
+> exactly one upstream.** `proxy.New` refuses a duplicate at construction, so
+> moving the prefix could not have been half-done — project's list lost it in
+> the same change that gave it to the new service.
 
 **The GitHub "connect" flow is not sign-in, and returns a token, not a session.**
 `GET /auth/github/authorize`/`callback` resolves or creates an AxeBOM user and

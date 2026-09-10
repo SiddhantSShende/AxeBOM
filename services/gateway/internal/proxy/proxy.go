@@ -38,6 +38,7 @@ import (
 	"time"
 
 	"github.com/axebom/axebom/libs/go-shared/platform/config"
+	"github.com/axebom/axebom/libs/go-shared/platform/ctxkey"
 	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
@@ -83,7 +84,15 @@ func New(svc config.Services, log *slog.Logger) (*Router, error) {
 		prefixe []string
 	}{
 		{"auth", svc.Auth, []string{"/v1/auth", "/v1/api-keys", "/v1/audit-log"}},
-		{"project", svc.Project, []string{"/v1/projects", "/v1/github", "/v1/hbom", "/v1/qbom", "/v1/aibom"}},
+		{"project", svc.Project, []string{"/v1/projects", "/v1/github", "/v1/hbom", "/v1/qbom"}},
+		// ⚠ `/v1/aibom` MOVED OFF project, AND THE PREFIX IS UNCHANGED ON PURPOSE.
+		//
+		// The browser already called `/v1/aibom/{projectId}/form`; that path now
+		// reaches the service that owns the data instead of the one that happened
+		// to hold the handler. A prefix claimed by two upstreams is refused by the
+		// loop below, so this could not have been added without removing it above
+		// — which is what makes the move visible rather than ambiguous.
+		{"aibom", svc.AIBOM, []string{"/v1/aibom"}},
 		{"scan-orchestrator", svc.ScanOrchestrator, []string{"/v1/scans", "/v1/vex"}},
 		// "/shared/{token}" is deliberately unauthenticated — it is the public
 		// side of a share link — and it does NOT live under /v1.
@@ -199,16 +208,59 @@ func newReverseProxy(up *Upstream, log *slog.Logger) *httputil.ReverseProxy {
 			pr.Out.URL.Scheme = target.Scheme
 			pr.Out.URL.Host = target.Host
 
-			// Strip the browser-side /api prefix. RawPath must be cleared or it
-			// wins over Path when the two disagree, and the upstream then sees
-			// the un-stripped path.
+			// Strip the browser-side /api prefix from BOTH forms of the path.
+			//
+			// ⚠ THIS USED TO CLEAR RawPath, AND THAT MADE EVERY PURL-SHAPED KEY
+			// IN A PATH UNREACHABLE THROUGH THE GATEWAY.
+			//
+			// `URL.Path` is DECODED and `URL.RawPath` is the escaped original,
+			// kept only when the two differ. Clearing RawPath was aimed at a real
+			// problem — it wins over Path when they disagree, so leaving the
+			// un-stripped original would send the upstream `/api/v1/...` — but it
+			// solved it by discarding the escaping.
+			//
+			// The effect: `GET /api/v1/projects/{id}/dependencies/purl%3Apkg%3Apypi%2Flangchain%400.3.7`
+			// arrived at the upstream as `.../dependencies/purl:pkg:pypi/langchain@0.3.7`,
+			// where the decoded `%2F` is now a REAL separator — three path segments
+			// where the route pattern has one, so ServeMux answered 404. Verified
+			// live: the same request against the project service directly matched
+			// the route (401, unauthenticated) and through the gateway did not.
+			// Every component key is a purl, so the SBOM dependency-detail
+			// endpoint could not be reached for any real component.
+			//
+			// `/api` contains no escapes, so trimming the same literal prefix from
+			// both forms keeps them consistent — which is what RawPath's contract
+			// actually requires — and preserves `%2F` all the way to the upstream.
 			pr.Out.URL.Path = strings.TrimPrefix(pr.In.URL.Path, APIPrefix)
-			pr.Out.URL.RawPath = ""
+			if raw := pr.In.URL.RawPath; raw != "" {
+				pr.Out.URL.RawPath = strings.TrimPrefix(raw, APIPrefix)
+			} else {
+				pr.Out.URL.RawPath = ""
+			}
 
 			// Send the upstream its own Host. Services do not vary on Host
 			// today, but forwarding the browser's makes any future virtual
 			// hosting silently wrong.
 			pr.Out.Host = target.Host
+
+			// ⚠ CARRY THE REQUEST ID ACROSS THE HOP, OR ONE FAILURE HAS TWO IDS
+			// AND THE ONE THE USER CAN SEE FINDS ONLY HALF OF IT.
+			//
+			// httpx.RequestID mints an id per service and honours an inbound
+			// X-Request-ID, but the gateway's own id lived only in its context
+			// and its RESPONSE header — never on the outbound request. So the
+			// upstream minted a second, unrelated id, logged everything under
+			// that one, and put THAT one in the error envelope the browser
+			// renders. Searching the gateway's log for the id a user quotes
+			// therefore returned nothing, and the two halves of a single
+			// request could not be joined by any field they shared.
+			//
+			// Set on pr.Out only. pr.In's header is the client's and may be
+			// absent or forged; httpx.RequestID upstream sanitises and length-
+			// caps whatever arrives before it reaches a log line.
+			if id := ctxkey.RequestID(pr.In.Context()); id != "" {
+				pr.Out.Header.Set("X-Request-ID", id)
+			}
 
 			pr.SetXForwarded()
 		},

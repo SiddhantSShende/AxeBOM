@@ -28,6 +28,9 @@ var MigrationOrder = []string{
 	"project",
 	"scan",
 	"normalize",
+	// After `normalize`: `aibom.0001` grants SELECT to axebom_normalize_writer,
+	// a role `migrations/normalize/0006` creates.
+	"aibom",
 	"report",
 	"campaign",
 	"comment",

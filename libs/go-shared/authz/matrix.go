@@ -140,6 +140,24 @@ const (
 	// is for or must not be used for — so this resource, alone among the
 	// read-only discovery resources, also grants ActionUpdate.
 	ResourceAIModel Resource = "ai_model"
+	// ResourceAIPolicy is a project's consent to send code to a third-party
+	// LLM — `ai-bom --llm-enrich` and `cisco-aibom --llm-model`
+	// (aibom.project_policy).
+	//
+	// ⚠ ITS OWN RESOURCE, NOT AN ACTION ON ResourceAIModel, AND THE REASON IS
+	// THE BLAST RADIUS. Editing what a model is FOR changes one row of a
+	// compliance document; consenting to LLM enrichment sends the customer's
+	// SOURCE to a third party for every future scan of that project. Those are
+	// not the same decision and must not share a permission — an Analyst may
+	// do the first and only an Admin the second.
+	ResourceAIPolicy Resource = "ai_policy"
+	// ResourceAITag is an operator's EU AI Act / NIST AI RMF / ISO 42001
+	// classification (aibom.compliance_tags). A declaration a named person
+	// makes, never something AxeBOM infers — see model.EUAIActTiers.
+	ResourceAITag Resource = "ai_tag"
+	// ResourceAIAttestation is a recorded model-signature verification RESULT
+	// (aibom.attestations).
+	ResourceAIAttestation Resource = "ai_attestation"
 	// ResourceAPIKey is a long-lived bearer credential (libs/go-shared/auth's
 	// apikey.go). Deliberately Owner-only, not Admin like member management:
 	// a key's scopes can run scans, read reports and triage VEX across the
@@ -298,6 +316,21 @@ var matrix = map[Permission]rule{
 	{ResourceDependency, ActionRead}:  {minRole: RoleViewer},
 	{ResourceDependency, ActionList}:  {minRole: RoleViewer},
 	{ResourceCryptoAsset, ActionList}: {minRole: RoleViewer},
+
+	// --- AI governance (services/aibom) ---
+	//
+	// ⚠ THE CONSENT SWITCHES ARE ADMIN, EVERYTHING ELSE IS ANALYST, AND THE
+	// SPLIT IS THE POINT. Recording what a model is for, or how somebody
+	// classifies it, is ordinary compliance work. Turning on LLM enrichment
+	// ships the customer's source code to a third party on every future scan of
+	// that project — a decision with a different blast radius and a different
+	// signatory.
+	{ResourceAIPolicy, ActionRead}:        {minRole: RoleViewer},
+	{ResourceAIPolicy, ActionUpdate}:      {minRole: RoleAdmin, why: "sends source code to a third-party LLM"},
+	{ResourceAITag, ActionList}:           {minRole: RoleViewer},
+	{ResourceAITag, ActionUpdate}:         {minRole: RoleAnalyst},
+	{ResourceAIAttestation, ActionList}:   {minRole: RoleViewer},
+	{ResourceAIAttestation, ActionCreate}: {minRole: RoleAnalyst},
 	// --- AI models (discovered, same read sensitivity as crypto assets;
 	// the four user-supplied elements are a data-entry action, same Analyst
 	// gate as quantum device's form save above) ---

@@ -155,9 +155,16 @@ func Logging(next http.Handler) http.Handler {
 		case rw.status >= 500:
 			level = slog.LevelError
 		case rw.status >= 400:
-			// 4xx is the caller's problem. At info level a scanner hammering
-			// 404s would drown the log.
-			level = slog.LevelDebug
+			// 4xx is the caller's problem, so it is not an error — but it is
+			// still a request that happened, and it is logged.
+			//
+			// This was LevelDebug, which at the info level services actually
+			// run at meant no 4xx appeared in the access log at all. A 401 on
+			// a real user's request was then unreconstructable: nothing named
+			// the path, the status or the request id, so the one identifier
+			// the error card tells them to quote led nowhere. See the longer
+			// note in platform/errs.Write, which had the same defect.
+			level = slog.LevelWarn
 		}
 
 		slog.Log(r.Context(), level, "http request",

@@ -1,11 +1,28 @@
 /**
  * The connect / register wizard.
  *
- * Three steps (docs/07-FRONTEND-SPEC.md §6):
+ * Four or five steps (docs/07-FRONTEND-SPEC.md §6):
  *
- *   1. source              GitHub repository, upload, or fully manual
- *   2. owner & validity    contact block and the validity window
- *   3. classification & practices
+ *   1. BOM types           what this project should produce
+ *   2. source              GitHub repository, upload, url, or fully manual
+ *   3. what it needs       the inputs particular to the chosen types — SHOWN
+ *                          ONLY when a chosen type asks for any
+ *   4. owner & validity    contact block and the validity window
+ *   5. practices           SDLC stage and the CERT-In practices fields
+ *
+ * ⚠ STEP 3 IS THE ANSWER TO "WHY DOES REGISTERING AN HBOM ASK THE SAME THINGS
+ * AS REGISTERING AN SBOM?" — because it did.
+ *
+ * Every type got the same five questions, and the inputs that are particular to
+ * a type lived on screens reachable only once the project existed. So a QBOM
+ * was created with none of CERT-In Table 8's device metadata — the one part of
+ * a QBOM that no scan can produce — and an HBOM with no device, which on a
+ * `manual` project is the only thing that will ever produce a document. Both
+ * then surfaced as checklist items on a project already made, which is the
+ * wrong moment: the person who knows the answers is the one filling in the
+ * form. The step is driven by the server's `at_registration` flag, so which
+ * types ask for what stays in services/project/internal/bommodule and this file
+ * holds no second copy of that judgement.
  *
  * THE PRACTICES STEP IS NOT OPTIONAL AND IS NOT BURIED IN SETTINGS.
  *
@@ -37,6 +54,22 @@ import {
   type PracticesInput,
   type Repo,
 } from '../../lib/projects';
+import {
+  EMPTY_QUANTUM_DEVICE,
+  hasQuantumValues,
+  useQBOMRegistrationForm,
+  useRegisterQuantumDevice,
+  type QuantumDeviceValues,
+} from '../../lib/qbom';
+import {
+  EMPTY_DEVICE,
+  hasDeviceValues,
+  useDeviceForm,
+  useRegisterDevice,
+  type DeviceInput,
+} from '../../lib/devices';
+import { DeviceFieldGroups } from '../hbom/DeviceFields';
+import { ErrorState, SkeletonRows } from '../../components/States';
 import { GitHubRepoPicker } from './GitHubRepoPicker';
 
 // UPLOAD_KINDS mirrors project.uploads' CHECK constraint minus the two kinds
@@ -71,7 +104,81 @@ interface StagedRepo {
   token: string;
 }
 
-type Step = 1 | 2 | 3 | 4;
+/**
+ * StepId names the steps rather than numbering them, because the list is no
+ * longer fixed.
+ *
+ * ⚠ `requirements` IS CONDITIONAL, AND THAT IS THE WHOLE CHANGE. Registration
+ * asked all five BOM types the same questions and then handed back a checklist:
+ * a QBOM project was created with none of Table 8's device metadata — the one
+ * part of it no scan can produce — and an HBOM project with no device, which is
+ * the only thing a `manual` one will ever have. Both were reachable only from a
+ * screen that needs a created project, so the form each type cannot do without
+ * came after the moment somebody was filling forms in.
+ *
+ * A numbered union could not express this: the step exists for some selections
+ * and not others, and an SBOM-only project must not be shown an empty screen
+ * where its per-type inputs would have been.
+ */
+type StepId = 'types' | 'source' | 'requirements' | 'owner' | 'practices';
+
+const STEP_LABELS: Record<StepId, string> = {
+  types: 'BOM types',
+  source: 'Source',
+  requirements: 'What it needs',
+  owner: 'Owner & validity',
+  practices: 'Practices',
+};
+
+/**
+ * BomTypeOption is one entry of `/v1/projects/options`'s `bom_types`.
+ *
+ * Declared once rather than inline per step: three components read it, and
+ * three structurally-typed copies drift the moment the server adds a field.
+ */
+interface BomTypeOption {
+  id: string;
+  requires_import: boolean;
+  is_derived: boolean;
+  sources: string[];
+  depends_on: string[];
+  requirements: Array<{
+    id: string;
+    title: string;
+    detail: string;
+    at_registration: boolean;
+    required: boolean;
+  }>;
+}
+
+/**
+ * registrationRequirements is what the selected types ask for up front.
+ *
+ * ⚠ FILTERED ON THE SERVER'S OWN FLAG, NEVER ON A LIST OF TYPE NAMES HERE. The
+ * modules decide what the wizard can collect (services/project/internal/
+ * bommodule) — QBOM's and HBOM's are per-project and askable now, AIBOM's are
+ * per-MODEL and cannot be, since no model exists until a scan finds one. A
+ * hardcoded `['QBOM', 'HBOM']` in this file would be a second copy of that
+ * judgement, and the copy that never learns about a sixth type.
+ */
+function registrationRequirements(
+  bomTypes: BomTypeOption[],
+  classifications: string[],
+): BomTypeOption['requirements'] {
+  const seen = new Set<string>();
+  return bomTypes
+    .filter((t) => classifications.includes(t.id))
+    .flatMap((t) => t.requirements)
+    .filter((r) => r.at_registration && !seen.has(r.id) && seen.add(r.id));
+}
+
+/** visibleSteps drops `requirements` when the selection asks for nothing. */
+function visibleSteps(bomTypes: BomTypeOption[], classifications: string[]): StepId[] {
+  const needs = registrationRequirements(bomTypes, classifications).length > 0;
+  return needs
+    ? ['types', 'source', 'requirements', 'owner', 'practices']
+    : ['types', 'source', 'owner', 'practices'];
+}
 
 /**
  * recordedPractices counts substantively-filled sub-elements.
@@ -107,6 +214,12 @@ interface Draft {
   classifications: string[];
   sdlcStage: string;
   practices: PracticesInput;
+  // ⚠ THE TWO PER-TYPE INPUTS, STAGED LIKE EVERY OTHER ATTACHMENT. Both are
+  // posted after the create call for the same reason uploads, practices and the
+  // repo connection are: the project id they hang off does not exist until it
+  // returns. They stay empty — and unsent — for the types that do not ask.
+  quantumDevice: QuantumDeviceValues;
+  hardwareDevice: DeviceInput;
 }
 
 const emptyDraft: Draft = {
@@ -122,11 +235,13 @@ const emptyDraft: Draft = {
   classifications: ['SBOM'],
   sdlcStage: 'source',
   practices: {},
+  quantumDevice: EMPTY_QUANTUM_DEVICE,
+  hardwareDevice: EMPTY_DEVICE,
 };
 
 export function ProjectWizard() {
   const navigate = useNavigate();
-  const [step, setStep] = useState<Step>(1);
+  const [step, setStep] = useState<StepId>('types');
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [error, setError] = useState<string | null>(null);
 
@@ -136,6 +251,19 @@ export function ProjectWizard() {
   const uploadFile = useUploadFile();
   const connectRepo = useConnectRepo();
   const createWebSource = useCreateWebSource();
+  const registerQuantumDevice = useRegisterQuantumDevice();
+  const registerDevice = useRegisterDevice();
+
+  const bomTypeOptions = options.data?.bom_types ?? [];
+  const steps = visibleSteps(bomTypeOptions, draft.classifications);
+
+  // ⚠ THE CURRENT STEP CAN STOP EXISTING. Going back to step 1 and deselecting
+  // the last type that asked for something removes `requirements` from the list
+  // while it is on screen. Falling back to the first step would throw away a
+  // filled-in form; clamping to the last still-visible one keeps the user where
+  // they were.
+  const index = Math.min(Math.max(steps.indexOf(step), 0), steps.length - 1);
+  const current = steps[index] ?? 'types';
 
   const patch = (p: Partial<Draft>) => setDraft((d) => ({ ...d, ...p }));
 
@@ -196,19 +324,46 @@ export function ProjectWizard() {
         await createWebSource.mutateAsync({ projectId: project.id, root_url: draft.webSourceUrl });
       }
 
+      // ⚠ ONLY WHEN SOMETHING WAS TYPED, AND ONLY FOR A SELECTED TYPE.
+      //
+      // Both guards matter. A QBOM device of nine empty strings is a document
+      // whose every element is not-provided — `declaration_pct` 100,
+      // `completeness_pct` 0 (invariant 3) — which every screen that counts
+      // documents would then report as recorded. And posting either record for
+      // a project not classified for it would attach data the project has no
+      // BOM type to render, which the server is entitled to refuse.
+      if (draft.classifications.includes('QBOM') && hasQuantumValues(draft.quantumDevice)) {
+        await registerQuantumDevice.mutateAsync({
+          projectId: project.id,
+          values: draft.quantumDevice,
+        });
+      }
+
+      if (draft.classifications.includes('HBOM') && hasDeviceValues(draft.hardwareDevice)) {
+        await registerDevice.mutateAsync({ projectId: project.id, input: draft.hardwareDevice });
+      }
+
       void navigate(`/projects/${project.id}`);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not create the project');
     }
   }
 
-  // Step 1 gates on having chosen something to produce: a project classified
-  // for nothing is refused by the server anyway, and finding that out on the
-  // last screen is the failure this reorder exists to remove.
+  // The types step gates on having chosen something to produce: a project
+  // classified for nothing is refused by the server anyway, and finding that
+  // out on the last screen is the failure this reorder exists to remove.
+  //
+  // ⚠ THE REQUIREMENTS STEP GATES ON NOTHING, DELIBERATELY. Its inputs are
+  // required for the BOM type to produce a document, not for the project to
+  // exist — an HBOM project whose device is registered next week is a real and
+  // supported state, and the same requirement is still listed on the project
+  // afterwards. Blocking the wizard on them would turn "your HBOM will be empty
+  // until you do this" into "you may not register this project", which is a
+  // different and wrong claim. The step says what is missing instead.
   const canAdvance =
-    step === 1
+    current === 'types'
       ? draft.classifications.length > 0
-      : step === 2
+      : current === 'source'
         ? draft.name.trim() !== '' &&
           (draft.sourceType !== 'github' || draft.githubRepo !== null) &&
           (draft.sourceType !== 'upload' || draft.uploadFiles.length > 0) &&
@@ -219,18 +374,13 @@ export function ProjectWizard() {
     <div className="page">
       <header>
         <h1>Register a project</h1>
+        {/* Numbered from the VISIBLE list, so an SBOM-only registration reads
+            1–4 with no gap where the per-type step would have been. */}
         <ol className="steps" aria-label="Progress">
-          {(
-            [
-              [1, 'BOM types'],
-              [2, 'Source'],
-              [3, 'Owner & validity'],
-              [4, 'Practices'],
-            ] as const
-          ).map(([n, label]) => (
-            <li key={n} aria-current={step === n ? 'step' : undefined} data-done={step > n}>
-              <span className="step-n">{n}</span>
-              {label}
+          {steps.map((id, n) => (
+            <li key={id} aria-current={current === id ? 'step' : undefined} data-done={index > n}>
+              <span className="step-n">{n + 1}</span>
+              {STEP_LABELS[id]}
             </li>
           ))}
         </ol>
@@ -247,25 +397,34 @@ export function ProjectWizard() {
           project on a url source, say — was only knowable on the last screen,
           after the whole form was filled. The order is the fix: choosing what
           to produce is what narrows every question after it. */}
-      {step === 1 && <BomTypeStep draft={draft} patch={patch} options={options.data} />}
-      {step === 2 && <SourceStep draft={draft} patch={patch} options={options.data} />}
-      {step === 3 && <OwnerStep draft={draft} patch={patch} />}
-      {step === 4 && <PracticesStep draft={draft} patch={patch} options={options.data} />}
+      {current === 'types' && <BomTypeStep draft={draft} patch={patch} options={options.data} />}
+      {current === 'source' && <SourceStep draft={draft} patch={patch} options={options.data} />}
+      {current === 'requirements' && (
+        <RequirementsStep
+          draft={draft}
+          patch={patch}
+          requirements={registrationRequirements(bomTypeOptions, draft.classifications)}
+        />
+      )}
+      {current === 'owner' && <OwnerStep draft={draft} patch={patch} />}
+      {current === 'practices' && (
+        <PracticesStep draft={draft} patch={patch} options={options.data} />
+      )}
 
       <nav className="wizard-nav">
         <button
           type="button"
           className="btn"
-          onClick={() => setStep((s) => (s > 1 ? ((s - 1) as Step) : s))}
-          disabled={step === 1}
+          onClick={() => setStep(steps[index - 1] ?? 'types')}
+          disabled={index === 0}
         >
           Back
         </button>
-        {step < 4 ? (
+        {index < steps.length - 1 ? (
           <button
             type="button"
             className="btn btn-primary"
-            onClick={() => setStep((s) => (s + 1) as Step)}
+            onClick={() => setStep(steps[index + 1] ?? current)}
             disabled={!canAdvance}
           >
             Continue
@@ -453,6 +612,15 @@ function GitHubSource({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft
     }
   }
 
+  // ⚠ THE SAME ROUND TRIP, FROM INSIDE THE OPEN PICKER. Reconnecting is what a
+  // rejected stored credential needs, and the PUT is an upsert keyed on the
+  // tenant, so this replaces the dead token rather than adding a second one.
+  // The picker stays open throughout: closing it to re-run the authorisation
+  // would discard the search the user had already typed and land them back on
+  // the step they started from, which is how "reconnect" came to feel like
+  // starting the registration over.
+  const reconnecting = connect.isPending || saveConnection.isPending;
+
   return (
     <div className="field">
       <span>Repository</span>
@@ -510,6 +678,8 @@ function GitHubSource({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft
           <GitHubRepoPicker
             token={token ?? ''}
             onClose={() => setPickerOpen(false)}
+            onReconnect={() => void handleConnect()}
+            reconnecting={reconnecting}
             onSelect={(repo: Repo) =>
               patch({
                 githubRepo: {
@@ -889,6 +1059,228 @@ function BomTypeStep({
       )}
     </section>
   );
+}
+
+// ---------------------------------------------------------------------------
+// What the selected BOM types actually need
+// ---------------------------------------------------------------------------
+
+/**
+ * RequirementsStep asks the questions that are specific to a BOM type.
+ *
+ * ⚠ THIS STEP EXISTS BECAUSE REGISTRATION ASKED ALL FIVE TYPES THE SAME THINGS.
+ *
+ * Name, source, owner, validity, practices — identical whether the project was
+ * an SBOM or an HBOM, and the inputs that are *particular* to a type lived on
+ * screens reachable only after the project existed. So a QBOM was created with
+ * none of Table 8's device metadata, which is the one part of a QBOM no scan
+ * can produce; an HBOM was created with no device, which on a `manual` project
+ * is the only thing that will ever produce a document. Both showed up later as
+ * checklist items on a project already made, which is the wrong moment: the
+ * person who knows the answers is the one filling in the form.
+ *
+ * ⚠ RENDERED FROM THE SERVER'S REQUIREMENT LIST, NOT FROM A LIST OF BOM TYPES.
+ * `at_registration` is the modules' judgement about what can be asked for up
+ * front (services/project/internal/bommodule). A requirement this file has no
+ * form for still renders — as its own title and detail — rather than
+ * disappearing, so a sixth type that grows a prerequisite is visible here on
+ * the day it is added instead of silently absent until somebody writes the UI.
+ */
+function RequirementsStep({
+  draft,
+  patch,
+  requirements,
+}: {
+  draft: Draft;
+  patch: (p: Partial<Draft>) => void;
+  requirements: BomTypeOption['requirements'];
+}) {
+  return (
+    <section aria-labelledby="needs-heading">
+      <h2 id="needs-heading">What these BOM types need</h2>
+
+      <p className="note">
+        These are particular to the types you picked, and nothing else on this form asks for them.
+        You can leave them for later — the project keeps the same list — but the answers are
+        easiest to give now.
+      </p>
+
+      {requirements.map((r) => (
+        <section key={r.id} className="panel" aria-label={r.title}>
+          <h3>
+            {r.title}
+            {r.required && <span className="chip-note">required</span>}
+          </h3>
+          <p className="field-hint">{r.detail}</p>
+
+          {r.id === 'qbom.device_metadata' && (
+            <QuantumDeviceFields
+              values={draft.quantumDevice}
+              onChange={(quantumDevice) => patch({ quantumDevice })}
+            />
+          )}
+
+          {r.id === 'hbom.device' && (
+            <HardwareDeviceFields
+              draft={draft}
+              values={draft.hardwareDevice}
+              onChange={(hardwareDevice) => patch({ hardwareDevice })}
+            />
+          )}
+        </section>
+      ))}
+    </section>
+  );
+}
+
+/**
+ * QuantumDeviceFields renders CERT-In Table 8's captured elements.
+ *
+ * ⚠ CAPTURED, NEVER SCANNED, AND THE DISCLOSURE COMES FROM THE SERVER. There is
+ * no quantum-hardware scanner (CLAUDE.md honest labels); the sentence saying so
+ * is served beside the fields rather than written here, so this screen cannot
+ * come to claim something the backend does not.
+ *
+ * The derived elements are filtered out for the same reason QuantumDevice.tsx
+ * filters them: crypto assets and findings are references resolved from the
+ * project's CBOM discovery, and an input for one would invite a customer to
+ * hand-type a value the product overwrites.
+ */
+function QuantumDeviceFields({
+  values,
+  onChange,
+}: {
+  values: QuantumDeviceValues;
+  onChange: (v: QuantumDeviceValues) => void;
+}) {
+  const form = useQBOMRegistrationForm(true);
+
+  if (form.isPending) return <SkeletonRows rows={5} columns={1} />;
+  if (form.isError) return <ErrorState error={form.error} action="load the device metadata form" />;
+
+  const fields = (form.data?.fields ?? []).filter((f) => !f.derived);
+
+  return (
+    <>
+      <p className="field-hint">{form.data?.disclosure}</p>
+      <div className="field-grid">
+        {fields.map((f) => {
+          const key = quantumFieldKey(f.canonical_path);
+          // ⚠ THE ONLY LIST-TYPED ELEMENT, branched on by its known key — every
+          // other Table 8 element is a plain string, and a dynamic lookup would
+          // widen a fully statically-known shape to `any`. Mirrors the same
+          // branch in routes/boms/QuantumDevice.tsx.
+          if (key === 'software_dependencies') {
+            return (
+              <label key={f.field_id} className="field">
+                <span>{f.name}</span>
+                <input
+                  value={values.software_dependencies.join(', ')}
+                  placeholder="comma-separated"
+                  onChange={(e) =>
+                    onChange({
+                      ...values,
+                      software_dependencies: e.target.value
+                        .split(',')
+                        .map((v) => v.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                />
+                {f.source_page ? <small>CERT-In p.{f.source_page}</small> : null}
+              </label>
+            );
+          }
+          return (
+            <label key={f.field_id} className="field">
+              <span>{f.name}</span>
+              <input
+                value={readQuantumField(values, key)}
+                onChange={(e) => onChange(writeQuantumField(values, key, e.target.value))}
+              />
+              {f.source_page ? <small>CERT-In p.{f.source_page}</small> : null}
+            </label>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+/**
+ * HardwareDeviceFields registers the device this project is about.
+ *
+ * ⚠ NOTHING HERE EXAMINES HARDWARE, AND THE COPY BELOW SAYS SO PER SOURCE.
+ * What a device registration is worth depends on where the project comes from,
+ * and the difference is not cosmetic: a repository of KiCad or Altium files has
+ * its parts read by `hbom-ecad`, so the device is a label for what the scan
+ * finds; a `manual` project has no scan at all, so this form is the entire
+ * hardware document. Saying "register a device" identically in both cases is
+ * what made registration feel like a form that ignored the answer to its own
+ * first question.
+ */
+function HardwareDeviceFields({
+  draft,
+  values,
+  onChange,
+}: {
+  draft: Draft;
+  values: DeviceInput;
+  onChange: (d: DeviceInput) => void;
+}) {
+  const form = useDeviceForm(true);
+  const manual = draft.sourceType === 'manual';
+
+  if (form.isPending) return <SkeletonRows rows={5} columns={1} />;
+  if (form.isError) return <ErrorState error={form.error} action="load the device form" />;
+
+  return (
+    <>
+      <p className="field-hint">
+        {manual
+          ? 'This project has no source to read, so what you enter here is the hardware document. ' +
+            'A parts list can be imported against this device afterwards.'
+          : 'Design files in the source are parsed for parts. Naming the device now gives those ' +
+            'parts something to belong to; you can also import a parts list against it later.'}
+      </p>
+
+      <DeviceFieldGroups fields={form.data?.fields ?? []} draft={values} onChange={onChange} />
+
+      {!hasDeviceValues(values) && (
+        <p className="field-hint">
+          {manual
+            ? 'Without a name, no device is registered and this project has no hardware to report ' +
+              'until one is added from its Hardware screen.'
+            : 'Without a name, no device is registered now. You can add one from the project’s ' +
+              'Hardware screen at any time.'}
+        </p>
+      )}
+    </>
+  );
+}
+
+/** quantumFieldKey turns a canonical path into the values key it maps to. */
+function quantumFieldKey(canonicalPath: string): string {
+  return canonicalPath.replace(/^quantum_component\./, '').replace(/\[\]$/, '');
+}
+
+/** The string-typed keys — every key except the one list field. */
+type QuantumStringKey = Exclude<keyof QuantumDeviceValues, 'software_dependencies'>;
+
+function isQuantumStringKey(key: string): key is QuantumStringKey {
+  return key !== 'software_dependencies' && key in EMPTY_QUANTUM_DEVICE;
+}
+
+function readQuantumField(values: QuantumDeviceValues, key: string): string {
+  return isQuantumStringKey(key) ? values[key] : '';
+}
+
+function writeQuantumField(
+  values: QuantumDeviceValues,
+  key: string,
+  value: string,
+): QuantumDeviceValues {
+  return isQuantumStringKey(key) ? { ...values, [key]: value } : values;
 }
 
 /**

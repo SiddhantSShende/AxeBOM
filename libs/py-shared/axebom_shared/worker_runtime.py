@@ -49,6 +49,7 @@ async def _serve(
     *,
     nats_url: str,
     max_ack_pending: int,
+    bus_overrides: dict[str, str] | None = None,
 ) -> int:
     bus = WorkerBus(
         BusConfig(
@@ -56,6 +57,7 @@ async def _serve(
             family=family,
             name=f"axebom-{family}-worker",
             max_ack_pending=max_ack_pending,
+            **(bus_overrides or {}),
         )
     )
 
@@ -102,6 +104,8 @@ def run_worker(
     *,
     preflight: Preflight | None = None,
     max_ack_pending: int = 2,
+    config_name: str | None = None,
+    bus_overrides: dict[str, str] | None = None,
 ) -> int:
     """Run one family's worker until SIGINT/SIGTERM.
 
@@ -110,7 +114,12 @@ def run_worker(
     only fail, because a WorkQueue delivers each job to exactly one consumer and
     claiming one hides it from a replica that could have done the work.
     """
-    cfg = load_worker_config(f"{family}-worker")
+    # ⚠ `config_name` EXISTS FOR THE ONE WORKER WHOSE NAME IS NOT ITS FAMILY.
+    # `workers/aienrich` reports as the AIBOM engine `aibom-generator` — it belongs
+    # in that family's Engine Coverage — but it is its own deployable with its own
+    # image, config, logs and metrics. Deriving all of those from `family` would
+    # make it indistinguishable from the AIBOM worker in every operational surface.
+    cfg = load_worker_config(config_name or f"{family}-worker")
 
     if preflight is not None:
         try:
@@ -130,6 +139,7 @@ def run_worker(
                 handler,
                 nats_url=cfg.nats_url,
                 max_ack_pending=max_ack_pending,
+                bus_overrides=bus_overrides,
             )
         )
     except KeyboardInterrupt:

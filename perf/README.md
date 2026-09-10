@@ -14,6 +14,8 @@ invisible — there is nothing to regress *from*.
 k6 run perf/scan-throughput.js   -e BASE_URL=... -e API_KEY=...
 k6 run perf/dependencies-page.js -e BASE_URL=... -e API_KEY=...
 k6 run perf/report-render.js     -e BASE_URL=... -e API_KEY=...
+k6 run perf/aibom-inventory.js   -e BASE_URL=... -e API_KEY=... \
+  -e SMALL_PROJECT_ID=... -e LARGE_PROJECT_ID=...
 ```
 
 Use a scoped API key (`scan:run`, `report:read`, `finding:read`) rather than a
@@ -27,6 +29,15 @@ admin session would exercise a path no client uses.
 | `scan-throughput.js` | 100 concurrent scans. The orchestrator fans out one job per engine, so this is really a test of the queue and the reaper under contention. |
 | `dependencies-page.js` | 200k findings, paged. **This is where `OFFSET` would have killed you** — the endpoint uses keyset pagination on a UUIDv7 id, and this scenario is what proves the deep page stays flat. |
 | `report-render.js` | A Complete BOM at the component cap. The writer is a push iterator precisely so this does not hold the report in memory twice. |
+| `aibom-inventory.js` | A project with many discovered models. **This is where the 1 + 3N round trips would have killed you** — the endpoint used to run three queries per model, so the page slowed in proportion to how much the customer found. |
+
+## What has actually been run
+
+`aibom-inventory.js`'s endpoint was exercised live against a three-model project
+while the batching was written: the response is byte-identical before and after,
+served in ~75 ms. That is a correctness check, **not a baseline** — three models
+is exactly the size at which the bug was invisible, and nothing has yet fed the
+endpoint two hundred. Everything in the table above remains a target.
 
 ## The one that matters most
 

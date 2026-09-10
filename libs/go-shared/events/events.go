@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -388,12 +389,74 @@ func (e *ScanEventV1) Sanitize() {
 	}
 	e.Message = strings.TrimSpace(m)
 
+	// ⚠ THE METRIC KEYS GO THROUGH THE SAME GATE AS THE MESSAGE. They reach a
+	// browser on the same frame, and a key built from a filename would put a
+	// path into the stream through the one field nobody thought to check.
+	e.Metrics, _ = SanitizeDiscoveries(e.Metrics)
+
 	if e.Pct < 0 {
 		e.Pct = 0
 	}
 	if e.Pct > 100 {
 		e.Pct = 100
 	}
+}
+
+// : The only characters a discovery key may contain.
+//
+// ⚠ THE KEYS REACH A BROWSER, AND A KEY IS AS MUCH OF A STRING AS A MESSAGE IS.
+// An engine that built a key from a filename would put a path into the event
+// stream through the one field nobody thought to check — Message has been
+// guarded since Phase 6 and this would have walked straight past it.
+const discoveryKeyChars = "abcdefghijklmnopqrstuvwxyz0123456789_."
+
+// : How many distinct discovery keys one result may carry.
+//
+// An engine emitting a key per FINDING rather than per KIND turns an advisory
+// event into an unbounded payload; the cap makes that a truncation with a
+// stated cause rather than a browser hanging on a 40MB frame.
+const MaxDiscoveryKeys = 32
+
+// SanitizeDiscoveries drops any key that is not a plain lowercase identifier.
+//
+// Returns the cleaned map and how many keys were dropped, so a caller can say
+// so rather than silently publishing fewer numbers than an engine reported.
+func SanitizeDiscoveries(in map[string]int64) (map[string]int64, int) {
+	if len(in) == 0 {
+		return nil, 0
+	}
+	// ⚠ SORTED, BECAUSE THE CAP TRUNCATES AND MAP ORDER IS RANDOMISED. Without
+	// this, publishing the same result twice would keep a different 32 keys
+	// each time, and a live feed that disagrees with itself on a replay is
+	// worse than one that shows fewer numbers.
+	keys := make([]string, 0, len(in))
+	for key := range in {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+
+	out := make(map[string]int64, len(in))
+	dropped := 0
+	for _, key := range keys {
+		value := in[key]
+		if key == "" || value < 0 || strings.ContainsFunc(key, func(r rune) bool {
+			return !strings.ContainsRune(discoveryKeyChars, r)
+		}) {
+			dropped++
+			continue
+		}
+		// Counted AFTER validation: a rejected key must not consume a slot a
+		// good one could have used.
+		if len(out) >= MaxDiscoveryKeys {
+			dropped++
+			continue
+		}
+		out[key] = value
+	}
+	if len(out) == 0 {
+		return nil, dropped
+	}
+	return out, dropped
 }
 
 // Validate checks an event before publication.
@@ -516,6 +579,30 @@ type ScanResultV1 struct {
 
 	Summary     Summary      `json:"summary"`
 	Diagnostics []Diagnostic `json:"diagnostics,omitempty"`
+
+	// Discoveries are FINER-GRAINED counts than Summary's four dimensions, keyed
+	// by what was found.
+	//
+	// ⚠ IT DOES NOT DUPLICATE Summary, AND THE DIFFERENCE IS THE POINT. Summary
+	// carries the four dimensions docs/02-CONTRACTS.md §6 defines for every BOM
+	// type — `components`, `vulnerabilities`, `licenses`, `crypto_assets` — and
+	// an AIBOM engine's models, prompts and vector stores all fold into
+	// `components` there, deliberately (see summary._DIMENSION_OF). That is the
+	// right answer for a headline figure a reader compares across engines, and
+	// it is useless for a live feed: "11 components" says nothing a customer
+	// watching a scan wants to know, where "2 vector stores, 2 prompts, 1 RAG
+	// pipeline" says exactly it.
+	//
+	// ⚠ OPTIONAL, AND OMITTED RATHER THAN ZEROED. An engine that counts nothing
+	// finer than the four dimensions leaves this nil — the same nil-is-not-zero
+	// discipline Summary's pointer fields carry. A zero here would claim the
+	// engine looked for prompts and found none.
+	//
+	// ⚠ COUNTS ONLY. These reach a browser through the advisory event stream, so
+	// they are held to the same rule as ScanEventV1.Message: never a path, a URL
+	// or anything from the scanned code. `SanitizeDiscoveries` enforces the key
+	// shape; the values are integers and cannot carry content.
+	Discoveries map[string]int64 `json:"discoveries,omitempty"`
 
 	Error *ResultError `json:"error,omitempty"`
 }

@@ -200,7 +200,11 @@ def test_the_manifest_pinning_state_is_visible() -> None:
     # Adding a name here is a deliberate act. Removing one means an engine lost
     # its digest and started running tag-addressed again, which is the
     # regression this guards.
-    assert pinned == ["cdxgen"], (
+    # `cdxgen-ai` is the SAME image and the SAME digest as `cdxgen`, invoked with
+    # `-t ai` — one image pinned once, two engine ids (the `syft-spdx` precedent).
+    # It is named here rather than filtered out, because a reader of this list is
+    # asking which ENGINES run against a pinned image, and both of them do.
+    assert pinned == ["cdxgen", "cdxgen-ai"], (
         f"the digest-pinned engine set changed to {pinned}: update this test "
         f"and docs/STATE.md — partial pinning is the state that quietly misleads"
     )

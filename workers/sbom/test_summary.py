@@ -25,7 +25,14 @@ from typing import Any
 
 import pytest
 import yaml
-from workers.aibom.adapters import AIBomAdapter
+from workers.aibom.adapters import (
+    AIBomAdapter,
+    AIBOMTomlAdapter,
+    AiromAdapter,
+    CdxgenAIAdapter,
+    GLaaSImportAdapter,
+    K8sAIBOMImportAdapter,
+)
 from workers.cbom.adapters import CBOMkitTheiaAdapter
 
 from axebom_shared.adapters.base import ResultStatus, ScanTarget
@@ -152,6 +159,20 @@ ADAPTERS: dict[str, tuple[type, str]] = {
     "dependency-check": (DependencyCheckAdapter, "dependency-check"),
     "cbomkit-theia": (CBOMkitTheiaAdapter, "cbomkit-theia"),
     "ai-bom": (AIBomAdapter, "ai-bom"),
+    "airom": (AiromAdapter, "airom"),
+    # cdxgen-ai has a manifest entry of its own — unlike syft-spdx, which the
+    # manifest carries as syft's `also_emits`. It is the same image and binary
+    # as `cdxgen` but a different family with a different `produces`, so folding
+    # it into cdxgen's entry would make this check compare an AI engine's
+    # capabilities against an SBOM engine's.
+    "cdxgen-ai": (CdxgenAIAdapter, "cdxgen-ai"),
+    # ⚠ THE IMPORTERS ARE CHECKED TOO. They declare `produces` exactly like a
+    # sandboxed engine does, and an unmapped token there drops a dimension from
+    # the envelope just as silently — the fact that no container runs changes
+    # nothing about the summary contract.
+    "aibom-toml": (AIBOMTomlAdapter, "aibom-toml"),
+    "aibom-k8s-runtime": (K8sAIBOMImportAdapter, "aibom-k8s-runtime"),
+    "aibom-glaas": (GLaaSImportAdapter, "aibom-glaas"),
 }
 
 

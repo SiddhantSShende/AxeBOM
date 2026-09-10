@@ -1963,6 +1963,61 @@ fieldset legend {
   font-variant-numeric: tabular-nums;
 }
 
+/* --- Discovery tally --------------------------------------------------------
+ * "Found so far", above the activity ticker. Counts and kinds only — the
+ * server holds a metric KEY to the same no-content rule as a message
+ * (events.SanitizeDiscoveries), and the names of what was found are read from
+ * Postgres by the inventory screens, never carried on the event stream.
+ * See ScanProgress.tsx's DiscoveryTally. */
+.discovery-tally {
+  margin: var(--space-4) 0;
+}
+.discovery-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.discovery-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+}
+.discovery-count {
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.discovery-kind {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.discovery-note {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: var(--space-2) 0 0;
+}
+
+/* One engine's counts, inline on its activity row. */
+.activity-count {
+  flex: none;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.activity-count b {
+  color: var(--text);
+  font-weight: 600;
+}
+
 /* --- Reports (on the scan progress page) -----------------------------------
  * Same card shape as .activity-item, deliberately — this is the other half
  * of "what this scan produced", directly below "what it is doing". */
@@ -2884,6 +2939,175 @@ button.menu-item:disabled {
   background: var(--primary);
   color: var(--primary-text);
   font-weight: 650;
+}
+
+/* --- AIBOM screens ----------------------------------------------------------
+ * The sub-views inside the AI Models tab, and the cells that carry evidence,
+ * identity and per-asset attributes. See routes/boms/AIModelInventory.tsx. */
+
+/* Sub-navigation WITHIN a tab. Deliberately lighter than .tabs: nesting the
+ * same weight of control twice reads as two competing navigations rather than
+ * one inside the other. */
+.subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-4);
+}
+.subtab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 550;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.subtab:hover {
+  background: var(--glass-row-hover);
+  color: var(--text);
+}
+.subtab[aria-current='page'] {
+  border-color: var(--glass-border-strong);
+  background: var(--glass-bg-strong);
+  color: var(--text);
+  font-weight: 650;
+}
+.subtab-count {
+  padding: 0 var(--space-2);
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A path, a purl or a model key. Smaller than the body face because these are
+ * long and are read by shape, not word by word. */
+.mono-sm {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  word-break: break-all;
+}
+
+.identity {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+/* ⚠ THE RULE AND ITS CONFIDENCE ARE COLOURED, because `hf_repo` and `name` are
+ * not the same claim and a reviewer skimming the column must be able to see
+ * which is which without reading. */
+.identity-rule {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+.identity-rule[data-confidence='high'] {
+  color: var(--ok);
+}
+.identity-rule[data-confidence='low'] {
+  color: var(--warn);
+}
+
+.evidence-more {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.verify-mark {
+  margin-left: var(--space-2);
+  padding: 1px var(--space-2);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.verify-ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+/* ⚠ MUTED, NOT RED. Unconfirmed is the ordinary state — confirming a model
+ * means reaching its publisher, and the scan sandbox has no network. A warning
+ * colour here would make a reader distrust three correctly-identified models. */
+.verify-unconfirmed {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+
+.model-detail {
+  padding: var(--space-3) 0;
+}
+.model-detail-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.model-detail h4 {
+  margin: 0 0 var(--space-2);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.plain-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.84rem;
+}
+/* A model with three hundred dependencies must not push the form off screen. */
+.scroll-list {
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.asset-group + .asset-group {
+  margin-top: var(--space-5);
+}
+.asset-group-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  font-size: 0.92rem;
+}
+.asset-group-count {
+  padding: 0 var(--space-2);
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.attr-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.attr {
+  display: inline-flex;
+  gap: var(--space-1);
+  font-size: 0.76rem;
+}
+.attr-key {
+  color: var(--text-muted);
+}
+.attr-value {
+  font-weight: 600;
 }
 
 /* --- Theme toggle --------------------------------------------------------- */

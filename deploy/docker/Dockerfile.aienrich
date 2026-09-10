@@ -1,0 +1,94 @@
+# AxeBOM enrichment worker — Hugging Face model metadata, outside the sandbox.
+#
+# ---------------------------------------------------------------------------
+# THE ONLY COMPONENT IN THE AI PATH WITH OUTBOUND NETWORK
+#
+# It is handed model IDENTIFIERS — `meta-llama/Llama-3-8B` — and asks a public
+# API about them. It never sees customer source, never starts a container, and
+# never runs a scanner. That is what makes network acceptable here and nowhere
+# else in the AI path, and it is the same reasoning that makes the fetcher the
+# only holder of git credentials (ADR-0008): the component that runs third-party
+# scanners over untrusted code holds nothing, and the component that holds
+# something runs no scanner.
+#
+# ⚠ A SEPARATE IMAGE FROM Dockerfile.worker, DELIBERATELY, AND FOR ONE PACKAGE.
+#
+# `owasp-aibom-generator` calls `push_to_hub` against a HARDCODED third-party
+# dataset — `owasp-genai-security-project/aisbom-usage-log`, in its own
+# src/config.py — sending {timestamp, "generated", model_id} for every model it
+# is asked about, gated ONLY on HF_TOKEN being set. So the obvious fix for
+# Hugging Face's anonymous rate limit would publish the name of every AI model in
+# every customer repository AxeBOM scans. Keeping the package out of the image
+# that processes those repositories bounds what it can ever observe, and
+# workers/aienrich/runner.py::assert_no_telemetry_token refuses to start if a
+# token is present.
+#
+# ⚠ NO Docker socket, NO sandbox bridge, NO OSINT manifest, NO enginedb mount.
+# It needs the per-scan workspace (read: ai-bom's staged discovery), the
+# artifacts volume (write: its own raw artifact), the enrichment cache, and NATS.
+#
+# ⚠ PINNED TO A COMMIT, NOT A BRANCH. The upstream project publishes no
+# releases, no tags, and nothing on PyPI — `owasp-aibom-generator` 404s there.
+# The commit is declared once, in pyproject.toml's `aienrich` extra, and echoed
+# into the image as AIBOM_GENERATOR_REF so Engine Coverage can report the version
+# it actually ran rather than a confident-looking guess.
+# ---------------------------------------------------------------------------
+
+FROM python:3.13-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# git is needed only to RESOLVE the pinned VCS install above; it is removed in
+# the same layer so the running image cannot clone anything.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY pyproject.toml ./
+COPY libs/py-shared ./libs/py-shared
+# ⚠ TWO STEPS, AND --no-deps IS THE POINT OF THE SECOND.
+#
+# The generator declares torch, transformers, datasets, sentencepiece, fastapi,
+# flask, gunicorn and uvicorn as hard runtime dependencies. Honouring them pulled
+# 3.2GB of CUDA, 1.2GB of torch and 897MB of triton into this image — measured at
+# 9.78GB — for a worker that fetches JSON over HTTPS. None of it is on the path we
+# use: the ML stack serves `--summarize` (which downloads and RUNS a model, which
+# this worker must never do) and the web stack serves the bundled Flask app on
+# port 8000 (which we must never start — and now cannot).
+#
+# The subset it genuinely imports is declared in pyproject.toml's `aienrich`
+# extra and installed first, so pip resolves them normally.
+RUN pip install --no-cache-dir -e ".[aienrich]" \
+    && pip install --no-cache-dir --no-deps \
+        "owasp-aibom-generator @ git+https://github.com/GenAI-Security-Project/aibom-generator@9b8056a66c03d4f6cf707059b83b21f97923c27b" \
+    && apt-get purge -y --auto-remove git \
+    && rm -rf /var/lib/apt/lists/*
+
+# workers/aienrich imports workers/aibom (extract_discovery, merge.model_refs,
+# the fetcher) and workers/aibom imports workers/sbom/adapters/common.py, so all
+# three packages must be present or the container fails at import time rather
+# than at build time. `workers` itself has no __init__.py — an implicit namespace
+# package, the same assumption Dockerfile.worker makes.
+COPY workers/sbom ./workers/sbom
+COPY workers/aibom ./workers/aibom
+COPY workers/aienrich ./workers/aienrich
+COPY docs/reference/certin-v2.0.yaml ./docs/reference/certin-v2.0.yaml
+
+# The commit pyproject.toml installed. Reported as engine_version.
+ARG AIBOM_GENERATOR_REF=9b8056a66c03d4f6cf707059b83b21f97923c27b
+ENV AIBOM_GENERATOR_REF=${AIBOM_GENERATOR_REF}
+
+# ⚠ EXPLICITLY EMPTY, AND THE WORKER REFUSES TO START IF IT IS NOT.
+# See the telemetry warning above.
+ENV HF_TOKEN="" \
+    HUGGING_FACE_HUB_TOKEN=""
+
+RUN useradd --uid 65532 --create-home --shell /usr/sbin/nologin axebom
+USER 65532
+
+ENTRYPOINT ["python", "-m", "workers.aienrich.runner"]

@@ -46,6 +46,56 @@ scanners = [
     "ai-bom>=0.9",          # Trusera: code-level AI discovery (Phase 12)
 ]
 
+# workers/aienrich — the ONE component in the AI path with outbound network.
+#
+# ⚠ DELIBERATELY NOT IN `scanners`, AND THAT SEPARATION IS THE POINT.
+# `owasp-aibom-generator` pushes every model id it is asked about to a HARDCODED
+# third-party Hugging Face dataset whenever HF_TOKEN is set (its own
+# `src/utils/analytics.py` + `src/config.py`). Keeping it out of the image that
+# processes customer repositories bounds what that package can ever see, and
+# `workers/aienrich/runner.py::assert_no_telemetry_token` refuses to start with a
+# token present.
+#
+# ⚠ INSTALLED FROM GIT AT A PINNED COMMIT, because the project publishes no
+# releases, no tags and nothing on PyPI — `pip install owasp-aibom-generator`
+# 404s. See `unpinned_reason` in OSINT/tools.manifest.yaml. The commit below was
+# resolved against the real repository and re-verified this session.
+# ⚠ INSTALLED WITH --no-deps IN THE IMAGE, AND THE SUBSET IS LISTED HERE.
+#
+# owasp-aibom-generator declares torch, transformers, datasets, sentencepiece,
+# fastapi, flask, gunicorn and uvicorn as HARD RUNTIME DEPENDENCIES. Installing
+# them pulled 3.2GB of NVIDIA CUDA libraries, 1.2GB of torch and 897MB of triton
+# into a worker whose entire job is fetching JSON metadata over HTTPS — a 9.78GB
+# image, measured, for an HTTP client.
+#
+# None of it is on the path we use. torch/transformers/sentencepiece serve
+# `--summarize`, which downloads and RUNS a model (facebook/bart-large-cnn) —
+# something this worker must never do. fastapi/flask/gunicorn/uvicorn serve the
+# project's bundled web app (`python -m src.main`, port 8000), which we must
+# never start; omitting them means it cannot be started even by accident.
+#
+# The subset below is what the CLI generate path actually imports, and
+# `test_the_pinned_generator_still_produces_a_populated_card` proves it against
+# the real API rather than against this reasoning.
+aienrich = [
+    "huggingface-hub>=0.34",
+    "cyclonedx-python-lib[json-validation]>=11.7.0",
+    "beautifulsoup4>=4.11.0",
+    "packageurl-python>=0.11.1",
+    "pydantic>=2.4.0",
+    "PyYAML>=6.0.1",
+    "requests>=2.31.0",
+    "httpx>=0.25.0",
+    "jinja2>=3.0.0",
+    "safetensors>=0.4.0",
+    # ⚠ NOT BECAUSE WE SERVE HTTP. `src/utils/__init__.py` eagerly imports
+    # `rate_limiting`, which imports `fastapi`, so the CLI path cannot import the
+    # package without it — an upstream coupling between the library and the
+    # bundled web app. fastapi alone is small and starts nothing; gunicorn,
+    # uvicorn and flask stay out, so the bundled server still cannot be run.
+    "fastapi>=0.104.0",
+]
+
 # workers/sbom/normalize_consumer.py — the ONE deliberate exception to
 # "workers hold no credentials" (axebom_shared.config's docstring). Its own
 # Dockerfile (deploy/docker/Dockerfile.normalize-consumer) installs this
@@ -76,6 +126,21 @@ where = ["libs/py-shared"]
 line-length = 100
 target-version = "py311"
 src = ["libs/py-shared", "workers"]
+
+# ⚠ FIXTURE SOURCE IS NOT OUR SOURCE, AND FORMATTING IT BREAKS EVIDENCE.
+#
+# `workers/aibom/testdata/ai-langchain/` is a sample application AxeBOM SCANS.
+# The captured engine outputs beside it — `airom-ai-langchain.cdx.json`,
+# `cdxgen-ai-ai-langchain.cdx.json`, `ai-bom-langchain-llama3.cdx.json` — are
+# real responses that cite `src/app.py:12`, `:17`, `:18` as the evidence for the
+# models they found. `ruff format` inserted one blank line after the module
+# docstring, which silently moved every one of those line numbers by one and
+# made three real captures disagree with the file they were captured from.
+#
+# It is also the wrong thing to lint on its own terms: it is written to look
+# like customer code, unused imports and all, because that is what it stands in
+# for.
+exclude = ["workers/*/testdata"]
 
 [tool.ruff.lint]
 select = [

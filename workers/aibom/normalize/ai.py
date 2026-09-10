@@ -35,15 +35,15 @@ NOT_PROVIDED = "not-provided"
 #: element goes through the same substantive-value check. It exists so the form
 #: and the report can say WHY a field is empty rather than leaving a reader to
 #: wonder whether the scan failed.
-USER_SUPPLIED_FIELDS = frozenset(
-    {
-        "certin.aibom.12.security_requirements",
-        "certin.aibom.15.intended_usage",
-        "certin.aibom.16.out_of_scope_usage",
-        "certin.aibom.17.environmental_impact",
-        "certin.aibom.19.attestations",
-    }
-)
+#: Elements NO TOOL CAN REPORT — intent and policy, not anything discoverable
+#: from code or a model card.
+#:
+#: ⚠ DERIVED FROM THE PROFILE, NOT LISTED HERE. This used to be a literal set,
+#: and so did its Go counterpart, and they disagreed by one element:
+#: `environmental_impact` was in this set and absent from Go's, so it was
+#: reachable by no form and populated by no tool. The profile declares
+#: `user_supplied: true` and both languages generate from it.
+USER_SUPPLIED_FIELDS = frozenset(f.id for f in AIBOM_FIELDS if f.user_supplied)
 
 #: How a merged model's keys map onto the canonical columns.
 _FROM_MODEL: dict[str, str] = {
@@ -129,6 +129,37 @@ def _value_for(column: str, model: dict[str, Any], user_values: dict[str, Any]) 
     if column in user_values and _is_substantive(user_values[column]):
         return user_values[column]
 
+    if column == "model_name":
+        # ⚠ THE REFERENCE OUTRANKS THE ENGINE'S LABEL, AND IT HAS TO.
+        #
+        # Table 10 element 01 is "Official name of the AI model". ai-bom emits
+        # `HuggingFace Transformers Model` as the `name` of a component whose real
+        # identity — `meta-llama/Llama-3-8B` — is in a property. That label is a
+        # category, not a name: reporting it as the model's official name states
+        # something false about the customer's system in a compliance document.
+        #
+        # Enrichment's card name wins when present (it is the publisher's own), then
+        # the NAME SEGMENT of the reference, then whatever the engine called it.
+        #
+        # ⚠ THE SEGMENT, NOT THE WHOLE REFERENCE. `meta-llama/Llama-3-8B` is
+        # `developer/name`; returning it whole would duplicate the developer into
+        # element 04's neighbour and read as a path where a name belongs. The org
+        # prefix is deliberately NOT used to fill `model_developer` either — see
+        # `test_the_developer_is_not_inferred_from_the_org_prefix`; a publisher is a
+        # legal entity, not a URL slug, and enrichment is what establishes it.
+        enriched = _string_or_empty(model.get("card_name"))
+        if enriched:
+            return enriched
+        ref = _string_or_empty(model.get("model_ref"))
+        if "/" in ref:
+            return ref.rsplit("/", 1)[-1]
+        # An asserted identifier of any shape still beats the engine's label:
+        # `gpt-4o` is the model; `OpenAI Model` is a category.
+        asserted = _string_or_empty(model.get("model_id"))
+        if asserted:
+            return asserted
+        return model.get("name")
+
     if column == "data_source":
         # Derived from the datasets rather than stored twice — two places
         # holding the same fact drift.
@@ -210,24 +241,88 @@ def link_dependencies(
     component with one set of vulnerabilities — not two rows a reviewer has to
     reconcile.
 
-    Returns `(linked, unlinked)`. The unlinked list is reported, not dropped: a
-    dependency the SBOM did not catalogue is a gap in the SBOM worth seeing.
+    Returns `(keys, unlinked)`.
+
+    ⚠ BOTH LISTS ARE STORED. `keys` holds every dependency — the ones that
+    resolved to an SBOM component under its own `component_key`, AND the ones that
+    did not, under a `name:` key that deliberately cannot collide with a purl.
+    `unlinked` is the same second group by name, for the diagnostic.
+
+    This used to return only the resolved ones, and the rest were dropped. On real
+    `ai-bom` output over a project with no SBOM scan that meant EVERY dependency
+    vanished: the report showed a model with no dependencies, which reads as "this
+    model depends on nothing" rather than "nothing catalogued them". Storing an
+    unresolved dependency costs nothing — `ai_model_dependencies.component_key` is
+    a plain text column with no foreign key precisely because the component it
+    names usually lives in a different document (`01-DATA-MODEL.md`) — and it is
+    the difference between an absence and a silence.
     """
-    linked: list[str] = []
+    keys: list[str] = []
     unlinked: list[str] = []
 
-    for dep in model.get("frameworks") or []:
+    for dep in attributed_frameworks(model):
         purl = str(dep.get("purl") or "").strip()
         candidate = f"purl:{purl}" if purl else ""
 
         if candidate and candidate in sbom_component_keys:
-            linked.append(candidate)
+            keys.append(candidate)
         elif purl and purl in sbom_component_keys:
-            linked.append(purl)
+            keys.append(purl)
         else:
-            unlinked.append(str(dep.get("name") or purl or "<unnamed>"))
+            name = str(dep.get("name") or purl or "<unnamed>")
+            unlinked.append(name)
+            # A dependency WITH a purl keeps it: the purl is the component's real
+            # identity, and `component_key` is resolved by string match at read
+            # time across documents (`01-DATA-MODEL.md`), so the SBOM that
+            # catalogues it may simply be a document we have not joined yet.
+            #
+            # ⚠ WITHOUT ONE, `name:` PREFIXED, MIRRORING `component_key` RULE 6.
+            # A bare name must never be stored where a purl is expected — a reader
+            # joining on `component_key` would treat `transformers` as an identity
+            # the ecosystem minted, which nobody did.
+            keys.append(f"purl:{purl}" if purl else f"name:{name.lower()}")
 
-    return sorted(set(linked)), sorted(set(unlinked))
+    return sorted(set(keys)), sorted(set(unlinked))
+
+
+def attributed_frameworks(model: dict[str, Any]) -> list[dict[str, Any]]:
+    """The frameworks THIS model's dependencies are drawn from.
+
+    ⚠ THE PROJECT-WIDE LIST IS THE FALLBACK, NOT THE ANSWER, AND THE DIFFERENCE
+    BECAME VISIBLE THE MOMENT A SECOND MODEL EXISTED.
+
+    `frameworks` is a SCAN-WIDE list — every AI library the engines found
+    anywhere in the tree — and the pipeline joins it onto each model. With one
+    model in the inventory that reads as "the AI software this model rests on".
+    With three, it says `gpt-4o` depends on `sentence-transformers`, which is
+    false: an embedding library has nothing to do with a hosted chat model, and
+    Table 10 element 06 is read as a claim about THAT model.
+
+    Where an engine actually attributed a calling framework to a model, that
+    attribution wins and only the matching framework is linked. Where none did,
+    the project-wide set is used and `dependency_scope` reports which of the two
+    happened, so the report can say so rather than implying per-model evidence
+    it does not have.
+    """
+    frameworks = list(model.get("frameworks") or [])
+    named = str(model.get("framework") or "").strip().lower()
+    if not named:
+        return frameworks
+
+    matched = [f for f in frameworks if str(f.get("name") or "").strip().lower() == named]
+    # An attribution naming a framework no engine catalogued is still an
+    # attribution, and falling back to everything would silently widen it.
+    return matched
+
+
+def dependency_scope(model: dict[str, Any]) -> str:
+    """`model` when an engine attributed a framework to this model, else `project`.
+
+    Rendered beside element 06 so a reader knows whether "this model's
+    dependencies" means "the engine said so" or "these are the AI libraries in
+    the project". See `attributed_frameworks`.
+    """
+    return "model" if str(model.get("framework") or "").strip() else "project"
 
 
 def coverage_note(gaps: list[FieldGap], total_fields: int) -> str:
@@ -255,3 +350,7 @@ def coverage_note(gaps: list[FieldGap], total_fields: int) -> str:
             f"than a failure of this scan."
         )
     return " ".join(parts)
+
+
+def _string_or_empty(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""

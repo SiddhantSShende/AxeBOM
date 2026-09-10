@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 )
 
 // GitHub repo listing, against a fake GitHub. No network, and the fake returns
@@ -277,5 +279,73 @@ func TestOnlyMetadataEndpointsAreCalled(t *testing.T) {
 					"content acquisition belongs in the Phase 5 sandbox", p)
 			}
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// CurrentLogin — the round trip that proves a token before it is stored
+// ---------------------------------------------------------------------------
+
+func TestCurrentLoginReadsTheAccountUnderTheToken(t *testing.T) {
+	var path string
+	c := fakeGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id": 583231, "login": "octocat"}`))
+	})
+
+	login, err := c.CurrentLogin(t.Context(), "token")
+	if err != nil {
+		t.Fatalf("current login: %v", err)
+	}
+	if login != "octocat" {
+		t.Errorf("login = %q, want octocat", login)
+	}
+	if path != "/user" {
+		t.Errorf("path = %q, want /user", path)
+	}
+}
+
+// ⚠ THE MESSAGE MATTERS AS MUCH AS THE CODE HERE.
+//
+// The listing path's 401 says "the STORED token" and tells the reader to
+// reconnect. On this path nothing is stored yet — the authorisation has just
+// come back from GitHub — so that instruction would send someone to repair a
+// connection they have not finished making.
+func TestCurrentLoginRejectsADeadTokenWithoutTellingAnyoneToReconnect(t *testing.T) {
+	c := fakeGitHub(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	})
+
+	_, err := c.CurrentLogin(t.Context(), "dead")
+	if err == nil {
+		t.Fatal("a token GitHub rejected was accepted")
+	}
+	if !errs.Is(err, errs.AuthTokenInvalid) {
+		t.Errorf("code = %s, want %s", errs.From(err).Code, errs.AuthTokenInvalid)
+	}
+	if strings.Contains(err.Error(), "reconnect") {
+		t.Errorf("err = %v, want no reconnect instruction on the connect path", err)
+	}
+}
+
+// A token GitHub answers for but names no account under is not a usable
+// credential either, and storing it would produce a connection with an empty
+// login — which is exactly the row this call exists to stop being written.
+func TestCurrentLoginRefusesAnAccountlessResponse(t *testing.T) {
+	c := fakeGitHub(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	})
+
+	if _, err := c.CurrentLogin(t.Context(), "token"); err == nil {
+		t.Error("a response naming no account was accepted")
+	}
+}
+
+func TestCurrentLoginRequiresAToken(t *testing.T) {
+	c := New(Config{})
+	if _, err := c.CurrentLogin(t.Context(), ""); err == nil {
+		t.Error("the empty token was sent to GitHub")
 	}
 }

@@ -24,6 +24,7 @@ import uuid
 
 import pytest
 
+from .bulk import _ai_model_id
 from .test_bulk import ai_model, component, crypto_asset, model
 from .writer import RefusedError, _optional_uuid, write_bom_document
 
@@ -206,11 +207,11 @@ def canonical_model(tenant_suffix: str = "") -> dict:
             # one document; this fixture does, deliberately, exactly the way
             # it already exercises every OTHER table in one small model.
             crypto_assets=[crypto_asset("algorithm", primitive="pke")],
-            # ⚠ SAME REASONING AS crypto_assets ABOVE, extended to all three
-            # AI-model tables at once: one model with one dataset and one
-            # dependency is what gives the schema-agreement test below
+            # ⚠ SAME REASONING AS crypto_assets ABOVE, extended to every
+            # AI table at once: one model with one dataset, one dependency and
+            # one engine sighting is what gives the schema-agreement test below
             # something to check for `ai_models`/`ai_datasets`
-            # /`ai_model_dependencies` too.
+            # /`ai_model_dependencies`/`ai_model_provenance` too.
             ai_models=[
                 ai_model(
                     f"model-ref{tenant_suffix}",
@@ -222,6 +223,21 @@ def canonical_model(tenant_suffix: str = "") -> dict:
                 )
             ],
         ),
+        # ⚠ AND `normalize.ai_assets`, WHICH IS A TOP-LEVEL CANONICAL LIST
+        # rather than a per-model one: a prompt or a vector store belongs to the
+        # repository, not to a model. One row here for the same reason as every
+        # other table in this fixture — a batch with no rows checks nothing.
+        "ai_assets": [
+            {
+                "asset_type": "prompt",
+                "asset_key": f"prompt:src/app.py:9{tenant_suffix}",
+                "name": "system-prompt",
+                "provider": "",
+                "evidence": ["src/app.py:9"],
+                "serves_model_key": "",
+                "attributes": {"found_by": ["airom"]},
+            }
+        ],
         "ruleset_version": "test-ruleset-1",
         "spdx_license_list_version": "3.24",
         "unidentified_count": 0,
@@ -957,8 +973,63 @@ def test_an_unmappable_licence_keeps_its_raw_text(pg_conn, written):
     written.append((tenant_id, second.bom_document_id))
 
     cur.execute(
-        "SELECT first_seen_scan_id FROM normalize.license_refs "
-        " WHERE tenant_id = %s AND slug = %s",
+        "SELECT first_seen_scan_id FROM normalize.license_refs  WHERE tenant_id = %s AND slug = %s",
         (tenant_id, "LicenseRef-acme-eula"),
     )
     assert str(cur.fetchone()[0]) == scan_id, "a re-scan overwrote the first sighting"
+
+
+def test_a_models_merge_key_lands_in_the_column_that_mints_its_id(
+    pg_conn, written, ensure_test_cluster, ensure_test_alias_snapshot
+) -> None:
+    """`model_key` must equal the `_identity` the row's own surrogate id derives from.
+
+    ⚠ THIS IS THE COLUMN `normalize.ai_models` SPENT ITS WHOLE LIFE WITHOUT. The merge
+    key existed only for the length of one Python dict, so nothing stored could say
+    whether two rows were the same model — which is how one Hugging Face model was
+    recorded as three separate AI models under three spellings of a library's name.
+
+    Asserted against live Postgres rather than the plan, because a planned column that
+    does not exist is exactly what `test_every_planned_column_exists_in_the_live_schema`
+    was written to catch, and this is the value inside it.
+    """
+    tenant_id = str(uuid.uuid4())
+
+    result = write_bom_document(
+        pg_conn,
+        tenant_id=tenant_id,
+        scan_id=str(uuid.uuid4()),
+        bom_type="AIBOM",
+        normalization_version=1,
+        canonical=canonical_model(),
+    )
+    written.append((tenant_id, result.bom_document_id))
+    doc_id = result.bom_document_id
+
+    cur = pg_conn.cursor()
+    cur.execute("SELECT set_config('app.current_tenant_id', %s, false)", (tenant_id,))
+    cur.execute(
+        """
+        SELECT id, model_key, identity_rule, identity_confidence, verified
+          FROM normalize.ai_models
+         WHERE bom_document_id = %s
+        """,
+        (doc_id,),
+    )
+    rows = cur.fetchall()
+
+    assert len(rows) == 1
+    row_id, model_key, rule, confidence, verified = rows[0]
+
+    assert model_key, "model_key is NOT NULL and must never be written empty"
+    assert model_key == "model-ref"
+    assert rule == "name"
+    assert confidence == "low"
+
+    # Unverified until something actually confirmed the model resolves upstream.
+    assert verified is False
+
+    # The stored key and the surrogate id agree by construction: bulk derives both
+    # from `_identity`. A row whose id says one model and whose key says another
+    # would dedup one way and render the other.
+    assert str(row_id) == _ai_model_id(doc_id, model_key)

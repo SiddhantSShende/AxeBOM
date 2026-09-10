@@ -9,6 +9,7 @@ compose into one canonical document.
 
 from __future__ import annotations
 
+from workers.aibom import merge
 from workers.aibom.adapters.ai_bom import extract_discovery
 from workers.aibom.adapters.aibom_generator import parse_model_card
 from workers.aibom.normalize.pipeline import build_canonical_aibom
@@ -42,8 +43,18 @@ def test_the_enriched_model_s_dataset_is_carried_through_to_the_row() -> None:
     canonical = build_canonical_aibom(_discovery(), _cards())
     row = canonical["ai_models"][0]
 
+    # ⚠ THE PUBLISHER'S DECLARATION, NOT AIBOM-GENERATOR'S PROSE SCRAPE. The
+    # `datasets:` front matter of the model card names real Hub dataset ids;
+    # aibom-generator's re-parse of the rendered page returns English words
+    # (`consisting`, `given`, `one`, `a` on three real models). See
+    # `aibom_generator._resolved_datasets`.
     assert row["_datasets"] == [
-        {"name": "the-pile", "type": "dataset", "license": "MIT", "source": ""}
+        {
+            "name": "the-pile",
+            "type": "dataset",
+            "license": "",
+            "source": "https://huggingface.co/datasets/the-pile",
+        }
     ]
 
 
@@ -63,7 +74,14 @@ def test_an_unresolved_dependency_is_reported_as_a_diagnostic() -> None:
     canonical = build_canonical_aibom(_discovery(), _cards())
     row = canonical["ai_models"][0]
 
-    assert row["_dependencies"] == []
+    # ⚠ THIS USED TO ASSERT `_dependencies == []`. Reporting a dependency only in a
+    # diagnostic and storing nothing meant the AI Model Dependencies sheet was empty
+    # for every project without an SBOM scan — an absence rendered as a fact.
+    assert row["_dependencies"], "an unresolved dependency must still be stored"
+    # It keeps its real purl: the SBOM that catalogues langchain may simply be a
+    # document not joined yet. What it must never do is vanish.
+    assert "purl:pkg:pypi/langchain@0.3.7" in row["_dependencies"]
+
     diag = next(d for d in canonical["diagnostics"] if d["code"] == "AIBOM_DEPENDENCY_NOT_IN_SBOM")
     assert "langchain" in diag["message"]
 
@@ -84,7 +102,18 @@ def test_risk_score_and_owasp_top10_are_captured_but_never_scored() -> None:
 
 
 def test_a_user_supplied_value_is_reflected_in_the_row_and_its_coverage() -> None:
-    identity = "meta-llama/Llama-3-8B"
+    # ⚠ DERIVED FROM THE LADDER, NEVER TYPED OUT. `user_values_by_identity` is keyed
+    # on the model's merge key, so a test that hardcodes the key silently stops
+    # exercising the lookup the moment the ladder changes a tier's format — which is
+    # exactly what happened when `merge.identity` stopped returning a bare
+    # `org/name` and started returning a prefixed `purl:pkg:huggingface/...` key.
+    # ⚠ DERIVED FROM THE MODEL THE PIPELINE ACTUALLY SEES, not a synthetic stand-in.
+    # A hand-built `{"model_ref": ...}` lacks the `provider` the real discovery
+    # carries, and the ladder reads it — a Hugging Face purl is only minted where
+    # something said Hugging Face. Keying this lookup off a different dict than the
+    # pipeline uses is precisely the mismatch this test exists to catch.
+    merged, _ = merge.merge(_discovery()["models"], _cards())
+    identity = merged[0]["_model_key"]
     without = build_canonical_aibom(_discovery(), _cards())
     with_user_value = build_canonical_aibom(
         _discovery(),

@@ -177,8 +177,9 @@ def write_bom_document(
                 (tenant_id, scan_id, bom_type, normalization_version,
                  ruleset_version, alias_snapshot_id, spdx_license_list_version,
                  completeness_pct, declaration_pct, coverage_breakdown,
-                 unidentified_count, project_id, supplementary_coverage)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 unidentified_count, project_id, supplementary_coverage,
+                 normalize_diagnostics)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -200,6 +201,13 @@ def write_bom_document(
                 # None for every other BOM type, which resolves by scan_id.
                 canonical.get("project_id"),
                 json.dumps(supplementary),
+                # ⚠ THIS USED TO BE COMPUTED AND DISCARDED. Every normalize
+                # consumer (aibom, cbom, hbom) sets `canonical["diagnostics"]`
+                # and nothing read it, so every statement the normalizer made
+                # about what it could NOT resolve died at this boundary — a
+                # direct CLAUDE.md invariant 12 failure, product-wide.
+                # See migrations/normalize/0017.
+                json.dumps(canonical.get("diagnostics") or []),
             ),
         )
         row = cur.fetchone()

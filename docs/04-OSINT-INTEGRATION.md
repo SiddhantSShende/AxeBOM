@@ -99,11 +99,54 @@ The unit is **(tool, mode)**, not tool — see `02-CONTRACTS.md §7`.
 | engine_id | Upstream | Mode | Role |
 |---|---|---|---|
 | `ai-bom` | `Trusera/ai-bom` | **container (built locally)** | **Code-level AI discovery** — LLM providers, agent frameworks (LangChain, CrewAI, AutoGen, LlamaIndex, LangGraph), MCP servers, model references, AI containers |
+| `airom` | `airomhq/airom` | **container (built locally)** | **Code-level AI discovery, widest surface** — models, embeddings, prompts, vector stores, RAG pipelines and frameworks, each with real `file:line` evidence |
+| `cdxgen-ai` | `cdxgen/cdxgen` | container (digest-pinned) | **Code-level AI discovery** — the SBOM engine's binary run with `-t ai`; correctly-cased `pkg:huggingface/…` purls and the inference services a repository talks to |
+| `cisco-aibom` | `cisco-ai-defense/aibom` | **registered, disabled** | Real AI-BOM generator whose `analyze` always requires `--llm-model` — network egress, an API key, and customer source sent to a third-party LLM. See below |
 | `aibom-generator` | `GenAI-Security-Project/aibom-generator` | pip / service | **Model-metadata AIBOM** from Hugging Face — model card, config, license, completeness score |
+| `aibom-toml` | `0disoft/ai-bom-generator` (format) | **internal** | **A declaration the customer committed** — parses `aibom.toml` where it lives in the source tree |
+| `aibom-k8s-runtime` | `GoogleCloudPlatform/k8s-aibom` (format) | **internal, upload** | **A running cluster** — the `AIBOM` custom resource the controller emits, exported and uploaded |
+| `aibom-glaas` | GLaaS + `treqs/roar` (format) | **internal, upload** | **A training run** — the ML-BOM GLaaS generates, downloaded and uploaded |
+
+> **THREE OF THE ELEVEN NAMED INTEGRATIONS ARE NOT SCANNERS, and calling them one would manufacture coverage out of nothing.** An engine that reports back what the customer already told us, dressed as discovery, is worse than no engine — invariant 12 rates a false negative a customer trusts above an honest gap. So each lands in the role it actually fills:
+>
+> - **`0disoft/ai-bom-generator` discovers nothing**, and that is not a criticism. Verified against the real package (0.6.1): it reads an `aibom.toml` the customer WROTE and renders it. Point it at a repository with no such file and it produces nothing. `aibom-toml` is an engine anyway because a committed `aibom.toml` is a file in the source tree, and parsing a file they committed is a scan in exactly the sense parsing a committed lockfile is — the same line that made `hbom-ecad` a scan and left `hbom-csv` an import. Every model it produces carries `model_ref_source: aibom.toml`, so provenance records that it is a **declaration**, not an observation. ⚠ AxeBOM parses the TOML rather than running the tool: `ai-bom-generator` installs a console script named `ai-bom`, which **collides** with Trusera's, and `tomllib` is in the standard library.
+> - **`k8s-aibom` is a Kubernetes controller**, installed by Helm chart. No scan CLI, needs cluster credentials AxeBOM must not hold, and what it describes is a RUNNING deployment — the one thing a source scan cannot see. Its ecosystem is `runtime-deployments` rather than `model-refs` alone, so Engine Coverage does not claim ground a source engine already covers.
+> - **`roar` can never be an AxeBOM engine**, and it is worth being exact rather than quietly dropping it: it wraps and **executes the user's own training command**, which invariant 7 forbids outright, and without network it produces no BOM at all — the CycloneDX AI-BOM and the G7/CISA/NTIA score are generated **server-side on glaas.ai**, which has no public repository and is not self-hostable. Its rubric may be cited as prior art and must never be described as a reference implementation AxeBOM followed. It also ships telemetry (`ROAR_NO_TELEMETRY=1` disables it), and the operator instruction says so.
+>
+> ⚠ **One parser, two engine ids** for the last two. Both documents are CycloneDX with AI content, so two parsers would be two places for the same bug; they are separate ids because they answer different questions, and Engine Coverage has to be able to say which of those a report contains. A document uploaded under the wrong id is **parsed and the mismatch reported** — refusing it would lose real data over a filing mistake, and parsing it silently would report a training-run BOM as a cluster inventory.
+
+> **THREE DISCOVERY ENGINES OVER ONE TREE, AND THE DISAGREEMENTS ARE THE POINT** — the same reasoning the SBOM family records for running syft and cdxgen together. Measured on one real tree (`workers/aibom/testdata/ai-langchain/`, whose captured responses are checked in beside it), each of the three sees something the others do not:
+>
+> | | `ai-bom` | `airom` | `cdxgen-ai` |
+> |---|---|---|---|
+> | `meta-llama/Llama-3-8B` | ✓ (no purl) | ✓ (name lowercased) | ✓ **`pkg:huggingface/meta-llama/Llama-3-8B`** |
+> | `gpt-4o` | ✓ attributed to `langchain` | ✓ attributed to **`openai`** | ✓ attributed to **`openai`** |
+> | `sentence-transformers/all-MiniLM-L6-v2` | ✗ | ✓ | ✗ |
+> | prompts, vector store, RAG pipeline | ✗ | ✓ (4, with `file:line`) | ✓ (1) |
+> | inference services | ✗ | ✗ | ✓ (2) |
+> | calling framework per model | ✓ | ✗ | ✗ |
+>
+> They converge on the same `model_key` for the models they share — which is what makes the union safe rather than a triple count — and `normalize.ai_model_provenance` records which engines saw each one, because "found by one engine, missed by two" is the most useful single fact a reviewer has for weighing a Table 10 row.
+>
+> ⚠ **`airom` must be dispatched on `airom:kind`, never on the CycloneDX `type`.** Real airom output types its vector store and its RAG pipeline as `application` — which is in the AIBOM classifier's *framework* set, so a type-based dispatch files a vector store as a software dependency — and its prompts as `data`, which is in neither set, so both would be dropped without a word.
+>
+> ⚠ **`airom` lowercases model names and Hugging Face is case-sensitive.** `airom:model.id` reads `meta-llama/llama-3-8b`; only `evidence.identity[].concludedValue` carries `meta-llama/Llama-3-8B`. Using the lowercased form keys the same model differently from the other two engines — storing one model as two — and sends enrichment a reference the Hub does not resolve.
+>
+> ⚠ **`airom` reports what it could not check.** It queries OSV.dev for advisories when it can; engines run `--network=none`, so it never can. It sets `airom:assurance.cve.unchecked`, which becomes an `ENGINE_PARTIAL_ECOSYSTEM` diagnostic rather than an absent vulnerability list nobody asked about.
+>
+> ⚠ **`cdxgen-ai` is the SAME image and binary as `cdxgen`** — the `syft-spdx` precedent — and `--no-install-deps` is mandatory for the reason the SBOM entry records at length: the flag defaults to TRUE and the tool otherwise runs `npm install` over the customer's source. Its `pkg:generic/openai/gpt-4o` purl is cdxgen minting a purl for a thing that has no package, and `generic` is in `discovery.PACKAGE_PURL_TYPES` precisely so it cannot be read as a model identifier.
+>
+> ⚠ **`cisco-aibom` is registered and never dispatched, and that is the honest shape of "it lands".** Its `analyze` command always requires `--llm-model`: it resolves ambiguous AI usage by sending code context to a third-party LLM, which needs egress and an API key that scan engines are not allowed to hold (invariant 7), and there is no egress proxy yet. It is listed by `GET /v1/scans/engines` with `disabled: true` and the reason attached, so a reader can tell "AxeBOM does not know about this tool" from "AxeBOM chose not to run it". It is deliberately **not** an `unavailable` engine RUN: a permanent degraded row on every AIBOM scan would make `DeriveScanStatus` return `completed_with_errors` for all of them, which trains a reader to ignore the status that matters. `Registry.Resolve` refuses to dispatch it even when a tenant policy names it.
 
 > **`ai-bom` runs in the scan sandbox, over untrusted customer code** — its adapter (`workers/aibom/adapters/ai_bom.py`) subclasses `SandboxedAdapter`, exactly like syft or cbomkit-theia, per `CLAUDE.md` invariant 7. Upstream publishes it only as a pip package (`pip install ai-bom==3.1.0`), which gives `ManifestResolver` nothing to build a sandboxed container invocation from — so `deploy/docker/engines/Dockerfile.ai-bom` wraps that package into a container built **locally** (`task osint:build-ai-bom`, folded into `task osint:pull`), tagged `axebom/ai-bom-engine:dev`. There is no upstream image, so there is no upstream digest to pin against: `OSINT/tools.manifest.yaml` pins it by tag only (`image_tag: dev`), and `SandboxedAdapter.classify()` reports that honestly as `ENGINE_IMAGE_DIGEST_UNKNOWN` in Engine Coverage rather than claiming a digest pin it does not have. The full pip dependency closure (23 packages) is hash-pinned in `deploy/docker/engines/ai-bom-requirements.lock.txt`.
 >
-> `aibom-generator` (below) is the OTHER pip-based AIBOM engine, and it stays `pip` mode deliberately: it makes an outbound call to the Hugging Face API over a model id, not over customer code, so it runs **outside** the sandbox as a trusted dependency of the AIBOM worker's own Python environment — see `workers/aibom/adapters/aibom_generator.py` and `workers/aibom/adapters/aibom_generator_fetch.py`. The two engines' upstream distribution shape looks identical (both are "just a pip package") but what they run *against* is what decides whether they need the sandbox at all.
+> `aibom-generator` (below) is the OTHER pip-based AIBOM engine, and it stays `pip` mode deliberately: it makes an outbound call to the Hugging Face API over a model id, not over customer code, so it runs **outside** the sandbox. The two engines' upstream distribution shape looks identical (both are "just a pip package") but what they run *against* is what decides whether they need the sandbox at all.
+>
+> ⚠ **It runs in its OWN deployable, not in the AIBOM worker's Python environment.** This section used to say the latter, and M2 moved it, for one specific reason: `owasp-aibom-generator` calls `push_to_hub` against a **hardcoded** third-party dataset (`owasp-genai-security-project/aisbom-usage-log`, in its own `src/config.py`), sending `{timestamp, "generated", model_id}` for every model it is asked about — gated only on `HF_TOKEN` being set. The obvious operational fix for Hugging Face's anonymous rate limit would therefore publish the name of every AI model in every customer repository AxeBOM scans. `workers/aienrich` keeps that package out of the image that processes customer code, and `assert_no_telemetry_token` refuses to start the worker with a token present.
+>
+> ⚠ **Installed `--no-deps`.** It declares torch, transformers, datasets, sentencepiece, fastapi, flask, gunicorn and uvicorn as hard runtime dependencies; honouring them produced a **9.78GB image** — 3.2GB of NVIDIA CUDA, 1.2GB of torch, 897MB of triton — for a worker that fetches JSON over HTTPS. The subset the CLI path actually imports is declared in `pyproject.toml`'s `aienrich` extra and builds a **426MB** image. The exclusions are also posture: the ML stack serves `--summarize`, which downloads and RUNS a model, and the web stack serves the project's bundled Flask app, which cannot now be started at all.
+>
+> ⚠ **It writes to its CWD whether you ask it to or not.** `CLIController.generate` opens with an unconditional `os.makedirs("sboms", exist_ok=True)` relative to the working directory, *before* it reads `--output`. Running as non-root in a root-owned WORKDIR, that is `PermissionError`, exit 0, and no output file — on every model. `aibom_generator_fetch` runs it with `cwd` set to its own temp directory. Same shape as the `--output -` defect on `ai-bom`: this family of tools describes less about its behaviour in its flags than it appears to.
 
 Both emit CycloneDX 1.6, so merging is clean.
 
@@ -259,6 +302,19 @@ cbomkit-theia image <image@digest>
 # unreachable. Omit `--output`: for any non-`table` format ai-bom prints the
 # rendered report straight to stdout, which is the one channel that exists.
 ai-bom scan <path> --format cyclonedx --quiet
+
+# airom writes the document to stdout and its OSV.dev warning to stderr, so the
+# JSON is never corrupted by the degradation notice. No --output for the same
+# reason as above: every sandbox mount is read-only.
+airom fs <path> -o cyclonedx
+
+# cdxgen's AI mode. `-o /dev/stdout` because every mount is read-only;
+# `--spec-version 1.6` because a newer spec parses into silently fewer fields
+# downstream rather than failing; `--no-install-deps` because the flag defaults
+# to TRUE and the alternative is package-manager resolution over untrusted
+# source (CLAUDE.md invariant 7).
+cdxgen -r <path> -t ai -o /dev/stdout --spec-version 1.6 --no-banner --no-install-deps
+
 python -m src.cli <hf-model-id> --output model.cdx.json
 
 # --- WEB RECON --------------------------------------------------------------
@@ -316,6 +372,34 @@ CycloneDX `cryptoProperties` maps almost directly: `oid`, `assetType`, `algorith
 ### AI models (CERT-In Table 10)
 
 CycloneDX ML-BOM `modelCard`, `component.properties`, and `data` components; plus Trusera risk properties (`risk_score`, OWASP LLM Top-10) which are **AxeBOM extensions excluded from coverage scoring**.
+
+Three engines emit CycloneDX and three put the model id, the provider and the evidence in different places. `workers/aibom/discovery.py` holds the judgement they share — what counts as a model reference, whether a purl is real, how an evidence location is spelled — and each adapter holds only its own dialect's mapping. Getting that judgement wrong once put a Python library in a Table 10 inventory three times over.
+
+⚠ **The licence and the training datasets do NOT come from `aibom-generator`'s parse.** Measured against the Hub's own `card_data` for three real models: it returns the licence with the next word of the document glued on (`apache-2.0 datasets`, `mit ---`, `apache-2.0 library`) and returns training datasets scraped out of prose (`consisting`, `one`, `a`, `given`) where the publisher declared `bookcorpus, wikipedia`, nothing, and 21 real dataset ids. The tool says so itself — it sets `genai:aibom:trainingDataAvailable = "false"`. `fetch_model_card` therefore stores **both** upstream responses in one envelope (`{aibom_generator, huggingface}`) and `parse_model_card` takes those two fields from the model card's structured front matter, recording a diagnostic when it declines a value.
+
+### Export — CycloneDX ML-BOM and SPDX 3.0 AI profile
+
+**The AIBOM already exported, and what it exported was not an ML-BOM.** Every AI model was mapped onto a generic protobom component with namespaced properties — a valid CycloneDX 1.6 document in which a consumer looking for `modelCard` finds nothing, because **protobom v0.5.8 has no ML fields at all** (checked: the string `ModelCard` does not appear anywhere in the module). Every ML-aware tool read our AIBOM as a list of unremarkable software.
+
+`services/report/internal/export/mlbom.go` is a second serializer for the AIBOM only, through **`CycloneDX/cyclonedx-go`** — the format's own Go library, already in the module graph as protobom's dependency, which models the whole ML shape. It is not hand-rolled JSON: `export.go`'s header forbids that, and the reasoning does not stop being true for a third format. Downloadable as `format: mlbom`.
+
+> ⚠ **`modelCard` is optional in CycloneDX 1.5, 1.6 and 1.7**, so a document with zero ML content validates as a perfect ML-BOM. Schema conformance is **not** evidence of content, and the tests assert content — `TestTheMLBOMCarriesAPopulatedModelCard`, plus a golden in `services/report/testdata/golden/` that `tools/conformance` validates against CycloneDX's own schema.
+>
+> ⚠ **The official schema caught a defect our own tests did not.** The serializer emitted `urn:uuid:` + the document id, and CycloneDX pins `serialNumber` to an RFC-4122 URN — so a non-UUID id produced a document the spec's validator rejects. It would have shipped: a report id is a UUIDv7 in production, so it would have been correct on every real report and wrong on the first one that was not.
+>
+> ⚠ **The `not-provided` sentinel is never exported as a value.** It is how *our* document makes a gap visible (invariant 3); emitting it as a model's licence or task in a CycloneDX file asserts it as the answer to every tool that reads one. A live export leaked `task: "not-provided"` into the ML-BOM and onward into SPDX's `typeOfModel` because the filter covered only licence and developer — the guard was narrower than the rule it was written for.
+
+**SPDX 3.0 AI profile — the plan's blocker was wrong, and this is what is actually true.** The plan recorded "⚠ our pinned `spdx-tools` 0.8.x cannot write 3.0.1" and pre-authorised a `LIMITATIONS.md` entry. Checked against the installed package rather than assumed: **`spdx-tools` 0.8.5 ships a complete `spdx_tools.spdx3`** — `model.ai.AIPackage`, `model.dataset.Dataset`, and a `writer.json_ld` that produces a real document. `workers/aibom/spdx3.py` converts an ML-BOM into one, and it is tested against the committed ML-BOM golden.
+
+> What is narrowly true: it writes **3.0.0**, not 3.0.1 — a patch release of the same major/minor, so a consumer reading 3.0 reads this and one demanding the literal string does not get it.
+>
+> ⚠ **It is a converter, not yet a downloadable format**, and the blocker is architectural rather than a library gap. `services/report` is a distroless **Go** binary; it cannot call a Python library, and SPDX 3.0 has no mature Go writer — hand-rolling JSON-LD is exactly what the export package forbids. Wiring it as a report format needs a Python renderer deployable. Named as owed rather than half-built; the mapping exists and is exercised, so that work starts from a spike that runs.
+>
+> **Why a second target at all**: `typeOfModel`, `informationAboutApplication`, `limitation`, `standardCompliance` and `sensitivePersonalInformation` are first-class in the SPDX AI profile and have no CycloneDX equivalent. A reviewer asking "what is this model FOR and what must it not do" gets a structured answer rather than a property named by us.
+
+### AI assets — prompts, vector stores, RAG pipelines, inference endpoints
+
+**No CERT-In Table 10 element covers any of these**, and `airom` and `cdxgen-ai` find them with `file:line` evidence — six of them on one small real tree. They are stored in `normalize.ai_assets` (type-discriminated, the same reasoning invariant 5 applies to Table 9's crypto types), rendered in their own report section, and **scored into neither coverage number**: letting them move `completeness_pct` would change a compliance percentage using something the guideline never asked for. Dropping them instead would be the silence invariant 12 exists to prevent. The operational profile (`aibom-operational-v1.yaml`) is where they get scored, under its own label.
 
 ### Hardware (CERT-In Table 11 + §10.4.1.4)
 

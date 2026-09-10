@@ -17,7 +17,7 @@
 # every production container to satisfy a status column, which is a bad trade.
 #
 # Readiness is still real and still exposed: every service serves /readyz, the
-# gateway probes all seven upstreams and reports each one by name, and
+# gateway probes every upstream and reports each one by name, and
 # `task health` curls them. `docker compose ps` will say "Up", not "healthy",
 # and that is the honest limit of what the container runtime can observe here.
 # ---------------------------------------------------------------------------
@@ -104,6 +104,7 @@ x-service-env: &service-env
   REPORT_URL: http://report:8094
   CAMPAIGN_URL: http://campaign:8095
   COMMENT_URL: http://comment:8096
+  AIBOM_URL: http://aibom:8100
   NOTIFICATION_URL: http://notification:8097
 
   # METRICS_PORT is deliberately NOT set. It is a single global; setting it
@@ -277,6 +278,25 @@ services:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.comment
     image: axebom/comment:dev
+    environment:
+      <<: *service-env
+
+  # ⚠ THE TENTH SERVICE, AND IT EXISTS BECAUSE OF invariant 10. `services/project`
+  # collected the operator-supplied half of CERT-In Table 10 and wrote it onto
+  # `normalize.ai_models` with an UPDATE — a mutation of normalized data. It owns
+  # the `aibom` schema, the two consent switches that would send customer code to
+  # a third-party LLM, the operator's own EU AI Act / NIST / ISO 42001
+  # classification, and the attestation verification records.
+  #
+  # The gateway routes the whole `/v1/aibom` prefix here; a prefix claimed by two
+  # upstreams is refused at construction, so this and project's shortened list
+  # are one fact stated twice.
+  aibom:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.aibom
+    image: axebom/aibom:dev
     environment:
       <<: *service-env
 
@@ -458,6 +478,85 @@ services:
       - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/enginedb:/var/lib/axebom/enginedb
       - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/workspaces:/var/lib/axebom/workspaces
       - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/artifacts:/var/lib/axebom/artifacts
+
+  # ⚠ THE ONLY WORKER THAT IS NOT root, WHICH IS WHY THIS ONE-SHOT EXISTS.
+  #
+  # Docker creates a missing bind-mount source as root:root. Every other worker
+  # runs as root and never noticed; `aienrich-worker` runs as 65532 (see
+  # Dockerfile.aienrich) and could therefore create NEITHER its per-job artifact
+  # directory NOR a cache entry.
+  #
+  # Both failures were invisible until enrichment first actually succeeded at
+  # resolving a model: the cache write logged a warning and carried on, and the
+  # artifact write raised — turning a successful enrichment into a `failed`
+  # engine run, and losing the immutable raw response that makes
+  # re-normalization replayable (invariant 10).
+  #
+  # ⚠ THE PARENT ONLY, NEVER `-R`. Each `artifacts/<job_id>` directory belongs to
+  # the engine run that wrote it and is never rewritten; recursively chowning
+  # them would touch stored evidence to fix a permission on a directory that has
+  # not been created yet. Handing over the parent is all a new job needs, and
+  # root-owned workers keep writing there regardless.
+  engine-state-init:
+    image: alpine:3.20
+    entrypoint: >
+      /bin/sh -c "
+      mkdir -p /state/artifacts /state/enrichment-cache /state/workspaces;
+      chown 65532:65532 /state/artifacts /state/enrichment-cache /state/workspaces;
+      echo 'engine state root ready';
+      "
+    volumes:
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}:/state
+    restart: "no"
+
+  # --------------------------------------------------- enrichment (aibom)
+  # ⚠ ITS OWN IMAGE, AND ITS OWN NETWORK POSTURE. This is the only component in
+  # the AI path that reaches the internet: it asks the Hugging Face API about
+  # model IDENTIFIERS it was handed, and never sees customer source. See
+  # deploy/docker/Dockerfile.aienrich for why `owasp-aibom-generator` is kept out
+  # of the image that processes customer repositories.
+  #
+  # ⚠ NO DOCKER SOCKET AND NO enginedb. It starts no container and runs no
+  # engine. `workspaces` is read-only: it reads the discovery `workers/aibom`
+  # staged there and has no business writing to a scan's workspace.
+  #
+  # It consumes `scan.job.aibom.enrich` — four tokens, which the AIBOM worker's
+  # exact `scan.job.aibom` filter never receives — and reports on
+  # `scan.result.aibom`, because `aibom-generator` is an AIBOM engine and belongs
+  # in that family's Engine Coverage.
+  aienrich-worker:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.aienrich
+    image: axebom/aienrich:dev
+    # ⚠ FULLY REPEATED, NOT MERGED — the same trap `project` documents above:
+    # a mapping key in a service REPLACES the anchor's, it does not merge into
+    # it, so every condition from x-service-defaults has to be restated here
+    # alongside the one this service alone needs.
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      nats:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
+      engine-state-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *service-env
+      AXEBOM_SERVICE_NAME: aienrich-worker
+      # ⚠ MUST STAY EMPTY. A token turns owasp-aibom-generator's analytics on,
+      # which publishes every model id to a third-party dataset. The worker
+      # refuses to start if either spelling is set.
+      HF_TOKEN: ""
+      HUGGING_FACE_HUB_TOKEN: ""
+    volumes:
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/workspaces:/var/lib/axebom/workspaces:ro
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/artifacts:/var/lib/axebom/artifacts
+      - ${ENGINE_STATE_ROOT:-/var/lib/axebom}/enrichment-cache:/var/lib/axebom/enrichment-cache
 
   # ----------------------------------------------- normalize consumer (sbom)
   # ⚠ NOT axebom/worker:dev. This is a SEPARATE image

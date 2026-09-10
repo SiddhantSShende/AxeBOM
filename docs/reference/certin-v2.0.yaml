@@ -680,14 +680,14 @@ aibom:
     - {id: certin.aibom.09.data_source,           name: Data Source,                canonical_path: ai_model.data_source,            type: text,        weight: 3, source_page: 54, status: verified, description: "Proprietary, publicly available, real-time, or synthetic data."}
     - {id: certin.aibom.10.data_sets,             name: Data Sets,                  canonical_path: "ai_model.data_sets[]",            type: ref_list,    weight: 3, source_page: 55, status: verified, description: "Names, versions, formats, and limitations. Privacy and licensing compliance."}
     - {id: certin.aibom.11.hardware,              name: Hardware,                   canonical_path: ai_model.hardware,               type: text,        weight: 1, source_page: 55, status: verified, description: "GPUs, TPUs, storage, memory."}
-    - {id: certin.aibom.12.security_requirements, name: Security Requirements,      canonical_path: ai_model.security_requirements,  type: text,        weight: 3, source_page: 55, status: verified, description: "Encryption methods and access control mechanisms."}
+    - {id: certin.aibom.12.security_requirements, name: Security Requirements,      canonical_path: ai_model.security_requirements,  type: text,        weight: 3, source_page: 55, status: verified, description: "Encryption methods and access control mechanisms.", user_supplied: true}
     - {id: certin.aibom.13.input,                 name: Input,                      canonical_path: ai_model.input,                  type: string,      weight: 3, source_page: 55, status: verified}
     - {id: certin.aibom.14.output,                name: Output,                     canonical_path: ai_model.output,                 type: string,      weight: 3, source_page: 55, status: verified}
-    - {id: certin.aibom.15.intended_usage,        name: Intended Usage,             canonical_path: ai_model.intended_usage,         type: text,        weight: 3, source_page: 55, status: verified}
-    - {id: certin.aibom.16.out_of_scope_usage,    name: Out of Scope Usage,         canonical_path: ai_model.out_of_scope_usage,     type: text,        weight: 3, source_page: 55, status: verified, description: "Scenarios the model is not intended for, to prevent misuse."}
-    - {id: certin.aibom.17.environmental_impact,  name: Environmental Impact,       canonical_path: ai_model.environmental_impact,   type: text,        weight: 1, source_page: 55, status: verified, description: "Energy consumption, resource use, carbon footprint."}
+    - {id: certin.aibom.15.intended_usage,        name: Intended Usage,             canonical_path: ai_model.intended_usage,         type: text,        weight: 3, source_page: 55, status: verified, user_supplied: true}
+    - {id: certin.aibom.16.out_of_scope_usage,    name: Out of Scope Usage,         canonical_path: ai_model.out_of_scope_usage,     type: text,        weight: 3, source_page: 55, status: verified, description: "Scenarios the model is not intended for, to prevent misuse.", user_supplied: true}
+    - {id: certin.aibom.17.environmental_impact,  name: Environmental Impact,       canonical_path: ai_model.environmental_impact,   type: text,        weight: 1, source_page: 55, status: verified, description: "Energy consumption, resource use, carbon footprint.", user_supplied: true}
     - {id: certin.aibom.18.vulnerabilities,       name: Vulnerabilities,            canonical_path: "ai_model.findings[]",             type: ref_list,    weight: 3, source_page: 55, status: verified}
-    - {id: certin.aibom.19.attestations,          name: Attestations,               canonical_path: ai_model.attestation_signature,  type: signature,   weight: 3, source_page: 55, status: verified, description: "Digital signature for the model or AIBOM."}
+    - {id: certin.aibom.19.attestations,          name: Attestations,               canonical_path: ai_model.attestation_signature,  type: signature,   weight: 3, source_page: 55, status: verified, description: "Digital signature for the model or AIBOM.", user_supplied: true}
 
   axebom_extensions:
     - {id: axebom.aibom.owasp_llm_top10, canonical_path: "ai_model.owasp_llm_top10[]", type: string_list, scored: false, status: extension, description: "OWASP LLM Top-10 mapping from Trusera ai-bom."}
@@ -843,6 +843,9 @@ expected_counts:
   crypto_protocols_fields: 5
   crypto_certificates_fields: 10
   aibom_elements: 19
+  # Table 10 elements NO TOOL CAN REPORT — intent and policy, collected from the
+  # operator. Transcribed from PDF p.55 and Phase 12's own list.
+  aibom_user_supplied_elements: 5
   hbom_table11_elements: 20
   hbom_additional_required_elements: 4
   hbom_total_elements: 24

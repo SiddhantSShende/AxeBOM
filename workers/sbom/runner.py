@@ -492,6 +492,15 @@ class SBOMWorker:
             "diagnostics": generated.diagnostics,
         }
 
+        # ⚠ OMITTED WHEN EMPTY, NOT SENT AS `{}`. Absent means "this engine
+        # counts nothing finer than the four summary dimensions"; an empty map
+        # would be a claim that it broke its results down and found none of
+        # everything. The Go field is `omitempty` for the same reason.
+        if generated.discoveries:
+            payload["discoveries"] = {
+                key: int(value) for key, value in generated.discoveries.items()
+            }
+
         if generated.engine_db_version:
             payload["engine_db_version"] = generated.engine_db_version
 

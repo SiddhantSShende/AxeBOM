@@ -6,9 +6,9 @@ A session that writes code but does not update this file has failed — the next
 
 ---
 
-**Last updated:** 2026-09-05
-**Current phase:** *Hardware as a first-class thing, and making every artifact actually contain its data*. 🟢 Track A rendering matrix (b); 🟢 B3 device register (c); 🟢 B1+B2 collectors and `axebom collect hardware` (d); 🟢 scans actually run (e); 🟢 **B4 the hardware screens** (f). **Track B is complete.** Not started: A6 (writerless tables), A7 (ecosystem coverage).
-**Next action:** ⚠ **Campaigns work now and never did before** — the campaign→orchestrator contract had three disagreeing fields and no test across the boundary, so every scheduled scan was refused before it existed. Verified live end to end. ⚠ **The frontend is a container serving a built bundle** — `docker compose up -d --build frontend` before any e2e run. 🟡 Carried forward: `scan.source_kind` is still caller-asserted for direct API callers (one live row diverges; it fails safely at dispatch, and fixing it properly means a synchronous project-service call in CreateScan); 26 unexplained webrecon misroutes for deleted scans, not reproducible; `aibom-generator` and `cbomkit` dispatchable with no adapter; gEDA/LibrePCB/Horizon EDA/Fritzing unparsed; the interactive import has no path for CycloneDX or collector JSON; `alpine/git` is tag-pinned; `raw_findings` and `licenses` deliberately writerless. ⚠ **`NVD_API_KEY` is still set in no environment — `task preflight` now says so.**
+**Last updated:** 2026-09-09
+**Current phase:** *AIBOM, for real* — a six-milestone program (plan: `~/.claude/plans/now-we-have-to-curried-leaf.md`). 🟢 **M1 truth** (2026-09-06 (a)): the AI BOM stopped reporting three models where there is one. 🟢 **M2 enrichment plane** (2026-09-06 (b), corrected 2026-09-07): the checkpoint scan M2 had never been driven through found four defects in M2's own work — enrichment reporting a clean success having looked nothing up, a card that reached no row, a licence and dataset list wrong on every model, and a worker that could not write its artifact at all. All fixed and re-measured live. 🟢 **M3 engines** (2026-09-07 (a)): `airom`, `cdxgen-ai` and `cisco-aibom` (registered, refused) — all four AIBOM engines run end to end in the sandbox and converge on one `model_key` per model. 🟢 **M4 service + wider surface** (2026-09-07 (b)): `services/aibom` and the `aibom` schema own operator input, consent, compliance tagging and attestation records; `normalize.ai_models` stopped being UPDATE-ed; a second operational profile scores the AI surface CERT-In has no element for. 🟢 **M5 ingest, export, render** (2026-09-07 (c)): CycloneDX ML-BOM downloadable and schema-validated, SPDX 3.0 AI profile converter proven (the plan's blocker was wrong), and the three non-scanner integrations landed as import paths. 🟢 **M6 real-time, frontend, scale** (2026-09-07 (d)): the live discovery feed carries per-engine counts end to end, the AI screens render evidence/provenance/assets/governance, the inventory endpoint stopped being 1 + 3N — and two import engines were caught reporting `ai-bom`'s own output back as customer-supplied evidence. **The six-milestone plan is complete.** Previous phase, complete: *Hardware as a first-class thing* — Track B done (rendering matrix, device register, collectors, live scans, hardware screens); **A6 (writerless tables) and A7 (ecosystem coverage) were never started and are still owed.**
+**Next action:** ⚠ **Registration now asks each BOM type for what that type actually needs** — it asked all five the same questions, and the `AtRegistration` flag built for exactly this had never been set true by any module; QBOM's Table 8 form and HBOM's device are now collected in the wizard, AIBOM's stay deferred because Table 10's user elements are per-MODEL and no model exists before a scan (2026-09-09 (b)). ⚠ **No 4xx was ever logged by any service, and the error card promises the opposite** — `errs.Write` and `httpx.Logging` both used `LevelDebug` while services run at info, so every 401/403/404/409/422 the product returned was unfindable by the request id it told the user to quote; both now log at `LevelWarn`, and the gateway finally carries `X-Request-ID` across the hop so one request stops having two ids (2026-09-09 (a)). ⚠ **A GitHub connection GitHub has rejected can now be repaired** — connecting verifies the token against `GET /user` before storing it (and fills `github_login`, empty on every row until now), and the repo picker offers **Reconnect GitHub** where the failure appears; there had been no reconnect anywhere in the product. ⚠ **The "What does `<CODE>` mean?" button on every error card is dead** — it links to `/docs/errors#<code>` and no such route exists; still owed. ⚠ **Two import engines were reporting `ai-bom`'s own output back as customer-supplied evidence, and no longer are** — `aibom-glaas` and `aibom-k8s-runtime` walked the shared workspace, found the CycloneDX document another engine had published there beside the customer's source, and imported it: three raw artifacts with one identical sha256 on a live scan. Excluded now by file name AND by producer, with a guard that reads the repository for every declared `workspace_artifact_name`. ⚠ **The live discovery feed carries real per-engine counts** — `ScanEventV1.Metrics` was defined in Phase 6 and filled by nothing until now; metric KEYS go through the same no-path/no-URL gate as `Message`. ⚠ **The AI inventory endpoint was 1 + 3N round trips** and is now three queries whatever the model count, response verified byte-identical. ⚠ **Three AI discovery engines now run over every AIBOM scan and reconcile** — `ai-bom`, `airom` and `cdxgen-ai`, plus `aibom-generator` enrichment outside the sandbox; `normalize.ai_model_provenance` records which engines saw each model, and `normalize.ai_assets` holds the prompts, vector stores, RAG pipelines and inference endpoints no CERT-In element covers. ⚠ **`cisco-aibom` is registered and never dispatched, with the reason on the engines endpoint** — it needs egress and an API key that scan engines are not allowed to hold; it is deliberately NOT an `unavailable` engine run, because that would make every AIBOM scan `completed_with_errors`. ⚠ **`owasp-aibom-generator`'s licence and dataset parse is not usable and is no longer used** — it returns `mit ---` and training datasets scraped out of English prose (`consisting`, `one`, `a`); both fields now come from the Hugging Face model card's structured front matter, and the raw artifact stores both upstream responses. ⚠ **Rebuild before any live AIBOM scan** — `docker compose up -d --build aibom-worker aibom-normalize-consumer aienrich-worker`, and `task osint:pull` (which now builds `axebom/airom-engine:dev`). ⚠ **AIBOM reported three models where there was one, and no longer does** — `ai-bom` emits the real Hugging Face id in a property nothing read, so `meta-llama/Llama-3-8B` was discarded and the `transformers` library was stored three times in its place. Fixed with a real `model_key` identity ladder (`migrations/normalize/0016`, `03-NORMALIZER-SPEC.md` §1.5); verified on live Postgres against the actual stored artifact. ⚠ **Campaigns work now and never did before** — the campaign→orchestrator contract had three disagreeing fields and no test across the boundary, so every scheduled scan was refused before it existed. Verified live end to end. ⚠ **The frontend is a container serving a built bundle** — `docker compose up -d --build frontend` before any e2e run. 🟡 Carried forward: `scan.source_kind` is still caller-asserted for direct API callers (one live row diverges; it fails safely at dispatch, and fixing it properly means a synchronous project-service call in CreateScan); 26 unexplained webrecon misroutes for deleted scans, not reproducible; `cbomkit` dispatchable with no adapter; gEDA/LibrePCB/Horizon EDA/Fritzing unparsed; the interactive import has no path for CycloneDX or collector JSON; `alpine/git` is tag-pinned; `raw_findings` and `licenses` deliberately writerless. ⚠ **`NVD_API_KEY` is still set in no environment — `task preflight` now says so.**
 
 > 🟢 **A REAL SCAN NOW NORMALIZES, LIVE, WITH NO MANUAL TRIGGER — THE
 > NORMALIZER'S DEPLOYED BOUNDARY FROM (e)/(k)/(l) IS CLOSED FOR SBOM.**
@@ -244,7 +244,7 @@ A session that writes code but does not update this file has failed — the next
 | Platform packages (Go) | ✅ errs, obs, httpx, health, config, ctxkey, **db** |
 | `axebom` CLI | ✅ preflight, version, docs, **db**, **profile** |
 | Service generator | ✅ all 8 services generated by it |
-| Go services (8) | 🟡 **auth + project are real**; **gateway now proxies to all 7 upstreams**; other 5 are scaffolds |
+| Go services (10) | 🟢 **auth, project, scan-orchestrator, report, campaign, comment, notification, fetcher, webrecon and aibom all real**; the gateway proxies 8 of them (fetcher and webrecon are queue-driven) |
 | **Auth service** | ✅ **register, login, refresh+reuse detection, logout, me, GitHub OAuth, invitations** |
 | **Project service** | ✅ **CRUD, classifications, practices+gaps, connections, uploads, repo listing** |
 | **RBAC** | ✅ 49 permissions, fails closed; route-guard test parses `routes.go` |
@@ -294,7 +294,7 @@ A session that writes code but does not update this file has failed — the next
 | CI (dual-OS) | ✅ written; **no Docker job**, so DB-backed and sandbox tests never run there |
 | OSINT manifest | ✅ resolved against upstream; **`cbomkit-theia` tag corrected (`v1.1.2` → `1.1.2`)** |
 | **Deployment** | ✅ **`task dev` runs the whole system: infra + 8 services + worker + frontend** |
-| **Gateway proxy** | ✅ **`/api` strip, 7 upstreams, WebSocket upgrade, taxonomy errors; 9 tests** |
+| **Gateway proxy** | ✅ **`/api` strip preserving percent-escaping, 8 upstreams, WebSocket upgrade, taxonomy errors** |
 | **Container images** | ✅ **8 services + worker + frontend + CLI; Go base read from `go.mod`** |
 | **Engine images** | ✅ **`task osint:pull` — the sandbox cannot pull, `--network=none`** |
 | **Engine databases** | ✅ **grype 2.0 GB · trivy 1.3 GB · osv 263 MB, stamped. `nvd` needs the free key** |
@@ -319,7 +319,11 @@ A session that writes code but does not update this file has failed — the next
 | **`ai-bom` engine containerization** | 🟢 **`deploy/docker/engines/Dockerfile.ai-bom` — this repo's first locally-built (not pulled) sandboxed engine image; the manifest `pip:`→`container:` contradiction (i) flagged is resolved** |
 | **`ai-bom` `--output -` bug** | ✅ **FIXED — every run before this session would have written an unreachable file and failed every scan; found only by actually running the real container** |
 | **`aibom-generator` Fetcher** | 🟢 **BUILT — `workers/aibom/adapters/aibom_generator_fetch.py`; guards two real upstream bugs (model fabrication, no revision pinning) found by running the real package; not yet wired into a live scan trigger** |
-| **AIBOM normalizer write path** | 🟢 **`workers/aibom/normalize/pipeline.py` writes `normalize.ai_models`/`ai_datasets`/`ai_model_dependencies` for real, proven against live Postgres; not live-triggered (same boundary as SBOM/CBOM, see (e))** |
+| **AIBOM normalizer write path** | 🟢 **`workers/aibom/normalize/pipeline.py` writes `normalize.ai_models`/`ai_datasets`/`ai_model_dependencies`/`ai_model_provenance`/`ai_assets` for real, proven against live Postgres and through a live four-engine scan** |
+| **AIBOM service** | 🟢 **`services/aibom` + the `aibom` schema: operator-supplied Table 10 elements, LLM-consent (Admin-only, audited), EU AI Act / NIST AI RMF / ISO 42001 tagging, attestation verification records. The whole `/v1/aibom` prefix moved off services/project** |
+| **AIBOM operational profile** | 🟢 **`aibom-operational-v1.yaml` — 15 elements scoring what Table 10 has no element for, into `supplementary_coverage`, never into either compliance number. Both operational scores now RENDER (they never did)** |
+| **AIBOM export** | 🟢 **CycloneDX ML-BOM (`format: mlbom`) with populated `modelCard`, validated against CycloneDX's own schema by `tools/conformance`; SPDX 3.0 AI profile as a tested converter (`python -m workers.aibom.spdx3`), not yet a download** |
+| **AIBOM engines** | 🟢 **four, all landing live: `ai-bom`, `airom`, `cdxgen-ai` (sandboxed discovery) + `aibom-generator` (enrichment, own deployable). `cisco-aibom` registered and deliberately never dispatched, with the reason on `GET /v1/scans/engines`** |
 | **`GET /v1/projects/{id}/ai-models`** | 🟢 **WIRED, plus `POST .../ai-models/{modelId}/fields` for the four user-supplied Table 10 elements** |
 | **AIBOM NULL-vs-not-provided bug** | ✅ **FIXED — an empty user-field edit was writing NULL instead of the explicit sentinel Python's normalizer always writes; caught by a test asserting the raw column, not just field_status** |
 | **Gateway `/v1/aibom` proxy prefix** | ✅ **FIXED — same class of gap (i) hit for `/v1/qbom`: a route that works against the service directly but 404s through real ingress until the prefix is added** |
@@ -2265,6 +2269,962 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-09-09 (b) — Registration asked all five BOM types the same questions
+
+**The complaint, and it was right.** Registering an HBOM asked exactly what
+registering an SBOM asked: name, source, owner, validity, practices. Everything
+*particular* to a type lived on a screen reachable only once the project
+existed — so a QBOM was created with none of CERT-In Table 8's device metadata,
+which is the one part of a QBOM no scan can produce, and an HBOM with no device,
+which on a `manual` project is the only thing that will ever produce a document.
+Both then appeared as checklist items on a project already made. The wrong
+moment: the person who knows the answers is the one filling in the form.
+
+**The mechanism for this already existed and was switched off.**
+`bommodule.Requirement.AtRegistration` has always been documented as "true when
+the wizard itself collects this", `/v1/projects/options` has always published
+it, and `BomTypeStep` has always filtered on it — and **no module had ever set
+it true**, so the flag only ever selected between "listed as a later task" and
+"listed as a later task". `qbom.device_metadata` and `hbom.device` are now
+`AtRegistration: true`; `aibom.user_fields` is explicitly `false` with the
+reason, and `TestOnlyWhatTheWizardCanActuallyCollectIsMarkedAtRegistration`
+pins all three so a fourth requirement has to state its own answer.
+
+**⚠ AIBOM CANNOT MOVE, AND THAT IS A FACT ABOUT TABLE 10'S SHAPE.** Its
+user-supplied elements are per-**model**, and no model exists until a scan has
+found one — a registration form for them would have no rows to attach to and
+could only ask a customer to describe models nobody has told them they have.
+QBOM's and HBOM's are per-project and therefore askable up front. The dividing
+line is shape, not importance: all three are `Required`.
+
+**Two form definitions became reachable without a project id.** Both generators
+(`qbom.FormFields`, `hbom.DeviceFormFields`) already took no arguments, but were
+served only from project-scoped routes — so the one screen that could not ask
+for them was the one where somebody is describing the project. Added
+`GET /v1/qbom/form` and `GET /v1/hbom/device-form`, literal patterns that
+ServeMux prefers over the neighbouring `{projectId}` wildcards, the arrangement
+`/v1/hbom/provider` already relies on. Both share one body with their scoped
+twin — `writeQBOMForm` exists so two handlers cannot come to disagree about what
+Table 8 contains.
+
+**The wizard's step list is now derived, not numbered.** `StepId` replaced
+`1 | 2 | 3 | 4`, because the per-type step exists for some selections and not
+others and an SBOM-only registration must not be shown an empty screen where
+another type's inputs would have been. The current step is clamped rather than
+reset when deselecting the last type that asked for something removes it from
+the list while it is on screen. The step renders from the server's flag, never
+from a `['QBOM','HBOM']` in the frontend — a requirement with no form yet still
+renders as its title and detail rather than disappearing.
+
+**⚠ THE STEP GATES NOTHING, DELIBERATELY.** These inputs are required for the
+BOM type to produce a document, not for the project to exist. An HBOM project
+whose device is registered next week is a real and supported state, and the
+requirement stays listed on the project. Blocking `Continue` would turn "your
+HBOM will be empty until you do this" into "you may not register this project",
+which is a different and wrong claim. Two guards keep the same honesty on
+submit: `hasQuantumValues` refuses to post nine empty strings — that would be a
+document with `declaration_pct` 100 and `completeness_pct` 0 (invariant 3) that
+every screen counting documents would report as recorded — and `hasDeviceValues`
+gates on `name`, the only field the API requires.
+
+**Also:** the device form's inputs moved to `routes/hbom/DeviceFields.tsx` so
+the device register and the wizard draw one generated form rather than two
+copies, one of which would freeze. The HBOM copy is source-specific — a
+repository of KiCad/Altium files has its parts read by `hbom-ecad`, so the
+device is a label for what the scan finds; a `manual` project has no scan, so
+the form *is* the document — and saying "register a device" identically in both
+cases is what made registration feel like a form that ignored the answer to its
+own first question. Nothing here claims to examine hardware; `hbom.test.ts`'s
+discovery-claim guard reads this file and passes.
+
+**Verification:** `go build ./...`, full `go test`, `golangci-lint` (0 issues),
+`tsc --noEmit`, `vitest` (146 → 151 across 11 → 12 files), `eslint src` clean.
+`project` and `frontend` rebuilt; both new routes confirmed reaching the service
+in its own logs, and the new step confirmed present in the served bundle.
+
+### 2026-09-09 (a) — A GitHub connection GitHub had rejected, and the request id that led nowhere
+
+**Reported as a 401.** The repo picker answered `AUTH_TOKEN_INVALID` /
+"GitHub rejected the stored token; reconnect your GitHub account" on
+`GET /v1/github/repos`, with a request id the error card told the user to
+quote. Four defects behind one message, and the second one is why the first
+took so long to find.
+
+**The stored credential is dead at GitHub, and nothing had ever checked it.**
+`project.github_connections` holds one row, written 2026-09-05 18:57 by the
+single connect this stack has ever run; the secret is intact in Vault
+(40 characters, version 1, never updated) and `api.github.com` refuses it.
+`ConnectGitHub` wrote whatever string arrived straight to Vault without one
+round trip, so a credential the provider had already rejected was
+indistinguishable from a working one until the next listing — by which time
+the OAuth window is closed and the row says `connected: true` for good.
+`handler.ConnectGitHub` now spends the token once on `github.Client.CurrentLogin`
+(`GET /user`) before storing it. That also fills `github_login`, which was
+empty on every row: it had only ever been read from a browser-supplied field
+the wizard does not send, and both screens that render it fell back to
+"an unnamed GitHub account".
+
+**⚠ THE ADVICE HAD NOWHERE TO GO — there was no reconnect anywhere in the
+product.** The wizard renders "Choose a repository" instead of a connect
+button whenever the organisation is connected, and a rejected token is still a
+token; the settings panel offers only Disconnect, deliberately
+(`SettingsIndex.tsx` says why). The whole route back was: leave the wizard,
+find Settings, disconnect, return, start the registration again — and nothing
+said so. `GitHubRepoPicker` now branches on the CODE (never the message) and
+offers **Reconnect GitHub** in place of "Try again" for exactly this failure,
+wired to the same OAuth round trip the first connect uses; the PUT is an upsert
+keyed on the tenant, so it replaces the dead token rather than adding a second.
+`useSaveGitHubConnection` now invalidates `['github-repos']` too — that key
+carries no token by design, so a reconnect changed which credential the next
+request would use while changing nothing react-query could see.
+
+**⚠ NO 4xx HAS EVER BEEN LOGGED, IN ANY SERVICE, AND THE UI PROMISES OTHERWISE.**
+Both `errs.Write` and `httpx.Logging` logged 4xx at `LevelDebug`; services run
+at info. So 400, 401, 403, 404, 409 and 422 produced no line anywhere — while
+the error card renders the request id under "quote the code and request id
+above — they are what identifies this exact failure in our logs". A support
+instruction that cannot be honoured is worse than none. Confirmed live before
+the fix: a reproduced 401 through the real stack appeared in nginx's access log
+and in *neither* Go service. Both now log at `LevelWarn` — the caller's fault,
+so not in the error log next to ours, but present. `TestEveryEnvelopeIsLoggedWithItsRequestID`
+guards it and was demonstrated failing against the old level.
+
+**One request had two request ids.** `httpx.RequestID` honours an inbound
+`X-Request-ID`, but the gateway's own id lived only in its context and its
+*response* header and was never set on the outbound hop — so the upstream
+minted a second, unrelated one, logged everything under that, and returned
+*that* one in the envelope the browser renders. Searching the gateway's log for
+the id a user quotes found nothing. The proxy's `Rewrite` now carries it
+across; verified live that one id reaches both services' log lines.
+
+**Also:** `hintFor` had no case for `AUTH_TOKEN_INVALID`, so the one code that
+is self-service fell through to the generic "quote the code and request id"
+hint. `ErrorState` gained `retryLabel`, because "Try again" is the wrong
+promise for a credential the provider has refused — it invites the user to
+prove the failure twice.
+
+**Verification:** `go build ./...`, full `go test`, `golangci-lint` (0 issues),
+`tsc --noEmit`, `vitest` (144 → 146 across 10 → 11 files), `eslint` clean.
+`project`, `gateway` and `frontend` rebuilt and running; the 401 → log-line →
+request-id chain re-checked end to end against the live stack.
+
+**Still owed here:** the "What does `<CODE>` mean?" button on *every* error card
+links to `/docs/errors#<code>`, and **no such route exists** in the SPA or
+behind nginx — the SPA catch-all serves index.html. That is a dead button on
+every error in the product, and it is the literal question this session was
+asked. Left alone rather than inventing a docs site unprompted.
+
+**Environment:** the disk hit 100% mid-session and blocked the image build.
+`docker builder prune -af` freed 39 GB (96 G volume, now 62% used). The user
+also approved pruning unused images; **not done** — the cache prune alone left
+37 GB free, and `axebom/worker:good` is a hand-tagged `dev:rollback` target.
+
+### 2026-09-07 (d) — AIBOM M6: the live discovery feed, the AI screens, and two engines that were reporting our own output back to us
+
+**The plan's last milestone, and it found the worst defect of the six.** M6 is
+"real-time, frontend, scale" — additive work on top of five corrective
+milestones. Driving it against the live stack turned up a fabrication that every
+test in the repository was blind to.
+
+**`aibom-glaas` and `aibom-k8s-runtime` were importing `ai-bom`'s output as if
+the customer had produced it.** On a live AIBOM scan of the `ai-langchain`
+fixture — which contains no GLaaS export and no Kubernetes AIBOM custom resource
+— both reported `succeeded` with seven components. `scan.raw_artifacts` held
+three rows with **one identical sha256**: one engine's findings, stored three
+times under three engine ids.
+
+The cause is structural rather than careless, which is why nothing caught it.
+The customer's upload is extracted into the workspace **root** — `README.md`,
+`src/`, `requirements.txt` — and `_publish_to_workspace` writes a producing
+engine's output right beside it, because `grype` consumes `syft`'s SBOM through
+that shared per-scan directory. So `ai-bom.cdx.json` sits next to the customer's
+own files, is perfectly valid CycloneDX, and carries `machine-learning-model`
+components. `_locate`'s `rglob("*.json")` found it; `_carries_ai` approved it.
+Every check said yes.
+
+What it cost is the entire point of an import engine. It exists to say "here is
+what YOUR tooling reported". Echoing our own output manufactures agreement
+between two engines that are one engine, and lit up `runtime-deployments` and
+`training-runs` in Engine Coverage for a scan that saw neither — invariant 12
+rates a false negative a customer trusts above an honest gap. It is also the
+exact failure the plan names in its own words: *"An engine that reports back what
+the customer already told us, dressed as discovery, is worse than no engine."*
+
+Fixed with two independent checks, deliberately not one:
+
+- `WORKSPACE_PUBLISHED_ARTIFACTS` in `workers/sbom/adapters/common.py` — excludes
+  by **file name**, exact and unarguable. `workers/aibom/test_import_adapters.py`
+  reads the repository and fails if any adapter's `workspace_artifact_name` is
+  missing from it, so an engine that starts publishing under a new name breaks the
+  build rather than silently becoming importable.
+- `_produced_by_axebom()` — excludes by **what made the file**, which survives a
+  rename and a customer whose own upload happens to share a name. A document
+  naming *this* engine's expected producer wins, so a `roar` export that embeds a
+  generator we also run is still imported: refusing genuine data over a substring
+  would trade a fabricated claim for a silent gap, which is a different failure
+  rather than a fix.
+
+Re-measured live: both engines now `unavailable`, with the diagnostic telling the
+customer how to produce the document, and no artifact rows at all.
+
+**The live discovery feed, which is what M6 was actually for.**
+`ScanEventV1.Metrics` has existed since Phase 6 and no publisher ever filled it —
+the field was defined, carried through the WebSocket, and rendered by nothing, so
+a customer watching a scan saw a percentage and an engine name and no idea what
+was being found. It now carries per-engine counts, end to end, observed on a real
+scan through the same WebSocket the browser opens:
+
+```
+[feed] ai-bom     done  {"ai_dependencies": 7, "ai_models": 3}
+[feed] airom      done  {"ai_asset.prompt": 2, "ai_asset.rag_pipeline": 1,
+                         "ai_asset.vector_store": 1, "ai_dependencies": 4,
+                         "ai_models": 3}
+[feed] cdxgen-ai  done  {"ai_asset.endpoint": 2, "ai_asset.prompt": 1,
+                         "ai_models": 2}
+```
+
+- `ScanResultV1.Discoveries` is optional and finer-grained than `Summary`'s four
+  dimensions, which fold every AI model, prompt and vector store into
+  `components` by design. `eventMetrics()` prefers the engine's own breakdown and
+  falls back to the summary; a `nil` summary pointer is **omitted, never zeroed**,
+  because publishing 0 would tell a live feed that grype found no licences.
+- **The metric KEYS go through the same gate as `Message`.** `Message` has been
+  forbidden from carrying a path, a URL or scanned content since Phase 6, and a
+  key built from a filename would have walked straight past that guard.
+  `SanitizeDiscoveries` drops any key that is not a plain lowercase identifier,
+  caps at `MaxDiscoveryKeys`, and — added here — **sorts before truncating**, so a
+  redelivered event does not disagree with the one before it.
+- The frontend tallies **per engine, last-value-wins**, so an at-least-once
+  redelivery cannot double a count, and folds kinds with **max, not sum**: three
+  engines each finding the one Llama model must not print "3 AI models".
+  `frontend/src/lib/discoveries.ts`, tested in isolation.
+
+**The AI screens.** `AIModelInventory.tsx` became a page with four sub-views
+addressed by `?view=` so a reviewer can share a link: **Models** (identity rule
+and confidence, which engines found it, `path:line` evidence, an expandable
+detail with the full evidence, dataset and dependency lists, and the
+user-supplied elements), **Datasets** (`AIDatasets.tsx`), **AI assets**
+(`AIAssets.tsx` — grouped by kind read from the data, with each engine's own
+reported attributes rather than fixed columns), and **Governance**
+(`AIGovernance.tsx` — consent, classification, attestation records).
+
+Two honesty decisions in the markup, both load-bearing: `verified: false` renders
+as a muted **"unconfirmed"**, not a red cross, because confirming a model means
+reaching its publisher and the scan sandbox has no network — a warning colour
+would make a reader distrust three correctly-identified models. And the
+compliance-tag form renders **the server's vocabulary**, not a list in the
+component, because a hardcoded option set is the Go-vs-SQL closed-set drift this
+repository has already shipped twice.
+
+Also fixed: the old file's own doc comment carried a **hardcoded field count**
+("Sixteen of Table 10's nineteen elements", "only [four] are ever editable") —
+a direct invariant-2 violation that was also, by then, wrong. The claims guard
+(`frontend/src/lib/aibom.claims.test.ts`) gained two patterns: AxeBOM must not
+read as if it worked out a risk tier (that depends on what a system is USED for,
+which is not in a repository), and must not assert that anything **is compliant**.
+
+**Scale: a 1 + 3N that would only ever have hurt the largest customer.**
+`GetInventory` ran three queries **per model** — datasets, dependencies,
+provenance — inside one HTTP request, inside one tenant transaction, holding one
+pooled connection for all of them. Three models cost eleven round trips and
+nobody notices; two hundred model references, an ordinary number for a monorepo
+using an agent framework, cost six hundred. Nothing errors; the page simply gets
+slower in proportion to how much the customer found, so the people who hit it are
+the ones with the most data. Now three queries whatever the model count, with the
+response verified **byte-identical** before and after on the live stack.
+`perf/aibom-inventory.js` is the scenario that would have caught it, and the test
+asserts the query **count**, not a duration — a timing threshold passes on a fast
+machine with the N+1 still in place.
+
+**DLQ, redelivery and idempotency, actually exercised** rather than assumed: all
+six `libs/go-shared/bus` scenarios run against the live NATS (dedup by message
+id, redelivery after nak, permanent failure reaching the DLQ **without burning
+the retry budget**, broadcast-not-workqueue on the event stream), the full
+orchestrator suite against live Postgres including
+`TestDuplicateResultConvergesRatherThanDuplicating`, and all 128 AIBOM/enrichment
+Python tests including `test_replaying_the_same_trigger_is_idempotent` and
+`test_a_malformed_job_dead_letters_instead_of_becoming_a_phantom_engine_run`.
+
+#### What M6 owes
+
+- **`normalize.ai_model_lineage` is still not built**, so there is no lineage
+  view and none was faked. Hugging Face `base_model` is the next step.
+- **The load scenarios remain targets, not baselines.** `aibom-inventory.js` has
+  a correctness check at three models, which is exactly the size at which its bug
+  was invisible; `dependencies-page.js` still needs 200k findings and
+  `scan-throughput.js` 100 concurrent scans. `k6` is not installed on this
+  machine.
+- **`DiscoveryTally` is empty for a scan that finished before the page opened.**
+  The snapshot's `engine_runs` records a status and a duration, never a per-kind
+  breakdown, and reconstructing one would be the fabrication this feed exists to
+  avoid. The inventory screens read the normalized rows and show everything.
+- Carried from earlier milestones: element 18 vulnerabilities still
+  `not-provided`; SPDX 3.0 needs a deployable Python renderer to become a
+  download; **no automated test checks a query's column arity** — the
+  `loadAIAssets` "6 and 7" defect would still ship today.
+
+### 2026-09-07 (c) — AIBOM M5: the ML-BOM, three import paths, and a gateway-shaped lesson repeated
+
+**The AIBOM already exported, and what it exported was not an ML-BOM.** Every AI
+model was mapped onto a generic protobom component with namespaced properties.
+That is a valid CycloneDX 1.6 document in which a consumer looking for
+`modelCard` finds nothing — **protobom v0.5.8 has no ML fields at all**; the
+string `ModelCard` does not appear anywhere in the module. Every ML-aware tool
+read our AIBOM as a list of unremarkable software.
+
+`services/report/internal/export/mlbom.go` serializes the AIBOM through
+`CycloneDX/cyclonedx-go` — the format's own Go library, already in the module
+graph as protobom's dependency, which models `MLModelCard`,
+`MLModelParameters` and `ComponentData`. Not hand-rolled JSON: the export
+package's header forbids that, and the reasoning does not stop being true for a
+third format. Downloadable as `format: mlbom`, proven end to end on the live
+stack.
+
+```
+components: 3 machine-learning-model (each with modelCard + considerations),
+            2 prompt, 1 rag-pipeline, 1 vector-store
+services:   2 inference endpoints
+```
+
+**Two defects the official schema and a live render caught that our own tests
+did not.**
+
+- CycloneDX pins `serialNumber` to an RFC-4122 URN; the serializer emitted
+  `urn:uuid:` + the document id. A report id is a UUIDv7 in production, so this
+  would have been correct on every real report and wrong on the first one that
+  was not — the worst shape of latent defect. `tools/conformance` validating
+  against CycloneDX's own schema is what surfaced it.
+- A live export leaked `task: "not-provided"` into the ML-BOM and onward into
+  SPDX 3.0's `typeOfModel`. The sentinel filter covered licence and developer
+  only — the guard was narrower than the rule it was written for. Now applied at
+  both the mapping layer and inside the serializer, and the test covers task,
+  version and input format.
+
+**SPDX 3.0 AI profile: the plan's blocker was wrong.** It recorded "our pinned
+`spdx-tools` 0.8.x cannot write 3.0.1" and pre-authorised a LIMITATIONS entry.
+Checked against the installed package: **0.8.5 ships a complete
+`spdx_tools.spdx3`** — `model.ai.AIPackage`, `model.dataset.Dataset`, a JSON-LD
+writer — and it produces a real document. `workers/aibom/spdx3.py` converts an
+ML-BOM into one, tested against the committed golden and run against a live
+report. What is narrowly true: it writes **3.0.0**, not 3.0.1. What is
+architecturally true: `services/report` is a distroless Go binary and cannot call
+a Python library, so this is a converter today rather than a download, and
+wiring it needs a Python renderer deployable. Named as owed, with a spike that
+runs.
+
+**Three of the eleven integrations are not scanners, and now land as what they
+are.** `aibom-toml` parses an `aibom.toml` the customer committed — a scan in
+exactly the sense parsing a lockfile is, and the same line that made `hbom-ecad`
+a scan; every model it yields carries `model_ref_source: aibom.toml` so
+provenance records a **declaration** rather than an observation.
+`aibom-k8s-runtime` and `aibom-glaas` ingest documents the customer produced
+where AxeBOM cannot reach — a live cluster, and a training run on their own
+machine. One parser, two engine ids, because both are CycloneDX but they answer
+different questions and Engine Coverage has to say which a report contains; a
+document uploaded under the wrong id is parsed **and the mismatch reported**.
+
+**`mlbomdoc` is deliberately not wired in.** Read from the real wheel: it
+reformats a finished ML-BOM through `lib4sbom` and `sbom2doc`. AxeBOM already
+renders PDF, DOCX, XLSX and JSON from the canonical model, which carries strictly
+more — both coverage numbers, Engine Coverage, normalization diagnostics,
+per-engine provenance. Running it would hand our own document back to us with
+less in it and add a dependency chain to do so. Recorded in the manifest as the
+reference it actually is, so a reader can tell a decision from an oversight.
+
+**A Go/SQL closed-set drift, the second this week.** `service.parseFormat`
+accepted `mlbom` the moment the renderer existed; `report.reports` has a CHECK
+over the same set, so the insert failed and the API answered 500 for a
+well-formed request. The format list is now DATA
+(`service.Formats`) and `TestTheRenderableFormatsMatchTheDatabaseConstraint`
+compares it with the migration's CHECK — mutation-verified by removing `mlbom`
+from the Go side and watching it fail by name.
+
+#### Owed, and stated
+
+- **A query's column count is checked by nothing.** `loadAIAssets` had six
+  columns and seven scan destinations; it compiled, passed every unit test, and
+  failed only when a real render ran. `schemacheck` verifies column NAMES exist,
+  not arity, and no report-store test touches a live database. The live e2e is
+  currently the only thing that catches this class.
+- **SPDX 3.0 is not a downloadable format** — see above. The converter is real
+  and tested; the renderer deployable is not built.
+- **No frontend surface for any of M5.** The ML-BOM is requestable by API;
+  nothing in the UI offers it yet. M6.
+
+### 2026-09-07 (b) — AIBOM M4: a tenth service, an operational profile, and a gateway bug it uncovered
+
+**`services/aibom` exists because of invariant 10.** `services/project`
+collected the operator-supplied half of CERT-In Table 10 and wrote it with
+`UPDATE normalize.ai_models SET intended_usage = …` — a mutation of normalized
+data. It worked only because the AIBOM normalize consumer read the PREVIOUS
+document's values back before writing a new one, a rescue for a write that
+should not exist; anything the rescue missed — a model whose identity changed
+between passes, the first normalization after somebody answered — lost the
+answer silently.
+
+Operator input now lives in the `aibom` schema, keyed by
+`(project, model_key)`, and survives every re-normalization **by construction**.
+`axebom_normalize_writer` gained SELECT on that schema and no write grant at
+all, so invariant 10 is untouched: nothing updates a normalized row, the values
+are read and written into the NEW document.
+
+Measured live on one project, before and after a person answered:
+
+```
+                        before        after
+CERT-In completeness      5.88%       31.37%
+AI operational surface   74.29%       91.43%
+```
+
+The second number is new. **`docs/reference/aibom-operational-v1.yaml`** is a
+second operational profile — the `hbom-manufacturing-v1.yaml` precedent — scoring
+what CERT-In Table 10 has no element for: resolved model identity and its
+confidence, which engines found it, file:line evidence, upstream verification,
+the AI frameworks it rests on, the prompts / vector stores / RAG pipelines /
+agents / inference services around it, and the operator's own EU AI Act, NIST AI
+RMF and ISO 42001 declarations. Scored into
+`bom_documents.supplementary_coverage`, **never** into either compliance
+percentage.
+
+**Both operational scores had been computed for a phase and read by nothing.**
+HBOM's manufacturing number has been in that column since migration 0011 and
+appeared in no report, no export and no screen. Both now render on the report's
+Summary sheet and in the JSON export, each under its own label and beside a
+sentence naming AxeBOM as the authority — a percentage on a compliance document
+is read as a compliance one unless something says otherwise.
+
+**A gateway bug the move uncovered: every purl-keyed path was unreachable.**
+The proxy's `Rewrite` hook cleared `URL.RawPath` to stop the un-stripped `/api`
+prefix winning over `Path` — a real problem, solved by discarding the escaping.
+So `GET /api/v1/projects/{id}/dependencies/purl%3Apkg%3Apypi%2Flangchain%400.3.7`
+arrived upstream with the `%2F` decoded into a real separator: three path
+segments where the route pattern has one, and ServeMux answered 404. Verified
+live before the fix — the identical request matched the route against the
+project service directly (401) and 404'd through the gateway. **Every component
+key is a purl**, so the SBOM dependency-detail endpoint could not be reached for
+any real component. Fixed by trimming the same literal prefix from both forms;
+`TestAPercentEncodedSlashSurvivesTheProxy` pins it.
+
+**One profile element was removed after a live scan, not before it.** An
+"Embedding models" element read 0 for a repository that *has* an embedding
+model: `airom` correctly types it as a MODEL, so it was already scored by the
+identity elements and the separate element could only ever be zero. A field
+nothing can fill scores zero for every customer for ever — that does not measure
+the customer, it measures us, and it reads on the report as the customer's gap.
+The agents/tools/MCP element was kept and made fillable instead: `ai-bom`
+classifies MCP servers and they now reach `normalize.ai_assets` as well as the
+dependency list.
+
+**Attestation is ingest, and the record says so.** `model_signing verify`
+recomputes the digest of every model FILE; AxeBOM never holds customer weights.
+So this follows `hbom-host-report`: the customer runs the verifier where the
+artifact is and AxeBOM **parses** the result. `verified` is read rather than
+typed, a failure is recorded as a failure, and the signer identity and digest
+land on the record — and it is not AxeBOM having checked a signature. Both
+halves are in `LIMITATIONS.md`.
+
+**Compliance tagging is a declaration, never an inference.** Whether a system is
+high-risk under the EU AI Act depends on what it is USED FOR, which no repository
+shows. AxeBOM offers closed vocabularies (`libs/go-shared/model/aiframeworks.go`),
+records who declared what, and renders it as theirs. ISO/IEC 42001 is offered as
+Annex A **categories**, not numbered controls: a control reference one digit
+wrong is a false citation, and unlike a missing value a plausible wrong one is
+invisible to the reader.
+
+Consent to `--llm-enrich` / `--llm-model` is Admin-only (`ResourceAIPolicy`),
+audited with who and when — and returns `effective: false` with the blocker
+named, because the sandbox still has no network.
+
+#### Owed, and stated
+
+- **The durable enrichment cache stayed on the filesystem**, against the plan.
+  Moving it to the `aibom` schema would have given the one network-facing worker
+  a database credential, which is a worse posture than the volume it already
+  uses. Recorded as a deliberate deviation, not an omission.
+- **Element 18 (vulnerabilities) is still `not-provided`** — unchanged, and still
+  the same open question `bomsource.go` records: findings against a model's
+  dependencies live on the project's SBOM document, and copying them here would
+  assert that a `transformers` CVE is a vulnerability OF `Llama-3-8B`.
+- **`normalize.ai_model_lineage` was not built.** The Hugging Face card's
+  `base_model` field would supply real parent/base-model lineage and nothing
+  reads it yet; it is named in the operational profile's own "deliberately not
+  here" list as the small next step.
+- **No frontend screen renders policy, tags or attestations yet.** The client
+  hooks exist and are typed; the screens are M6's.
+
+### 2026-09-07 (a) — AIBOM M2 corrected against a live scan, then M3: three engines land
+
+Two halves. The first ran the end-to-end scan M2 had never actually been driven
+through; the second added the engines. Every defect below was found by running
+the real stack against a real repository, not by reading code.
+
+#### What one real scan found in M2's own work
+
+**`aibom-generator` reported `succeeded` having enriched nothing, with no
+diagnostic.** A repository whose only model was `distilbert-base-uncased` produced
+a clean green engine row over a model that was never looked up: `model_refs`
+required an `org/name` shape and dropped bare names in silence. Checked against
+the real Hub — `distilbert-base-uncased`, `gpt2` and `bert-base-uncased` are
+canonical repositories, and `model_info` resolves the first to
+`distilbert/distilbert-base-uncased`. The single most common shape of Hugging Face
+reference enriched to nothing. `lookup_plan` now gates on the PROVIDER rather than
+the slash, and every reference it declines costs a diagnostic and the `partial`
+status. Engine Coverage exists to say what a report could not see; a silent skip
+is the one thing it must never do.
+
+**Enrichment ran, succeeded, wrote its artifact — and reached no row.** ai-bom
+reports `distilbert-base-uncased` in `model_id` and leaves `model_ref` empty,
+because the reference is not `org/name` shaped. The enrichment plane asked under
+the asserted id, stored the card under that key, and the merge then looked it up
+under `model_ref` — `""`. One function (`merge.lookup_ref`) decides this now, for
+both sides.
+
+**`aibom-generator`'s licence and training datasets are wrong on every model, and
+we were storing them.** Measured against the Hub's own `card_data` for three real
+models:
+
+```
+                          aibom-generator          the publisher's own card
+distilbert-base-uncased   "apache-2.0 datasets"    apache-2.0
+                          datasets ["consisting"]  [bookcorpus, wikipedia]
+gpt2                      "mit ---"                mit
+                          datasets ["one", "a"]    (none declared)
+all-MiniLM-L6-v2          "apache-2.0 library"     apache-2.0
+                          datasets ["given"]       21 real dataset ids
+```
+
+`consisting`, `one`, `a` and `given` are English words scraped out of prose, and
+they were being written into Table 10 as a model's training data. The tool says so
+itself — it sets `genai:aibom:trainingDataAvailable = "false"`. `fetch_model_card`
+now returns a **two-source envelope** (`{aibom_generator, huggingface}`), both
+responses verbatim, and that envelope is the immutable raw artifact; the parser
+takes those two fields from the structured front matter and records a diagnostic
+when it declines a value. Everything else aibom-generator produces — architecture,
+task, metrics, external references, the revision-pinned purl — is untouched and
+good.
+
+**The enrichment worker could not write anything, and nothing had noticed.**
+Docker creates a missing bind-mount source as `root:root`; every other worker runs
+as root and `aienrich` runs as 65532. Both its cache write and its artifact write
+failed — the first logged a warning and carried on, the second turned a successful
+enrichment into a `failed` engine run and lost the raw response that makes
+re-normalization replayable. Invisible until enrichment first actually succeeded
+at resolving a model. `engine-state-init` in the compose file now hands the parent
+directories over; the per-job directories, which are stored evidence, are never
+touched.
+
+Result on a real scan of a repository using two public models:
+**completeness 5.88% -> 29.41%**, `licensing: apache-2.0`, `model_version:
+12040acc` (the real Hub commit), `data_source: bookcorpus, wikipedia`,
+`verified: true`, evidence `src/app.py:5`, `src/app.py:6`.
+
+#### M3 — `airom`, `cdxgen-ai`, and `cisco-aibom` registered and refused
+
+All four AIBOM engines now run end to end through the real stack, in the sandbox:
+
+```
+ai-bom          succeeded   10 components   agent-frameworks, llm-providers, model-refs
+airom           succeeded   11 components   + embeddings, prompts, rag-pipelines, vector-stores
+cdxgen-ai       succeeded    3 components   + inference-services
+aibom-generator partial      0 components   2 diagnostics, both naming what was not done
+```
+
+**The disagreements are the point, and they reconcile.** On one real tree, each
+engine sees something the others do not — airom alone reports the embedding model,
+the system prompt at `src/app.py:9`, the prompt file, the Chroma vector store and
+the RAG pipeline; cdxgen-ai alone emits a correctly-cased
+`pkg:huggingface/meta-llama/Llama-3-8B` and the two inference services; ai-bom
+alone names a calling framework per model. They converge on the same `model_key`
+for the models they share, which is what makes running three engines an
+improvement rather than a triple count. `normalize.ai_model_provenance` records
+which engines saw each model, because "found by one, missed by two" is the most
+useful single fact a reviewer has for weighing a Table 10 row:
+
+```
+purl:pkg:huggingface/meta-llama/Llama-3-8B   ai-bom, airom, cdxgen-ai
+api:openai/gpt-4o                            ai-bom, airom, cdxgen-ai
+model:sentence-transformers/all-MiniLM-L6-v2 airom
+```
+
+**Adding engines multiplied the M1 defect before it fixed it.** `gpt-4o` was
+stored **twice**: ai-bom puts the calling framework in its provider property
+(`LangChain`, `HuggingFace`, `ChromaDB` are its real values) so it keyed as
+`name:langchain/gpt-4o`, while the other two report the serving provider and keyed
+as `api:openai/gpt-4o`. The alias fold in `03-NORMALIZER-SPEC.md` §1.5 absorbs a
+low-confidence `name:` key into a single stronger one asserting the same model id
+— and refuses when two strong candidates claim it, because `gpt-4o` from two
+providers is two models.
+
+**`normalize.ai_assets` had to land in M3 or six real findings would have been
+computed and dropped** (migration `0018`). Prompts, vector stores, RAG pipelines
+and inference endpoints match no CERT-In Table 10 element, so they are stored
+type-discriminated, rendered in their own report sheet and in the JSON export, and
+**scored into neither coverage number**.
+
+**`airom` must be dispatched on `airom:kind`, never on the CycloneDX `type`.** It
+types its vector store and its RAG pipeline as `application` — which is in the
+classifier's framework set — and its prompts as `data`, which is in neither set.
+A type-based dispatch files the vector store as a software dependency and drops
+both prompts without a word.
+
+**`cisco-aibom` is registered and never dispatched.** Its `analyze` always
+requires `--llm-model`: egress, an API key, and customer source sent to a
+third-party LLM. It is listed by `GET /v1/scans/engines` with `disabled: true` and
+the reason attached, so a reader can tell "AxeBOM does not know about this tool"
+from "AxeBOM chose not to run it". Deliberately **not** an `unavailable` engine
+run: a permanent degraded row on every AIBOM scan would make every one of them
+`completed_with_errors`, which trains a reader to ignore the status that matters.
+`Registry.Resolve` refuses to dispatch it even when a tenant override names it,
+and `TestATenantOverrideCannotResurrectADisabledEngine` pins that.
+
+Two smaller corrections found the same way: every evidence path now drops the
+`/src` sandbox mount, because ai-bom echoes it and airom does not and one model
+carried both spellings of one file; and element 06's dependency list is now
+attributed per model where an engine said so, with
+`AIBOM_DEPENDENCY_SCOPE_PROJECT` stating the scope where none did — the
+project-wide join said `gpt-4o` depends on `sentence-transformers`, which is not
+true.
+
+#### Owed, and stated
+
+- **Element 18 (vulnerabilities) is still `not-provided`** — unchanged from M2 and
+  deliberate; see `bomsource.go`'s own note. M4.
+- **`ai_models.source_engine` is singular and names the engine whose observation
+  built the row**, not the whole answer. The provenance table is the whole answer;
+  nothing may render `source_engine` as if it were.
+- **Whether `model_developer` should come from the Hub's repository owner** is an
+  open question, not an oversight. `authors[0].name` is the namespace — right for
+  `distilbert/distilbert-base-uncased`, arguable for a fine-tune uploaded by an
+  individual. Left `not-provided` rather than decided in passing.
+- **AI assets are rendered in XLSX and JSON only.** The PDF and DOCX AIBOM
+  treatments are page-capped and unchanged; M5 owns the wider export surface.
+- `cisco-aibom` is packaged nowhere, by choice: a disabled engine that shipped its
+  dependency closure into a worker would be all of the cost and none of the
+  benefit.
+
+### 2026-09-06 (b) — AIBOM M2: the enrichment plane, and coverage that moved because the data did
+
+**5.88% -> 43.14%**, measured on live Postgres through the real write path. Not
+because the formula changed — because the model finally has facts attached to it.
+
+```
+completeness_pct : 43.14%   (was 5.88%)      declaration_pct : 76.47%
+model_name       : Meta Llama 3 8B           model_type      : text-generation
+licensing        : Apache-2.0                input / output  : text / text
+algorithms       : ['LlamaForCausalLM']      metrics         : {'accuracy': '0.82'}
+datasets         : ['the-pile']              verified        : True
+```
+
+**`workers/aienrich` is a new deployable, and the reason is one package.**
+`aibom-generator` asks a public API about a model IDENTIFIER; it never sees
+customer source, which is what makes network acceptable for it and for nothing
+else in the AI path — the same rule that makes the fetcher the sole holder of git
+credentials (ADR-0008). Keeping it out of `axebom/worker:dev` also contains
+`owasp-aibom-generator`, which pushes every model id it is asked about to a
+**hardcoded** third-party dataset whenever `HF_TOKEN` is set. The worker refuses
+to start with a token present; verified by running the real container.
+
+**How it is dispatched, without a new family or a new contract shape.**
+`aibom-generator` now sets `ConsumesOutputOf: "ai-bom"`, so it reuses the
+mechanism grype already uses behind syft: `FanOut` holds it back,
+`releaseDependents` publishes it once ai-bom produced the discovery it enriches,
+`skipDependent` marks it `skipped` with a stated cause if ai-bom produced
+nothing. A new `policy.Engine.JobSubject` sends that job to
+`scan.job.aibom.enrich` — four tokens, which `workers/aibom`'s exact-match
+`scan.job.aibom` filter never receives. **Verified against the running server, not
+assumed**: a `scan.job.aibom` consumer's `num_pending` does not move when a
+message lands on the four-token subject, and both consumers coexist on the
+WorkQueue stream. It still reports on `scan.result.aibom`, so its status appears in
+AIBOM's Engine Coverage and the existing `orchestrator-aibom` durable consumes it
+unchanged.
+
+Because its run is not terminal until enrichment reports, `familyTerminal` stays
+false and the normalize trigger does not fire early — which is what makes
+enrichment land in the FIRST normalization instead of needing a second version.
+That answers all three questions `workers/aibom/runner.py` recorded as open: when
+it runs, whether the response becomes a raw artifact (**yes** — that is what makes
+re-normalization replayable without re-fetching), and how a rate limit interacts
+with redelivery (an engine run like any other: `partial` with a diagnostic, never
+a failed scan).
+
+**Four defects fixed by running the real thing, not by reading it.**
+
+1. ⚠ **Enrichment would have failed on EVERY model, in production.**
+   `CLIController.generate` opens with an unconditional
+   `os.makedirs("sboms", exist_ok=True)` **relative to the CWD**, before it ever
+   reads `--output`. Non-root in a root-owned WORKDIR, that is
+   `PermissionError: [Errno 13] 'sboms'`, exit 0, no output file. Caught by
+   running the built container against the real Hugging Face API. Same shape as
+   the `--output -` defect on `ai-bom`: this family of tools describes less about
+   its behaviour in its flags than it appears to.
+2. ⚠ **The image was 9.78GB — for an HTTP client.** The package declares torch,
+   transformers, datasets, sentencepiece, fastapi, flask, gunicorn and uvicorn as
+   hard runtime dependencies; pip honoured them and pulled **3.2GB of NVIDIA CUDA,
+   1.2GB of torch, 897MB of triton**. Installed `--no-deps` with the subset the
+   CLI path actually imports: **426MB**, a 23x reduction, and the live fetch still
+   works. Two of the exclusions are posture, not size: the ML stack serves
+   `--summarize`, which downloads and RUNS a model, and the web stack serves the
+   bundled Flask app — which now cannot be started at all.
+3. ⚠ **CERT-In element 03 was reporting the architecture family, not the task.**
+   Real output carries `modelParameters.task = "fill-mask"` and a vendor property
+   `model_type = "distilbert"`; the parser read the property first. Table 10's own
+   examples for that element are `text-generation`, `image-processing`,
+   `image-classifier` — all tasks. `distilbert` was also the third copy of a fact
+   already in `architectures` (element 07) and `modelArchitecture`.
+4. **A malformed job became a phantom engine run.** Observed on first start: a
+   leftover message on the subject was consumed and reported `succeeded` with no
+   job and no scan. A structurally invalid job now dead-letters with its content
+   intact.
+
+**Defect J is fixed at its root, in the profile.** Go's user-supplied field set
+had four ids and Python's had five; they disagreed about
+`certin.aibom.17.environmental_impact`, so that element sat in the coverage
+denominator reachable by no form — while `TestUserSuppliedFormFieldsIsExactlyFour`
+asserted the Go list was complete. That test was **itself a hardcoded field
+count**, which invariant 2 forbids for exactly the reason it then demonstrated.
+The profile now declares `user_supplied: true`, both languages generate from it,
+`expected_counts.aibom_user_supplied_elements` is a transcription assertion that
+fails `task profile:lint` by name if an element gains or loses the flag
+(mutation-verified), and the element is wired end to end — store, handler, form.
+
+**Defect K is fixed, and it needed a data-model change to be fixable at all.**
+Operator-entered Table 10 values were silently overwritten with `not-provided` on
+every re-normalization, because `user_values_by_identity` was populated by no
+caller. The consumer now reads them back first — but it could not find them:
+`bom_documents.project_id` was populated only by HBOM imports, and
+`axebom_normalize_writer` is scoped to the `normalize` schema and cannot read
+`scan.scans` at all (invariant 11 forbids the JOIN, and `services/project` does it
+in two queries). AIBOM documents now carry their project id. Mutation-verified:
+removing the read-back fails the test by name.
+
+**Element 06 was `not-provided` in every report ever generated**, with its own
+dependency list in the adjacent variable — derived from `ai_model_dependencies`
+now, exactly as element 10 is derived from `ai_datasets`.
+
+⚠ **Element 18 is still `not-provided`, deliberately.** An AI model has no
+findings of its own; what exists is findings against its DEPENDENCIES, on the
+project's SBOM document. Copying them here would assert that a vulnerability in
+`transformers` is a vulnerability *of* `Llama-3-8B` — a defensible reading of
+element 18 with compliance consequences, so it is a decision to make deliberately
+(M4, with attestations) rather than one for whoever writes the query.
+
+⚠ **The durable cache is on disk, not in an `aibom` schema, and that is a
+deliberate narrowing of the plan.** A schema would mean a new migration and a new
+database credential held by the one component with outbound network — widening
+exactly the blast radius that splitting this worker out was meant to contain. A
+model card is public data about a public model: no tenant scoping, no RLS. A
+content-addressed directory on a volume it already mounts is durable, survives
+restarts, and is inspectable. M4 can lift it if it ever needs querying.
+
+`task verify` green. `docs/02-CONTRACTS.md`, `docs/04-OSINT-INTEGRATION.md` and
+`docs/01-DATA-MODEL.md` updated.
+
+**Still owed:** element 18 (above); `aibom-generator` has not yet run inside a
+real end-to-end scan (its unit and integration tests pass, the container fetches
+live, and the dispatch path is verified, but no scan has driven all of it at once
+— that is the M2 checkpoint demo); the upstream package ships a broken
+`field_registry.json` reference that logs a loud warning and degrades only its own
+completeness score, which AxeBOM does not consume.
+
+### 2026-09-06 (a) — AIBOM M1: the AI BOM reported three models where there was one
+
+**The defect, measured live before any change was made.** Two `AIBOM`
+`bom_documents` existed, holding six `ai_models` rows, `0` datasets, `0`
+dependencies, both at `completeness_pct = 5.88%` with exactly one element
+(`model_name`) marked `provided`. `scan.engine_runs` showed `ai-bom` succeeding
+four times and `aibom-generator` **skipped** four times.
+
+The stored `scan.raw_artifacts` output for the last AIBOM scan
+(now committed as `workers/aibom/testdata/ai-bom-langchain-llama3.cdx.json`)
+contains three `machine-learning-model` components:
+
+```
+transformers                    purl: pkg:pypi/transformers
+HuggingFace Transformers        purl: pkg:pypi/huggingface transformers        <- literal spaces
+HuggingFace Transformers Model  purl: pkg:pypi/huggingface transformers model  <- literal spaces
+                                property trusera:model_name = meta-llama/Llama-3-8B
+```
+
+**There is one model in that repository.** AxeBOM reported three, each named
+after the Python library that loads it, while `meta-llama/Llama-3-8B` — sitting
+in a property nothing read — was recorded nowhere.
+
+**Six root causes, all in source, none hypothetical.**
+
+| Defect | Cause | Fix |
+|---|---|---|
+| A | `_model_reference` read only `model_id`/`huggingface_id`; ai-bom 3.1.0 emits `trusera:model_name` | `_MODEL_REF_PROPERTIES` + `looks_like_model_reference` (`org/name` shape, never a label) |
+| B | `_locations` read only `evidence.occurrences[]`; ai-bom emits **no `evidence` block at all**, only a `trusera:source_location` property | `_locations` reads both. `/src/app.py:13` survives for the first time |
+| C | A component the engine typed `machine-learning-model` was believed even when its purl said `pkg:pypi/…` | `classify_component`: a package purl outranks a guessed type field, unless a resolvable model reference is present |
+| D | Purls containing literal spaces were stored as identity | `valid_purl` drops them; a malformed merge key matches nothing while looking real |
+| E | `merge.identity()` fell back to the component purl, so one model under three labels was three rows | The `model_key` ladder (`workers/aibom/identity.py`, `03-NORMALIZER-SPEC.md` §1.5) |
+| L | `normalize_consumer` gathered a `datasets` key `extract_discovery` has never returned | Removed |
+
+**`normalize.ai_models` had no identity column, and that is the structural
+cause.** Every other canonical table stores what it merges on
+(`components.component_key`, `crypto_assets.component_key`); this one stored a
+name, so the merge key lived for the length of one Python dict and was
+discarded. `migrations/normalize/0016_ai_model_identity.sql` adds `model_key`,
+`identity_rule`, `identity_confidence`, `source_engine`, `evidence`, `verified`.
+
+- The ladder is prefixed per tier (`purl:` / `hash:` / `oci:` / `api:` / `file:`
+  / `name:` / `opaque:`), so a weight digest can never collide with a typed name.
+- `bulk._ai_models_batch` derives `model_key` from the same `_identity` that
+  mints the row's uuid5 surrogate, so the key and the id **cannot** drift.
+- Existing rows were backfilled `opaque:<id>`, **not** reconstructed from their
+  names. There is no key to recover from a row produced by a pipeline that
+  computed none, and minting `name:<model_name>` would have asserted an identity
+  nobody established — for rows where the name is the name of the wrong thing.
+- `verified` never defaults to true. Only an engine confirming the model resolves
+  upstream sets it; today only enrichment can, and enrichment is not yet wired.
+
+**Two bugs found while fixing those, neither in the original list.**
+
+1. **`extract_discovery`'s diagnostics were computed and dropped.**
+   `normalize_consumer` built a fresh `discovery` dict carrying only `models` and
+   `frameworks`, so every content-level diagnostic died there. That became
+   load-bearing the moment reclassification started emitting
+   `AIBOM_MODEL_RECLASSIFIED` — a model count that changes with no diagnostic
+   beside it is a number nobody can account for (invariant 12).
+2. **Zero models used to mean no document at all.** The consumer returned early
+   on an empty model list. With classification landing, a repository importing
+   LangChain but naming no resolvable model would have written **no
+   `bom_documents` row**, leaving the report nothing to render and Engine
+   Coverage nothing to explain — which reads as "we did not look". It now returns
+   early only when there are no models *and* no frameworks;
+   `build_canonical_aibom` already handled the empty case and is tested for it.
+
+**Table 10 element 01 was reporting a category, not a name.** ai-bom names the
+component `HuggingFace Transformers Model`. `_value_for` now prefers the
+enrichment card name, then the **name segment** of the reference (`Llama-3-8B`,
+not `meta-llama/Llama-3-8B` — the org prefix belongs to element 04 and is
+deliberately *not* used to fill it; `test_the_developer_is_not_inferred_from_the_org_prefix`
+still holds).
+
+**A seventh defect was found while fixing the sixth, and it was product-wide.**
+`canonical["diagnostics"]` is set by **every** normalize consumer — aibom, cbom
+and hbom — and `writer.write_bom_document` never read the key. There was no
+column for it. So every statement the normalizer has ever made about what it
+could NOT resolve was computed and discarded inside a process that then exited.
+
+That became load-bearing the moment reclassification started emitting
+`AIBOM_MODEL_RECLASSIFIED`. On the real artifact the effect is precise: two
+components the engine called models are recorded as dependencies, and
+`link_dependencies` drops both because no SBOM catalogues them — so they appear
+in **neither** the model list nor the dependency list, and the customer sees a
+model count of one where three components went in, with nothing anywhere saying
+why. `migrations/normalize/0017` adds `bom_documents.normalize_diagnostics`;
+the writer persists it, `bomsource.go` loads it, and it renders in the Notes
+sheet and the JSON bundle. Three tests cover it, **mutation-verified**: removing
+the render loop makes them fail by name.
+
+⚠ **This fixes CBOM and HBOM too** — they were losing their normalize
+diagnostics the same way, and now persist them through the same path.
+
+**Verified against the real artifact, through the real write path, on live
+Postgres:**
+
+```
+LIVE ai_models ROWS: 1   (was 3 for this exact input)
+   name      = 'Llama-3-8B'
+   model_key = purl:pkg:huggingface/meta-llama/Llama-3-8B
+   rule      = hf_repo / high
+   evidence  = ['/src/app.py:13']
+   verified  = False
+   coverage  = (5.88, 76.47)
+
+PERSISTED DIAGNOSTICS: 3
+   [info] AIBOM_DEPENDENCY_NOT_IN_SBOM   2 dependencies not catalogued in the SBOM
+   [info] AIBOM_MODEL_RECLASSIFIED       transformers -> AI dependency (pkg:pypi/transformers)
+   [info] AIBOM_MODEL_RECLASSIFIED       HuggingFace Transformers -> AI dependency
+```
+
+Every one of the three components the engine reported is now accounted for in
+the customer's own report: one is the model, two are named as reclassified.
+
+⚠ **Coverage is still 5.88%, and that is the honest number, not a failure of
+this session.** Without enrichment only `model_name` is substantive. The
+difference is that it is now 5.88% about a real model instead of 5.88% about a
+Python library counted three times. M2 (enrichment) is what moves it.
+
+**Seven new tests replay the real captured output** rather than a hand-built
+fixture — every one of them failed against this exact file before this session.
+A hand-built CycloneDX document could not have caught any of these bugs: each was
+a mismatch between what the spec permits and what this engine actually emits.
+
+`task verify` green. `docs/01-DATA-MODEL.md` and `docs/03-NORMALIZER-SPEC.md`
+§1.5 updated (invariant 1 — neither restates the other).
+
+**Then the change was reviewed adversarially, and the review found five more
+defects in it — three of them mine.** Seventeen candidate findings, each
+independently re-checked by a second agent instructed to refute it; nine survived.
+The ones that mattered:
+
+1. ⚠ **The reclassification rule deleted every hosted-API model from the
+   inventory** — the false-negative direction a compliance document must never
+   take, and worse than the bug it replaced. A reviewer downloaded the real
+   `ai_bom-3.1.0` sdist and read it: `ScanResult.to_cyclonedx` maps
+   **`llm_provider` AND `model` alike** to CycloneDX `machine-learning-model`, and
+   `_generate_purl` **always** mints a purl from the component's own display name
+   (`name.lower().replace("_","-")`, type defaulting to `pypi`). So
+   `client.chat.completions.create(model="gpt-4o")` arrives named `OpenAI Model`
+   with `trusera:model_name: gpt-4o` and `purl: pkg:pypi/openai model` — no slash,
+   a pypi purl, demoted. With zero models surviving, `_dependencies` is never built
+   either (the pipeline builds it inside the per-model loop), so **the customer's
+   GPT-4o usage existed nowhere in the document.** Reproduced, then fixed: an
+   asserted model identifier is positive evidence *whatever its shape* — the slash
+   requirement belongs to enrichment (a Hugging Face lookup needs `org/name`), not
+   to classification. `gpt-4o` now lands as `api:openai/gpt-4o`.
+2. ⚠ **The demotion trusted a purl the engine invented.** ai-bom derives every purl
+   from the display name, so `pkg:pypi/huggingface transformers` is the label with a
+   prefix — believing it as "the ecosystem's own assertion" is believing the engine
+   twice and calling it corroboration. The rule now fires only where the purl adds
+   nothing the name did not already say (`_purl_derived_from_name`, mirroring
+   upstream's own transform), plus an exemption for committed weights files
+   (`.safetensors`, `.gguf`, …) whose purl describes no package at all.
+3. ⚠ **The ladder asserted a Hugging Face repository for any `org/name`.**
+   `anthropic/claude-3.5-sonnet` is a real reference and there is no such HF repo;
+   minting `pkg:huggingface/…` for it puts a fabricated, resolvable-looking upstream
+   location into a compliance document. A HF purl is now minted only where something
+   actually said Hugging Face; everything else keeps a neutral `model:` key.
+4. **Tier 7 merged two unidentifiable models**, contradicting its own docstring —
+   identical seeds produced identical keys. It now takes the discovery position.
+   And identity was being derived **twice** (once in `merge` to dedup, once
+   downstream to store, with different arguments), so an opaque model merged under
+   one key and was written under another. Derived once now, carried on the model.
+5. **A library could escape reclassification with a slash in its own display name**;
+   the name fallback forms a reference and does not prove one.
+
+Also from the review: the migration's backfill now lifts `FORCE ROW LEVEL SECURITY`
+for its length and restores it, the bracket `0012` introduced for exactly this — it
+worked on a superuser-owned dev database and would have failed on a managed one.
+`normalize_diagnostics` now reach the **PDF and DOCX** too, through one shared
+helper rather than a fourth copy (`TypeNotes`' comment records what happened last
+time a caveat was built inline in one renderer). And `workers/aibom/normalize_consumer.py`
+had **no tests at all** — the module where two of these defects lived — so it now has
+three, run against real Postgres as `axebom_normalize_writer`, the role the deployed
+consumer actually holds.
+
+⚠ **Those integration tests do not run in CI.** No workflow starts a Postgres
+service; `verify.yml`'s python job runs `pytest` with no database, so every
+`pytest.importorskip`/skip-when-down test in this repo is a `task dev` check and not
+a merge gate. Worth knowing before trusting a green CI run on anything DB-shaped.
+
+**Still owed, unchanged by this session:** enrichment is not live-wired
+(`cards` is still `{}`); `aibom-generator` still reports `skipped` on every scan
+because it has no `ADAPTERS` entry; neither `huggingface_hub` nor
+`owasp-aibom-generator` is installed in any image, so the fetcher cannot run
+anywhere; elements 06 and 18 are still computed and never persisted; Go's
+user-supplied field set still has four ids to Python's five; and
+`user_values_by_identity` is still populated by no caller, so a re-normalization
+would still overwrite operator-entered values. All of that is M2.
+
+⚠ **The deployed containers still run the old code.** These fixes are verified
+against the live database through the real write path, but
+`axebom-aibom-worker-1` and `axebom-aibom-normalize-consumer-1` were built
+before them. `docker compose up -d --build` is needed before a live scan shows
+this behaviour.
 
 ### 2026-09-05 (n) — Audit sweep: campaigns had never started a scan
 

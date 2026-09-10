@@ -250,6 +250,35 @@ class ArtifactWriter:
         )
 
 
+#: Every name an engine publishes into the shared per-scan workspace.
+#:
+#: ⚠ AN IMPORT ENGINE MUST NEVER READ ONE OF THESE, AND ONE DID. The customer's
+#: upload is extracted into the workspace ROOT — `README.md`, `src/`,
+#: `requirements.txt` — and `_publish_to_workspace` writes a producing engine's
+#: output right beside it. `aibom-glaas` and `aibom-k8s-runtime` walk that tree
+#: looking for a CycloneDX document the CUSTOMER produced, found `ai-bom.cdx.json`
+#: there, and reported AxeBOM's own discovery back as an independent
+#: customer-supplied source. Measured on a live scan: three raw artifacts with the
+#: identical sha256, and Engine Coverage claiming `runtime-deployments` and
+#: `training-runs` — surfaces nothing had looked at.
+#:
+#: That is worse than an engine finding nothing. An import engine exists to say
+#: "here is what your own tooling reported"; one that echoes our own output
+#: manufactures agreement between two engines that are the same engine, and
+#: invariant 12 rates a false negative a customer trusts above an honest gap.
+#:
+#: ⚠ A LIST, NOT A PREFIX RULE, and `test_workspace_artifacts.py` asserts it
+#: names every `workspace_artifact_name` declared anywhere in the repository — so
+#: an engine that starts publishing under a new name fails the build here rather
+#: than silently becoming importable.
+WORKSPACE_PUBLISHED_ARTIFACTS: frozenset[str] = frozenset(
+    {
+        "sbom.cdx.json",
+        "ai-bom.cdx.json",
+    }
+)
+
+
 class SandboxedAdapter(ToolAdapterBase):
     """Base for engines that run as a container in the sandbox."""
 

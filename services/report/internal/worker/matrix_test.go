@@ -204,13 +204,50 @@ func matrixQBOM() render.BOM {
 func matrixAIBOM() render.BOM {
 	risk := 7.5
 	b := matrixBase(model.BOMTypeAIBOM)
+	// ⚠ RICH ENOUGH TO EXERCISE THE ML-BOM, not only the generic export. A
+	// fixture carrying a name and a risk score would serialize to an ML-BOM with
+	// an empty `modelCard` — which validates, and would freeze "says nothing" as
+	// the expected answer for the one format whose whole purpose is saying it.
 	b.AIModels = []render.AIModel{{
-		Name: "matrix-aibom-model", RiskScore: &risk,
+		Name:     "matrix-aibom-model",
+		ModelKey: "purl:pkg:huggingface/matrix/aibom-model",
+		FoundBy:  []string{"ai-bom", "airom"},
+		Evidence: []string{"src/app.py:17"},
+		Verified: true,
+		// Which rung of the ladder produced the key, and what that is worth.
+		IdentityRule:       "hf_repo",
+		IdentityConfidence: "high",
+		Datasets: []render.AIDataset{{
+			Name: "matrix-dataset", License: "CC-BY-4.0",
+			Source: "https://example.test/matrix-dataset",
+		}},
+		Dependencies:  []string{"purl:pkg:pypi/transformers@4.44.2"},
+		RiskScore:     &risk,
 		OwaspLLMTop10: []string{"LLM01"},
 		Fields: map[string]string{
-			model.FieldCertinAibom01ModelName: "matrix-aibom-model",
+			model.FieldCertinAibom01ModelName:            "matrix-aibom-model",
+			model.FieldCertinAibom02ModelVersion:         "1.0",
+			model.FieldCertinAibom03ModelType:            "text-generation",
+			model.FieldCertinAibom04ModelDeveloper:       "Matrix Systems",
+			model.FieldCertinAibom05Licensing:            "Apache-2.0",
+			model.FieldCertinAibom07MlModelsAlgorithms:   "MatrixForCausalLM",
+			model.FieldCertinAibom13Input:                "text",
+			model.FieldCertinAibom14Output:               "text",
+			model.FieldCertinAibom15IntendedUsage:        "internal triage only",
+			model.FieldCertinAibom16OutOfScopeUsage:      "never for medical advice",
+			model.FieldCertinAibom12SecurityRequirements: "runs inside the VPC",
+			// ⚠ THE SENTINEL, DELIBERATELY. The golden is where a regression
+			// that started exporting `not-provided` as a real value would show.
+			model.FieldCertinAibom11Hardware: model.NotProvided,
 		},
 	}}
+	b.AIAssets = []render.AIAsset{
+		{Type: "prompt", Key: "prompt:src/app.py:9", Name: "system-prompt",
+			Evidence: []string{"src/app.py:9"}, FoundBy: []string{"airom"}},
+		{Type: "vector_store", Key: "vector_store:chroma", Name: "chroma", Provider: "chroma"},
+		{Type: "endpoint", Key: "endpoint:openai", Name: "OpenAI API",
+			Provider: "openai", ServesModel: "gpt-4o"},
+	}
 	return b
 }
 

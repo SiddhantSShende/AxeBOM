@@ -19,6 +19,7 @@ import { BomTypeChip, StatusPill } from '../../components/Chips';
 import { ErrorState, SkeletonRows } from '../../components/States';
 import { downloadFile, getAccessToken, triggerSave } from '../../lib/api';
 import { formatBytes, levelLabel, useReports, type Report } from '../../lib/reports';
+import { metricLabel, sortedCounts, tallyDiscoveries } from '../../lib/discoveries';
 import { isTerminal } from '../../lib/scans';
 import {
   bearerProtocols,
@@ -43,6 +44,12 @@ export function ScanProgressRoute() {
   const reportWarning = (useLocation().state as { reportWarning?: string } | null)?.reportWarning;
   const [progress, setProgress] = useState<Progress | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
+  // ⚠ KEYED BY ENGINE, AND THAT IS WHAT MAKES IT SURVIVE A REDELIVERY. The
+  // orchestrator's result consumer is at-least-once with MaxDeliver=4
+  // (docs/02-CONTRACTS.md §2), so the same engine's counts can arrive twice.
+  // Accumulating into a running total would double them and print "6 models"
+  // for a repository holding three; last-value-wins per engine cannot.
+  const [discoveries, setDiscoveries] = useState<Record<string, Record<string, number>>>({});
   const [connection, setConnection] = useState<ConnectionState>({ kind: 'connecting' });
   const seeded = useRef(false);
   // ⚠ QUERIED HERE, NOT INSIDE ReportsSection, so OverallBar can see it too —
@@ -88,6 +95,13 @@ export function ScanProgressRoute() {
         },
         onActivity: (a) => {
           setActivity((prev) => [a, ...prev].slice(0, ACTIVITY_LIMIT));
+          // Only an engine RESULT carries counts; a phase transition carries
+          // none, and an empty object here would blank an engine that had
+          // already reported.
+          if (a.engine && Object.keys(a.metrics).length > 0) {
+            const { engine, metrics } = a;
+            setDiscoveries((prev) => ({ ...prev, [engine]: metrics }));
+          }
         },
         onConnection: setConnection,
       },
@@ -117,6 +131,7 @@ export function ScanProgressRoute() {
       ) : (
         <>
           <OverallBar progress={progress} reports={reports.data?.reports} />
+          <DiscoveryTally byEngine={discoveries} />
           <ActivityFeed items={activity} />
           <ReportsSection query={reports} />
           <EngineTable engines={progress.engines} />
@@ -203,13 +218,7 @@ function displayPercent(progress: Progress, reports: Report[] | undefined): numb
  * every other animation in this app is, in app.css's global `@media
  * (prefers-reduced-motion: reduce)` rule).
  */
-function OverallBar({
-  progress,
-  reports,
-}: {
-  progress: Progress;
-  reports: Report[] | undefined;
-}) {
+function OverallBar({ progress, reports }: { progress: Progress; reports: Report[] | undefined }) {
   const pending = reportsPending(reports);
   const live = !isTerminal(progress.status) || pending;
   const percent = displayPercent(progress, reports);
@@ -286,11 +295,69 @@ function ActivityFeed({ items }: { items: ActivityItem[] }) {
                 {item.engine && <strong>{item.engine}</strong>}
                 {item.message ?? item.phase}
               </span>
+              {sortedCounts(item.metrics).map(([key, count]) => (
+                <span className="activity-count" key={key}>
+                  <b>{count}</b> {metricLabel(key, count)}
+                </span>
+              ))}
               <span className="activity-time">{relativeTime(item.ts)}</span>
             </m.li>
           ))}
         </AnimatePresence>
       </ul>
+    </section>
+  );
+}
+
+/**
+ * DiscoveryTally is what the scan has found so far, by kind.
+ *
+ * ⚠ THIS IS THE ANSWER TO "WHAT IS IT ACTUALLY FINDING", AND THE ENGINE TABLE
+ * IS NOT. The table says which engines ran and how they ended; the overall bar
+ * says how far along they are. Neither tells somebody watching an AI scan that
+ * two vector stores and a RAG pipeline just turned up — and until the
+ * orchestrator started filling events.ScanEventV1.Metrics, nothing did.
+ *
+ * ⚠ COUNTS AND KINDS, NEVER CONTENT. The server holds a metric KEY to the same
+ * rule as a message — no path, no URL, nothing out of the scanned code
+ * (events.SanitizeDiscoveries). BOM content is confidential under CERT-In §5.3;
+ * the names of what was found live in Postgres and are read by the inventory
+ * screens, which are authenticated per project. So this renders a number and a
+ * kind, and a reader who wants the names follows the report.
+ *
+ * ⚠ ADVISORY, LIKE EVERY EVENT ON THIS PAGE. `docs/02-CONTRACTS.md` §10: no
+ * progress logic may depend on receiving an event, and none here does — this
+ * component renders nothing at all until an engine reports, and the normalized
+ * document remains the only thing anyone counts from.
+ */
+function DiscoveryTally({ byEngine }: { byEngine: Record<string, Record<string, number>> }) {
+  const rows = sortedCounts(tallyDiscoveries(byEngine));
+  if (rows.length === 0) return null;
+
+  return (
+    <section className="discovery-tally" aria-label="What this scan has found so far">
+      <h2 className="activity-feed-title">Found so far</h2>
+      <ul className="discovery-list">
+        <AnimatePresence initial={false}>
+          {rows.map(([key, count]) => (
+            <m.li
+              className="discovery-chip"
+              key={key}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <b className="discovery-count">{count}</b>
+              <span className="discovery-kind">{metricLabel(key, count)}</span>
+            </m.li>
+          ))}
+        </AnimatePresence>
+      </ul>
+      <p className="discovery-note">
+        As each engine reports. The report is generated from the normalized document, which merges
+        what every engine found — these are the raw per-engine claims.
+      </p>
     </section>
   );
 }
@@ -319,6 +386,13 @@ function deriveActivity(engines: EngineProgress[]): ActivityItem[] {
         engine: e.engineId,
         phase: 'running',
         message: `running ${e.engineId}`,
+        // ⚠ EMPTY, NOT RECONSTRUCTED. engine_runs records a status and a
+        // duration, never a per-kind breakdown, and the breakdown reaches this
+        // page only on the live event. Inventing one from the snapshot is the
+        // exact fabrication this feed must not do — a scan already finished when
+        // the page opens shows no counts here, and its inventory screens
+        // (which read the normalized rows) show all of them.
+        metrics: {},
         ts: e.startedAt,
       });
     }
@@ -328,6 +402,7 @@ function deriveActivity(engines: EngineProgress[]): ActivityItem[] {
         engine: e.engineId,
         phase: e.status === 'failed' || e.status === 'timeout' ? 'failed' : 'done',
         message: e.message ?? `${e.engineId} ${e.status}`,
+        metrics: {},
         ts: e.finishedAt,
       });
     }

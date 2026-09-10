@@ -504,6 +504,240 @@ tools:
       `workers/aibom/adapters/aibom_generator_fetch.py`'s module docstring for
       both, and how the Fetcher guards against them.
 
+  - id: airom
+    role: generator
+    families: [aibom]
+    upstream: https://github.com/airomhq/airom
+    license: Apache-2.0
+    version: "0.4.4"
+    # ⚠ CONTAINER, NOT PIP, FOR THE REASON ai-bom's ENTRY GIVES ABOVE: this runs
+    # third-party code over untrusted customer source, which invariant 7 puts in
+    # the sandbox, and a `pip:` entry gives ManifestResolver nothing to build a
+    # sandboxed invocation from.
+    #
+    # airom ships a Go static binary published to PyPI as a platform wheel, and
+    # no container image of its own — so, like ai-bom,
+    # deploy/docker/engines/Dockerfile.airom IS the upstream image, built locally
+    # with `task osint:build-airom`, and `image_tag: dev` records honestly that
+    # there is no upstream digest to pin against.
+    container:
+      image: axebom/airom-engine
+      image_tag: "dev"
+      image_digest: null
+    source_kinds: [git, upload]
+    produces: [ai_models, ai_dependencies, ai_assets]
+    native_format: cyclonedx-json-1.6
+    default_weight: 2
+    db_backed: false
+    notes: >
+      The widest AI discovery surface of the three code scanners, measured on
+      one real tree (workers/aibom/testdata/ai-langchain, captured in
+      airom-ai-langchain.cdx.json): it is the only engine that reports the
+      embedding model, the system prompt at src/app.py:9, the prompt file, the
+      Chroma vector store and the RAG pipeline. It also attributes gpt-4o to
+      `openai` where ai-bom attributes it to `langchain`.
+      ⚠ DISPATCH ON `airom:kind`, NEVER ON THE CycloneDX `type`: airom types its
+      vector store and RAG pipeline as `application` and its prompts as `data`,
+      so a type-based classifier files the vector store as a software dependency
+      and drops both prompts. ⚠ Its component names are LOWERCASED and the true
+      casing lives only in `evidence.identity[].concludedValue` — Hugging Face
+      ids are case-sensitive, so using the lowercased form stores one model as
+      two. Both handled in workers/aibom/adapters/airom.py.
+      Offline by design here: airom queries OSV.dev when it can and sets
+      `airom:assurance.cve.unchecked` when it cannot, which under
+      `--network=none` is always. That becomes a diagnostic rather than an
+      absent vulnerability list nobody asked about.
+      The single wheel and its hash are pinned in
+      deploy/docker/engines/airom-requirements.lock.txt; it declares no
+      dependencies, being a Go binary.
+
+  - id: cdxgen-ai
+    role: generator
+    families: [aibom]
+    upstream: https://github.com/cdxgen/cdxgen
+    license: Apache-2.0
+    version: "13.0.1"
+    # ⚠ THE SAME IMAGE AND THE SAME BINARY AS `cdxgen`, DELIBERATELY — the
+    # `syft-spdx` precedent above, for the same reason. It is cdxgen's `-t ai`
+    # pass, a separate engine id rather than a second flag because the tool
+    # writes ONE document to stdout and the sandbox has no writable host mount
+    # to collect a second from.
+    #
+    # The digest below is `cdxgen`'s, unchanged: one image, pinned once. Bumping
+    # cdxgen bumps both.
+    container:
+      image: ghcr.io/cdxgen/cdxgen
+      image_tag: "13.0.1"
+      image_digest: "sha256:0be75639a833b59d1ba29b3c8ac00dfd2e41e7568d56b6c039007caadebebc0d"
+    container_only: true
+    container_only_reason: >
+      The same Node runtime and per-ecosystem helper closure `cdxgen` records.
+    source_kinds: [git, upload]
+    produces: [ai_models, ai_assets]
+    native_format: cyclonedx-json-1.6
+    default_weight: 4
+    db_backed: false
+    verify:
+      checksum: unavailable
+      signature: unavailable
+    notes: >
+      The only engine of the three that emits a real, correctly-cased model purl
+      (`pkg:huggingface/meta-llama/Llama-3-8B` — tier 1 of the identity ladder),
+      the only one that attributes `gpt-4o` to `openai` AND names it in a purl,
+      and the only one that reports the INFERENCE SERVICES a repository talks to
+      as `services[]`. Captured in
+      workers/aibom/testdata/cdxgen-ai-ai-langchain.cdx.json.
+      ⚠ `--no-install-deps` IS MANDATORY: the flag defaults to TRUE and cdxgen
+      otherwise runs `npm install` over the customer's source, which invariant 7
+      forbids outright — see workers/sbom/adapters/cdxgen.py for the full
+      account, including why it also cannot work under `--network=none`.
+      ⚠ Its `pkg:generic/openai/gpt-4o` purl is NOT identity: cdxgen mints a purl
+      for a thing that has no package. `generic` is in
+      discovery.PACKAGE_PURL_TYPES precisely so it cannot be read as one.
+
+  - id: cisco-aibom
+    role: generator
+    families: [aibom]
+    upstream: https://github.com/cisco-ai-defense/aibom
+    license: Apache-2.0
+    version: "1.10.0"
+    # ⚠ REGISTERED AND DISABLED, ON PURPOSE, AND THIS IS THE HONEST SHAPE OF
+    # "IT LANDS".
+    #
+    # `cisco-aibom analyze` REQUIRES `--llm-model`: it resolves ambiguous AI
+    # usage by sending code context to a third-party LLM. Two things follow, and
+    # either alone is disqualifying today:
+    #
+    #   1. It needs egress and an API key. Engines run `--network=none` and hold
+    #      no credentials (invariant 7). There is no egress proxy yet; Phase 16
+    #      owns that, and pulling it forward for one engine is not a trade worth
+    #      making.
+    #   2. It ships CUSTOMER SOURCE to a third party. That is a per-project
+    #      decision made with open eyes and audited, exactly like ai-bom's
+    #      `--llm-enrich` — never a default a customer discovers afterwards in an
+    #      egress log.
+    #
+    # So it is present, selectable-in-principle, and reports `unavailable` with
+    # that reason in every Engine Coverage section. That is a true statement
+    # about a real tool. Quietly omitting it would leave a reader unable to tell
+    # "we did not run it" from "it found nothing" — which invariant 12 rates as
+    # worse than not having the engine at all.
+    enabled: false
+    deferred_reason: >
+      cisco-aibom `analyze` always requires `--llm-model`, which sends code
+      context to a third-party LLM and needs both network egress and an API key.
+      Scan engines run with no network and hold no credentials by design
+      (CLAUDE.md invariant 7), and no egress allowlist exists yet. This engine is
+      registered so it appears in Engine Coverage as deliberately not run, rather
+      than being silently absent.
+    pip:
+      package: cisco-aibom
+      version: "1.10.0"
+    source_kinds: [git, upload]
+    produces: [ai_models]
+    native_format: cyclonedx-json-1.6
+    default_weight: 5
+    db_backed: false
+    notes: >
+      Cisco AI Defense's AI BOM generator. Verified on PyPI as `cisco-aibom`
+      1.10.0, Apache-2.0. It is NOT packaged into an image and NOT installed
+      anywhere in this repository — a disabled engine that ships its dependency
+      closure into a worker would be all of the cost and none of the benefit.
+      Enabling it is blocked on the Phase-16 egress proxy AND on a per-project
+      consent flag, not on packaging work.
+
+  - id: aibom-toml
+    role: importer
+    families: [aibom]
+    # ⚠ `internal`, BECAUSE AxeBOM IMPLEMENTS THIS ENGINE — the same reasoning
+    # `hbom-cdxgen-host` records. It parses a file the customer committed; there
+    # is no artifact to acquire, and pointing `upstream` at 0disoft's package
+    # would make the availability probe try to resolve a pip package and report
+    # the engine unavailable while it works perfectly, which shows in Engine
+    # Coverage as a false gap.
+    upstream: internal
+    license: proprietary
+    format_reference: https://github.com/0disoft/ai-bom-generator
+    source_kinds: [git, upload]
+    produces: [ai_models, ai_assets]
+    native_format: axebom-aibom-json-1
+    mode: internal
+    default_weight: 1
+    notes: >
+      ⚠ `0disoft/ai-bom-generator` DISCOVERS NOTHING, and that is not a
+      criticism. Verified against the real package (ai-bom-generator 0.6.1,
+      Apache-2.0): it reads an `aibom.toml` the customer WROTE and renders it
+      into CycloneDX 1.7 or SPDX. Point it at a repository with no such file and
+      it produces nothing.
+      This is an engine anyway because a committed `aibom.toml` is a file in the
+      customer's source tree, and parsing a file they committed is a scan in
+      exactly the sense parsing a committed lockfile is — the same line that made
+      `hbom-ecad` a scan and left `hbom-csv` an import. Nobody uploads it; it is
+      found where it lives.
+      ⚠ AxeBOM PARSES THE TOML AND DOES NOT RUN THE TOOL. `ai-bom-generator`
+      installs a console script named `ai-bom`, which COLLIDES with Trusera's —
+      the two must never share an image. Reading TOML needs no third-party code:
+      `tomllib` is in the standard library.
+      ⚠ WHAT IT REPORTS IS A DECLARATION, NOT AN OBSERVATION. Every model
+      carries `model_ref_source: aibom.toml`, so `ai_model_provenance` records
+      which KIND of evidence is behind the row. Three engines observing a model
+      in source and one person declaring it are not the same thing.
+
+  - id: aibom-k8s-runtime
+    role: importer
+    families: [aibom]
+    upstream: internal
+    license: proprietary
+    format_reference: https://github.com/GoogleCloudPlatform/k8s-aibom
+    source_kinds: [upload]
+    produces: [ai_models, ai_assets]
+    native_format: cyclonedx-json-1.6
+    mode: internal
+    default_weight: 2
+    notes: >
+      ⚠ NOT RUN BY AxeBOM. `GoogleCloudPlatform/k8s-aibom` is a Kubernetes
+      CONTROLLER installed by Helm chart — it watches a live cluster and emits an
+      `AIBOM` custom resource (CycloneDX 1.6). It has no scan CLI, it needs
+      cluster credentials AxeBOM does not hold and must not hold, and what it
+      describes is a RUNNING deployment, which is the one thing a source scan
+      cannot see. The customer installs it in the cluster they want documented
+      and uploads the resource; this engine parses that document. The raw
+      artifact is their file byte for byte.
+      Its ecosystem is `runtime-deployments` and not `model-refs` alone,
+      deliberately: reusing a source engine's surface would make Engine Coverage
+      claim the same ground twice.
+
+  - id: aibom-glaas
+    role: importer
+    families: [aibom]
+    upstream: internal
+    license: proprietary
+    format_reference: https://github.com/treqs/roar
+    source_kinds: [upload]
+    produces: [ai_models, ai_assets]
+    native_format: cyclonedx-json-1.6
+    mode: internal
+    default_weight: 2
+    notes: >
+      ⚠ `roar` CAN NEVER BE AN AxeBOM ENGINE, and it is worth being exact about
+      why rather than quietly dropping it. It is a RUN-TRACING CLI that wraps and
+      EXECUTES the user's own command (`roar run python3 train.py`) — the single
+      act CLAUDE.md invariant 7 forbids outright — and without a network it
+      produces no BOM at all: the CycloneDX AI-BOM and the G7/CISA/NTIA score are
+      generated SERVER-SIDE on glaas.ai, behind a web-UI download.
+      ⚠ HALF OF GLaaS IS CLOSED SaaS. `treqs/roar` is Apache-2.0 (PyPI
+      `roar-cli` 0.4.5); GLaaS itself has no public repository and is not
+      self-hostable. Its scoring rubric — Required Fields 20 / Metadata 20 /
+      Component Basics 20 / Lineage & Provenance 30 / External References 10,
+      against G7's Feb-2026 minimum elements, CISA 2025 and NTIA 2021 — is
+      documented but not published as code, so it may be cited as prior art and
+      must never be described as a reference implementation AxeBOM followed.
+      ⚠ AND IT SHIPS TELEMETRY. `ROAR_NO_TELEMETRY=1` disables it; the operator
+      instruction this engine emits says so, because a customer running it on our
+      advice should not discover that afterwards.
+      A customer who uses GLaaS downloads their ML-BOM and uploads it. That is
+      what this engine reads.
+
 # ============================================================================
 # HBOM
 #
@@ -735,6 +969,48 @@ libraries:
       SPDX <-> CycloneDX SERIALIZATION LAYER in the report phase.
       The original plan classified it as an AIBOM generator — wrong phase,
       wrong kind of artifact entirely.
+
+  - id: mlbomdoc
+    upstream: https://github.com/anthonyharrison/mlbomdoc
+    license: Apache-2.0
+    kind: reference
+    version: "0.1.1"
+    used_by: none
+    notes: >
+      ⚠ NOT INSTALLED, NOT RUN, AND THAT IS A DECISION RATHER THAN AN OVERSIGHT.
+      Read from the real wheel (mlbomdoc 0.1.1): it parses a finished ML-BOM with
+      `lib4sbom` and renders console / markdown / JSON / PDF through
+      `sbom2doc`'s document builders. It discovers nothing and validates nothing.
+      AxeBOM already renders PDF, DOCX, XLSX and JSON for every BOM type from the
+      CANONICAL MODEL, which carries strictly more than an ML-BOM does — both
+      coverage numbers, Engine Coverage, normalization diagnostics, per-engine
+      provenance. Wiring mlbomdoc would take our own exported document, hand it
+      back to us with less in it, and add lib4sbom + sbom2doc + a PDF stack to
+      the report path to do it.
+      It lands as the REFERENCE for what an ML-BOM summary should contain, which
+      is the role it actually fills. Recorded here rather than omitted so a
+      reader can tell a decision from an oversight.
+
+  - id: cyclonedx-go
+    upstream: https://github.com/CycloneDX/cyclonedx-go
+    license: Apache-2.0
+    kind: go_module
+    version: "v0.11.0"
+    used_by: report-svc
+    notes: >
+      ⚠ ADDED FOR THE ML-BOM, AND IT WAS ALREADY IN THE MODULE GRAPH — protobom
+      depends on it, so this promotes an indirect dependency to a direct one
+      rather than introducing new code.
+      protobom is the SPDX <-> CycloneDX serialization layer for every other BOM
+      type and stays that. It cannot serve the AIBOM: `sbom.Node` has no
+      `modelCard` and the string does not appear anywhere in protobom v0.5.8, so
+      an AIBOM exported through it is a list of unremarkable components that
+      every ML-aware tool reads as ordinary software. cyclonedx-go is
+      CycloneDX's own Go library and models the whole ML shape — MLModelCard,
+      MLModelParameters, ComponentData.
+      Used ONLY for the ML-BOM. Hand-rolling the JSON was the alternative and is
+      the thing services/report/internal/export's header forbids: a writer that
+      passes our tests and fails the customer's validator is worthless.
 
   - id: bomctl
     upstream: https://github.com/bomctl/bomctl

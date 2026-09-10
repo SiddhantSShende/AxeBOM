@@ -59,6 +59,10 @@ type Services struct {
 	Campaign         string
 	Comment          string
 	Notification     string
+	// AIBOM is the tenth service: operator-supplied Table 10 elements, the two
+	// AI consent switches, compliance tagging and attestation verification.
+	// See tools/gen-service's registry entry for why it is not part of project.
+	AIBOM string
 }
 
 // Postgres carries TWO identities, and the separation is load-bearing.
@@ -344,6 +348,7 @@ func LoadService(name string) (*Service, error) {
 			Campaign:         l.StringOr("CAMPAIGN_URL", localURL("campaign")),
 			Comment:          l.StringOr("COMMENT_URL", localURL("comment")),
 			Notification:     l.StringOr("NOTIFICATION_URL", localURL("notification")),
+			AIBOM:            l.StringOr("AIBOM_URL", localURL("aibom")),
 		},
 		Report: Report{
 			// No default. A default key NAME would have every deployment sign
@@ -496,6 +501,7 @@ var servicePorts = map[string]int{
 	"notification":      8097,
 	"fetcher":           8098,
 	"webrecon":          8099,
+	"aibom":             8100,
 }
 
 // defaultMetricsPort gives each service its OWN metrics port.

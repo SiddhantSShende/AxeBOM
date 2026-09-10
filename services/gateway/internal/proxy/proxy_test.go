@@ -21,6 +21,7 @@ func testServices(base string) config.Services {
 		Campaign:         base,
 		Comment:          base,
 		Notification:     base,
+		AIBOM:            base,
 	}
 }
 
@@ -57,7 +58,7 @@ func TestRoutesReachTheOwningService(t *testing.T) {
 	// Each upstream reports its own name, so the assertion is "which service
 	// received it", not merely "something answered".
 	var servers = map[string]*httptest.Server{}
-	for _, name := range []string{"auth", "project", "scan", "report", "campaign", "comment", "notify"} {
+	for _, name := range []string{"auth", "project", "scan", "report", "campaign", "comment", "notify", "aibom"} {
 		servers[name] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Echo the path the upstream actually saw, to prove /api was stripped.
 			w.Header().Set("X-Seen-Path", r.URL.Path)
@@ -74,6 +75,7 @@ func TestRoutesReachTheOwningService(t *testing.T) {
 		Campaign:         servers["campaign"].URL,
 		Comment:          servers["comment"].URL,
 		Notification:     servers["notify"].URL,
+		AIBOM:            servers["aibom"].URL,
 	}
 
 	r, err := New(svc, nil)
@@ -106,6 +108,11 @@ func TestRoutesReachTheOwningService(t *testing.T) {
 		{"github repos", "/v1/github/repos", "project", "/v1/github/repos"},
 		{"hbom", "/v1/hbom/preview", "project", "/v1/hbom/preview"},
 		{"qbom", "/v1/qbom/proj-1/form", "project", "/v1/qbom/proj-1/form"},
+		// ⚠ `/v1/aibom` REACHES ITS OWN SERVICE NOW, NOT project. The browser
+		// path is unchanged; the upstream behind it is not. A prefix claimed by
+		// two upstreams is refused at construction, so this row and the absence
+		// of `/v1/aibom` from project's list are one fact stated twice.
+		{"aibom form", "/v1/aibom/proj-1/form", "aibom", "/v1/aibom/proj-1/form"},
 		{"scans", "/v1/scans/abc/engine-runs", "scan", "/v1/scans/abc/engine-runs"},
 		{"reports", "/v1/reports", "report", "/v1/reports"},
 		{"shares", "/v1/shares/tok", "report", "/v1/shares/tok"},
@@ -340,12 +347,105 @@ func TestEveryUpstreamIsProbeable(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	if len(r.Upstreams()) != 7 {
-		t.Errorf("got %d upstreams, want 7 — every proxied service must be probeable", len(r.Upstreams()))
+	if len(r.Upstreams()) != 8 {
+		t.Errorf("got %d upstreams, want 8 — every proxied service must be probeable", len(r.Upstreams()))
 	}
 	for _, up := range r.Upstreams() {
 		if err := up.Probe(t.Context()); err != nil {
 			t.Errorf("probe %s: %v", up.Name, err)
 		}
+	}
+}
+
+// TestAPercentEncodedSlashSurvivesTheProxy.
+//
+// ⚠ EVERY COMPONENT KEY IS A PURL, AND EVERY PURL CONTAINS A SLASH.
+//
+// `purl:pkg:pypi/langchain@0.3.7` reaches a route pattern like
+// `/v1/projects/{id}/dependencies/{key}` only if the `%2F` stays escaped: a
+// decoded slash is a real path separator, so the upstream's ServeMux sees three
+// segments where the pattern has one and answers 404.
+//
+// The Rewrite hook used to clear `URL.RawPath` — aimed at a real problem, since
+// RawPath wins over Path when the two disagree — and in doing so threw away the
+// escaping. Verified live before the fix: the same request matched the route
+// against the project service directly (401) and 404'd through the gateway.
+// Every purl-keyed detail endpoint was unreachable.
+func TestAPercentEncodedSlashSurvivesTheProxy(t *testing.T) {
+	var seen struct {
+		escaped string
+		decoded string
+	}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen.escaped = r.URL.EscapedPath()
+		seen.decoded = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	r, err := New(testServices(upstream.URL), nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	const key = "purl%3Apkg%3Apypi%2Flangchain%400.3.7"
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/projects/abc/dependencies/"+key, nil)
+	r.Handler(httpx.NotFound)(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	// The /api prefix is stripped from BOTH forms, and the escaping is intact.
+	want := "/v1/projects/abc/dependencies/" + key
+	if seen.escaped != want {
+		t.Errorf("upstream saw escaped path %q, want %q", seen.escaped, want)
+	}
+	// And the upstream can still decode it to the key the caller meant.
+	if got := "purl:pkg:pypi/langchain@0.3.7"; !strings.HasSuffix(seen.decoded, got) {
+		t.Errorf("upstream decoded path %q, want it to end with %q", seen.decoded, got)
+	}
+}
+
+// ⚠ THE ID THE USER CAN SEE MUST FIND BOTH HALVES OF THEIR REQUEST.
+//
+// httpx.RequestID mints an id per service and honours an inbound X-Request-ID.
+// The gateway's own id lived only in its context and its RESPONSE header and
+// was never put on the outbound hop, so the upstream minted a second,
+// unrelated one — logged everything under that, and returned THAT one in the
+// error envelope the browser renders. Searching the gateway's log for the id a
+// user quotes found nothing, and no shared field joined the two log lines.
+func TestTheRequestIDCrossesTheHop(t *testing.T) {
+	var got string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("X-Request-ID")
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	r, err := New(testServices(upstream.URL), nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// Through httpx.RequestID, which is what assigns the id in the real chain.
+	gw := httptest.NewServer(httpx.RequestID(r.Handler(httpx.NotFound)))
+	t.Cleanup(gw.Close)
+
+	resp, err := http.Get(gw.URL + "/v1/projects")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	// The response header is the id the caller is told to quote. The upstream
+	// must have logged under the same one.
+	want := resp.Header.Get("X-Request-ID")
+	if want == "" {
+		t.Fatal("the gateway returned no request id at all")
+	}
+	if got != want {
+		t.Errorf("upstream saw request id %q, caller was given %q", got, want)
 	}
 }

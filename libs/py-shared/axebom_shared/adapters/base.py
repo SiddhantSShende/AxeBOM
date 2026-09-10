@@ -156,6 +156,26 @@ class GenerateResult:
     #: the payload is already parsed; see adapters/summary.py.
     summary: EngineSummary = field(default_factory=lambda: _EngineSummary())
     diagnostics: list[dict[str, Any]] = field(default_factory=list)
+    #: ⚠ FINER-GRAINED THAN `summary`, AND FOR A DIFFERENT READER.
+    #:
+    #: `summary` carries the four dimensions docs/02-CONTRACTS.md §6 defines for
+    #: every BOM type, and an AIBOM engine's models, prompts and vector stores
+    #: all fold into `components` there — deliberately, because that is the
+    #: figure a reader compares BETWEEN engines. It is useless to somebody
+    #: watching a scan run: "11 components" says nothing they want to know,
+    #: where "2 vector stores, 2 prompts, 1 RAG pipeline" says exactly it.
+    #:
+    #: ⚠ EMPTY MEANS "COUNTS NOTHING FINER", NOT "FOUND NONE". An engine that
+    #: does not break its results down leaves this empty and the event stream
+    #: reports its `summary` instead; a zero here would claim it looked for
+    #: prompts and found none. Same nil-is-not-zero discipline `summary`'s
+    #: Optional fields carry.
+    #:
+    #: ⚠ COUNTS ONLY, AND THE KEYS REACH A BROWSER. `events.SanitizeDiscoveries`
+    #: drops any key that is not a plain lowercase identifier, because a key
+    #: built from a filename would put a path into the advisory event stream
+    #: through the one field nobody thought to check.
+    discoveries: dict[str, int] = field(default_factory=dict)
     engine_version: str | None = None
     # REQUIRED for vulnerability engines. Without it a finding cannot be dated,
     # and a report that cannot say "matched against vulnerability data as of X"

@@ -116,15 +116,26 @@ func profileGen(args []string) error {
 			return fmt.Errorf("refusing to generate from a profile with %d lint problem(s)",
 				len(res.Problems))
 		}
-		goPath, err := compliance.GenerateGoOperational(p, "hbom_manufacturing",
-			resolveFromRepoRoot(*outGo))
-		if err != nil {
-			return fmt.Errorf("generate operational Go: %w", err)
+		// ⚠ EVERY SET THE PROFILE DEFINES, NOT A NAMED ONE. This used to pass
+		// the literal "hbom_manufacturing", so the second operational profile
+		// generated nothing and reported success — its fields authored, linted
+		// and scored while no Go consumer could see them, which is precisely the
+		// invisibility the generator exists to prevent.
+		sets := p.OperationalSetNames()
+		if len(sets) == 0 {
+			return fmt.Errorf("profile %q is operational but defines no field set", p.Meta.ID)
 		}
 		fmt.Printf("generated from %s (revision %d)\n", p.Meta.ID, p.Meta.Revision)
-		fmt.Printf("  %s\n", goPath)
-		fmt.Printf("\n%d operational field(s).\n",
-			len(p.OperationalFields("hbom_manufacturing")))
+		total := 0
+		for _, set := range sets {
+			goPath, err := compliance.GenerateGoOperational(p, set, resolveFromRepoRoot(*outGo))
+			if err != nil {
+				return fmt.Errorf("generate operational Go for %s: %w", set, err)
+			}
+			fmt.Printf("  %s\n", goPath)
+			total += len(p.OperationalFields(set))
+		}
+		fmt.Printf("\n%d operational field(s) across %d set(s).\n", total, len(sets))
 		return nil
 	}
 
