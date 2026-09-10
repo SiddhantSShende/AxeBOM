@@ -86,10 +86,10 @@
     }
   ],
   "coverage": {
-    "completeness_numerator": 15,
-    "completeness_pct": 15.96,
-    "declaration_numerator": 15,
-    "declaration_pct": 15.96,
+    "completeness_numerator": 33,
+    "completeness_pct": 35.11,
+    "declaration_numerator": 33,
+    "declaration_pct": 35.11,
     "denominator": 94,
     "field_count": 21,
     "fields": [
@@ -154,22 +154,22 @@
         "weight": 3
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 50.0,
+        "declaration_pct": 50.0,
+        "declared": 1,
         "field_id": "certin.sbom.07.component_dependencies",
         "name": "Component Dependencies",
-        "present": 0,
+        "present": 1,
         "total": 2,
         "weight": 3
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 50.0,
+        "declaration_pct": 50.0,
+        "declared": 1,
         "field_id": "certin.sbom.08.vulnerabilities",
         "name": "Vulnerabilities",
-        "present": 0,
+        "present": 1,
         "total": 2,
         "weight": 3
       },
@@ -244,22 +244,22 @@
         "weight": 1
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 100.0,
+        "declaration_pct": 100.0,
+        "declared": 2,
         "field_id": "certin.sbom.16.author_of_sbom_data",
         "name": "Author of SBOM Data",
-        "present": 0,
+        "present": 2,
         "total": 2,
         "weight": 3
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 100.0,
+        "declaration_pct": 100.0,
+        "declared": 2,
         "field_id": "certin.sbom.17.timestamp",
         "name": "Timestamp",
-        "present": 0,
+        "present": 2,
         "total": 2,
         "weight": 3
       },
@@ -558,13 +558,13 @@
       }
     ],
     "normalization_version": 1,
-    "ruleset_version": "2026.08.1",
+    "ruleset_version": "2026.09.1",
     "scan_id": "fixture-alias-overmerge",
     "source_commit_sha": "",
     "spdx_license_list_version": "3.25",
     "workspace_archive_sha256": ""
   },
-  "ruleset_version": "2026.08.1",
+  "ruleset_version": "2026.09.1",
   "spdx_license_list_version": "3.25",
   "unidentified_count": 0,
   "vuln_clusters": [

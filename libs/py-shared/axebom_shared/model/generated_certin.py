@@ -279,7 +279,7 @@ SBOM_FIELDS: list[ProfileField] = [
         "certin.sbom.16.author_of_sbom_data",
         16,
         "Author of SBOM Data",
-        "component.provenance[].author",
+        "component.author_of_sbom_data",
         "metadata.authors[]",
         "creationInfo.creators[]",
         "string",

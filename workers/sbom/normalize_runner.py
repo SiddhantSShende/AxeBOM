@@ -148,6 +148,9 @@ def normalize_fixture(fixture_dir: Path, *, profile_path: Path | None = None) ->
         scan_id=f"fixture-{fixture_dir.name}",
         fields=sbom_fields(profile_path),
         alias_snapshot_id=f"fixture-{fixture_dir.name}-aliases",
+        # Same reasoning: a fixed sentinel, never `datetime.now()` — normalize()
+        # must stay a pure function of its inputs (module docstring).
+        generated_at="2025-01-01T00:00:00Z",
     )
     return result.as_dict()
 

@@ -338,10 +338,10 @@
     }
   ],
   "coverage": {
-    "completeness_numerator": 24,
-    "completeness_pct": 10.21,
-    "declaration_numerator": 33,
-    "declaration_pct": 14.04,
+    "completeness_numerator": 48,
+    "completeness_pct": 20.43,
+    "declaration_numerator": 57,
+    "declaration_pct": 24.26,
     "denominator": 235,
     "field_count": 21,
     "fields": [
@@ -416,12 +416,12 @@
         "weight": 3
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 66.67,
+        "declaration_pct": 66.67,
+        "declared": 2,
         "field_id": "certin.sbom.08.vulnerabilities",
         "name": "Vulnerabilities",
-        "present": 0,
+        "present": 2,
         "total": 3,
         "weight": 3
       },
@@ -496,22 +496,22 @@
         "weight": 1
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 100.0,
+        "declaration_pct": 100.0,
+        "declared": 3,
         "field_id": "certin.sbom.16.author_of_sbom_data",
         "name": "Author of SBOM Data",
-        "present": 0,
+        "present": 3,
         "total": 3,
         "weight": 3
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 100.0,
+        "declaration_pct": 100.0,
+        "declared": 3,
         "field_id": "certin.sbom.17.timestamp",
         "name": "Timestamp",
-        "present": 0,
+        "present": 3,
         "total": 3,
         "weight": 3
       },
@@ -1054,13 +1054,13 @@
       }
     ],
     "normalization_version": 1,
-    "ruleset_version": "2026.08.1",
+    "ruleset_version": "2026.09.1",
     "scan_id": "fixture-npm-simple",
     "source_commit_sha": "",
     "spdx_license_list_version": "3.25",
     "workspace_archive_sha256": ""
   },
-  "ruleset_version": "2026.08.1",
+  "ruleset_version": "2026.09.1",
   "spdx_license_list_version": "3.25",
   "unidentified_count": 0,
   "vuln_clusters": [

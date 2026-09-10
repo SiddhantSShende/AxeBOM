@@ -26,6 +26,7 @@ single engine's view.
 from __future__ import annotations
 
 import itertools
+from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
@@ -120,6 +121,7 @@ def normalize(
     workspace_archive_sha256: str = "",
     normalization_version: int = 1,
     ecosystems_without_engine: Iterable[str] = (),
+    generated_at: str = "",
 ) -> NormalizationResult:
     """Run the full pipeline."""
     trust = graph_trust or _DEFAULT_GRAPH_TRUST
@@ -306,8 +308,25 @@ def normalize(
     scored = [c for c in components if c.identity_rule != "opaque" and c.scope != "excluded"]
     not_scored = len(components) - len(scored)
 
+    # ⚠ GROUPED ONCE, KEYED BY THE SAME `component_key` FINDINGS AND THE GRAPH
+    # ALREADY USE. Without this, certin.sbom.07/08 (Dependencies, Vulnerabilities)
+    # score zero forever even when `normalize.component_dependencies` and
+    # `normalize.findings` hold real rows — the data landed, it just never
+    # reached the flattened entity `score()` reads.
+    edges_by_from: dict[str, list[Any]] = defaultdict(list)
+    for edge in graph.edges:
+        edges_by_from[edge.from_key].append(edge)
+
     coverage = score(
-        [_flatten(c) for c in scored],
+        [
+            _flatten(
+                c,
+                edges=edges_by_from.get(c.component_key, []),
+                findings=findings_by_component.get(c.component_key, []),
+                generated_at=generated_at,
+            )
+            for c in scored
+        ],
         fields,
         unidentified=not_scored,
     )
@@ -338,13 +357,28 @@ def normalize(
     )
 
 
-def _flatten(component: MergedComponent) -> dict[str, Any]:
+def _flatten(
+    component: MergedComponent,
+    *,
+    edges: Iterable[Any] = (),
+    findings: Iterable[Finding] = (),
+    generated_at: str = "",
+) -> dict[str, Any]:
     """Flatten a component onto the profile's canonical paths.
 
     The profile keys everything by `canonical_path`, so scoring needs that shape
     rather than the object. Fields the model does not carry yet are ABSENT
     rather than defaulted — an absent field scores zero on both numbers, which
     is the honest answer for something we never collected.
+
+    `edges` and `findings` are THIS component's own outgoing dependency edges
+    and matched vulnerabilities — the caller looks them up by `component_key`,
+    the same key the graph and findings dedup already use. A component with
+    none is left with an empty list, which scores present=0: that is the
+    correct, conservative reading (this pipeline does not yet distinguish
+    "verified zero dependencies" from "no trusted graph engine for this
+    ecosystem" — see `_DEFAULT_GRAPH_TRUST` — so it asserts nothing either way
+    rather than guessing).
     """
     value, _rule = component.licenses.effective()
     return {
@@ -370,6 +404,14 @@ def _flatten(component: MergedComponent) -> dict[str, Any]:
         "component.author_of_sbom_data": ", ".join(
             sorted({o.engine for o in component.observed_by})
         ),
+        "component.dependencies": [e.as_dict() for e in edges],
+        "component.findings": [f.as_dict() for f in findings],
+        # ⚠ DOCUMENT-LEVEL, NOT PER-COMPONENT — certin.sbom.17 (Timestamp) is
+        # one fact about the whole BOM, not about any single entity. `score()`
+        # only knows how to weigh per-entity fields, so the same value is
+        # asserted on every row; that is redundant, not dishonest — the BOM
+        # genuinely was assembled at this instant, for every component in it.
+        "bom_document.generated_at": generated_at,
     }
 
 

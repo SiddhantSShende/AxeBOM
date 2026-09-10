@@ -333,6 +333,7 @@ A session that writes code but does not update this file has failed — the next
 | **CSAF 2.0 generation** | 🟢 **`services/report/internal/csafgen` + storage; always produces a `csaf.Document.Validate()`-clean document; idempotent per VEX statement; verified live with a real generated document (real tenant as publisher, real CVE/GHSA, real impact statement)** |
 | **Threaded comments (`services/comment`)** | 🟢 **Real service — depth-5 enforced, ownership checked, soft-delete-with-live-children — built by a dispatched agent, survived a session interruption with zero rework needed; frontend comment rail built and verified live** |
 | **Report viewer crash + data gap** | 🟢 **FULLY FIXED — `GET /v1/reports/{id}` sends real project name, coverage numbers (nullable, honestly "not yet computed"), coverage-field breakdown, engine coverage, ecosystems-with-no-engine and a live siblings list, captured at render completion (`migrations/report/0003`); also fixed a bug that made every render of every format fail (`loadFindings` on a busy pgx connection) and a bug that left `render.BOM.ProjectName` always empty since Phase 9** |
+| **SBOM coverage scoring — 4 fields landing zero despite real data** | ✅ **FIXED, verified on a real live scan — see 2026-09-10 (a). `component.dependencies[]`/`component.findings[]` were never wired into the flattened entity `score()` reads, so certin.sbom.07/08 read zero against 281 real dependency edges and 4 real findings; `author_of_sbom_data`'s profile canonical_path pointed at a table nothing writes; `certin.sbom.17.timestamp` is document-level but `score()` is per-component, so it was structurally unscoreable. `completeness_pct` on the live scan went 24.39% → 40.02% using ONLY already-landed data. RULESET_VERSION bumped 2026.08.1→2026.09.1 (invariant 10) and all 7 SBOM goldens regenerated. `certin.sbom.21.unique_identifier` stays an HONEST, still-open 0% — `certin_identifier` is genuinely never derived; see that session entry** |
 
 ---
 
@@ -2269,6 +2270,126 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-09-10 (a) — Data that landed in Postgres and never reached the report
+
+**Started from a `/debug` on real browser console noise, ended somewhere else
+entirely.** Two of the three pasted errors were browser-extension noise
+(`message channel closed`, a `VM`-script `reportAllChanges` crash — neither
+originates from AxeBOM's bundle). The third, a 401 on
+`GET /v1/github/repos`, was already fixed in code (2026-09-09 (a)'s
+reconnect flow) — the tenant just needed to reconnect, and evidently had: a
+live "ETC Analytics" project existed against a real repo
+(`NHIT-ETC-Analytics-Dashboard`), registered and scanned minutes before this
+session started. That real scan, not a fixture, is what this session actually
+investigated.
+
+**⚠ THE SCAN WAS FINE. THE REPORT LIED ABOUT IT.** `completeness_pct` read
+24.39% on an SBOM where cdxgen/syft/syft-spdx/trivy-fs/grype/osv-scanner all
+genuinely succeeded (185 components landed, `normalize.component_dependencies`
+held 281 real edges, `normalize.findings` held 4 real matched CVEs,
+`components.author_of_sbom_data` was populated on every row). Querying
+Postgres directly showed real data the coverage breakdown reported as
+completely absent. Four fields, four distinct causes, all in
+`libs/py-shared/axebom_shared/normalize/pipeline.py`'s `_flatten()`:
+
+  - **certin.sbom.07 (Dependencies) and certin.sbom.08 (Vulnerabilities)** —
+    `_flatten()` never set `component.dependencies`/`component.findings` at
+    all. `coverage.score()` reads `entity.get(canonical_path)`; an absent key
+    is indistinguishable from "nothing there" even though the graph and
+    findings-dedup stages, earlier in the SAME pipeline run, already computed
+    exactly this per `component_key`.
+  - **certin.sbom.16 (Author of SBOM Data)** — the profile's canonical_path
+    was `component.provenance[].author`, pointing at
+    `normalize.component_provenance` — a table nothing has ever written (see
+    the cross-cutting list below). The actual data lives on the
+    `components.author_of_sbom_data` column and `_flatten()` was already
+    computing it correctly, under the key `component.author_of_sbom_data` —
+    one string away from the field the profile was actually scoring against.
+  - **certin.sbom.17 (Timestamp)** — canonical_path `bom_document.generated_at`
+    is a fact about the WHOLE DOCUMENT; `score()` only knows how to weigh
+    per-entity fields. This was not a wiring gap, it was structurally
+    unscoreable — every SBOM this pipeline has ever produced scored 0% on this
+    field, forever, regardless of how correct anything else was.
+
+**The fix asserts nothing that wasn't already true.** `_flatten()` now takes
+each component's own outgoing edges and matched findings (looked up by
+`component_key`, the exact key the graph and findings-dedup stages already
+use) and includes them — present only where a real edge/finding exists,
+absent otherwise; the module's own long-standing philosophy (see
+`component.patch_status`'s handling just above it) already refuses to guess
+"verified zero" vs "never checked," and this keeps that. The profile's
+`certin.sbom.16` canonical_path now reads `component.author_of_sbom_data`,
+matching `docs/01-DATA-MODEL.md`'s actual column. `normalize()` gained a
+`generated_at: str` parameter — the package docstring had already promised
+this ("generated_at is passed in from the scan record") without it ever
+existing — asserted once per component under `bom_document.generated_at`,
+which is redundant, not dishonest: the BOM genuinely was assembled at that
+instant, for every component in it.
+
+**⚠ THIS WAS A RULESET CHANGE, NOT JUST A CODE CHANGE (invariant 10).** The
+same `RULESET_VERSION` must never quietly start scoring differently — a
+report issued under "2026.08.1" has to still resolve to what "2026.08.1"
+computes, six months later. Bumped to `2026.09.1`. That surfaced a real second
+bug: `test_renormalize_produces_version_2_without_touching_version_1` calls
+`renormalize()` without a `generated_at`, silently defaulting to `""` — so
+even at the SAME ruleset version, a stored golden (built via
+`normalize_fixture()`, which does pass one) and a fresh `renormalize()` call
+disagreed by exactly one weight-3 field's worth of completeness. Fixed by
+passing the same fixed sentinel (`"2025-01-01T00:00:00Z"`) both places — the
+kind of gap that only a real determinism test catches.
+
+**Verified against the live stack, not just fixtures.** Rebuilt
+`axebom/normalize-consumer:dev` (shared by all four BOM-type consumers) and
+re-ran a real scan against the same live "ETC Analytics" project via a minted
+API key (`axebom apikey mint`) — `completeness_pct` went **24.39% → 40.02%**,
+`declaration_pct` **24.74% → 40.37%**, using only data that was already
+landing. Everything that stayed at 0% — description, supplier, origin,
+release/EOL date, criticality, usage restrictions, comments, the three
+CycloneDX boolean properties — genuinely is absent: no current engine
+populates any of them, and the report now says so honestly rather than
+implying a wiring bug where there is a real OSINT gap. Full `pytest` across
+`workers/` and `libs/py-shared/`, `go build ./...`, and the `compliance`/
+`model`/`report` Go packages all green; `task profile:lint` OK (131 fields,
+18 count assertions matched); all 7 SBOM golden fixtures regenerated with
+this justification.
+
+**⚠ certin.sbom.21 (Unique Identifier) is a genuine gap, deliberately NOT
+touched.** `component.certin_identifier` really is never computed — the 0% is
+honest, not a bug, and per invariant 4 it must stay derived/render-only,
+never a merge key. The profile's own note says deriving it from purl +
+supplier is a pure function, but `supplier` is itself 0% populated across the
+board, so a real fix needs a designed fallback (purl namespace → organisation
+name) with its own tests — flagged rather than rushed under this session's
+clock.
+
+**Checked whether AIBOM had the same dependencies/findings bug — it does
+not.** `workers/aibom/normalize/pipeline.py`'s `_flatten()` derives its keys
+generically from `AIBOM_FIELDS` rather than hand-listing them, and `.ai.py`
+already has an explicit `if column == "findings": return
+list(model.get("findings") or [])`. The SBOM bug was specific to SBOM's
+hand-written flatten dict, which is exactly the kind of drift a hand-written
+list invites and a profile-driven one does not — worth remembering next time
+SBOM's `_flatten()` grows another field.
+
+**Still open, surfaced but not attempted this session (budget, not
+difficulty):** QBOM had zero `bom_documents` in the dev database as of the
+last session that checked (2026-09-05) and was not re-verified here.
+`normalize.component_provenance` is still written by nothing — the table
+`certin.sbom.16`'s profile entry originally (wrongly) pointed at. `mock-engine`
+/`cbomkit`/`aibom-generator` remain dispatchable with no adapter, producing
+permanent `skipped` rows. `NVD_API_KEY` is unset in every environment, so
+`dependency-check` correctly reports `unavailable` (not a bug) and HBOM
+element 24 stays zero.
+
+**Files touched:** `docs/reference/certin-v2.0.yaml` (one canonical_path),
+`libs/py-shared/axebom_shared/normalize/pipeline.py` (`_flatten` wiring +
+`generated_at` param), `libs/py-shared/axebom_shared/normalize/__init__.py`
+(ruleset bump), `workers/sbom/normalize_runner.py` +
+`workers/sbom/normalize_consumer.py` (`generated_at` threading, fixed sentinel
+vs. real clock respectively), `workers/sbom/test_golden.py` (determinism fix),
+all 7 SBOM `fixtures/*/expected/canonical.json`, and the profile-generated
+`generated_certin.go`/`generated_certin.py` (via `task profile:gen`).
 
 ### 2026-09-09 (b) — Registration asked all five BOM types the same questions
 

@@ -428,6 +428,11 @@ def test_renormalize_produces_version_2_without_touching_version_1() -> None:
         scan_id="fixture-npm-simple",
         fields=sbom_fields(),
         alias_snapshot_id="fixture-npm-simple-aliases",
+        # Same fixed sentinel normalize_fixture() uses to build `version_1` —
+        # this test asserts byte-for-byte determinism under the same ruleset,
+        # so both calls must supply the same "scan record" timestamp rather
+        # than one carrying it and the other silently defaulting to "".
+        generated_at="2025-01-01T00:00:00Z",
     )
     version_2 = result.as_dict()
 

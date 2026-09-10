@@ -443,10 +443,10 @@
     }
   ],
   "coverage": {
-    "completeness_numerator": 42,
-    "completeness_pct": 9.93,
-    "declaration_numerator": 54,
-    "declaration_pct": 12.77,
+    "completeness_numerator": 90,
+    "completeness_pct": 21.28,
+    "declaration_numerator": 102,
+    "declaration_pct": 24.11,
     "denominator": 423,
     "field_count": 21,
     "fields": [
@@ -511,22 +511,22 @@
         "weight": 3
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 14.29,
+        "declaration_pct": 14.29,
+        "declared": 1,
         "field_id": "certin.sbom.07.component_dependencies",
         "name": "Component Dependencies",
-        "present": 0,
+        "present": 1,
         "total": 7,
         "weight": 3
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 14.29,
+        "declaration_pct": 14.29,
+        "declared": 1,
         "field_id": "certin.sbom.08.vulnerabilities",
         "name": "Vulnerabilities",
-        "present": 0,
+        "present": 1,
         "total": 7,
         "weight": 3
       },
@@ -601,22 +601,22 @@
         "weight": 1
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 100.0,
+        "declaration_pct": 100.0,
+        "declared": 7,
         "field_id": "certin.sbom.16.author_of_sbom_data",
         "name": "Author of SBOM Data",
-        "present": 0,
+        "present": 7,
         "total": 7,
         "weight": 3
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 100.0,
+        "declaration_pct": 100.0,
+        "declared": 7,
         "field_id": "certin.sbom.17.timestamp",
         "name": "Timestamp",
-        "present": 0,
+        "present": 7,
         "total": 7,
         "weight": 3
       },
@@ -1410,13 +1410,13 @@
       }
     ],
     "normalization_version": 1,
-    "ruleset_version": "2026.08.1",
+    "ruleset_version": "2026.09.1",
     "scan_id": "fixture-golang-incompatible",
     "source_commit_sha": "",
     "spdx_license_list_version": "3.25",
     "workspace_archive_sha256": ""
   },
-  "ruleset_version": "2026.08.1",
+  "ruleset_version": "2026.09.1",
   "spdx_license_list_version": "3.25",
   "unidentified_count": 0,
   "vuln_clusters": [

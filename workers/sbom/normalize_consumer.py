@@ -33,6 +33,7 @@ import asyncio
 import json
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -249,6 +250,12 @@ async def handle_trigger(
             workspace_archive_sha256=str(trigger.get("workspace_archive_sha256", "")),
             normalization_version=normalization_version,
             ecosystems_without_engine=trigger.get("ecosystems_without_engine") or (),
+            # Read here, at the call site, not inside normalize() itself — the
+            # module's purity contract (module docstring) forbids a wall-clock
+            # read in the pipeline; the caller supplying it as a plain string
+            # is exactly the documented escape hatch ("generated_at is passed
+            # in from the scan record").
+            generated_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         )
 
         return writer.write_bom_document(

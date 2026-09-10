@@ -401,7 +401,7 @@ sbom:
       ordinal: 16
       name: Author of SBOM Data
       description: The name of the entity that creates the SBOM data for this component.
-      canonical_path: component.provenance[].author
+      canonical_path: component.author_of_sbom_data
       cyclonedx_path: metadata.authors[]
       spdx_path: creationInfo.creators[]
       type: string

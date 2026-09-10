@@ -880,10 +880,10 @@
     }
   ],
   "coverage": {
-    "completeness_numerator": 54,
-    "completeness_pct": 7.18,
-    "declaration_numerator": 75,
-    "declaration_pct": 9.97,
+    "completeness_numerator": 117,
+    "completeness_pct": 15.56,
+    "declaration_numerator": 138,
+    "declaration_pct": 18.35,
     "denominator": 752,
     "field_count": 21,
     "fields": [
@@ -948,22 +948,22 @@
         "weight": 3
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 25.0,
+        "declaration_pct": 25.0,
+        "declared": 2,
         "field_id": "certin.sbom.07.component_dependencies",
         "name": "Component Dependencies",
-        "present": 0,
+        "present": 2,
         "total": 8,
         "weight": 3
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 37.5,
+        "declaration_pct": 37.5,
+        "declared": 3,
         "field_id": "certin.sbom.08.vulnerabilities",
         "name": "Vulnerabilities",
-        "present": 0,
+        "present": 3,
         "total": 8,
         "weight": 3
       },
@@ -1038,22 +1038,22 @@
         "weight": 1
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 100.0,
+        "declaration_pct": 100.0,
+        "declared": 8,
         "field_id": "certin.sbom.16.author_of_sbom_data",
         "name": "Author of SBOM Data",
-        "present": 0,
+        "present": 8,
         "total": 8,
         "weight": 3
       },
       {
-        "completeness_pct": 0.0,
-        "declaration_pct": 0.0,
-        "declared": 0,
+        "completeness_pct": 100.0,
+        "declaration_pct": 100.0,
+        "declared": 8,
         "field_id": "certin.sbom.17.timestamp",
         "name": "Timestamp",
-        "present": 0,
+        "present": 8,
         "total": 8,
         "weight": 3
       },
@@ -2279,13 +2279,13 @@
       }
     ],
     "normalization_version": 1,
-    "ruleset_version": "2026.08.1",
+    "ruleset_version": "2026.09.1",
     "scan_id": "fixture-monorepo-multiroot",
     "source_commit_sha": "",
     "spdx_license_list_version": "3.25",
     "workspace_archive_sha256": ""
   },
-  "ruleset_version": "2026.08.1",
+  "ruleset_version": "2026.09.1",
   "spdx_license_list_version": "3.25",
   "unidentified_count": 0,
   "vuln_clusters": [

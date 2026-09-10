@@ -26,4 +26,4 @@ See `docs/03-NORMALIZER-SPEC.md`.
 #: Recorded on every `bom_document` so a report states which rules produced it,
 #: and so `renormalize` can replay stored artifacts into a new version without
 #: touching the old one.
-RULESET_VERSION = "2026.08.1"
+RULESET_VERSION = "2026.09.1"
