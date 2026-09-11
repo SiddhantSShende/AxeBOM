@@ -33,7 +33,7 @@ from workers.aibom.adapters import (
     GLaaSImportAdapter,
     K8sAIBOMImportAdapter,
 )
-from workers.cbom.adapters import CBOMkitTheiaAdapter
+from workers.cbom.adapters import CBOMkitActionAdapter, CBOMkitTheiaAdapter, CdxgenCBOMAdapter
 
 from axebom_shared.adapters.base import ResultStatus, ScanTarget
 from axebom_shared.adapters.summary import (
@@ -158,6 +158,10 @@ ADAPTERS: dict[str, tuple[type, str]] = {
     "osv-scanner": (OSVScannerAdapter, "osv-scanner"),
     "dependency-check": (DependencyCheckAdapter, "dependency-check"),
     "cbomkit-theia": (CBOMkitTheiaAdapter, "cbomkit-theia"),
+    "cbomkit-action": (CBOMkitActionAdapter, "cbomkit-action"),
+    # Same image as `cdxgen`, its own manifest entry — the `cdxgen-ai` precedent:
+    # a different family with a different `produces`.
+    "cdxgen-cbom": (CdxgenCBOMAdapter, "cdxgen-cbom"),
     "ai-bom": (AIBomAdapter, "ai-bom"),
     "airom": (AiromAdapter, "airom"),
     # cdxgen-ai has a manifest entry of its own — unlike syft-spdx, which the

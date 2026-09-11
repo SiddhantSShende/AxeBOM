@@ -391,6 +391,79 @@ tools:
       keys, secrets, java.security. Output schema is early and moving: parse
       defensively, ignore unknown fields, diagnose missing ones, never panic.
 
+  - id: cbomkit-action
+    role: generator
+    families: [cbom]
+    upstream: https://github.com/cbomkit/cbomkit-action
+    license: Apache-2.0
+    version: "2.3.0"
+    # ⚠ SOURCE-CODE CRYPTO DISCOVERY, AND THE ONLY ENGINE HERE THAT READS CODE.
+    # sonar-cryptography's detection rules (cbomkit-lib 1.3.0 embedding
+    # sonar-cryptography-plugin 1.7.0) run as a LIBRARY over SonarSource's own
+    # AST parsers — no SonarQube server (PQCA architecture notes; research
+    # 2026-09-11).
+    #
+    # ⚠ `v2.3.0` AND `2.3.0` ARE DIFFERENT IMAGES (built 2026-09-07 and
+    # 2026-09-03 respectively, probed against the registry 2026-09-11) — the
+    # cbomkit-theia tag trap in a new shape, and why this is pinned by digest.
+    container:
+      image: ghcr.io/cbomkit/cbomkit-action
+      image_tag: "v2.3.0"
+      image_digest: "sha256:47c2505267dc5f055152616ffa0d0076b7d0824fe9e0de670b572d1ebad2fc4b"
+    container_only: true
+    container_only_reason: >
+      A JVM application (ubi8 + OpenJDK 21) published only as a container image;
+      the primary dev machine's Java 1.8 cannot run it (ADR-0002).
+    source_kinds: [git, upload]
+    produces: [crypto_assets]
+    native_format: cyclonedx-json-1.6
+    default_weight: 4
+    db_backed: false
+    verify:
+      checksum: unavailable
+      signature: unavailable
+    notes: >
+      Java (JCA + BouncyCastle lightweight API) and Python (pyca/cryptography),
+      scanned from source WITHOUT A BUILD (invariant 7): a call whose algorithm
+      arrives through a variable or wrapper is invisible, and an unstated key
+      size is reported as the engine's default (AES-128). Go is NOT enabled —
+      its scanner executes a helper from the noexec tmpfs and fails silently
+      (exit 0, nothing found); C# is "not yet meant for active usage" upstream.
+      The image's CMD asks for -Xmx16g; the adapter starts the JVM at 3g inside
+      the 4 GiB sandbox. Output is a file, cat-ed to stdout. Measured on
+      fixtures/crypto-mixed (all five JCA calls found, with lines), jjwt and pyjwt.
+
+  - id: cdxgen-cbom
+    role: generator
+    families: [cbom]
+    upstream: https://github.com/cdxgen/cdxgen
+    license: Apache-2.0
+    version: "13.0.1"
+    # ⚠ THE SAME IMAGE AND DIGEST AS `cdxgen` and `cdxgen-ai`, entrypoint `cbom`
+    # (cdxgen's CBOM preset). One image, pinned once; bumping cdxgen bumps all three.
+    container:
+      image: ghcr.io/cdxgen/cdxgen
+      image_tag: "13.0.1"
+      image_digest: "sha256:0be75639a833b59d1ba29b3c8ac00dfd2e41e7568d56b6c039007caadebebc0d"
+    container_only: true
+    container_only_reason: >
+      The same Node runtime and per-ecosystem helper closure `cdxgen` records.
+    source_kinds: [git, upload]
+    produces: [crypto_assets]
+    native_format: cyclonedx-json-1.6
+    default_weight: 2
+    db_backed: false
+    verify:
+      checksum: unavailable
+      signature: unavailable
+    notes: >
+      JavaScript/TypeScript crypto call sites only (node:crypto hashes, RSA,
+      jsonwebtoken, HMAC) with file, line and symbol. Misses createCipheriv and
+      WebCrypto; found no Java call site. Types every .pem — private keys
+      included — as a certificate, so those file findings are left to
+      cbomkit-theia. ⚠ `-o -`, never `-o /dev/stdout`: the latter blocked forever
+      with the cbom preset. `--no-install-deps` is mandatory (invariant 7).
+
   - id: cbomkit
     role: service
     families: [cbom]
@@ -405,19 +478,24 @@ tools:
     container_only_reason: "Java 17+ service"
     enabled: false
     optional: true
-    notes: Managed clone-and-scan service with a viewer. Not required for MVP.
+    notes: >
+      Clone-and-scan service with a viewer. It clones the repository itself
+      (JGit) and resolves package URLs through the GitHub API and deps.dev, so
+      it needs network and credentials no scan engine may hold. Its detection
+      runs here through cbomkit-action instead. Registered Disabled in the
+      orchestrator with that reason.
 
   - id: sonar-cryptography
     role: deferred
     families: [cbom]
     upstream: https://github.com/cbomkit/sonar-cryptography
     license: Apache-2.0
-    version: "1.6.1"
+    version: "1.7.0"
     enabled: false
     deferred_reason: >
-      This is a SonarQube PLUGIN, not a CLI. It requires a running SonarQube
-      server — a heavyweight Java service the original plan never accounted
-      for. cbomkit-theia covers directory and image discovery without it.
+      As a SonarQube PLUGIN it needs a running SonarQube server. Its detection
+      rules are NOT deferred: they run embedded, with no server, inside
+      cbomkit-action (cbomkit-lib 1.3.0 bundles sonar-cryptography-plugin 1.7.0).
       Revisit post-MVP if deep Java/Python source crypto inventory is needed.
 
 # ============================================================================
@@ -1070,6 +1148,29 @@ part_data_providers:
 # Explicitly NOT used — recorded so nobody re-adds them
 # ============================================================================
 rejected:
+  - id: trufflehog
+    upstream: https://github.com/trufflesecurity/trufflehog
+    license: AGPL-3.0
+    reason: >
+      ⚠ AGPL-3.0 (its LICENSE file, v3), so it could only ever run as a separate
+      container (invariant 9). Its distinguishing feature is LIVE verification of
+      a credential against the issuing service — including private keys, checked
+      through "Driftwood" against GitHub and TLS certificates — which needs the
+      network no scan engine has (invariant 7); offline it needs
+      --no-verification --no-update and adds nothing for key material that
+      cbomkit-theia's secrets plugin (which wraps gitleaks, MIT) does not already
+      find. Checked against the repository 2026-09-11.
+
+  - id: cryptoguard
+    upstream: https://github.com/CryptoGuardOSS/cryptoguard
+    license: GPL-3.0
+    reason: >
+      ⚠ GPL-3.0. A Java crypto-MISUSE detector (Soot-based), not a CBOM engine —
+      it emits misuse findings, not CycloneDX crypto assets. Unmaintained: last
+      master commit 2020-11-24. Needs a Java 8 JDK, and scanning a source project
+      needs its dependencies gathered first, i.e. package-manager resolution
+      (invariant 7). Checked against the repository 2026-09-11.
+
   - id: django-bom
     upstream: https://github.com/mpkasp/django-bom
     license: GPL-3.0

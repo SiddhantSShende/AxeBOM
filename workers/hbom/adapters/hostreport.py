@@ -89,9 +89,7 @@ class HostReportAdapter(ToolAdapterBase):
         Never raises. A missing, unreadable or unrecognised file is a status
         plus a diagnostic naming exactly what was looked for.
         """
-        report, raw, filename, diagnostics = _locate(
-            Path(target.workspace), target.root_subpath
-        )
+        report, raw, filename, diagnostics = _locate(Path(target.workspace), target.root_subpath)
 
         if report is None:
             return GenerateResult(

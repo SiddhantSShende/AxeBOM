@@ -1,0 +1,182 @@
+{
+  "completeness_numerator": 303,
+  "completeness_pct": 60.0,
+  "declaration_numerator": 505,
+  "declaration_pct": 100.0,
+  "denominator": 505,
+  "derivation_sources": {
+    "nist-sp800-57p1r5-table2": "NIST SP 800-57 Part 1 Rev. 5, §5.6.1.1, Table 2 “Comparable security strengths of symmetric block cipher and asymmetric-key algorithms” (pp. 54-55)",
+    "rfc8032-s8.5": "RFC 8032, §8.5 — Ed25519 nominal strength 128 bits; Ed448 224"
+  },
+  "field_count": 15,
+  "fields": [
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 16,
+      "derived": 0,
+      "field_id": "certin.crypto.algo.asset_type",
+      "name": "Asset Type",
+      "present": 16,
+      "total": 16,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 68.75,
+      "declaration_pct": 100.0,
+      "declared": 16,
+      "derived": 0,
+      "field_id": "certin.crypto.algo.crypto_functions",
+      "name": "Crypto Functions",
+      "present": 11,
+      "total": 16,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 0.0,
+      "declaration_pct": 100.0,
+      "declared": 16,
+      "derived": 0,
+      "field_id": "certin.crypto.algo.list",
+      "name": "List",
+      "present": 0,
+      "total": 16,
+      "weight": 1
+    },
+    {
+      "completeness_pct": 25.0,
+      "declaration_pct": 100.0,
+      "declared": 16,
+      "derived": 0,
+      "field_id": "certin.crypto.algo.mode",
+      "name": "Mode",
+      "present": 4,
+      "total": 16,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 16,
+      "derived": 0,
+      "field_id": "certin.crypto.algo.name",
+      "name": "Name",
+      "present": 16,
+      "total": 16,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 81.25,
+      "declaration_pct": 100.0,
+      "declared": 16,
+      "derived": 0,
+      "field_id": "certin.crypto.algo.oid",
+      "name": "OID",
+      "present": 13,
+      "total": 16,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 93.75,
+      "declaration_pct": 100.0,
+      "declared": 16,
+      "derived": 0,
+      "field_id": "certin.crypto.algo.primitive",
+      "name": "Primitive",
+      "present": 15,
+      "total": 16,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 31.25,
+      "declaration_pct": 100.0,
+      "declared": 16,
+      "derived": 5,
+      "field_id": "certin.crypto.algo.security_level",
+      "name": "Classical security level",
+      "present": 5,
+      "total": 16,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 0.0,
+      "declaration_pct": 100.0,
+      "declared": 9,
+      "derived": 0,
+      "field_id": "certin.crypto.key.activation_date",
+      "name": "Activation Date",
+      "present": 0,
+      "total": 9,
+      "weight": 1
+    },
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 9,
+      "derived": 0,
+      "field_id": "certin.crypto.key.asset_type",
+      "name": "Asset Type",
+      "present": 9,
+      "total": 9,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 0.0,
+      "declaration_pct": 100.0,
+      "declared": 9,
+      "derived": 0,
+      "field_id": "certin.crypto.key.creation_date",
+      "name": "Creation Date",
+      "present": 0,
+      "total": 9,
+      "weight": 1
+    },
+    {
+      "completeness_pct": 0.0,
+      "declaration_pct": 100.0,
+      "declared": 9,
+      "derived": 0,
+      "field_id": "certin.crypto.key.id",
+      "name": "id",
+      "present": 0,
+      "total": 9,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 100.0,
+      "declaration_pct": 100.0,
+      "declared": 9,
+      "derived": 0,
+      "field_id": "certin.crypto.key.name",
+      "name": "Name",
+      "present": 9,
+      "total": 9,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 33.33,
+      "declaration_pct": 100.0,
+      "declared": 9,
+      "derived": 0,
+      "field_id": "certin.crypto.key.size",
+      "name": "size",
+      "present": 3,
+      "total": 9,
+      "weight": 3
+    },
+    {
+      "completeness_pct": 0.0,
+      "declaration_pct": 100.0,
+      "declared": 9,
+      "derived": 0,
+      "field_id": "certin.crypto.key.state",
+      "name": "state",
+      "present": 0,
+      "total": 9,
+      "weight": 3
+    }
+  ],
+  "formula": "pct = 100 × Σ_c Σ_f (w_f × present(c,f)) / Σ_c Σ_f w_f",
+  "scored_entities": 25,
+  "unidentified_count": 0
+}

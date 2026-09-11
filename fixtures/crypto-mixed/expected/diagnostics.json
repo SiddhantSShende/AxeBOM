@@ -1,0 +1,8 @@
+[
+  {
+    "code": "NORMALIZE_CRYPTO_FILE_FINDING_DEFERRED",
+    "hint": "cdxgen types every .pem file, private keys included, as a certificate; cbomkit-theia reads those files and classifies them correctly",
+    "message": "1 key or certificate file finding(s) from cdxgen-cbom were left to cbomkit-theia",
+    "severity": "info"
+  }
+]

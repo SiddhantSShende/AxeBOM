@@ -87,6 +87,9 @@ func WriteDOCX(w io.Writer, b BOM, opts DOCXOptions) (DOCXResult, error) {
 	docxCoverPage(&doc, b)
 	docxCoveragePage(&doc, b, fields)
 	docxEngineCoveragePage(&doc, b)
+	// A finding, before the inventory it was drawn from; absent when nothing
+	// was flagged. See PrivateKeysInSource.
+	docxPrivateKeysInSource(&doc, b, cap, &result)
 	docxPracticesPage(&doc, b)
 
 	// ⚠ SAME QBOM FALL-THROUGH THE PDF HAD. See pdf.go's comment on this switch:
@@ -289,29 +292,95 @@ func docxComponents(doc *docxBuilder, components []Component, cap int, result *D
 	doc.table(rows)
 }
 
-// docxCryptoAssets renders Table 9's field set generically rather than
-// branching on AssetType the way CBOMSheets/pdfRender's cryptoInventoryPage
-// do — a deliberate, stated simplification for this DOCX renderer (not a
-// hidden gap): every field below is real data from the row, shown for every
-// asset type even where CERT-In's own table would leave that field blank
-// for that type. CLAUDE.md invariant 5 (type-aware SCORING) is unaffected —
-// this is presentation, not the coverage math, which still runs per-type
-// wherever it is actually computed.
+// docxCryptoAssets renders Table 9 the way CBOMSheets does: one table per asset
+// type, each showing only that type's own CERT-In fields.
+//
+// ⚠ IT USED TO BE ONE FLAT TABLE — Type, Name, Component, Primitive, Key size,
+// OID — for every asset, and its comment called that "a deliberate, stated
+// simplification". It was the one artifact that still rendered the shape
+// invariant 5 exists to prevent: a certificate row with an empty "Key size"
+// cell, which a reader cannot tell from "not reported", and no column at all
+// for a certificate's subject, issuer or validity.
 func docxCryptoAssets(doc *docxBuilder, assets []CryptoAsset, cap int, result *DOCXResult) {
 	doc.heading(2, "Cryptographic assets")
-	rows := [][]string{{"Type", "Name", "Component", "Primitive", "Key size", "OID", "Quantum-vulnerable"}}
-	n := len(assets)
-	if n > cap {
-		n = cap
+	shown := 0
+	for _, t := range cryptoAssetTypeOrder {
+		fields := model.CryptoFieldsByAssetType[t]
+		header := make([]string, 0, len(fields)+3+len(cryptoEvidenceHeader))
+		for _, f := range fields {
+			if isCryptoAssetTypeField(f.ID) {
+				continue // the table's own heading states the type
+			}
+			header = append(header, f.Name)
+		}
+		header = append(header, derivedColumnHeader)
+		header = append(header, cryptoEvidenceHeader...)
+		header = append(header,
+			"Quantum-vulnerable (AxeBOM analysis)",
+			"Deprecation (AxeBOM analysis)")
+
+		var rows [][]string
+		for _, a := range assets {
+			if a.AssetType != t {
+				continue
+			}
+			if shown >= cap {
+				result.Truncated = true
+				break
+			}
+			row := make([]string, 0, len(header))
+			for _, f := range fields {
+				if isCryptoAssetTypeField(f.ID) {
+					continue
+				}
+				row = append(row, orNotProvided(cryptoFieldValue(f.ID, a)))
+			}
+			row = append(row,
+				derivedCell(a),
+				CryptoLocationCell(a),
+				CryptoEnginesCell(a),
+				boolText(a.QuantumVulnerable),
+				orNotProvided(a.DeprecationStatus))
+			rows = append(rows, row)
+			shown++
+		}
+		if len(rows) == 0 {
+			continue
+		}
+		doc.heading(3, cryptoAssetTypeLabel[t])
+		doc.table(append([][]string{header}, rows...))
+	}
+}
+
+// docxPrivateKeysInSource is the Word block — the finding, then where each key
+// was found. Nothing at all when nothing was flagged. See PrivateKeysInSource.
+func docxPrivateKeysInSource(doc *docxBuilder, b BOM, cap int, result *DOCXResult) {
+	keys := PrivateKeysInSource(b)
+	if len(keys) == 0 {
+		return
+	}
+	doc.heading(2, PrivateKeysInSourceTitle)
+	doc.callout("Finding", PrivateKeysInSourceFinding(b))
+	list, truncated := privateKeyRows(keys, cap)
+	if truncated {
 		result.Truncated = true
 	}
-	for _, a := range assets[:n] {
-		rows = append(rows, []string{
-			a.AssetType, orNotProvided(a.Name), orNotProvided(a.ComponentKey), orNotProvided(a.Primitive),
-			intOrNotProvided(a.KeySize), orNotProvided(a.OID), boolText(a.QuantumVulnerable),
-		})
+	rows := [][]string{privateKeysInSourceHeader[:4]}
+	for _, row := range list {
+		rows = append(rows, row[:4])
 	}
 	doc.table(rows)
+}
+
+// isCryptoAssetTypeField reports whether a Table 9 field id is one of the four
+// per-type `asset_type` fields — redundant under a per-type heading.
+func isCryptoAssetTypeField(id string) bool {
+	switch id {
+	case model.FieldCertinCryptoAlgoAssetType, model.FieldCertinCryptoKeyAssetType,
+		model.FieldCertinCryptoProtoAssetType, model.FieldCertinCryptoCertAssetType:
+		return true
+	}
+	return false
 }
 
 // docxAIModels renders CERT-In Table 10, then the two AxeBOM extensions.

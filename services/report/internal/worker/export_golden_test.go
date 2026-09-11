@@ -51,7 +51,17 @@ func TestSpecializedExportGolden(t *testing.T) {
 		for suffix, format := range formats {
 			name := "fixture-" + c.name + suffix
 			t.Run(name, func(t *testing.T) {
-				got, err := export.Serialize(toExportDocument(c.bom), format)
+				// ⚠ THE WRITER THE PRODUCT USES, NOT A PARALLEL ONE. A CBOM's
+				// CycloneDX comes from the native serializer (cycloneDXDocument);
+				// a golden produced through protobom would pin, and hand
+				// tools/conformance, a document no customer ever downloads.
+				var got []byte
+				var err error
+				if format == export.CycloneDX16JSON {
+					got, err = cycloneDXDocument(c.bom)
+				} else {
+					got, err = export.Serialize(toExportDocument(c.bom), format)
+				}
 				if err != nil {
 					t.Fatalf("serialize: %v", err)
 				}

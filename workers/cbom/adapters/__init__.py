@@ -1,24 +1,25 @@
 """CBOM engine adapters.
 
-Cryptographic discovery. One engine is wired today:
+    cbomkit-theia   directories and container-image tarballs: certificates,
+                    keys, secrets, OpenSSL config and java.security policy.
+                    Reads FILES, never source code.
+    cbomkit-action  crypto API use in Java and Python source, with file and
+                    line — sonar-cryptography's rules embedded via cbomkit-lib,
+                    no SonarQube server. Source-only (no build).
+    cdxgen-cbom     crypto API use in JavaScript/TypeScript source, via cdxgen's
+                    `cbom` preset on the already-pinned cdxgen image.
 
-    cbomkit-theia   directories and container images; certificates, keys,
-                    secrets and java.security policy -> CycloneDX 1.6 with
-                    cryptoProperties
+Named in OSINT/tools.manifest.yaml and deliberately NOT run:
 
-Two more are named in OSINT/tools.manifest.yaml and deliberately have no
-adapter:
-
-    cbomkit             a managed clone-and-scan SERVICE with its own viewer,
-                        not a CLI this worker can invoke; enabled: false
-    sonar-cryptography  a SonarQube PLUGIN, so it needs a SonarQube server
-                        (~4 GB). Deferred past MVP with a stated reason —
-                        cbomkit-theia covers CBOM discovery without it.
-
-This file was empty, so CBOMkitTheiaAdapter was importable only by its full
-module path and was registered nowhere.
+    cbomkit             a clone-and-scan SERVICE: it clones and resolves purls
+                        itself, which needs network and credentials; Disabled in
+                        the orchestrator's registry with that reason.
+    sonar-cryptography  as a SonarQube plugin it needs a server; its rules run
+                        here embedded in cbomkit-action instead.
 """
 
+from .cbomkit_action import CBOMkitActionAdapter
 from .cbomkit_theia import CBOMkitTheiaAdapter
+from .cdxgen_cbom import CdxgenCBOMAdapter
 
-__all__ = ["CBOMkitTheiaAdapter"]
+__all__ = ["CBOMkitActionAdapter", "CBOMkitTheiaAdapter", "CdxgenCBOMAdapter"]

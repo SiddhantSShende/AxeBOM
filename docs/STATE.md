@@ -6,9 +6,9 @@ A session that writes code but does not update this file has failed — the next
 
 ---
 
-**Last updated:** 2026-09-09
-**Current phase:** *AIBOM, for real* — a six-milestone program (plan: `~/.claude/plans/now-we-have-to-curried-leaf.md`). 🟢 **M1 truth** (2026-09-06 (a)): the AI BOM stopped reporting three models where there is one. 🟢 **M2 enrichment plane** (2026-09-06 (b), corrected 2026-09-07): the checkpoint scan M2 had never been driven through found four defects in M2's own work — enrichment reporting a clean success having looked nothing up, a card that reached no row, a licence and dataset list wrong on every model, and a worker that could not write its artifact at all. All fixed and re-measured live. 🟢 **M3 engines** (2026-09-07 (a)): `airom`, `cdxgen-ai` and `cisco-aibom` (registered, refused) — all four AIBOM engines run end to end in the sandbox and converge on one `model_key` per model. 🟢 **M4 service + wider surface** (2026-09-07 (b)): `services/aibom` and the `aibom` schema own operator input, consent, compliance tagging and attestation records; `normalize.ai_models` stopped being UPDATE-ed; a second operational profile scores the AI surface CERT-In has no element for. 🟢 **M5 ingest, export, render** (2026-09-07 (c)): CycloneDX ML-BOM downloadable and schema-validated, SPDX 3.0 AI profile converter proven (the plan's blocker was wrong), and the three non-scanner integrations landed as import paths. 🟢 **M6 real-time, frontend, scale** (2026-09-07 (d)): the live discovery feed carries per-engine counts end to end, the AI screens render evidence/provenance/assets/governance, the inventory endpoint stopped being 1 + 3N — and two import engines were caught reporting `ai-bom`'s own output back as customer-supplied evidence. **The six-milestone plan is complete.** Previous phase, complete: *Hardware as a first-class thing* — Track B done (rendering matrix, device register, collectors, live scans, hardware screens); **A6 (writerless tables) and A7 (ecosystem coverage) were never started and are still owed.**
-**Next action:** ⚠ **Registration now asks each BOM type for what that type actually needs** — it asked all five the same questions, and the `AtRegistration` flag built for exactly this had never been set true by any module; QBOM's Table 8 form and HBOM's device are now collected in the wizard, AIBOM's stay deferred because Table 10's user elements are per-MODEL and no model exists before a scan (2026-09-09 (b)). ⚠ **No 4xx was ever logged by any service, and the error card promises the opposite** — `errs.Write` and `httpx.Logging` both used `LevelDebug` while services run at info, so every 401/403/404/409/422 the product returned was unfindable by the request id it told the user to quote; both now log at `LevelWarn`, and the gateway finally carries `X-Request-ID` across the hop so one request stops having two ids (2026-09-09 (a)). ⚠ **A GitHub connection GitHub has rejected can now be repaired** — connecting verifies the token against `GET /user` before storing it (and fills `github_login`, empty on every row until now), and the repo picker offers **Reconnect GitHub** where the failure appears; there had been no reconnect anywhere in the product. ⚠ **The "What does `<CODE>` mean?" button on every error card is dead** — it links to `/docs/errors#<code>` and no such route exists; still owed. ⚠ **Two import engines were reporting `ai-bom`'s own output back as customer-supplied evidence, and no longer are** — `aibom-glaas` and `aibom-k8s-runtime` walked the shared workspace, found the CycloneDX document another engine had published there beside the customer's source, and imported it: three raw artifacts with one identical sha256 on a live scan. Excluded now by file name AND by producer, with a guard that reads the repository for every declared `workspace_artifact_name`. ⚠ **The live discovery feed carries real per-engine counts** — `ScanEventV1.Metrics` was defined in Phase 6 and filled by nothing until now; metric KEYS go through the same no-path/no-URL gate as `Message`. ⚠ **The AI inventory endpoint was 1 + 3N round trips** and is now three queries whatever the model count, response verified byte-identical. ⚠ **Three AI discovery engines now run over every AIBOM scan and reconcile** — `ai-bom`, `airom` and `cdxgen-ai`, plus `aibom-generator` enrichment outside the sandbox; `normalize.ai_model_provenance` records which engines saw each model, and `normalize.ai_assets` holds the prompts, vector stores, RAG pipelines and inference endpoints no CERT-In element covers. ⚠ **`cisco-aibom` is registered and never dispatched, with the reason on the engines endpoint** — it needs egress and an API key that scan engines are not allowed to hold; it is deliberately NOT an `unavailable` engine run, because that would make every AIBOM scan `completed_with_errors`. ⚠ **`owasp-aibom-generator`'s licence and dataset parse is not usable and is no longer used** — it returns `mit ---` and training datasets scraped out of English prose (`consisting`, `one`, `a`); both fields now come from the Hugging Face model card's structured front matter, and the raw artifact stores both upstream responses. ⚠ **Rebuild before any live AIBOM scan** — `docker compose up -d --build aibom-worker aibom-normalize-consumer aienrich-worker`, and `task osint:pull` (which now builds `axebom/airom-engine:dev`). ⚠ **AIBOM reported three models where there was one, and no longer does** — `ai-bom` emits the real Hugging Face id in a property nothing read, so `meta-llama/Llama-3-8B` was discarded and the `transformers` library was stored three times in its place. Fixed with a real `model_key` identity ladder (`migrations/normalize/0016`, `03-NORMALIZER-SPEC.md` §1.5); verified on live Postgres against the actual stored artifact. ⚠ **Campaigns work now and never did before** — the campaign→orchestrator contract had three disagreeing fields and no test across the boundary, so every scheduled scan was refused before it existed. Verified live end to end. ⚠ **The frontend is a container serving a built bundle** — `docker compose up -d --build frontend` before any e2e run. 🟡 Carried forward: `scan.source_kind` is still caller-asserted for direct API callers (one live row diverges; it fails safely at dispatch, and fixing it properly means a synchronous project-service call in CreateScan); 26 unexplained webrecon misroutes for deleted scans, not reproducible; `cbomkit` dispatchable with no adapter; gEDA/LibrePCB/Horizon EDA/Fritzing unparsed; the interactive import has no path for CycloneDX or collector JSON; `alpine/git` is tag-pinned; `raw_findings` and `licenses` deliberately writerless. ⚠ **`NVD_API_KEY` is still set in no environment — `task preflight` now says so.**
+**Last updated:** 2026-09-11
+**Current phase:** *CBOM, end to end* (2026-09-11 (a)) — source code read for the first time (`cbomkit-action` Java/Python, `cdxgen-cbom` JS/TS, beside `cbomkit-theia`), one `asset_key` per asset with file:line evidence and per-engine provenance, correct type-aware coverage (both numbers), a native CycloneDX 1.6 CBOM, every upload scanned, verified live from a GitHub repo and a two-file upload through every report format. Previous phase, complete: *AIBOM, for real* — a six-milestone program (plan: `~/.claude/plans/now-we-have-to-curried-leaf.md`). 🟢 **M1 truth** (2026-09-06 (a)): the AI BOM stopped reporting three models where there is one. 🟢 **M2 enrichment plane** (2026-09-06 (b), corrected 2026-09-07): the checkpoint scan M2 had never been driven through found four defects in M2's own work — enrichment reporting a clean success having looked nothing up, a card that reached no row, a licence and dataset list wrong on every model, and a worker that could not write its artifact at all. All fixed and re-measured live. 🟢 **M3 engines** (2026-09-07 (a)): `airom`, `cdxgen-ai` and `cisco-aibom` (registered, refused) — all four AIBOM engines run end to end in the sandbox and converge on one `model_key` per model. 🟢 **M4 service + wider surface** (2026-09-07 (b)): `services/aibom` and the `aibom` schema own operator input, consent, compliance tagging and attestation records; `normalize.ai_models` stopped being UPDATE-ed; a second operational profile scores the AI surface CERT-In has no element for. 🟢 **M5 ingest, export, render** (2026-09-07 (c)): CycloneDX ML-BOM downloadable and schema-validated, SPDX 3.0 AI profile converter proven (the plan's blocker was wrong), and the three non-scanner integrations landed as import paths. 🟢 **M6 real-time, frontend, scale** (2026-09-07 (d)): the live discovery feed carries per-engine counts end to end, the AI screens render evidence/provenance/assets/governance, the inventory endpoint stopped being 1 + 3N — and two import engines were caught reporting `ai-bom`'s own output back as customer-supplied evidence. **The six-milestone plan is complete.** Previous phase, complete: *Hardware as a first-class thing* — Track B done (rendering matrix, device register, collectors, live scans, hardware screens); **A6 (writerless tables) and A7 (ecosystem coverage) were never started and are still owed.**
+**Next action:** ⚠ **CBOM (2026-09-11 (a)) — commit with a golden justification per 09 §5** (crypto-mixed, crypto-quantum, report CBOM/QBOM goldens), and rebuild before any live CBOM scan (`scan-orchestrator fetcher sbom-worker sbom-normalize-consumer report project frontend`; normalize migrations 0019/0020). Owed: a crypto weak→strong identity fold (`EC` + `EC-secp256r1`), `secret_key_in_source` in reports, the image digest in report Engine Coverage, a CBOM source engine for Go/C#/C/C++. ⚠ **Registration now asks each BOM type for what that type actually needs** — it asked all five the same questions, and the `AtRegistration` flag built for exactly this had never been set true by any module; QBOM's Table 8 form and HBOM's device are now collected in the wizard, AIBOM's stay deferred because Table 10's user elements are per-MODEL and no model exists before a scan (2026-09-09 (b)). ⚠ **No 4xx was ever logged by any service, and the error card promises the opposite** — `errs.Write` and `httpx.Logging` both used `LevelDebug` while services run at info, so every 401/403/404/409/422 the product returned was unfindable by the request id it told the user to quote; both now log at `LevelWarn`, and the gateway finally carries `X-Request-ID` across the hop so one request stops having two ids (2026-09-09 (a)). ⚠ **A GitHub connection GitHub has rejected can now be repaired** — connecting verifies the token against `GET /user` before storing it (and fills `github_login`, empty on every row until now), and the repo picker offers **Reconnect GitHub** where the failure appears; there had been no reconnect anywhere in the product. ⚠ **The "What does `<CODE>` mean?" button on every error card is dead** — it links to `/docs/errors#<code>` and no such route exists; still owed. ⚠ **Two import engines were reporting `ai-bom`'s own output back as customer-supplied evidence, and no longer are** — `aibom-glaas` and `aibom-k8s-runtime` walked the shared workspace, found the CycloneDX document another engine had published there beside the customer's source, and imported it: three raw artifacts with one identical sha256 on a live scan. Excluded now by file name AND by producer, with a guard that reads the repository for every declared `workspace_artifact_name`. ⚠ **The live discovery feed carries real per-engine counts** — `ScanEventV1.Metrics` was defined in Phase 6 and filled by nothing until now; metric KEYS go through the same no-path/no-URL gate as `Message`. ⚠ **The AI inventory endpoint was 1 + 3N round trips** and is now three queries whatever the model count, response verified byte-identical. ⚠ **Three AI discovery engines now run over every AIBOM scan and reconcile** — `ai-bom`, `airom` and `cdxgen-ai`, plus `aibom-generator` enrichment outside the sandbox; `normalize.ai_model_provenance` records which engines saw each model, and `normalize.ai_assets` holds the prompts, vector stores, RAG pipelines and inference endpoints no CERT-In element covers. ⚠ **`cisco-aibom` is registered and never dispatched, with the reason on the engines endpoint** — it needs egress and an API key that scan engines are not allowed to hold; it is deliberately NOT an `unavailable` engine run, because that would make every AIBOM scan `completed_with_errors`. ⚠ **`owasp-aibom-generator`'s licence and dataset parse is not usable and is no longer used** — it returns `mit ---` and training datasets scraped out of English prose (`consisting`, `one`, `a`); both fields now come from the Hugging Face model card's structured front matter, and the raw artifact stores both upstream responses. ⚠ **Rebuild before any live AIBOM scan** — `docker compose up -d --build aibom-worker aibom-normalize-consumer aienrich-worker`, and `task osint:pull` (which now builds `axebom/airom-engine:dev`). ⚠ **AIBOM reported three models where there was one, and no longer does** — `ai-bom` emits the real Hugging Face id in a property nothing read, so `meta-llama/Llama-3-8B` was discarded and the `transformers` library was stored three times in its place. Fixed with a real `model_key` identity ladder (`migrations/normalize/0016`, `03-NORMALIZER-SPEC.md` §1.5); verified on live Postgres against the actual stored artifact. ⚠ **Campaigns work now and never did before** — the campaign→orchestrator contract had three disagreeing fields and no test across the boundary, so every scheduled scan was refused before it existed. Verified live end to end. ⚠ **The frontend is a container serving a built bundle** — `docker compose up -d --build frontend` before any e2e run. 🟡 Carried forward: `scan.source_kind` is still caller-asserted for direct API callers (one live row diverges; it fails safely at dispatch, and fixing it properly means a synchronous project-service call in CreateScan); 26 unexplained webrecon misroutes for deleted scans, not reproducible; gEDA/LibrePCB/Horizon EDA/Fritzing unparsed; the interactive import has no path for CycloneDX or collector JSON; `alpine/git` is tag-pinned; `raw_findings` and `licenses` deliberately writerless. ⚠ **`NVD_API_KEY` is still set in no environment — `task preflight` now says so.**
 
 > 🟢 **A REAL SCAN NOW NORMALIZES, LIVE, WITH NO MANUAL TRIGGER — THE
 > NORMALIZER'S DEPLOYED BOUNDARY FROM (e)/(k)/(l) IS CLOSED FOR SBOM.**
@@ -312,7 +312,8 @@ A session that writes code but does not update this file has failed — the next
 | **`/v1/hbom/*`** | 🟢 **WIRED — Go-native port of `workers/hbom/{model,csv_import,providers}.py`, no Go→Python bridge exists so none was built** |
 | **`/v1/projects/{id}/dependencies`, `/findings`** | 🟢 **WIRED — were dead routes the frontend already called** |
 | **Orchestrator dead-job bug** | ✅ **FIXED — `families:["hbom"\|"qbom"]` now rejected at scan-create time (`SCAN_FAMILY_NOT_DIRECTLY_SCANNABLE`), not published to a subject nothing consumes** |
-| **CBOM normalizer write path** | 🟢 **`workers/cbom/normalize/pipeline.py` writes `normalize.crypto_assets` for real, proven against live Postgres; not live-triggered (same boundary as SBOM, see (e))** |
+| **CBOM normalizer write path** | 🟢 **Live-triggered from git and upload scans; three engines (`cbomkit-theia` files, `cbomkit-action` Java/Python source, `cdxgen-cbom` JS/TS source) merged per `asset_key` (03 §1.6) with file:line evidence and per-engine provenance (`normalize.crypto_asset_provenance`); ruleset `2026.09.1`; verified live 2026-09-11 — see 2026-09-11 (a)** |
+| **CBOM golden corpus** | 🟢 **`workers/cbom/test_golden.py` replays `fixtures/crypto-mixed` and `fixtures/crypto-quantum` (real output of all three engines) under `task test:golden`; there was no CBOM harness before 2026-09-11** |
 | **`GET /v1/projects/{id}/crypto-assets`** | 🟢 **WIRED — the interactive read the sidebar's Crypto tab needed; neither parallel Milestone 4 workstream built it, so it was added directly** |
 | **`/v1/qbom/{id}[/form,/device]`** | 🟢 **WIRED — Go-native port of `workers/qbom/metadata.py`, same no-bridge precedent as HBOM** |
 | **Certificate quantum-verdict bug** | ✅ **FIXED — found only by running real `cbomkit-theia` output: a certificate inherited nothing from its signer because the code matched the signer's raw engine `bom-ref` UUID as if it were a name** |
@@ -2270,6 +2271,222 @@ mind**, because a claim about limits should be falsifiable.
 ---
 
 ## Session log
+
+### 2026-09-11 (a) — CBOM: source code read for the first time, one identity per asset, every report generated live
+
+**Asked:** make CBOM work "just like SBOM" — fetched from a GitHub repo or an
+upload, "all the results, accurately and precisely", "no errors and no bugs",
+and "the report is getting generated". Plan:
+`~/.claude/plans/lets-work-on-our-mutable-axolotl.md`. **User decisions
+(2026-09-11):** derived CERT-In values are filled from a cited table, counted
+as present and labelled; engines are `cbomkit-action` + cdxgen's `cbom` preset
+beside theia; a theia run over a tree with no key/cert/config files is
+`succeeded` + an info diagnostic; every uploaded file is scanned (JAR/WAR
+bytecode deferred — no engine turns bytecode into a CBOM).
+
+**⚠ WHAT WAS WRONG, MEASURED — NOT READ.** Before this session only 4 CBOM
+scans had ever run (all uploads), and:
+
+- **Crypto in source code was invisible.** The one engine, `cbomkit-theia`,
+  reads certificate/key/config FILES and never code; the five JCA calls in
+  `fixtures/crypto-mixed/repo/src/main/java/com/example/CryptoConfig.java` were
+  detected by nothing, and
+  the golden pinned that absence as correct. A repository with no PEM file got
+  an empty CBOM.
+- **Every git CBOM scan ended `completed_with_errors` by construction**:
+  `cbomkit` was in the default set with no adapter, so it was always `skipped`.
+- **Coverage was wrong twice over**: list-valued fields (`crypto_functions[]`,
+  the algorithm list, cipher suites) scored 0 on every CBOM (the profile's `[]`
+  was used as a lookup key), and `declaration_pct` always equalled
+  `completeness_pct` (live 60.14 / 60.14) because the scorer never saw the
+  fields stored as `not-provided`.
+- **No crypto identity**: `component_key` held theia's random per-run bom-ref,
+  so a second engine could only duplicate; no evidence (file/line discarded),
+  no per-engine provenance (03 §7 required it).
+- **Verdicts**: ML-DSA/SLH-DSA reported deprecated (the DSA rule ran first);
+  EdDSA read as DSA; AES-ECB `current` (mode never reached the rules); unsized
+  RSA/DH `current`; ML-KEM-768 stored as a 768-bit key; DESede, P-256, ffdhe,
+  RC4, Blowfish unrecognised; Grover advice wrong for hashes. Found later by the
+  new `crypto-quantum` golden: Ed25519 and DSA told to migrate to ML-KEM
+  (`keygen` counted as key establishment), JCA's bare `EC` not
+  quantum-vulnerable, an AES size given only in the parameter set ignored;
+  ECDSA/ECDH with no curve `current` while unsized RSA was `unassessed`.
+- **A generated RSA key (cbomkit-action names it `key`) was reported NOT
+  quantum-vulnerable** — the engine states the key's algorithm only as a
+  CycloneDX `dependencies` edge, which nothing read.
+- **Exports**: protobom cannot emit a `cryptographic-asset`, so CycloneDX lost
+  every `cryptoProperties`; export ids `crypto/<type>/<name>` collided (an RSA
+  dropped, duplicate `dependsOn`, duplicate SPDXIDs); CBOM JSON keys were
+  PascalCase; the DOCX table was flat.
+- **Only the newest upload was scanned.**
+- **`scan.engine_runs.image_digest` was NULL on every run ever recorded** —
+  0 of ~400, every family. Every worker sent `invocation.image_digest` (its
+  manifests hold the daemon's digest); `HandleResult` dropped it.
+- **A DOCX download was served as `application/json`** (`mediaType` had no case).
+- **A CBOM report never listed an ecosystem with no engine** — the report
+  derived gaps from catalogued components, and a CBOM has none.
+- `proto/schemas/*` had drifted from the Go types (`discoveries`,
+  `native_sbom_ref` missing); regenerated with `axebom schema gen`.
+
+**What changed.**
+
+- *Engines* — `cbomkit-action` (`workers/cbom/adapters/cbomkit_action.py`;
+  sonar-cryptography's rules via cbomkit-lib, no SonarQube; Java + Python,
+  source-only, `-Xmx3g` because the image's CMD asks 16 GB; Go not enabled —
+  it fails silently under the noexec tmpfs) and `cdxgen-cbom`
+  (`cdxgen_cbom.py`; JS/TS call sites). Both pinned by digest in
+  `OSINT/tools.manifest.yaml`. `cbomkit` is `Disabled` with a reason (it clones
+  and resolves purls itself); TruffleHog (AGPL) and CryptoGuard (GPL,
+  unmaintained) are `rejected:`. theia gained image-tarball mode and the
+  `succeeded` + `ENGINE_NO_CRYPTO_MATERIAL` empty result.
+  `policy/adapter_parity_test.go` fails when a dispatchable engine has no
+  worker adapter or an adapter no registry entry.
+- *Identity, merge, provenance* — `asset_key` ladder (03 §1.6,
+  `workers/cbom/normalize/identity.py`, canonicalizer
+  `axebom_shared/crypto/identity.py`); raw assets sharing a key merge before
+  analysis (lists unioned, scalars by per-type engine trust, every conflict a
+  `NORMALIZE_CRYPTO_FIELD_CONFLICT`); evidence `[{path,line,engine}]`;
+  `normalize.crypto_asset_provenance`. Migrations `normalize/0019`
+  (`unassessed`, `derivations`) and `0020` (identity columns, provenance table,
+  RLS + grants) — **both applied to the dev DB (normalize at 20)**.
+- *Analysis* — `deprecation.py`/`quantum_rules.py`/`pqc.py` rewritten test-first
+  (statuses `current|deprecated|weak|broken|unassessed`); derived values from
+  `axebom_shared/crypto/reference.py` (SP 800-57 Pt1 R5 §5.6.1.1 Table 2
+  pp. 54-55, RFC 8032 §8.5, NIST CSOR, RFC 8017/5758/3279/8410/8018), digest
+  pinned to CBOM ruleset `2026.09.1`; `crypto_status.py` shared by writer and
+  scorer so `field_status` and the score cannot drift.
+- *Engine Coverage for code nobody read* — every CBOM engine reports the source
+  languages it saw and did not read (`ecosystems_uncovered`, new optional
+  `ScanResultV1` field, 02 §6); the orchestrator records them as gaps;
+  `Store.CoverageGapsFor` scopes a normalize trigger's gaps to its own family
+  (the CBOM engines' `go-source` is not an SBOM gap); the report adds gaps
+  reported by engines that ran.
+- *Reports* (`services/report`) — native CycloneDX 1.6 CBOM
+  (`export/cbom.go`, bom-ref = `asset_key`, evidence occurrences, key→algorithm
+  and cert→signer/key dependencies); SPDX ids hashed from `asset_key`;
+  Location/Engines columns and per-type tables in XLSX/PDF/DOCX; a
+  private-keys-in-source block in every format; derived-value footnote; JSON
+  crypto keys snake_case.
+- *API + UI* — `GET /v1/projects/{id}/crypto-assets` returns `asset_key`,
+  evidence, attributes, derivations, engines; QBOM refs resolve by `asset_key`;
+  `CryptoInventory.tsx` shows Location, Engines, Deprecation (`Unassessed` its
+  own pill), PQC target (full text in the tooltip), † on derived values, a
+  private-key badge; `cbom.claims.test.ts` forbids "complete inventory" /
+  bytecode claims.
+- *Uploads* — every upload of a project is materialized into one workspace
+  (`uploads/<name>/`), caps on the total (02 §3).
+- *Provenance* — the orchestrator stores `image_digest`; the scan API returns it.
+- *Golden corpus* — CBOM harness `workers/cbom/test_golden.py` (+
+  `normalize_runner.py`) in `task test:golden`; `fixtures/crypto-mixed`
+  re-captured with all three engines; new `fixtures/crypto-quantum`.
+
+**Found by the live git scan, fixed the same session:**
+
+- **cdxgen `cbom` hangs on a Maven Java repository.** On 1MansiS/JavaCrypto it
+  wrote its BOM in 11 s, then sat in atom's "reachables" slice at 0% CPU until
+  the 900 s wall clock killed it — `timeout`, and the scan
+  `completed_with_errors` fifteen minutes later. Read from cdxgen's own source
+  in the pinned image: the preset forces `deep`, and crypto evidence always
+  builds the reachables slice (`evinser.js`: `withReachables || includeCrypto`);
+  `--no-deep`, plain `cdxgen --include-crypto` and `--exclude-type java` all hung
+  the same way; `-t js` stopped the hang and lost every JS finding. So the
+  adapter does not start cdxgen-cbom on a tree with no JS/TS (it reads nothing
+  else), and its wall clock is 300 s. ⚠ A JS/TS tree that also carries a Java
+  build can still hang — now a five-minute `timeout`, stated in Engine Coverage.
+- **27 of 32 "keys" were gitleaks hits** (`generic-api-key`, mostly in
+  Markdown): theia's Secret Detection Plugin types a finding `key` whenever the
+  rule id contains "key" (read from `secrets.go`). They are credentials, not
+  crypto material: kept out of Table 9 and reported as `CBOM_SECRET_IN_SOURCE`
+  with rule ids and locations (`normalize/extractors.py`).
+- **A timed-out engine's empty stdout was reported "not valid JSON"**; the
+  consumer now skips a run that left no result (`NORMALIZE_ENGINE_NO_RESULT`).
+
+**Verification actually performed.** **`task verify` exit 0** (fmt, lint,
+boundary lint, every test, build, profile lint + guardrails, evidence pack —
+regenerated: it had been stale since 2026-09-10 (a)'s SBOM author path — and
+docs lint). Python `libs/py-shared` + `workers` full suite green; ruff clean; Go build/vet/test green for scan-orchestrator,
+report, project, fetcher, libs (report/project DB tests ran against the dev
+DB); `tools/conformance` 10 passed; frontend typecheck, lint, 178 tests.
+**Live, through the real gateway as `alice@acme.test` (token from a real
+ZITADEL browser sign-in, Playwright):**
+
+- *Upload* — a new CBOM project with TWO uploads (`crypto-mixed.zip` and a
+  second archive holding a pyca/cryptography file and a Go file): scan
+  `completed`, three engines `succeeded`, no `cbomkit` run. Both archives were
+  materialized (`uploads/crypto-mixed/…`, `uploads/extra-sources/…`). 14
+  assets (8 algorithms, 4 keys, 1 protocol, 1 certificate), no duplicate
+  `asset_key`, every row with evidence, **completeness 70.67 / declaration
+  100.00**, `crypto_functions` present 7/8, 3 derived security levels + 1
+  derived OID, 0 rows containing key material. cbomkit-action read the Python
+  too (MD5 `broken`, `rsa.generate_private_key` as an RSA-2048 key);
+  `RSA-2048` merged the Java and Python keygens (2 locations); SHA-256 merged
+  theia + cbomkit-action. **`go-source` recorded as a gap by all three
+  engines** and listed under Engine Coverage "no engine" in the report.
+- *Reports* — CBOM in all six formats `ready`: CycloneDX passes
+  `cyclonedx-python-lib` `JsonStrictValidator(V1_6)` with 14
+  `cryptographic-asset` components (= the DB rows), unique bom-refs, no
+  dangling `dependsOn`, 16 evidence occurrences; SPDX passes `spdx-tools`
+  validation (15 packages); DOCX contains Engine Coverage, `go-source`,
+  derived notes and Location, and not the word "compliant"; XLSX has
+  per-type Crypto sheets.
+- *UI* — the project's Crypto tab rendered all four tables from the live API
+  with no failed request: Location with `+1 more`, engine chips, `Unassessed`
+  pills, † with its source in the tooltip, and the PQC column showing the
+  migration target (`ML-KEM (FIPS 203, lattice)`) with the full recommendation
+  in the tooltip — whole, it had made every quantum-vulnerable row several
+  times taller than the rest.
+- *Final re-run with the final images* — the upload scan `completed` again
+  (same 14 assets, 70.67 / 100.00), every engine run now carrying the image
+  digest the daemon ran (`cbomkit-action` `sha256:47c25052…` = the manifest
+  pin), cdxgen-cbom not started (no JS/TS), and a DOCX served as
+  `…wordprocessingml.document`. Reports re-rendered in every format; CycloneDX
+  and SPDX re-validated.
+- *Git* — `1MansiS/JavaCrypto` (public, Maven, many literal JCA calls),
+  fetched at commit `7a70c024`. First run: cdxgen-cbom hung and timed out at
+  900 s, and 27 gitleaks strings were counted as keys — both fixed above.
+  **Final run: `completed`**, three engines `succeeded`, 11 assets (6
+  algorithms incl. ChaCha20, Ed25519, EC-secp384r1; 5 generated keys),
+  **completeness 53.92 / declaration 100.00**, the 27 possible secrets
+  reported once as `CBOM_SECRET_IN_SOURCE` with their locations, no key
+  material stored. CycloneDX (11 components) validates.
+
+**Goldens changed — justify each in the commit message** (09 §5):
+`fixtures/crypto-mixed/expected/*` (list fields scored, `not-provided`
+counted, derived values, `unassessed`, asset_key identity, cbomkit-action +
+cdxgen raw added — completeness 61.07/61.07 → 72.13/100.0, see its README);
+`fixtures/crypto-quantum/*` (new); `services/report/testdata/golden/
+fixture-{cbom,qbom}.{cdx,spdx}.json` (native CBOM serializer, asset-key
+bom-refs, hashed SPDX ids, evidence occurrences; validated by
+`tools/conformance`).
+
+**⚠ Rebuild before any live CBOM scan:** `scan-orchestrator fetcher
+sbom-worker (cbom/aibom/hbom-worker share its image) sbom-normalize-consumer
+(cbom-normalize-consumer shares it) report project frontend` — done in this
+session. The two CBOM documents written at 11:51 on 2026-09-11 came from an
+intermediate build of ruleset `2026.09.1`, before the crypto-quantum verdict
+fixes; the ruleset was never released, so it was not bumped.
+
+**Owed / known gaps:**
+- Go, C#, C/C++, Rust and every other language have no CBOM source engine —
+  now stated in Engine Coverage rather than silent. JAR/WAR bytecode is not
+  analysed. Java is read without a build (variables and wrappers invisible).
+- One JCA `EC` generator yields two algorithm and two key rows (`EC`,
+  `EC-secp256r1`): no weak→strong fold for crypto identity yet.
+- `secret_key_in_source` is set by the normalizer but not surfaced in reports
+  or the UI (only private keys are).
+- The JSON bundle's `engine_coverage.engines[]` keys are PascalCase (no json
+  tags on `render.EngineCoverage`) — pre-existing, every BOM type; changing it
+  is a bundle-schema change.
+- Engine Coverage in reports does not show the image digest yet (it is now
+  stored).
+- A QBOM report requested for a scan whose families did not include `qbom`
+  waits `normalizedBOMRetryAttempts` for a document that will never exist,
+  then fails — pre-existing.
+- `services/report/internal/store/bomsource.go` `loadPractices` JOINs
+  `project.practices` with `scan.scans` — a cross-schema JOIN (invariant 11),
+  pre-existing, found while reading; not changed here.
+- Observed, not investigated: live SBOM documents average completeness 0.50 /
+  declaration 0.57 — possibly a unit mismatch somewhere.
 
 ### 2026-09-10 (a) — Data that landed in Postgres and never reached the report
 

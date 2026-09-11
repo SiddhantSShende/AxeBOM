@@ -500,17 +500,9 @@ func (h *Handler) Source(w http.ResponseWriter, r *http.Request) {
 				"the project has no uploaded source to fetch from"))
 			return
 		}
-		// The MOST RECENT upload. ListUploads already orders newest-first (id
-		// DESC, and ids are UUIDv7) — the same "pick one, document it" convention
-		// the connection branch below uses for multiple repository connections.
-		u := uploads[0]
-		errs.WriteJSON(w, http.StatusOK, map[string]any{
-			"kind":              "upload",
-			"upload_id":         u.ID,
-			"upload_kind":       u.Kind,
-			"storage_ref":       u.StorageRef,
-			"original_filename": u.OriginalFilename,
-		})
+		// EVERY upload — see uploadSourceBody for why this stopped being
+		// "the most recent one".
+		errs.WriteJSON(w, http.StatusOK, uploadSourceBody(uploads))
 		return
 
 	case "url":

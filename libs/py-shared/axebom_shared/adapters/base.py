@@ -150,6 +150,13 @@ class GenerateResult:
     status: ResultStatus
     artifacts: list[RawArtifact] = field(default_factory=list)
     ecosystems_covered: list[str] = field(default_factory=list)
+    #: ⚠ WHAT THE ENGINE SAW IN THE SOURCE AND COULD NOT READ — Go code handed to
+    #: engines that read Java and JavaScript. Each becomes an
+    #: `engine_available=false` row in scan.ecosystems_detected, and a gap in
+    #: Engine Coverage unless another engine in the scan covered it (invariant
+    #: 12). Left empty by an engine that cannot tell, and never a superset of
+    #: `ecosystems_covered`'s complement: only what is actually present.
+    ecosystems_uncovered: list[str] = field(default_factory=list)
     #: Headline counts. Every field defaults to None — "not measured" — so a
     #: run that produced no output reports nothing rather than a row of zeros
     #: that reads as a clean result. Adapters set this in `interpret()`, where

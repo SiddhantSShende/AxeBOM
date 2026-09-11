@@ -266,11 +266,18 @@ func loadStoredQuantumDevice(ctx context.Context, tx db.Tx, projectID string) (*
 // returns the reference list QBOM Table 8 element 5 carries.
 //
 // ⚠ REFERENCES, NOT COPIES. Mirrors workers/qbom/derive.py's
-// crypto_asset_refs() precedence exactly: id, then component_key, then name
-// — whichever is present first. normalize.crypto_assets.id is always
-// populated (it is the table's UUID primary key), so in practice this
-// always resolves to id; the fallback chain is kept for parity with the
-// Python side.
+// crypto_asset_refs() precedence exactly: asset_key, then id, then
+// component_key, then name — whichever is present first.
+//
+// ⚠ asset_key FIRST (migrations/normalize/0020). A row id changes every time
+// a CBOM is re-normalized — invariant 10 writes a NEW document, and the row id
+// is derived from it — so a QBOM that referenced ids stopped resolving after
+// every corrected pass. The asset key names the same asset across versions.
+// It is NOT NULL since 0020, so in practice this always resolves to it; the
+// fallback chain is kept for parity with the Python side.
+//
+// Ordered by asset_key (unique per document) so the stored list is the same
+// for the same inventory, whichever normalization wrote it.
 func resolveCryptoAssetRefs(ctx context.Context, tx db.Tx, projectID string) ([]string, error) {
 	cbomDocID, err := resolveCurrentBOMDocument(ctx, tx, projectID, "CBOM")
 	if err != nil {
@@ -281,10 +288,10 @@ func resolveCryptoAssetRefs(ctx context.Context, tx db.Tx, projectID string) ([]
 	}
 
 	rows, err := tx.Query(ctx, `
-		SELECT id, COALESCE(component_key, ''), name
+		SELECT COALESCE(asset_key, ''), id, COALESCE(component_key, ''), name
 		  FROM normalize.crypto_assets
 		 WHERE bom_document_id = $1
-		 ORDER BY id`, cbomDocID)
+		 ORDER BY asset_key, id`, cbomDocID)
 	if err != nil {
 		return nil, fmt.Errorf("list crypto assets: %w", err)
 	}
@@ -292,11 +299,14 @@ func resolveCryptoAssetRefs(ctx context.Context, tx db.Tx, projectID string) ([]
 
 	var refs []string
 	for rows.Next() {
-		var id, componentKey, name string
-		if err := rows.Scan(&id, &componentKey, &name); err != nil {
+		var assetKey, id, componentKey, name string
+		if err := rows.Scan(&assetKey, &id, &componentKey, &name); err != nil {
 			return nil, fmt.Errorf("scan crypto asset ref: %w", err)
 		}
-		ref := id
+		ref := assetKey
+		if ref == "" {
+			ref = id
+		}
 		if ref == "" {
 			ref = componentKey
 		}

@@ -40,6 +40,7 @@ NOT_PROVIDED = "not-provided"
 #: assembly; past that, the customer is told rather than guessed at.
 MAX_DEPTH = 10
 
+
 def _profile_values(field_id: str) -> tuple[str, ...]:
     """The closed value set the compliance profile declares for one element.
 

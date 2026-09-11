@@ -222,6 +222,91 @@ def test_a_family_with_no_standardised_replacement_says_so() -> None:
     assert "has not published" in rec.guidance
 
 
+@pytest.mark.parametrize(
+    ("family", "name", "primitive", "functions", "want"),
+    [
+        # cbomkit-action reports every key-pair generator's function as `keygen`.
+        ("ecc", "Ed25519", "signature", ["keygen"], "ML-DSA"),
+        ("dsa", "DSA-2048", "signature", ["keygen"], "ML-DSA"),
+        ("ecc", "x25519", "key-agree", ["keygen"], "ML-KEM"),
+        ("rsa", "RSA-1024", "pke", ["keygen"], "ML-KEM"),
+        # No functions and no primitive: a single-purpose name still states its use.
+        ("ecc", "Ed25519", "", [], "ML-DSA"),
+        ("ecc", "X25519", "", [], "ML-KEM"),
+    ],
+)
+def test_generating_a_key_is_not_a_use(
+    family: str, name: str, primitive: str, functions: list[str], want: str
+) -> None:
+    """⚠ `keygen` WAS COUNTED AS KEY ESTABLISHMENT. Every asymmetric algorithm
+    generates keys, so Ed25519 and DSA — signature schemes — were told to migrate
+    to ML-KEM (found on fixtures/crypto-quantum, 2026-09-11)."""
+    rec = recommend_pqc(
+        family=family,
+        quantum_vulnerable=True,
+        crypto_functions=functions,
+        name=name,
+        primitive=primitive,
+    )
+    assert rec is not None
+    assert rec.algorithm == want
+
+
+def test_signing_alongside_keygen_is_still_signing() -> None:
+    rec = recommend_pqc(family="rsa", quantum_vulnerable=True, crypto_functions=["keygen", "sign"])
+    assert rec is not None
+    assert rec.algorithm == "ML-DSA"
+
+
+def test_a_bare_ec_is_elliptic_curve_and_its_strength_stays_open() -> None:
+    """⚠ JCA's `KeyPairGenerator.getInstance("EC")` reaches the rules named just
+    `EC`. No rule matched it, and an elliptic-curve key was reported NOT
+    quantum-vulnerable. The curve decides its classical strength, so that verdict
+    stays unassessed until a curve is reported."""
+    quantum = assess_quantum(name="EC", primitive="pke")
+    assert quantum.quantum_vulnerable is True
+    assert quantum.family == "ecc"
+    assert assess_deprecation(name="EC", primitive="pke").status == "unassessed"
+    # A key whose algorithm is EC: the key's name says nothing, the algorithm does.
+    assert assess_quantum(name="key", primitive="EC", asset_type="key").family == "ecc"
+    # With a curve it is judged on the curve.
+    assert assess_deprecation(name="EC-secp256r1", primitive="pke").status == "current"
+
+
+@pytest.mark.parametrize(
+    ("name", "primitive", "key_size", "expected"),
+    [
+        # ⚠ The same missing fact RSA and DH are judged on: no curve, no verdict.
+        ("ECDSA", "signature", None, "unassessed"),
+        ("ECDH", "key-agree", None, "unassessed"),
+        # A curve, or a size that fixes one, decides it.
+        ("ECDSA", "signature secp384r1", None, "current"),
+        ("ECDSA-P256", "signature", None, "current"),
+        ("ECDSA", "signature", 256, "current"),
+        ("ECDSA", "signature", 192, "weak"),
+        ("ECDSA", "signature secp192r1", None, "weak"),
+    ],
+)
+def test_an_elliptic_curve_verdict_needs_its_curve(
+    name: str, primitive: str, key_size: int | None, expected: str
+) -> None:
+    assert assess_deprecation(name=name, primitive=primitive, key_size=key_size).status == expected
+
+
+@pytest.mark.parametrize(
+    ("name", "primitive"),
+    [
+        # `ECB` is a mode, not a curve.
+        ("AES-128-ECB-PKCS5", "block-cipher"),
+        # `ec` is two hex digits: an unresolved bom-ref must never read as a curve.
+        ("leaf", "A3 EC-5F21"),
+        ("leaf", "b21f7408-6344-4ea2-a3ec-541fa2579d3e"),
+    ],
+)
+def test_ec_is_matched_only_as_a_whole_name(name: str, primitive: str) -> None:
+    assert assess_quantum(name=name, primitive=primitive).family != "ecc"
+
+
 # ---------------------------------------------------------------------------
 # Deprecation
 # ---------------------------------------------------------------------------
@@ -383,3 +468,230 @@ def test_tokenizing_alone_would_break_rules_that_were_already_right() -> None:
 def test_search_text_is_a_no_op_on_an_already_spaced_name() -> None:
     assert search_text("AES-256") == "AES-256"
     assert search_text("") == ""
+
+
+# ---------------------------------------------------------------------------
+# Verdicts that were wrong until 2026-09-11 — pinned so they stay fixed
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "ML-DSA-65",
+        "SLH-DSA-SHA2-128s",
+        "FN-DSA-512",
+        "Falcon-512",
+        "ML-KEM-768",
+        "Kyber1024",
+        "HQC-128",
+    ],
+)
+def test_post_quantum_algorithms_are_never_deprecated(name: str) -> None:
+    """⚠ `\\bdsa\\b` MATCHED THE "-DSA" IN ML-DSA, SLH-DSA AND FN-DSA, and the
+    legacy DSA rule ran before any post-quantum check — so the algorithms a
+    customer migrated TO were reported deprecated."""
+    assert assess_deprecation(name=name).status == "current"
+
+
+def test_selected_is_not_reported_as_standardised() -> None:
+    """FN-DSA and HQC are NIST selections with no final FIPS in this ruleset; a
+    customer cites this at an audit."""
+    assert assess_deprecation(name="ML-KEM-768").reference == "FIPS 203"
+    for name in ("FN-DSA-512", "HQC-128"):
+        verdict = assess_deprecation(name=name)
+        assert verdict.reference == "", name
+        assert "selected" in verdict.rationale.lower(), name
+
+
+@pytest.mark.parametrize("name", ["EdDSA", "Ed25519", "Ed448", "X25519"])
+def test_edwards_and_montgomery_curves_are_not_dsa(name: str) -> None:
+    """`EdDSA` tokenizes to `Ed DSA`, and the DSA rule fired on the second token."""
+    assert assess_deprecation(name=name).status == "current"
+    verdict = assess_quantum(name=name)
+    assert verdict.family == "ecc"
+    assert verdict.quantum_vulnerable
+
+
+def test_the_mode_field_condemns_ecb_even_when_the_name_does_not_say_it() -> None:
+    assert assess_deprecation(name="AES", mode="ecb").status == "broken"
+    assert assess_deprecation(name="AES", mode="gcm").status == "current"
+
+
+def test_ecb_in_an_rsa_transformation_is_not_blamed_pkcs1_v15_is() -> None:
+    """Java's `RSA/ECB/PKCS1Padding` names ECB only because the syntax demands a
+    mode. Blaming ECB would send a reviewer after the wrong fix."""
+    verdict = assess_deprecation(name="RSA/ECB/PKCS1Padding", key_size=2048)
+    assert verdict.status == "weak"
+    assert "ECB" not in verdict.rationale
+    assert "PKCS#1 v1.5" in verdict.rationale
+
+
+def test_pkcs1_v15_key_transport_is_weak_but_a_v15_signature_is_not() -> None:
+    transport = assess_deprecation(
+        name="RSA",
+        primitive="pke",
+        key_size=2048,
+        padding="pkcs1v15",
+        crypto_functions=["encrypt", "decrypt"],
+    )
+    signature = assess_deprecation(
+        name="SHA256-RSA",
+        primitive="signature",
+        key_size=2048,
+        padding="pkcs1v15",
+        crypto_functions=["sign"],
+    )
+    assert transport.status == "weak"
+    assert signature.status == "current"
+
+
+def test_a_mixed_use_rsa_asset_is_not_guessed_to_be_key_transport() -> None:
+    """theia's RSA `pke` asset lists encapsulate, decapsulate AND sign together."""
+    verdict = assess_deprecation(
+        name="RSA",
+        primitive="pke",
+        key_size=2048,
+        padding="pkcs1v15",
+        crypto_functions=["encapsulate", "decapsulate", "sign"],
+    )
+    assert verdict.status == "current"
+
+
+@pytest.mark.parametrize("name", ["RSA", "rsaEncryption", "Diffie-Hellman"])
+def test_an_unsized_modulus_is_unassessed_not_current(name: str) -> None:
+    """⚠ It returned `current` with an apologetic rationale, so a status filter
+    showed the likeliest legacy 1024-bit key as fine."""
+    verdict = assess_deprecation(name=name)
+    assert verdict.status == "unassessed"
+    assert "not reported" in verdict.rationale
+
+
+def test_an_unrecognised_or_unnamed_asset_is_unassessed_not_current() -> None:
+    assert assess_deprecation(name="ACME-CIPHER-9000").status == "unassessed"
+    assert assess_deprecation(name="").status == "unassessed"
+
+
+@pytest.mark.parametrize("name", ["DESede", "TDEA", "DES-EDE3-CBC"])
+def test_java_openssl_and_nist_names_for_3des(name: str) -> None:
+    """Java's `DESede` tokenized to `DE Sede` and matched nothing."""
+    assert assess_deprecation(name=name).status == "weak"
+    assert assess_quantum(name=name).family == "3des"
+
+
+@pytest.mark.parametrize(
+    ("name", "family"),
+    [
+        ("P-256", "ecc"),
+        ("P-384", "ecc"),
+        ("prime256v1", "ecc"),
+        ("ffdhe2048", "dh"),
+        ("RC4", "rc4"),
+        ("Blowfish", "blowfish"),
+        ("HQC-128", "hqc"),
+    ],
+)
+def test_names_that_used_to_go_unrecognised(name: str, family: str) -> None:
+    assert assess_quantum(name=name).family == family
+
+
+def test_an_ffdhe_group_is_sized_from_its_name() -> None:
+    assert assess_deprecation(name="ffdhe2048").status == "current"
+    assert assess_deprecation(name="ffdhe").status == "unassessed"
+
+
+@pytest.mark.parametrize(
+    ("name", "version", "expected"),
+    [
+        ("TLS", "1.0", "deprecated"),
+        ("TLS", "1.1", "deprecated"),
+        ("TLS", "1.2", "current"),
+        ("TLS", "1.3", "current"),
+        ("TLS", "", "unassessed"),
+        ("SSL", "3.0", "broken"),
+        ("DTLS", "1.0", "deprecated"),
+        ("DTLS", "1.2", "current"),
+        ("SSH", "2.0", "current"),
+        ("SSH", "1.5", "weak"),
+        ("IKE", "1", "deprecated"),
+        ("IKE", "2", "current"),
+        ("QUIC", "", "current"),
+        ("CustomProto", "1", "unassessed"),
+    ],
+)
+def test_a_protocol_is_judged_by_its_version(name: str, version: str, expected: str) -> None:
+    """⚠ `TLS` WAS `current` WHATEVER ITS VERSION. TLS 1.0 and 1.1 are deprecated
+    (RFC 8996); a protocol with no version is unassessed, never current."""
+    verdict = assess_deprecation(name=name, asset_type="protocol", protocol_version=version)
+    assert verdict.status == expected
+
+
+def test_a_tls_version_in_the_name_is_read_when_the_field_is_empty() -> None:
+    assert assess_deprecation(name="TLSv1.1", asset_type="protocol").status == "deprecated"
+    assert assess_deprecation(name="TLSv1.3", asset_type="protocol").status == "current"
+
+
+def test_grover_advice_names_a_size_the_primitive_has() -> None:
+    """ "Consider a 384-bit key" for AES-192; "a 224-bit key" for 3DES."""
+    aes192 = assess_quantum(name="AES-192").grover_note
+    assert "384" not in aes192
+    assert "AES-256" in aes192
+
+    des3 = assess_quantum(name="3DES").grover_note
+    assert "224-bit" not in des3
+    assert "migrate" in des3.lower()
+
+
+def test_a_hash_note_talks_about_the_digest_not_a_key() -> None:
+    note = assess_quantum(name="SHA-256").grover_note
+    assert "digest" in note
+    assert "key" not in note
+
+
+def test_the_status_set_is_the_database_s_and_the_profile_s() -> None:
+    """The rules, the column's CHECK and the profile's closed value set agree."""
+    import re
+    from pathlib import Path
+
+    from axebom_shared.crypto.deprecation import STATUSES
+
+    repo = Path(__file__).resolve().parents[4]
+
+    up = (
+        (repo / "migrations/normalize/0019_crypto_unassessed_and_derivations.sql")
+        .read_text()
+        .split("-- +goose Down")[0]
+    )
+    checked = re.findall(r"deprecation_status IN \(([^)]*)\)", up)
+    assert checked, "0019 no longer carries the deprecation_status CHECK"
+    assert set(re.findall(r"'([a-z]+)'", checked[-1])) == set(STATUSES)
+
+    yaml = pytest.importorskip("yaml")
+    profile = yaml.safe_load((repo / "docs/reference/certin-v2.0.yaml").read_text())
+
+    def find(node: object) -> list[str] | None:
+        if isinstance(node, dict):
+            if node.get("id") == "axebom.crypto.deprecation_status":
+                return list(node.get("values") or [])
+            nodes: list[object] = list(node.values())
+        elif isinstance(node, list):
+            nodes = list(node)
+        else:
+            return None
+        for child in nodes:
+            found = find(child)
+            if found is not None:
+                return found
+        return None
+
+    assert set(find(profile) or []) == set(STATUSES)
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["RSA", "AES-256-GCM", "MD5", "ML-DSA-65", "EdDSA", "ACME-9000", "", "DESede", "P-256"],
+)
+def test_every_verdict_is_a_known_status(name: str) -> None:
+    from axebom_shared.crypto.deprecation import STATUSES
+
+    assert assess_deprecation(name=name).status in STATUSES

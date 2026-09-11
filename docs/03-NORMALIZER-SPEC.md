@@ -188,6 +188,35 @@ location** — a prompt IS a piece of text at a place, and airom names every sys
 however many files mention it. Keying both on location splits one vector store in two;
 keying both on name collapses every system prompt in a repository into one.
 
+### 1.6 The `asset_key` chain — crypto assets
+
+A crypto asset had no identity: `crypto_assets.component_key` held the engine's own `bom-ref`, which `cbomkit-theia` mints at random on every run, so nothing could say whether two rows were the same key — and a second crypto engine could only duplicate what the first reported. `asset_key` is the crypto counterpart of `component_key` (§1.2) and `model_key` (§1.5), produced by `workers/cbom/normalize/identity.py` over the canonical algorithm identity in `libs/py-shared/axebom_shared/crypto/identity.py`. Every tier is prefixed, so two tiers never collide.
+
+| asset_type | Tier (first that applies wins) | `identity_rule` | Confidence |
+|---|---|---|---|
+| algorithm | `algorithm:<family>;bits=…;digest=…;mode=…;padding=…;curve=…;param=…;scheme=…;primitive=…` (only the parts known) | `algorithm` | high when bits, digest, curve or parameter set is known; else medium |
+| algorithm | `name:algorithm/<name>;primitive=…` — family not recognised | `algorithm-name` | low |
+| key | `key:fp:<alg>:<hex>` — SHA-256 over a PUBLIC key's DER, or the engine's material fingerprint | `key-fingerprint` | high |
+| key | `key:<material>;alg=…;size=…;path=<repository path>[:line]` — `alg` from the key's own name, else from the algorithm its engine links it to | `key-location` | medium |
+| certificate | `cert:fp:<alg>:<hex>` | `certificate-fingerprint` | high |
+| certificate | `cert:issuer-serial:<issuer>/<serial>` | `certificate-issuer-serial` | high |
+| certificate | `cert:<subject>;issuer=…;from=…;to=…` | `certificate-subject-issuer-validity` | medium |
+| protocol | `protocol:<family>;version=<v>` — the family read out of the name (`TLSv1.2` → `tls`), the version from its field or else the name | `protocol` | high with a version; else medium |
+| any | `opaque:<engine>:<native ref>` — nothing better; never merges | `opaque` | low |
+
+- **Never a name alone for a recognised algorithm.** One certificate yields two assets named `RSA` — one `signature`, one `pke` — and they are different uses; the primitive is part of the key.
+- **Hash-and-sign RSA is PKCS#1 v1.5 unless it says PSS.** JCA's `SHA256withRSA` states no padding; `cbomkit-theia` labels the same algorithm `SHA256-RSA` with `padding: pkcs1v15`. The key records the scheme, not the literal padding field, so the two merge.
+- **`parameterSetIdentifier` is interpreted per family** — key bits for AES, digest bits for SHA, a named set for SLH-DSA, a modulus only when no digest is present. theia's `SHA256-RSA` carries `256`, the digest; read as a modulus it would report a 256-bit RSA key.
+- **Engine `bom-ref`s are never identity.** They resolve references inside the one document that minted them (a certificate's signer and public key, a key's algorithm) and are kept as provenance (`native_ref`).
+- **A key's algorithm is read wherever its engine states it** — `algorithmRef`, a 1.7 `relatedCryptographicAssets` entry, or a CycloneDX `dependencies` edge to exactly one algorithm, which is the only form `cbomkit-action` uses. It feeds the key's `alg=` and its analysis: judged on its name alone (`key`), a generated RSA key was reported not quantum-vulnerable. A key depending on two algorithms is linked to neither.
+- **A protocol's name is not its key.** `cbomkit-action` names TLS 1.2 `TLSv1.2`; another engine says `TLS` with version `1.2`. Both are `protocol:tls;version=1.2`.
+- **Private-key material is never an input.** A private key is identified by where it was found; its bytes are never read.
+- **Location is evidence, not identity (§1.4)** — except for a key with no fingerprint, where the location, line included, is the only thing that distinguishes two keys.
+
+**Merge.** Raw assets sharing a key become one BEFORE normalization, so the analysis and the reference derivation run once over everything every engine reported. List fields are unioned. For a scalar, the engine that read the thing wins — for algorithms and protocols the source engines (`cbomkit-action`, then `cdxgen-cbom`) outrank `cbomkit-theia`; for keys and certificates `cbomkit-theia`, which reads the file, ranks first — and every disagreement is a `NORMALIZE_CRYPTO_FIELD_CONFLICT` diagnostic, never resolved silently. Evidence is kept per engine as `[{path, line, engine}]`; `normalize.crypto_asset_provenance` holds one row per (asset, engine). Only an engine that reads key FILES may mark a key as found in the source: `cbomkit-action` reports keys the code generates at runtime.
+
+**Derived values.** When an exactly identified algorithm lacks a Table 9 field that an authoritative source states — the classical security strength (NIST SP 800-57 Part 1 Rev. 5 §5.6.1.1 Table 2; RFC 8032 §8.5 for Ed25519/Ed448) or the OID (NIST CSOR; RFC 8017, 5758, 3279, 8410, 8018) — the normalizer fills it from `libs/py-shared/axebom_shared/crypto/reference.py`. The value counts as present (§5.3); `crypto_assets.derivations` names each filled column and its source, `field_status` records `derived`, and every report footnotes it. It never overwrites an engine value; a disagreement is diagnosed. Only exact rows are used — no interpolation (RSA-4096 is not a row of Table 2), and a source that states a value only approximately (X25519's "~128") is not used. The table's digest is pinned to the CBOM ruleset version.
+
 ---
 
 ## 2. Vulnerability identity — the alias transitive closure
@@ -395,14 +424,11 @@ Computed only over in-scope components, against the **declared required-field se
 
 ### 5.3 Type-aware scoring
 
-CERT-In Table 9 is **type-discriminated**. Score a crypto asset only against the field set for its `asset_type`:
+CERT-In Table 9 is **type-discriminated**. Score a crypto asset only against the field set for its `asset_type` — `algorithm`, `key`, `protocol` or `certificate` — exactly as the compliance profile defines it (`docs/reference/certin-v2.0.yaml` → `crypto_asset`). The sizes of those sets are never restated here or anywhere else (invariant 2); every report renders them from the profile.
 
-| asset_type | Field count |
-|---|---|
-| `algorithm` | 8 |
-| `key` | 7 |
-| `protocol` | 5 |
-| `certificate` | 10 |
+A list-valued canonical path is written with a trailing `[]` (`crypto_asset.cipher_suites[]`). The `[]` is notation: the scored key, and the stored `field_status` key, is the path without it. Every field of the asset's own type is scored either as its value or as an explicit `not-provided` — the same statuses `field_status` stores — so an unknown field counts toward `declaration_pct` and scores zero toward `completeness_pct` (§5.2). One module computes both (`axebom_shared.normalize.crypto_status`).
+
+A value derived from the cited reference table (§1.6) is a real property of the named algorithm and counts as **present**; its `field_status` is `derived`, not `provided`, and the CBOM coverage breakdown carries a per-field `derived` count and a `derivation_sources` map (reference id → citation) so every report can say how much of each field's "present" came from AxeBOM's lookup rather than an engine.
 
 Scoring a certificate against `key_size` (a Keys field) would report every CBOM at roughly 30% coverage — **falsely, in a compliance document.** The coverage checker branches on `asset_type`. This is not an optimization; it is a correctness requirement.
 
@@ -453,6 +479,8 @@ Every normalized entity carries:
 ```
 
 And the scan carries a `provenance_manifest`: resolved tool ids/versions/digests, SPDX license-list version, alias-graph snapshot id, `ruleset_version`, source commit sha, workspace archive sha256.
+
+For crypto assets, per-entity provenance is `normalize.crypto_asset_provenance` — one row per (asset, engine) with the engine version, the engine's own `native_ref`, what it called the asset, the stored artifact's sha256, and where that engine saw it — alongside the merged `evidence` on the asset (§1.6). A value AxeBOM filled rather than an engine reporting it is named in `crypto_assets.derivations` with its cited source.
 
 Together these are what let you answer, in an audit, "where did this line in this report come from?"
 

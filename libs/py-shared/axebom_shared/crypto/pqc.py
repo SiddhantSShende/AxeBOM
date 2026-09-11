@@ -24,6 +24,7 @@ such rather than recommended outright.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 
@@ -86,12 +87,35 @@ _STATEFUL_HASH = PQCRecommendation(
 )
 
 
+#: Algorithms with ONE use, so their name states it when no function is reported.
+_SIGNATURE_ONLY = re.compile(r"\beddsa\b|\bed25519\b|\bed448\b|\becdsa\b|\bdsa\b", re.I)
+_ESTABLISHMENT_ONLY = re.compile(
+    r"\bx25519\b|\bx448\b|\becdh\b|\becies\b|\bdhe?\b|\bdiffie|\bffdhe", re.I
+)
+
+
+def _use_from(primitive: str, text: str) -> str:
+    """`signature`, `establishment` or "" — from the engine's primitive, else from a
+    single-purpose algorithm name."""
+    prim = primitive.strip().lower()
+    if prim == "signature":
+        return "signature"
+    if prim in {"kem", "key-agree", "keyagree", "key-agreement", "pke"}:
+        return "establishment"
+    if _SIGNATURE_ONLY.search(text):
+        return "signature"
+    if _ESTABLISHMENT_ONLY.search(text):
+        return "establishment"
+    return ""
+
+
 def recommend_pqc(
     *,
     family: str,
     quantum_vulnerable: bool,
     crypto_functions: list[str] | None = None,
     name: str = "",
+    primitive: str = "",
 ) -> PQCRecommendation | None:
     """Recommend a replacement, or return None when there is nothing to say.
 
@@ -109,10 +133,13 @@ def recommend_pqc(
     # transport AND signing, and they migrate to different algorithms. A
     # recommendation keyed only on "RSA" sends half of them to the wrong one.
     signing = bool(functions & {"sign", "verify", "signature", "digital-signature"})
+    # ⚠ `keygen` IS NOT A USE. Every asymmetric algorithm generates keys, and
+    # cbomkit-action reports every key-pair generator as `keygen`; counted as key
+    # establishment it told Ed25519 and DSA — signature schemes — to migrate to
+    # ML-KEM (fixtures/crypto-quantum, 2026-09-11).
     establishment = bool(
         functions
         & {
-            "keygen",
             "encapsulate",
             "decapsulate",
             "key-agree",
@@ -121,6 +148,9 @@ def recommend_pqc(
             "decrypt",
         }
     )
+    if not signing and not establishment:
+        use = _use_from(primitive, lowered)
+        signing, establishment = use == "signature", use == "establishment"
 
     if signing and not establishment:
         if "firmware" in lowered or "code" in lowered:

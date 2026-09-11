@@ -333,11 +333,17 @@ func applyCoverageBreakdown(raw []byte, out *render.BOM) error {
 	var breakdown struct {
 		Formula string `json:"formula"`
 		Fields  []struct {
-			FieldID  string `json:"field_id"`
-			Present  int    `json:"present"`
-			Declared int    `json:"declared"`
-			Total    int    `json:"total"`
+			FieldID string `json:"field_id"`
+			Present int    `json:"present"`
+			// Derived is a SUBSET of Present: values AxeBOM filled from a cited
+			// reference table. Absent on documents written before derivation.
+			Derived  int `json:"derived"`
+			Declared int `json:"declared"`
+			Total    int `json:"total"`
 		} `json:"fields"`
+		// DerivationSources cites every reference table the document used:
+		// {reference_id: citation}. Absent when nothing was derived.
+		DerivationSources map[string]string `json:"derivation_sources"`
 	}
 	if err := json.Unmarshal(raw, &breakdown); err != nil {
 		// ⚠ NOT AN ERROR, DELIBERATELY. The two headline numbers are already
@@ -349,6 +355,9 @@ func applyCoverageBreakdown(raw []byte, out *render.BOM) error {
 	}
 
 	out.Coverage.Formula = breakdown.Formula
+	if len(breakdown.DerivationSources) > 0 {
+		out.Coverage.DerivationSources = breakdown.DerivationSources
+	}
 	for _, fc := range breakdown.Fields {
 		if fc.FieldID == "" {
 			// A row that names no field cannot be joined to a profile element,
@@ -356,7 +365,8 @@ func applyCoverageBreakdown(raw []byte, out *render.BOM) error {
 			continue
 		}
 		out.Coverage.Fields = append(out.Coverage.Fields, render.FieldCoverage{
-			FieldID: fc.FieldID, Present: fc.Present, Declared: fc.Declared, Total: fc.Total,
+			FieldID: fc.FieldID, Present: fc.Present, Derived: fc.Derived,
+			Declared: fc.Declared, Total: fc.Total,
 		})
 	}
 	// Deterministic order: the serializer's array order is Python dict order,
@@ -541,8 +551,18 @@ func deriveRoots(out *render.BOM) {
 // agree on the same list, and the two would drift the day CERT-In Table 9
 // changes.
 func loadCryptoAssets(ctx context.Context, tx db.Tx, docID string, out *render.BOM) error {
+	// ⚠ `asset_key` IS THE EXPORT IDENTITY (migrations/normalize/0020) AND `id`
+	// ITS FALLBACK — id IS ORDERED ON LAST SO THE ORDER IS TOTAL. Two assets can
+	// share a type and a name; the export used to key them on exactly that pair
+	// and collapsed them, and without the tiebreak their relative order changed
+	// between renders (ADR-0003).
+	//
+	// ⚠ THE ENGINES ARE A CORRELATED SUBQUERY ON THE SAME SCHEMA, not a query
+	// per asset: normalize.crypto_asset_provenance holds one row per (asset,
+	// engine), and RLS scopes it exactly as it scopes crypto_assets.
 	rows, err := tx.Query(ctx, `
-		SELECT component_key, asset_type, name,
+		SELECT id::text, asset_key, identity_rule, identity_confidence,
+		       component_key, asset_type, name,
 		       primitive, mode, crypto_functions, classical_security_level, algorithm_list,
 		       key_id, key_state, key_size, creation_date, activation_date,
 		       protocol_version, cipher_suites, oid,
@@ -550,10 +570,14 @@ func loadCryptoAssets(ctx context.Context, tx db.Tx, docID string, out *render.B
 		       signature_algo_ref, subject_public_key_ref, cert_format, cert_extension,
 		       quantum_vulnerable, pqc_recommendation, deprecation_status,
 		       quantum_family, grover_note, quantum_rationale, deprecation_rationale,
-		       deprecation_reference, effective_quantum_bits, quantum_readiness_group
-		  FROM normalize.crypto_assets
+		       deprecation_reference, effective_quantum_bits, quantum_readiness_group,
+		       derivations, evidence, attributes,
+		       COALESCE((SELECT array_agg(DISTINCT p.engine_id ORDER BY p.engine_id)
+		                   FROM normalize.crypto_asset_provenance p
+		                  WHERE p.crypto_asset_id = a.id), '{}')
+		  FROM normalize.crypto_assets a
 		 WHERE bom_document_id = $1
-		 ORDER BY asset_type, name`, docID)
+		 ORDER BY asset_type, name, id`, docID)
 	if err != nil {
 		return fmt.Errorf("load crypto assets: %w", err)
 	}
@@ -573,9 +597,12 @@ func loadCryptoAssets(ctx context.Context, tx db.Tx, docID string, out *render.B
 			classicalSecurityLevel, keySize, effectiveBits    *int
 			creationDate, activationDate                      *time.Time
 			notValidBefore, notValidAfter                     *time.Time
+			derivationsJSON, evidenceJSON, attributesJSON     []byte
+			assetKey, identityRule, identityConfidence        *string
 		)
 
 		if err := rows.Scan(
+			&a.ID, &assetKey, &identityRule, &identityConfidence,
 			&componentKey, &a.AssetType, &a.Name,
 			&primitive, &mode, &a.CryptoFunctions, &classicalSecurityLevel, &a.AlgorithmList,
 			&keyID, &keyState, &keySize, &creationDate, &activationDate,
@@ -585,8 +612,50 @@ func loadCryptoAssets(ctx context.Context, tx db.Tx, docID string, out *render.B
 			&a.QuantumVulnerable, &pqcRecommendation, &deprecationStatus,
 			&quantumFamily, &groverNote, &quantumRationale, &deprecationRationale,
 			&deprecationReference, &effectiveBits, &readinessGroup,
+			&derivationsJSON, &evidenceJSON, &attributesJSON,
+			&a.Engines,
 		); err != nil {
 			return fmt.Errorf("scan crypto asset: %w", err)
+		}
+		a.AssetKey = deref(assetKey)
+		a.IdentityRule = deref(identityRule)
+		a.IdentityConfidence = deref(identityConfidence)
+
+		// Same reasoning as derivations below: jsonb written only by the
+		// normalizer, so a decode failure is corruption — and a location or a
+		// committed-key flag silently dropped would understate the finding.
+		if len(evidenceJSON) > 0 {
+			if err := json.Unmarshal(evidenceJSON, &a.Evidence); err != nil {
+				return fmt.Errorf("decode crypto asset evidence: %w", err)
+			}
+		}
+		if len(attributesJSON) > 0 {
+			if err := json.Unmarshal(attributesJSON, &a.Attributes); err != nil {
+				return fmt.Errorf("decode crypto asset attributes: %w", err)
+			}
+		}
+		if len(a.Evidence) == 0 {
+			a.Evidence = nil
+		}
+		if len(a.Attributes) == 0 {
+			a.Attributes = nil
+		}
+		if len(a.Engines) == 0 {
+			a.Engines = nil
+		}
+
+		// ⚠ A MALFORMED LABEL FAILS THE RENDER RATHER THAN BEING DROPPED. The
+		// value it labels is still on the row, and rendering it without its
+		// label would present AxeBOM's lookup as an engine's claim — the one
+		// thing the label exists to prevent. The column is jsonb written only by
+		// the normalizer, so this is a corruption signal, not a routine case.
+		if len(derivationsJSON) > 0 {
+			if err := json.Unmarshal(derivationsJSON, &a.Derivations); err != nil {
+				return fmt.Errorf("decode crypto asset derivations: %w", err)
+			}
+		}
+		if len(a.Derivations) == 0 {
+			a.Derivations = nil
 		}
 
 		a.ComponentKey = deref(componentKey)
@@ -1257,8 +1326,68 @@ func loadEngineCoverage(ctx context.Context, tx db.Tx, scanID string, out *rende
 		return err
 	}
 
-	out.EcosystemsWithNoEngine = ecosystemsWithNoEngine(out)
+	reported, err := loadReportedGaps(ctx, tx, scanID)
+	if err != nil {
+		return err
+	}
+	out.EcosystemsWithNoEngine = unionSorted(ecosystemsWithNoEngine(out), reported)
 	return nil
+}
+
+// loadReportedGaps reads the ecosystems an engine that RAN in this scan saw in
+// the source and could not read, and that no engine covered.
+//
+// ⚠ A CBOM HAS NO COMPONENTS TO INFER A GAP FROM. ecosystemsWithNoEngine
+// derives gaps from catalogued components, so a CBOM of a Go repository listed
+// no gap at all: its engines read Java, Python and JavaScript, found nothing,
+// and the report read as a repository with no cryptography. The engines now say
+// what they saw and skipped (`ecosystems_uncovered`, 02 §6); this reads those
+// rows. Only engines with a run row count — an engine skipped for the source
+// kind never looked, so its registered ecosystems are not evidence of anything
+// being present.
+func loadReportedGaps(ctx context.Context, tx db.Tx, scanID string) ([]string, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT DISTINCT e1.ecosystem
+		  FROM scan.ecosystems_detected e1
+		 WHERE e1.scan_id = $1
+		   AND e1.engine_available = false
+		   AND e1.detected_by IN (SELECT r.engine_id FROM scan.engine_runs r WHERE r.scan_id = $1)
+		   AND NOT EXISTS (
+		       SELECT 1 FROM scan.ecosystems_detected e2
+		        WHERE e2.scan_id = e1.scan_id
+		          AND e2.ecosystem = e1.ecosystem
+		          AND e2.engine_available = true)
+		 ORDER BY 1`, scanID)
+	if err != nil {
+		return nil, fmt.Errorf("load reported coverage gaps: %w", err)
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var eco string
+		if err := rows.Scan(&eco); err != nil {
+			return nil, fmt.Errorf("scan reported coverage gap: %w", err)
+		}
+		out = append(out, eco)
+	}
+	return out, rows.Err()
+}
+
+// unionSorted merges two ecosystem lists into one sorted, de-duplicated list.
+func unionSorted(a, b []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, list := range [][]string{a, b} {
+		for _, eco := range list {
+			if eco != "" && !seen[eco] {
+				seen[eco] = true
+				out = append(out, eco)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // ecosystemsWithNoEngine names what was detected and could not be scanned.

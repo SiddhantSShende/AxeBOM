@@ -107,6 +107,16 @@ Two structural decisions, both load-bearing:
 
 **The fetcher materializes source exactly once.** Six engines cloning the same branch independently can land on **six different commits in one report**, describing a codebase that never existed. Fetching once also means only the fetcher needs git credentials, so every component that runs a third-party scanner over untrusted code holds zero secrets. See ADR-0008.
 
+**An upload-sourced project materializes EVERY upload, into one workspace, archived once.** The project service's service-only `GET /v1/projects/:id/source` answers an upload project with `uploads` — every stored upload (`upload_id`, `upload_kind`, `storage_ref`, `original_filename`), oldest first, since upload ids are UUIDv7 — alongside the newest upload's top-level fields for readers that predate the list (`Source` in `libs/go-shared/projectsource`). The fetcher places them deterministically and only then builds the single content-addressed archive, so the same uploads always produce the same archive bytes:
+
+| Uploads | Layout under the workspace root |
+|---|---|
+| exactly one | unchanged: a `source_archive` is extracted at the root; any other kind is written at the root under its name |
+| two or more | each `source_archive` → `uploads/<name without its archive extension>/`; any other kind → `uploads/<name>` |
+| a name already taken (case-insensitive) | an archive's directory gets `-<last 12 hex digits of its upload id>`; a file keeps its basename — engines find lockfiles by exact name — inside `uploads/<last 12 hex digits of its upload id>/` |
+
+Names are re-sanitized by the fetcher, never taken from the client: basename only, `[A-Za-z0-9._-]`, no leading dot or dash, at most 120 bytes. The extraction ceilings (`fetcher.ExtractLimits` — total bytes and file count) are **one budget across all of a scan's uploads**, never per upload. An upload that cannot be materialized fails the fetch with its own `FETCH_*` code (`FETCH_NO_SOURCE`, `FETCH_ARCHIVE_TOO_LARGE`, `FETCH_TOO_MANY_FILES`, `FETCH_PATH_TRAVERSAL`, `FETCH_UNSUPPORTED_ARCHIVE_FORMAT`) and a message naming that upload; no upload is ever skipped (CLAUDE.md invariant 12).
+
 ---
 
 ## 4. `ScanJobV1`
@@ -228,6 +238,7 @@ Rules:
   }],
 
   "ecosystems_covered": ["npm", "pypi", "golang"],
+  "ecosystems_uncovered": ["go-source"],   // optional: seen in the source, NOT read by this engine
 
   "summary": { "components": 1421, "vulnerabilities": 88, "licenses": 34, "crypto_assets": 0 },
 
@@ -262,6 +273,8 @@ Scan status derives mechanically, never by hand:
 Every generated report carries a mandatory **Engine Coverage** section: each requested engine, its terminal status, the ecosystems it covered, and ecosystems detected with **no available engine**.
 
 > An SBOM that silently omits an ecosystem is worse than no SBOM: it converts an unknown into a false negative the customer trusts. This section is not optional and may not be suppressed by a report template.
+
+Two sources feed "no available engine": an engine skipped because it cannot read this source kind (its registered ecosystems, recorded at scan creation), and an engine's own `ecosystems_uncovered` — what it saw in the source and could not read, such as Go code handed to CBOM engines that read Java and JavaScript. Both are `engine_available = false` rows in `scan.ecosystems_detected`. An ecosystem is a gap only when no engine in the scan covered it, and a document's gaps are those recorded by its own family's engines (`Store.CoverageGapsFor`): the CBOM engines' `go-source` is not a gap in the SBOM that catalogued every Go module.
 
 ---
 

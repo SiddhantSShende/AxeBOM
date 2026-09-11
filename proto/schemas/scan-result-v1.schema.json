@@ -53,7 +53,17 @@
       },
       "type": "array"
     },
+    "discoveries": {
+      "additionalProperties": true,
+      "type": "object"
+    },
     "ecosystems_covered": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "ecosystems_uncovered": {
       "items": {
         "type": "string"
       },

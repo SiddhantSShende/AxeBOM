@@ -16,10 +16,13 @@ package worker
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -465,7 +468,11 @@ func (w *Worker) renderArtifact(r store.Report, bom render.BOM) ([]byte, bool, s
 			return nil, false, "", errs.Wrap(err, errs.ReportRenderFailed,
 				"serializing the SPDX document for the bundle")
 		}
-		cdx, err := export.Serialize(toExportDocument(bom), export.CycloneDX16JSON)
+		// ⚠ THE SAME CycloneDX THE STANDALONE DOWNLOAD SERVES. The bundle
+		// embeds it byte-for-byte so a consumer can verify it against that
+		// download's signature; a bundle built with a different writer would
+		// fail that check for a CBOM.
+		cdx, err := cycloneDXDocument(bom)
 		if err != nil {
 			return nil, false, "", errs.Wrap(err, errs.ReportRenderFailed,
 				"serializing the CycloneDX document for the bundle")
@@ -487,16 +494,141 @@ func (w *Worker) renderArtifact(r store.Report, bom render.BOM) ([]byte, bool, s
 }
 
 func (w *Worker) standardDocument(r store.Report, bom render.BOM) ([]byte, error) {
-	format := export.SPDX23JSON
 	if r.Format == "cyclonedx" {
-		format = export.CycloneDX16JSON
+		doc, err := cycloneDXDocument(bom)
+		if err != nil {
+			return nil, errs.Wrap(err, errs.ReportRenderFailed,
+				"serializing the CycloneDX document")
+		}
+		return doc, nil
 	}
-	doc, err := export.Serialize(toExportDocument(bom), format)
+	doc, err := export.Serialize(toExportDocument(bom), export.SPDX23JSON)
 	if err != nil {
 		return nil, errs.Wrap(err, errs.ReportRenderFailed,
 			"serializing the standard document")
 	}
 	return doc, nil
+}
+
+// cycloneDXDocument is a BOM's CycloneDX serialization, through whichever
+// writer its type needs.
+//
+// ⚠ A CBOM TAKES THE NATIVE WRITER, NOT protobom. protobom v0.5.8 cannot emit
+// a `cryptographic-asset` component or `cryptoProperties` at all, so the generic
+// path produced a CycloneDX document in which every crypto asset was a `data`
+// component — valid, and not a CBOM to any tool that reads one. See
+// export/cbom.go. A QBOM keeps the protobom path: its subject is a device and
+// its crypto assets are another document's, carried as properties.
+func cycloneDXDocument(bom render.BOM) ([]byte, error) {
+	if bom.BOMType == model.BOMTypeCBOM {
+		return export.SerializeCBOM(toCBOMDocument(bom))
+	}
+	return export.Serialize(toExportDocument(bom), export.CycloneDX16JSON)
+}
+
+// toCBOMDocument maps the render model onto the CBOM serializer's.
+//
+// ⚠ IDENTITY COMES FROM cryptoRef AND NOWHERE ELSE, so the CycloneDX bom-refs
+// and the SPDX package ids name the same assets the same way.
+func toCBOMDocument(b render.BOM) export.CBOMDocument {
+	doc := export.CBOMDocument{
+		GeneratedAt: b.GeneratedAt,
+		DocumentID:  b.ReportID,
+		ProjectName: b.ProjectName,
+		ToolName:    b.ToolName,
+		ToolVersion: b.ToolVersion,
+		// The type caveat and the derived-value footnote — the same sentences
+		// every other format of this report carries (render.TypeNotes).
+		Notes: render.TypeNotes(b),
+		// The private-key finding, as one string a metadata property can carry
+		// — the same block every other format renders (render.PrivateKeysInSource).
+		PrivateKeysInSource: render.PrivateKeysInSourceStatement(b),
+	}
+	for _, a := range b.CryptoAssets {
+		var derivations map[string]string
+		if len(a.Derivations) > 0 {
+			derivations = make(map[string]string, len(a.Derivations))
+			for column, ref := range a.Derivations {
+				derivations[column] = render.DerivationCitation(ref, b.Coverage.DerivationSources)
+			}
+		}
+		doc.Assets = append(doc.Assets, export.CBOMAsset{
+			Ref:                    cryptoRef(a),
+			AssetType:              a.AssetType,
+			Name:                   a.Name,
+			ComponentKey:           a.ComponentKey,
+			AssetKey:               a.AssetKey,
+			IdentityRule:           a.IdentityRule,
+			IdentityConfidence:     a.IdentityConfidence,
+			Primitive:              a.Primitive,
+			Mode:                   a.Mode,
+			CryptoFunctions:        a.CryptoFunctions,
+			ClassicalSecurityLevel: a.ClassicalSecurityLevel,
+			AlgorithmList:          a.AlgorithmList,
+			KeyID:                  a.KeyID,
+			KeyState:               a.KeyState,
+			KeySize:                a.KeySize,
+			CreationDate:           a.CreationDate,
+			ActivationDate:         a.ActivationDate,
+			ProtocolVersion:        a.ProtocolVersion,
+			CipherSuites:           a.CipherSuites,
+			OID:                    a.OID,
+			CertSubject:            a.CertSubject,
+			CertIssuer:             a.CertIssuer,
+			NotValidBefore:         a.NotValidBefore,
+			NotValidAfter:          a.NotValidAfter,
+			SignatureAlgoRef:       a.SignatureAlgoRef,
+			SubjectPublicKeyRef:    a.SubjectPublicKeyRef,
+			CertFormat:             a.CertFormat,
+			CertExtension:          a.CertExtension,
+			QuantumVulnerable:      a.QuantumVulnerable,
+			QuantumFamily:          a.QuantumFamily,
+			QuantumReadinessGroup:  a.QuantumReadinessGroup,
+			DeprecationStatus:      a.DeprecationStatus,
+			DeprecationRationale:   a.DeprecationRationale,
+			DeprecationReference:   a.DeprecationReference,
+			PQCRecommendation:      a.PQCRecommendation,
+			Derivations:            derivations,
+			// normalize.crypto_assets.attributes: the facts CycloneDX 1.6 has a
+			// field for, and the asset keys a certificate or key points at.
+			Padding:                  a.AttrString("padding"),
+			Curve:                    a.AttrString("curve"),
+			ParameterSetIdentifier:   a.AttrString("parameter_set"),
+			NISTQuantumSecurityLevel: attrInt(a, "nist_quantum_security_level"),
+			MaterialType:             a.AttrString("material_type"),
+			MaterialFormat:           a.AttrString("material_format"),
+			ExpirationDate:           a.AttrString("expiration_date"),
+			AlgorithmKey:             a.AttrString("algorithm_key"),
+			SignatureAlgorithmKey:    a.AttrString("signature_algorithm_key"),
+			SubjectPublicKeyKey:      a.AttrString("subject_public_key_key"),
+			Evidence:                 cbomEvidence(a.Evidence),
+			Engines:                  a.Engines,
+			PrivateKeyInSource:       a.PrivateKeyInSource(),
+		})
+	}
+	return doc
+}
+
+// cbomEvidence carries an asset's locations to the serializer. Which engine saw
+// each one is not carried: a CycloneDX 1.6 occurrence has no field for it, so
+// the engines travel on the asset (`axebom:crypto:engines`) instead.
+func cbomEvidence(evidence []render.CryptoEvidence) []export.CBOMEvidence {
+	if len(evidence) == 0 {
+		return nil
+	}
+	out := make([]export.CBOMEvidence, 0, len(evidence))
+	for _, e := range evidence {
+		out = append(out, export.CBOMEvidence{Path: e.Path, Line: e.Line})
+	}
+	return out
+}
+
+// attrInt is one attribute as *int; nil when absent or not a whole number.
+func attrInt(a render.CryptoAsset, key string) *int {
+	if n, ok := a.AttrInt(key); ok {
+		return &n
+	}
+	return nil
 }
 
 // writerNote turns the spreadsheet writer's counters into a sentence, or "".
@@ -686,50 +818,106 @@ func subjectKey(doc *export.Document, b render.BOM) string {
 // containment for the other.
 func appendCryptoAssets(doc *export.Document, b render.BOM, parent string) {
 	for _, a := range b.CryptoAssets {
+		ref := cryptoRef(a)
 		doc.Components = append(doc.Components, export.Component{
-			Key:  cryptoKey(a),
+			Key:  ref,
 			Name: a.Name,
-			// See export.purposeFor: CycloneDX's own `cryptographic-asset` type
-			// cannot be emitted by protobom, so this serializes as `data` and
-			// the real type travels as `certin:crypto:asset_type`.
+			// See export.purposeFor: protobom cannot emit CycloneDX's own
+			// `cryptographic-asset` type, so on THIS path an asset serializes as
+			// `data` with its real type on `certin:crypto:asset_type`. A CBOM's
+			// CycloneDX download no longer takes this path — see cbomCycloneDX;
+			// SPDX, and a QBOM's CycloneDX, still do.
 			PrimaryPurpose: "cryptographic-asset",
-			Properties:     cryptoProperties(a),
+			// The description is what SPDX keeps when it drops every property;
+			// see render.CryptoAssetSummary.
+			Description: render.CryptoAssetSummary(a, b.Coverage.DerivationSources),
+			Properties:  cryptoProperties(a, b.Coverage.DerivationSources),
 		})
 		doc.Dependencies = append(doc.Dependencies, export.Dependency{
-			From: parent, To: cryptoKey(a), Kind: export.KindContains,
+			From: parent, To: ref, Kind: export.KindContains,
 		})
 	}
 }
 
-// cryptoKey is the export identity of one crypto asset.
+// cryptoRef is THE export identity of one crypto asset — every standard
+// document keys on it, and nothing else may build one.
 //
-// ⚠ ASSET TYPE PLUS NAME, NOT NAME ALONE. Table 9 is type-discriminated: a
-// protocol and a certificate can legitimately share a name, and collapsing them
-// would understate the inventory in exactly the way CLAUDE.md invariant 5
-// exists to prevent.
-func cryptoKey(a render.CryptoAsset) string {
-	return "crypto/" + a.AssetType + "/" + a.Name
+// ⚠ IT WAS `crypto/<type>/<name>`, AND THAT COLLAPSED REAL ASSETS. Type plus
+// name is not an identity: cbomkit-theia reports two RSA algorithms (a
+// signature and a pke) from one certificate. protobom indexed components by
+// that key and silently kept one, the CycloneDX `dependsOn` list carried the
+// same ref twice (which the schema forbids), and SPDX emitted two packages
+// with one SPDXID. The row id is unique by construction.
+//
+// ⚠ ONE FUNCTION, SO THE IDENTITY CHANGED IN ONE PLACE. The normalizer now
+// records a deterministic `asset_key` (migrations/normalize/0020): unique per
+// document, like the row id, and — unlike it — the same for the same asset
+// after a re-normalization, so a bom-ref a reviewer noted down still names the
+// same asset in the next corrected document. It is also what a QBOM's
+// crypto-asset references carry. The row id remains the fallback; SPDX ids are
+// derived from whichever this returns by export.spdxSafeID, which hashes the
+// full value, so the key's `:`/`;`/`=` never reach an SPDXID.
+func cryptoRef(a render.CryptoAsset) string {
+	if a.AssetKey != "" {
+		return a.AssetKey
+	}
+	if a.ID != "" {
+		return "crypto-" + a.ID
+	}
+	// No row id: a render model built outside the store, i.e. a test fixture.
+	// A digest of everything the asset says keeps two different assets apart;
+	// only two byte-identical assets could still collide, and every stored row
+	// has an id, so production never reaches this branch.
+	raw, _ := json.Marshal(a)
+	sum := sha256.Sum256(raw)
+	return "crypto-" + hex.EncodeToString(sum[:8])
 }
 
-func cryptoProperties(a render.CryptoAsset) []export.Property {
+// cryptoProperties are the namespaced properties an asset carries on the
+// protobom path (SPDX, and a QBOM's CycloneDX).
+//
+// ⚠ AxeBOM ANALYSIS UNDER `axebom:`, NEVER `certin:`. The quantum family and
+// the deprecation status were emitted as `certin:crypto:algorithm_family` and
+// `certin:crypto:deprecation_status` — AxeBOM's own verdicts labelled as
+// CERT-In Table 9 fields, in a document handed to a regulator. Only Table 9
+// values carry `certin:`.
+func cryptoProperties(a render.CryptoAsset, sources map[string]string) []export.Property {
 	props := []export.Property{{Name: "certin:crypto:asset_type", Value: a.AssetType}}
 	add := func(name, value string) {
 		if value != "" {
 			props = append(props, export.Property{Name: name, Value: value})
 		}
 	}
-	add("certin:crypto:component_key", a.ComponentKey)
-	add("certin:crypto:algorithm_family", a.QuantumFamily)
-	add("certin:crypto:deprecation_status", a.DeprecationStatus)
 	add("certin:crypto:oid", a.OID)
 	add("certin:crypto:cert_subject", a.CertSubject)
 	add("certin:crypto:cert_issuer", a.CertIssuer)
+	add("axebom:crypto:component_key", a.ComponentKey)
+	add("axebom:crypto:quantum_family", a.QuantumFamily)
+	add("axebom:crypto:deprecation_status", a.DeprecationStatus)
 	add("axebom:qbom:readiness_group", a.QuantumReadinessGroup)
 	add("axebom:qbom:pqc_recommendation", a.PQCRecommendation)
 	if a.QuantumVulnerable {
 		add("axebom:qbom:quantum_vulnerable", "true")
 	}
+	add("axebom:crypto:engines", strings.Join(a.Engines, ", "))
+	if a.PrivateKeyInSource() {
+		add("axebom:crypto:private_key_in_source", "true")
+	}
+	for _, column := range sortedKeys(a.Derivations) {
+		add("axebom:crypto:derived:"+column, render.DerivationCitation(a.Derivations[column], sources))
+	}
 	return props
+}
+
+// sortedKeys returns a map's keys in order, so properties built from it are
+// byte-reproducible (ADR-0003).
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func appendAIModels(doc *export.Document, b render.BOM) {

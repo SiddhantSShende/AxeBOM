@@ -110,6 +110,9 @@
         "artifact_uri": {
           "type": "string"
         },
+        "native_sbom_ref": {
+          "type": "string"
+        },
         "root_subpath": {
           "type": "string"
         },

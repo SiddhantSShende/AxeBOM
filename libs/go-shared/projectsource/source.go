@@ -71,10 +71,21 @@ type Source struct {
 
 	// Upload-shaped fields. Populated when Kind == events.SourceUpload.
 	// Never carry a credential: nothing about an upload is ever authenticated.
+	//
+	// These four describe the NEWEST upload only, for a reader that predates
+	// Uploads. Read UploadList, never these, to see what a project holds.
 	UploadID         string `json:"upload_id,omitempty"`
 	UploadKind       string `json:"upload_kind,omitempty"`
 	StorageRef       string `json:"storage_ref,omitempty"`
 	OriginalFilename string `json:"original_filename,omitempty"`
+	// Uploads is EVERY upload the project holds, oldest first (upload ids are
+	// UUIDv7, so id order is upload order).
+	//
+	// ⚠ ONLY THE NEWEST UPLOAD WAS EVER SENT, SO ONLY THE NEWEST WAS SCANNED. A
+	// project given a source archive and then a lockfile produced a BOM of the
+	// lockfile alone, and nothing said the archive had been ignored. The fetcher
+	// now materializes all of these into one workspace (docs/02-CONTRACTS.md §3).
+	Uploads []Upload `json:"uploads,omitempty"`
 
 	// URL-shaped fields. Populated when Kind == events.SourceURL. Also never
 	// carries a credential — the same reason an upload never does.
@@ -199,7 +210,10 @@ func (c *Client) Resolve(ctx context.Context, tenantID, projectID string) (Sourc
 	// field did.
 	switch out.Kind {
 	case events.SourceUpload:
-		if out.StorageRef == "" {
+		// The list OR the legacy fields: a project service that predates
+		// `uploads` sends only the latter, and one that might one day send only
+		// the list must not be read as having nothing.
+		if len(out.UploadList()) == 0 {
 			return Source{}, ErrNoSource
 		}
 	case events.SourceURL:

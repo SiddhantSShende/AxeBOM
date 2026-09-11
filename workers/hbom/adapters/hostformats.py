@@ -53,8 +53,9 @@ MAX_NODES = 5_000
 class Report:
     """One parsed collector report."""
 
-    def __init__(self, tool: str, roots: list[HardwareComponent],
-                 diagnostics: list[dict[str, Any]]) -> None:
+    def __init__(
+        self, tool: str, roots: list[HardwareComponent], diagnostics: list[dict[str, Any]]
+    ) -> None:
         self.tool = tool
         self.roots = roots
         self.diagnostics = diagnostics
@@ -142,7 +143,10 @@ def parse_lshw(payload: Any) -> Report:
 
 
 def _lshw_node(
-    obj: Any, parent: str | None, level: int, counter: _Counter,
+    obj: Any,
+    parent: str | None,
+    level: int,
+    counter: _Counter,
     diagnostics: list[dict[str, Any]],
 ) -> HardwareComponent | None:
     if not isinstance(obj, dict) or not counter.take(diagnostics):
@@ -154,7 +158,9 @@ def _lshw_node(
         return None
 
     node = _node(
-        local_id, parent, level,
+        local_id,
+        parent,
+        level,
         product_name=name,
         product_version=_text(obj.get("version")),
         manufacturer_name=_text(obj.get("vendor")),
@@ -230,7 +236,9 @@ def parse_dmidecode(raw: str) -> Report:
             or label
         )
         node = _node(
-            f"dmi-{counter.n}", root.local_id, 1,
+            f"dmi-{counter.n}",
+            root.local_id,
+            1,
             product_name=name,
             product_version=_text(fields.get("Version")),
             manufacturer_name=_text(fields.get("Manufacturer")) or _text(fields.get("Vendor")),
@@ -317,7 +325,9 @@ def parse_fwupd(payload: dict[str, Any]) -> Report:
         if not name:
             continue
         node = _node(
-            f"fwupd-{counter.n}", root.local_id, 1,
+            f"fwupd-{counter.n}",
+            root.local_id,
+            1,
             product_name=name,
             manufacturer_name=_text(entry.get("Vendor")),
             serial_number=_text(entry.get("Serial")),
@@ -349,21 +359,21 @@ def parse_redfish(payload: dict[str, Any]) -> Report:
 
     # A Systems collection, or one system.
     members = payload.get("Members")
-    systems = [m for m in members if isinstance(m, dict)] if isinstance(members, list) else [payload]
+    systems = (
+        [m for m in members if isinstance(m, dict)] if isinstance(members, list) else [payload]
+    )
 
     roots: list[HardwareComponent] = []
     for system in systems:
         if not counter.take(diagnostics):
             break
-        name = (
-            _text(system.get("Model"))
-            or _text(system.get("Name"))
-            or _text(system.get("Id"))
-        )
+        name = _text(system.get("Model")) or _text(system.get("Name")) or _text(system.get("Id"))
         if not name:
             continue
         root = _node(
-            f"redfish-{counter.n}", None, 0,
+            f"redfish-{counter.n}",
+            None,
+            0,
             product_name=name,
             manufacturer_name=_text(system.get("Manufacturer")),
             serial_number=_text(system.get("SerialNumber")),
@@ -378,7 +388,9 @@ def parse_redfish(payload: dict[str, Any]) -> Report:
 
 
 def _redfish_children(
-    system: dict[str, Any], root: HardwareComponent, counter: _Counter,
+    system: dict[str, Any],
+    root: HardwareComponent,
+    counter: _Counter,
     diagnostics: list[dict[str, Any]],
 ) -> None:
     """Take whichever collections the export happened to expand.
@@ -412,7 +424,9 @@ def _redfish_children(
                 continue
             root.children.append(
                 _node(
-                    f"redfish-{counter.n}", root.local_id, 1,
+                    f"redfish-{counter.n}",
+                    root.local_id,
+                    1,
                     product_name=name,
                     manufacturer_name=_text(entry.get("Manufacturer")),
                     serial_number=_text(entry.get("SerialNumber")),
@@ -457,7 +471,9 @@ def parse_wmi(payload: Any) -> Report:
         if not name:
             continue
         node = _node(
-            f"wmi-{counter.n}", root.local_id, 1,
+            f"wmi-{counter.n}",
+            root.local_id,
+            1,
             product_name=name,
             manufacturer_name=_text(entry.get("Manufacturer")) or _text(entry.get("Vendor")),
             serial_number=_text(entry.get("SerialNumber")) or _text(entry.get("SerialNumber")),
@@ -564,7 +580,10 @@ _COLLECT_FIELDS = (
 
 
 def _collect_node(
-    obj: dict[str, Any], parent: str | None, level: int, counter: _Counter,
+    obj: dict[str, Any],
+    parent: str | None,
+    level: int,
+    counter: _Counter,
     diagnostics: list[dict[str, Any]],
 ) -> HardwareComponent | None:
     if not counter.take(diagnostics):
@@ -574,7 +593,9 @@ def _collect_node(
         return None
 
     node = _node(
-        f"collect-{counter.n}", parent, level,
+        f"collect-{counter.n}",
+        parent,
+        level,
         **{f: _text(obj.get(f)) for f in _COLLECT_FIELDS},
     )
 

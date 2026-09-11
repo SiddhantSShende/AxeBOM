@@ -48,7 +48,7 @@ fixtures/{crypto-mixed,crypto-quantum}/
 
 ## Contracts to honour
 
-- **Coverage is type-aware.** Score each asset only against the field set for its `asset_type` — 8 / 7 / 5 / 10 fields. Scoring a certificate against `key_size` reports every CBOM at roughly 30%, falsely, in a compliance document.
+- **Coverage is type-aware.** Score each asset only against the field set for its `asset_type`, as the profile defines it (never restate the sizes — invariant 2). Scoring a certificate against `key_size` reports every CBOM at roughly 30%, falsely, in a compliance document.
 - `quantum_vulnerable`, `pqc_recommendation` and `deprecation_status` are **AxeBOM extensions, excluded from coverage scoring**. They are analysis, not CERT-In fields.
 - QBOM `crypto_assets` reference the CBOM-derived assets — a QBOM does not re-discover them.
 - `cbomkit-theia`'s output schema is early and moving: **parse defensively**, ignore unknown fields, diagnose missing ones, never panic.
@@ -69,7 +69,7 @@ fixtures/{crypto-mixed,crypto-quantum}/
 ## Test requirements
 
 - All four asset types normalize from one scan with the right columns populated.
-- **Type-aware coverage**: a certificate is not scored against `key_size`; each type's denominator is 8/7/5/10.
+- **Type-aware coverage**: a certificate is not scored against `key_size`; each type's denominator is its own profile field set.
 - RSA/ECC/DH/DSA flagged; **AES-256 is not flagged** but carries a Grover note.
 - Deprecated algorithms marked.
 - QBOM references CBOM assets rather than duplicating them.

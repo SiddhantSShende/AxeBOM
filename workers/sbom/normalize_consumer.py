@@ -33,7 +33,7 @@ import asyncio
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -255,7 +255,7 @@ async def handle_trigger(
             # read in the pipeline; the caller supplying it as a plain string
             # is exactly the documented escape hatch ("generated_at is passed
             # in from the scan record").
-            generated_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            generated_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         )
 
         return writer.write_bom_document(

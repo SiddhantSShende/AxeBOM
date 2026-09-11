@@ -577,6 +577,14 @@ type ScanResultV1 struct {
 	// mandatory Engine Coverage report section — the honest denominator.
 	EcosystemsCovered []string `json:"ecosystems_covered,omitempty"`
 
+	// EcosystemsUncovered is what this engine SAW in the source and could not
+	// read — Go code handed to engines that read Java and JavaScript. Each is
+	// recorded as an engine_available=false row in scan.ecosystems_detected,
+	// and is a gap in Engine Coverage unless another engine in the same scan
+	// covered it (Store.CoverageGaps). Optional: an engine that cannot tell
+	// leaves it empty, and every existing result is unaffected.
+	EcosystemsUncovered []string `json:"ecosystems_uncovered,omitempty"`
+
 	Summary     Summary      `json:"summary"`
 	Diagnostics []Diagnostic `json:"diagnostics,omitempty"`
 

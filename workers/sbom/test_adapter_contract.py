@@ -19,11 +19,17 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from workers.cbom.runner import ADAPTERS as _CBOM_ADAPTERS
 
 from axebom_shared.adapters.base import ScanTarget
 from axebom_shared.sandbox import WorkspaceLayout
 
-from .runner import ADAPTERS
+from .runner import ADAPTERS as _SBOM_ADAPTERS
+
+#: ⚠ EVERY WORKER'S SANDBOXED ADAPTERS, NOT ONLY THE SBOM WORKER'S. This read the
+#: SBOM map alone, so the CBOM adapters — including cbomkit-action's shell
+#: entrypoint and cdxgen-cbom's `-o -` — were never contract-tested at all.
+ADAPTERS = {**_SBOM_ADAPTERS, **_CBOM_ADAPTERS}
 
 
 def _names_a_scratch_path(name: str) -> bool:

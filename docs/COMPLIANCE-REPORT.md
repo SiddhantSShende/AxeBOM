@@ -60,7 +60,7 @@ Source: CERT-In Table 5 (data fields)
 | 13 | Usage Restrictions | p.23 | verified | user-supplied | `component.usage_restrictions` |
 | 14 | Checksums or Hashes | p.23 | verified | automated | `component.hashes[]` |
 | 15 | Comments or Notes | p.23 | verified | user-supplied | `component.comments` |
-| 16 | Author of SBOM Data | p.23 | verified | derived | `component.provenance[].author` |
+| 16 | Author of SBOM Data | p.23 | verified | derived | `component.author_of_sbom_data` |
 | 17 | Timestamp | p.23 | verified | derived | `bom_document.generated_at` |
 | 18 | Executable Property | p.24 | verified | automated | `component.executable_property` |
 | 19 | Archive Property | p.24 | verified | automated | `component.archive_property` |

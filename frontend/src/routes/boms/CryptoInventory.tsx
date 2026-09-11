@@ -8,13 +8,29 @@
  * scored against `key_size`. `services/report/internal/render/cbom.go`
  * draws the same four-way split for the downloadable workbook; this is the
  * live equivalent for the sidebar's CBOM section.
+ *
+ * ⚠ EVERY ROW SAYS WHERE IT WAS SEEN AND WHO SAW IT. The location column and the
+ * engine chips are what let a reviewer check a row against the code rather than
+ * take it on trust; a value AxeBOM filled from a cited reference table carries a
+ * † so it is never mistaken for something an engine measured; and `unassessed`
+ * is its own pill, never "Current".
  */
 
+import type { ReactNode } from 'react';
 import { useParams } from 'react-router';
+import { ProvenanceChips } from '../../components/Chips';
 import { EmptyState, ErrorState, SkeletonRows } from '../../components/States';
 import {
   CRYPTO_ASSET_TYPES,
+  assetEngines,
+  assetRowKey,
+  deprecationLabel,
+  deprecationTone,
+  derivedFrom,
+  pqcSummary,
+  privateKeyInSource,
   readinessLabel,
+  summarizeLocations,
   useCryptoAssets,
   type CryptoAsset,
 } from '../../lib/crypto';
@@ -25,6 +41,9 @@ const TYPE_LABELS: Record<(typeof CRYPTO_ASSET_TYPES)[number], string> = {
   protocol: 'Protocols',
   certificate: 'Certificates',
 };
+
+/** The footnote a † points at. Rendered only when a table has a derived value. */
+export const DERIVED_NOTE = '† Derived from a cited reference table, not reported by an engine.';
 
 export function CryptoInventory() {
   const { id = '' } = useParams();
@@ -48,7 +67,7 @@ export function CryptoInventory() {
       {assets.length === 0 ? (
         <EmptyState
           title="No cryptographic assets discovered yet"
-          guidance="Run a CBOM scan from Generate. cbomkit-theia discovers algorithms, keys, protocols and certificates from source, container images and configuration."
+          guidance="Run a CBOM scan from Generate. Crypto assets appear here once the scan's CBOM engines have run; the scan's Engine Coverage shows what each engine examined and what it could not see."
         />
       ) : (
         CRYPTO_ASSET_TYPES.map((type) => {
@@ -68,6 +87,9 @@ function TypeTable({
   type: (typeof CRYPTO_ASSET_TYPES)[number];
   rows: CryptoAsset[];
 }) {
+  const columns = typeColumns(type);
+  const anyDerived = rows.some((a) => Object.keys(a.derivations ?? {}).length > 0);
+
   return (
     <section className="panel" aria-labelledby={`crypto-${type}-heading`}>
       <h2 id={`crypto-${type}-heading`}>{TYPE_LABELS[type]}</h2>
@@ -77,25 +99,54 @@ function TypeTable({
             {type === 'certificate'
               ? "Only this type's own fields — CERT-In Table 9 does not ask a certificate for a key size."
               : `${rows.length} ${TYPE_LABELS[type].toLowerCase()}.`}
+            {anyDerived && ` ${DERIVED_NOTE}`}
           </caption>
           <thead>
             <tr>
               <th scope="col">Name</th>
-              {typeColumns(type).map((c) => (
+              {columns.map((c) => (
                 <th key={c.key} scope="col">
                   {c.label}
                 </th>
               ))}
+              <th scope="col">Location</th>
+              <th scope="col">Engines</th>
+              <th scope="col">Deprecation</th>
+              <th scope="col">PQC recommendation</th>
               <th scope="col">Quantum readiness</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((a, i) => (
-              <tr key={a.component_key ?? `${a.name}-${i}`}>
-                <td>{a.name}</td>
-                {typeColumns(type).map((c) => (
+              <tr key={assetRowKey(a, i)}>
+                <td>
+                  <NameCell asset={a} />
+                </td>
+                {columns.map((c) => (
                   <td key={c.key}>{c.render(a)}</td>
                 ))}
+                <td>
+                  <LocationCell asset={a} />
+                </td>
+                <td>
+                  <EnginesCell asset={a} />
+                </td>
+                <td>
+                  <span
+                    className="pill"
+                    data-status={deprecationTone(a.deprecation_status)}
+                    title={
+                      [a.deprecation_rationale, a.deprecation_reference]
+                        .filter(Boolean)
+                        .join(' — ') || undefined
+                    }
+                  >
+                    {deprecationLabel(a.deprecation_status)}
+                  </span>
+                </td>
+                <td>
+                  <PqcCell asset={a} />
+                </td>
                 <td>
                   <span
                     className="pill"
@@ -114,10 +165,89 @@ function TypeTable({
   );
 }
 
+/**
+ * The asset's name, and — for a private key an engine read out of a FILE in the
+ * scanned source — the warning that it is exposed. A key the code merely
+ * generates at runtime never carries it.
+ */
+function NameCell({ asset }: { asset: CryptoAsset }) {
+  return (
+    <>
+      {asset.name}
+      {privateKeyInSource(asset) && (
+        <>
+          {' '}
+          <span
+            className="pill"
+            data-status="down"
+            title="A private key file was found in the scanned source. Anyone who can read the source can read the key. AxeBOM never reads or stores the key material itself."
+          >
+            Private key found in source — rotate and remove
+          </span>
+        </>
+      )}
+    </>
+  );
+}
+
+/** The first location an engine reported, with every other one in the tooltip. */
+function LocationCell({ asset }: { asset: CryptoAsset }) {
+  const summary = summarizeLocations(asset.evidence);
+  if (!summary) return <>—</>;
+  const all = [summary.primary, ...summary.rest];
+  return (
+    <span className="mono" title={all.join('\n')}>
+      {summary.label}
+    </span>
+  );
+}
+
+/**
+ * The migration target for a quantum-vulnerable asset, with the full
+ * recommendation in the tooltip — whole, it made every such row several times
+ * taller than the rest.
+ */
+function PqcCell({ asset }: { asset: CryptoAsset }) {
+  const summary = asset.quantum_vulnerable ? pqcSummary(asset.pqc_recommendation) : null;
+  if (!summary) return <>—</>;
+  return <span title={summary.full}>{summary.label}</span>;
+}
+
+function EnginesCell({ asset }: { asset: CryptoAsset }) {
+  const engines = assetEngines(asset);
+  return engines.length > 0 ? <ProvenanceChips engines={engines} /> : <>—</>;
+}
+
+/**
+ * A column value, marked with † when AxeBOM filled it from a cited reference
+ * table rather than an engine reporting it (derive + count, labelled).
+ */
+function Derived({
+  asset,
+  column,
+  children,
+}: {
+  asset: CryptoAsset;
+  column: string;
+  children: string;
+}) {
+  const reference = derivedFrom(asset, column);
+  if (!reference || children === '—') return <>{children}</>;
+  const note = `Derived from ${reference}, not reported by an engine`;
+  return (
+    <>
+      {children}
+      <sup className="derived-mark" title={note} aria-label={note}>
+        †
+      </sup>
+    </>
+  );
+}
+
 interface Column {
   key: string;
   label: string;
-  render: (a: CryptoAsset) => string;
+  render: (a: CryptoAsset) => ReactNode;
 }
 
 function typeColumns(type: (typeof CRYPTO_ASSET_TYPES)[number]): Column[] {
@@ -125,7 +255,24 @@ function typeColumns(type: (typeof CRYPTO_ASSET_TYPES)[number]): Column[] {
     case 'algorithm':
       return [
         { key: 'primitive', label: 'Primitive', render: (a) => a.primitive || '—' },
-        { key: 'oid', label: 'OID', render: (a) => a.oid || '—' },
+        {
+          key: 'oid',
+          label: 'OID',
+          render: (a) => (
+            <Derived asset={a} column="oid">
+              {a.oid || '—'}
+            </Derived>
+          ),
+        },
+        {
+          key: 'security',
+          label: 'Security (bits)',
+          render: (a) => (
+            <Derived asset={a} column="classical_security_level">
+              {a.classical_security_level != null ? String(a.classical_security_level) : '—'}
+            </Derived>
+          ),
+        },
         {
           key: 'functions',
           label: 'Functions',

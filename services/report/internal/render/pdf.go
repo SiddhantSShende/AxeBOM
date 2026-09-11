@@ -124,6 +124,9 @@ func WritePDF(w io.Writer, b BOM, opts PDFOptions) (PDFResult, error) {
 	}
 
 	r.engineCoveragePage()
+	// A finding, before the inventory it was drawn from; absent when nothing
+	// was flagged. See PrivateKeysInSource.
+	r.privateKeysInSourcePage()
 	r.practicesPage()
 
 	// ⚠ QBOM MUST NOT REACH componentPages(), AND IT USED TO.

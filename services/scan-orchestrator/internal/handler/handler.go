@@ -108,6 +108,9 @@ type engineRunDTO struct {
 	// EngineDBVersion is surfaced because a finding that cannot be dated is not
 	// defensible — a reader must be able to see "matched against data as of X".
 	EngineDBVersion string `json:"engine_db_version,omitempty"`
+	// ImageDigest is which image bytes actually ran, read back from the daemon.
+	// Omitted when unknown: an empty string in a provenance field reads as a value.
+	ImageDigest string `json:"image_digest,omitempty"`
 
 	StartedAt  *time.Time `json:"started_at,omitempty"`
 	FinishedAt *time.Time `json:"finished_at,omitempty"`
@@ -926,6 +929,7 @@ func toRunDTOs(runs []orchestr.EngineRun) []engineRunDTO {
 			EcosystemsCovered: orEmpty(r.EcosystemsCovered),
 			EngineVersion:     r.EngineVersion,
 			EngineDBVersion:   r.EngineDBVersion,
+			ImageDigest:       r.ImageDigest,
 			StartedAt:         r.StartedAt,
 			FinishedAt:        r.FinishedAt,
 			ErrorCode:         r.ErrorCode,

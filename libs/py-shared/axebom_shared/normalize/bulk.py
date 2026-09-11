@@ -237,15 +237,15 @@ def plan(
     out.batches.append(deps_batch)
     out.diagnostics.extend(deps_diagnostics)
 
-    # ⚠ NO component_ids DEPENDENCY, UNLIKE EVERY BATCH ABOVE.
-    #
-    # normalize.crypto_assets.component_key is a plain `text` column, not a
-    # uuid foreign key into normalize.components (contrast normalize.findings
-    # .component_id) — see _crypto_assets_batch's own docstring. Nothing else
-    # in this same write needs to reference a crypto asset's row id either, so
-    # unlike _component_id there is no client-side id to mint here at all:
-    # normalize.crypto_assets.id keeps its schema DEFAULT app.uuid_v7().
-    out.batches.append(_crypto_assets_batch(crypto_assets, tenant_id, bom_document_id))
+    # ⚠ THE CRYPTO ROW ID IS MINTED CLIENT-SIDE NOW, keyed on asset_key, because
+    # crypto_asset_provenance (0020) must reference the row this same write
+    # inserts — see _crypto_asset_id. The keys are computed once so both batches
+    # derive the same ids.
+    crypto_keys = _crypto_asset_keys(crypto_assets)
+    out.batches.append(_crypto_assets_batch(crypto_assets, tenant_id, bom_document_id, crypto_keys))
+    out.batches.append(
+        _crypto_asset_provenance_batch(crypto_assets, tenant_id, bom_document_id, crypto_keys)
+    )
 
     # ⚠ MINTED FOR THE SAME REASON AS component_ids, and it is what wires the
     # recursive parent_id. See _hardware_component_id.
@@ -885,6 +885,9 @@ _CRYPTO_ASSET_COLUMNS: tuple[str, ...] = (
     "analysis_diagnostics",
     "quantum_readiness_group",
     "field_status",
+    # {column: reference_id} for CERT-In values AxeBOM filled from a cited
+    # reference table (migrations/normalize/0019). jsonb, like field_status.
+    "derivations",
 )
 
 #: text[] columns on normalize.crypto_assets — see the module docstring's
@@ -900,26 +903,49 @@ _CRYPTO_ARRAY_COLUMNS = frozenset({"crypto_functions", "algorithm_list", "cipher
 _CRYPTO_INT_COLUMNS = frozenset({"classical_security_level", "key_size", "effective_quantum_bits"})
 
 
+#: Identity, evidence and attributes (migrations/normalize/0020). Kept apart from
+#: `_CRYPTO_ASSET_COLUMNS` only so the 0003/0005 list above stays readable.
+_CRYPTO_IDENTITY_COLUMNS: tuple[str, ...] = (
+    "asset_key",
+    "identity_rule",
+    "identity_confidence",
+    "evidence",
+    "attributes",
+)
+
+
+def _crypto_asset_keys(assets: Sequence[dict[str, Any]]) -> list[str]:
+    """Each asset's `asset_key`, with a positional opaque key for any caller that
+    built a canonical model without one — the column is NOT NULL and UNIQUE per
+    document, so an empty key would collide on the second such asset."""
+    return [
+        _text(asset.get("asset_key")) or f"opaque:unkeyed:{position}"
+        for position, asset in enumerate(assets)
+    ]
+
+
+def _crypto_asset_id(bom_document_id: str, asset_key: str) -> str:
+    """Mint the surrogate id one `normalize.crypto_assets` row is inserted with.
+
+    ⚠ MINTED NOW, AND IT USED NOT TO BE. Nothing referenced a crypto row from
+    inside the same write until `normalize.crypto_asset_provenance` (0020), which
+    must point at the row this same COPY inserts — and COPY has no RETURNING.
+    uuid5 over (document, asset_key), for the replayability `_component_id` and
+    `_ai_model_id` use it for.
+    """
+    return str(uuid.uuid5(_SURROGATE_NAMESPACE, f"crypto_asset:{bom_document_id}:{asset_key}"))
+
+
 def _crypto_assets_batch(
     assets: Sequence[dict[str, Any]],
     tenant_id: str,
     bom_document_id: str,
+    keys: list[str] | None = None,
 ) -> CopyBatch:
     """Plan the `normalize.crypto_assets` batch.
 
-    ⚠ NO SURROGATE ID MINTED HERE, UNLIKE `_components_batch`.
-
-    `normalize.components.id` has to be minted client-side (see
-    `_component_id`) because `component_locations`, `findings` and
-    `component_dependencies` all need to reference a component row from
-    WITHIN THIS SAME transaction, before Postgres has assigned it a real id.
-    Nothing in this canonical model references a crypto asset's row the same
-    way — `crypto_assets.component_key` is a plain `text` column carrying
-    whatever string `crypto.py` put there (today, the asset's OWN CycloneDX
-    `bom-ref`, used by `workers/qbom/derive.py`'s cross-referencing — never a
-    foreign key into `normalize.components`) — so there is nothing to look up
-    and no reason to mint an id in Python at all. The column keeps its schema
-    `DEFAULT app.uuid_v7()`.
+    The row id is minted here from `asset_key` (see `_crypto_asset_id`) so the
+    provenance batch can reference it inside the same transaction.
 
     ⚠ DATES AND TIMESTAMPS TRAVEL AS PLAIN STRINGS, DELIBERATELY.
 
@@ -933,16 +959,34 @@ def _crypto_assets_batch(
     first, and doing so would just be a second place an ISO-8601 parsing bug
     could live.
     """
+    keys = keys if keys is not None else _crypto_asset_keys(assets)
+    columns = (*_CRYPTO_ASSET_COLUMNS, *_CRYPTO_IDENTITY_COLUMNS)
     batch = CopyBatch(
         table="normalize.crypto_assets",
-        columns=("tenant_id", "bom_document_id", *_CRYPTO_ASSET_COLUMNS),
+        columns=("id", "tenant_id", "bom_document_id", *columns),
     )
 
-    for asset in assets:
-        row: list[Any] = [tenant_id, bom_document_id]
-        for column in _CRYPTO_ASSET_COLUMNS:
-            if column == "field_status":
+    for asset, key in zip(assets, keys, strict=True):
+        row: list[Any] = [_crypto_asset_id(bom_document_id, key), tenant_id, bom_document_id]
+        for column in columns:
+            if column == "asset_key":
+                row.append(key)
+            elif column == "identity_rule":
+                # NOT NULL with a CHECK (0020). An asset from a caller that ran
+                # no identity stage is `opaque`, the tier that never merges.
+                row.append(_text(asset.get("identity_rule")) or "opaque")
+            elif column == "identity_confidence":
+                row.append(_text(asset.get("identity_confidence")) or "low")
+            elif column == "evidence":
+                row.append(json.dumps(list(asset.get("evidence") or [])))
+            elif column == "attributes":
+                row.append(json.dumps(asset.get("attributes") or {}, sort_keys=True))
+            elif column == "field_status":
                 row.append(json.dumps(_crypto_field_status(asset)))
+            elif column == "derivations":
+                # NOT NULL DEFAULT '{}' — an asset nothing was derived for is an
+                # empty object, never NULL and never the text of a Python dict.
+                row.append(json.dumps(asset.get("derivations") or {}, sort_keys=True))
             elif column == "analysis_diagnostics":
                 row.append(json.dumps(asset.get("analysis_diagnostics") or []))
             elif column == "quantum_vulnerable":
@@ -968,6 +1012,61 @@ def _crypto_assets_batch(
                 # uses for every nullable text column.
                 row.append(_text(asset.get(column)) or None)
         batch.rows.append(tuple(row))
+
+    return batch
+
+
+def _crypto_asset_provenance_batch(
+    assets: Sequence[dict[str, Any]],
+    tenant_id: str,
+    bom_document_id: str,
+    keys: list[str] | None = None,
+) -> CopyBatch:
+    """Plan `normalize.crypto_asset_provenance` — which engines saw each asset.
+
+    ⚠ THE CROSS-ENGINE MERGE MAKES "WHO FOUND THIS" A LIST. An algorithm theia
+    read out of a certificate and cbomkit-action read out of `Sign.java` is one
+    asset with two finders, and "found by one engine, missed by the other" is the
+    fact a reviewer weighs a row by. The crypto counterpart of
+    `_ai_model_provenance_batch`, reading the pipeline-attached `_provenance`.
+    """
+    keys = keys if keys is not None else _crypto_asset_keys(assets)
+    batch = CopyBatch(
+        table="normalize.crypto_asset_provenance",
+        columns=(
+            "tenant_id",
+            "crypto_asset_id",
+            "engine_id",
+            "engine_version",
+            "native_ref",
+            "observed_name",
+            "artifact_sha256",
+            "evidence",
+        ),
+    )
+
+    for asset, key in zip(assets, keys, strict=True):
+        asset_id = _crypto_asset_id(bom_document_id, key)
+        seen: set[str] = set()
+        for entry in asset.get("_provenance") or []:
+            engine_id = _text(entry.get("engine_id"))
+            # UNIQUE (crypto_asset_id, engine_id): the pipeline already folds an
+            # engine's repeat sightings into one entry; this guards the constraint.
+            if not engine_id or engine_id in seen:
+                continue
+            seen.add(engine_id)
+            batch.rows.append(
+                (
+                    tenant_id,
+                    asset_id,
+                    engine_id,
+                    _text(entry.get("engine_version")) or None,
+                    _text(entry.get("native_ref")) or None,
+                    _text(entry.get("observed_name")) or None,
+                    _text(entry.get("artifact_sha256")) or None,
+                    json.dumps(list(entry.get("evidence") or [])),
+                )
+            )
 
     return batch
 
@@ -1009,18 +1108,13 @@ def _crypto_field_status(asset: dict[str, Any]) -> dict[str, str]:
     are never in `CRYPTO_FIELDS_BY_ASSET_TYPE`, so they never appear here,
     exactly mirroring their exclusion from both coverage numbers.
     """
-    from axebom_shared.model.generated_certin import CRYPTO_FIELDS_BY_ASSET_TYPE
+    # ⚠ ONE DEFINITION, SHARED WITH THE SCORER. This body used to compute the
+    # status here while the CBOM pipeline scored a different view of the same
+    # asset, and the two disagreed on every CBOM ever written (declaration_pct
+    # always equal to completeness_pct). See crypto_status's own docstring.
+    from .crypto_status import field_status
 
-    from .coverage import is_substantive
-
-    asset_type = str(asset.get("asset_type") or "")
-    fields = CRYPTO_FIELDS_BY_ASSET_TYPE.get(asset_type, [])
-
-    status: dict[str, str] = {}
-    for f in fields:
-        column = f.canonical_path.removeprefix("crypto_asset.").removesuffix("[]")
-        status[column] = "provided" if is_substantive(asset.get(column)) else "not-provided"
-    return status
+    return field_status(asset)
 
 
 def _ai_model_id(bom_document_id: str, identity: str) -> str:

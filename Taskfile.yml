@@ -174,11 +174,14 @@ tasks:
     # Update a golden only with `normalize_runner --write-expected` AND a
     # justification in the commit message.
     cmds:
-      # ⚠ BOTH CORPORA. The SBOM goldens replay committed scanner JSON; the HBOM
+      # ⚠ EVERY CORPUS. The SBOM goldens replay committed scanner JSON; the HBOM
       # golden replays a committed parts list, because no engine produces
-      # hardware output — the customer's CSV IS the raw artifact. Same property
-      # either way: same input in, byte-identical canonical model out.
-      - '{{.PY}} -m pytest workers/sbom/test_golden.py workers/hbom/test_golden.py -v -m golden'
+      # hardware output — the customer's CSV IS the raw artifact; the CBOM
+      # golden replays each crypto engine's committed output through the same
+      # extract-merge-normalize path as a live scan (it had no harness at all
+      # until 2026-09-11). Same property every time: same input in,
+      # byte-identical canonical model out.
+      - '{{.PY}} -m pytest workers/sbom/test_golden.py workers/hbom/test_golden.py workers/cbom/test_golden.py -v -m golden'
 
   test:conformance:
     desc: Validate exported SPDX/CycloneDX documents against the OFFICIAL schemas

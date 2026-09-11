@@ -672,10 +672,22 @@ class SandboxedAdapter(ToolAdapterBase):
                     "message": (
                         f"{self.engine_id} was addressed by tag ({image.reference}), not by digest"
                     ),
+                    # ⚠ ONLY SAY "RECORDED" WHEN IT WAS. The hint used to claim
+                    # the resolved digest was on this result unconditionally;
+                    # live CBOM runs carried it with image_digest NULL, which is
+                    # the one statement a provenance field must never make.
                     "hint": (
-                        "the digest it resolved to is recorded on this result; run "
-                        "`axebom toolctl pin` to make the reference itself "
-                        "reproducible"
+                        (
+                            "the digest it resolved to is recorded on this result; run "
+                            "`axebom toolctl pin` to make the reference itself "
+                            "reproducible"
+                        )
+                        if result.image_digest
+                        else (
+                            "no resolved digest was reported either, so this run cannot "
+                            "name the image bytes it executed; run `axebom toolctl pin` "
+                            "to make the reference itself reproducible"
+                        )
                     ),
                 }
             )

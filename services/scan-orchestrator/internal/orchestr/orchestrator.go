@@ -687,6 +687,7 @@ func (o *Orchestrator) HandleResult(ctx context.Context, result events.ScanResul
 		// defensible six months later.
 		ArgvRedacted: result.Invocation.ArgvRedacted,
 		Summary:      result.Summary,
+		ImageDigest:  result.Invocation.ImageDigest,
 	}
 	exitCode := result.Invocation.ExitCode
 	run.ExitCode = &exitCode
@@ -731,8 +732,20 @@ func (o *Orchestrator) HandleResult(ctx context.Context, result events.ScanResul
 
 	// Every ecosystem the engine covered is recorded as covered. The gaps were
 	// recorded at create time; together they are the Engine Coverage denominator.
+	covered := make(map[string]bool, len(result.EcosystemsCovered))
 	for _, eco := range result.EcosystemsCovered {
+		covered[eco] = true
 		_ = o.store.RecordEcosystem(ctx, result.TenantID, result.ScanID, eco, result.Engine, true)
+	}
+	// And every ecosystem it SAW and could not read is recorded as a gap, which
+	// CoverageGaps reports unless another engine covered it in this scan: a Go
+	// repository scanned for cryptography by engines that read Java is not a
+	// repository with no cryptography. One row per (ecosystem, engine), so an
+	// engine naming an ecosystem both ways must not overwrite its own coverage.
+	for _, eco := range result.EcosystemsUncovered {
+		if !covered[eco] {
+			_ = o.store.RecordEcosystem(ctx, result.TenantID, result.ScanID, eco, result.Engine, false)
+		}
 	}
 
 	// ⚠ BEFORE RecomputeScanStatus, NOT AFTER.

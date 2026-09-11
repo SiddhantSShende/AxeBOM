@@ -84,9 +84,13 @@ The unit is **(tool, mode)**, not tool — see `02-CONTRACTS.md §7`.
 
 | engine_id | Upstream | Mode | Role |
 |---|---|---|---|
-| `cbomkit-theia` | **`cbomkit/cbomkit-theia`** | **container only** | **Primary CBOM discovery** — directories and container images; certs, keys, secrets, `java.security` |
-| `cbomkit` | **`cbomkit/cbomkit`** | service, optional | Managed clone-and-scan with a viewer |
-| `sonar-cryptography` | **`cbomkit/sonar-cryptography`** | **deferred** | Deepest Java/Python source crypto inventory — but see below |
+| `cbomkit-theia` | **`cbomkit/cbomkit-theia`** | **container only** | Crypto MATERIAL and configuration FILES — certificates, keys, secrets (its secrets plugin wraps gitleaks), OpenSSL config, `java.security` — in directories and exported image tarballs. **Never source code** (its README says so). |
+| `cbomkit-action` | **`cbomkit/cbomkit-action`** | **container only, digest-pinned** | Crypto API use in **Java and Python source**, with file and line: sonar-cryptography's rules embedded via cbomkit-lib, **no SonarQube server**. Source-only (no build). Go and C# not enabled. |
+| `cdxgen-cbom` | **`cdxgen/cdxgen`** (`cbom` preset) | container, `cdxgen`'s digest | Crypto API use in **JavaScript/TypeScript** source (node:crypto hashes, RSA, JWT, HMAC). Narrow — see LIMITATIONS. |
+| `cbomkit` | **`cbomkit/cbomkit`** | registered, **Disabled** | Clone-and-scan service: clones and resolves purls itself, so needs network and credentials no engine may hold. Its detection runs through `cbomkit-action`. |
+| `sonar-cryptography` | **`cbomkit/sonar-cryptography`** | not run as a plugin | Its rules run embedded in `cbomkit-action`; as a SonarQube plugin it would need a server. |
+
+> **Every CBOM engine names the source languages it did NOT read** (`ecosystems_uncovered`, 02 §6), from one table (`workers/cbom/adapters/_source.py` `SOURCE_LANGUAGES`): theia every language present, each source engine every language present but its own. A language is a gap in Engine Coverage only when no engine in the scan read it, so a Go or C/C++ repository's CBOM says its code was not read instead of reading as a repository with no cryptography.
 
 > **CORRECTION (Phase 2, verified against the network).** An earlier planning note claimed these lived under `PQCA/` following the Post-Quantum Cryptography Alliance donation. They do not. `github.com/PQCA/*` returns **HTTP 301** and redirects to `github.com/cbomkit/*`, and `ghcr.io/cbomkit/cbomkit-theia` resolves while `ghcr.io/pqca/cbomkit-theia` 404s. The canonical org is **`cbomkit`**, which is what the original draft plan said.
 >
@@ -292,8 +296,22 @@ docker run --rm -v deps-data:/usr/share/dependency-check/data \
   --scan /src --format JSON --format SARIF --nvdApiKey "$NVD_API_KEY"
 
 # --- CBOM -----------------------------------------------------------------
-cbomkit-theia dir <path>          # → CycloneDX 1.6 with cryptoProperties
-cbomkit-theia image <image@digest>
+# All three measured against the pinned images under the exact sandbox flags
+# (--network=none, read-only rootfs, uid 65534, noexec tmpfs at /workspace), 2026-09-11.
+cbomkit-theia dir /src                       # env HOME=/workspace TMPDIR=/workspace
+cbomkit-theia image /src/image.tar           # the fetcher's exported tarball; TMPDIR is
+                                             # mandatory — without it: exit 0, EMPTY stdout
+sh -c 'mkdir -p /workspace/cbom /workspace/home /workspace/jvm-temp &&
+       java -Xmx3g -XX:-UsePerfData -Djava.io.tmpdir=/workspace/jvm-temp \
+            -jar /cbomkit-action/CBOMkit-action.jar 1>&2 &&
+       cat /workspace/cbom/cbom.json'        # cbomkit-action; env GITHUB_WORKSPACE=/src
+                                             # CBOMKIT_LANGUAGES=java,python
+                                             # CBOMKIT_JAVA_REQUIRE_BUILD=false
+                                             # CBOMKIT_GENERATE_MODULE_CBOMS=false
+                                             # CBOMKIT_OUTPUT_DIR=/workspace/cbom
+                                             # (image CMD asks -Xmx16g; the sandbox has 4 GiB)
+cbom -r /src -o - --spec-version 1.6 --no-banner --no-install-deps
+                                             # cdxgen-cbom; `-o /dev/stdout` HANGS FOREVER
 
 # --- AIBOM ----------------------------------------------------------------
 # NOT `-o aibom.cdx.json`. ai-bom==3.1.0's `--output` is a real file path with
@@ -363,7 +381,7 @@ Where a tool emits CycloneDX or SPDX natively, **parse the standard document**. 
 
 ### Crypto assets (CERT-In Table 9)
 
-CycloneDX `cryptoProperties` maps almost directly: `oid`, `assetType`, `algorithmProperties.{primitive,mode,cryptoFunctions,classicalSecurityLevel}`, key `{state,size}`, protocol `{version,cipherSuites}`, certificate `{subjectName,issuerName,notValidBefore,notValidAfter,signatureAlgorithmRef,subjectPublicKeyRef,certificateFormat,certificateExtension}`.
+CycloneDX `cryptoProperties` maps almost directly: `oid`, `assetType`, `algorithmProperties.{primitive,mode,cryptoFunctions,classicalSecurityLevel}`, key `{state,size}`, protocol `{version,cipherSuites}`, certificate `{subjectName,issuerName,notValidBefore,notValidAfter,signatureAlgorithmRef,subjectPublicKeyRef,certificateFormat,certificateExtension}`. One reader serves every engine (`workers/cbom/normalize/cyclonedx_crypto.py`) and reads **1.6 and 1.7** — 1.7's `ellipticCurve`, `algorithmFamily`, certificate `serialNumber`/`fingerprint`/`certificateFileExtension`, material `fingerprint` and `relatedCryptographicAssets` alongside the 1.6 spellings. Non-CERT-In facts (padding, curve, parameter set, `nistQuantumSecurityLevel` 0–6) go to `crypto_assets.attributes`; `evidence.occurrences` becomes repository-relative `[{path, line}]` per engine. A private or secret key's `value` is never read; a public key's is hashed to a fingerprint and discarded. Identity and the cross-engine merge are `03-NORMALIZER-SPEC.md` §1.6; per-engine quirks are corrected in `workers/cbom/normalize/extractors.py`, never in the stored raw artifact.
 
 > Remember the discriminator: `assetType` selects **which field set applies**, and coverage is scored against that set only. See `03-NORMALIZER-SPEC.md §5.3`.
 
@@ -420,7 +438,15 @@ Each of these has bitten real deployments. Adapters must handle them without emi
 | **cbomkit output schema is early and moving** | Defensive parser; unknown fields ignored, missing fields → diagnostic |
 | **trivy fs vs image differ** in scanners and parsers | Modelled as two engines |
 | **syft reports Go modules, trivy sometimes packages** | Reconcile on module path only |
-| **Engine finds zero components** | `partial` + diagnostic; not `succeeded`. Zero is a claim, and it needs to be an explicit one |
+| **Engine finds zero components** | `partial` + diagnostic; not `succeeded`. Zero is a claim, and it needs to be an explicit one. One exception: `cbomkit-theia` finding no certificate, key or crypto configuration file is `succeeded` + `ENGINE_NO_CRYPTO_MATERIAL` naming the plugins that ran — most repositories hold none (user decision 2026-09-11). The source engines finding nothing where their language is present stay `partial` |
+| **`cbomkit-action` with `go` in `CBOMKIT_LANGUAGES`** under the sandbox's `noexec` tmpfs | The Go scanner cannot execute its toolchain and exits 0 with zero components — a clean result for code that was never read. `go` is not enabled; Go is an ecosystem with no CBOM engine in Engine Coverage |
+| **`cbomkit-action`'s default command asks for `-Xmx16g`**, four times the sandbox memory quota | The adapter runs the jar itself with `-Xmx3g` |
+| **`cdxgen cbom -o /dev/stdout` never exits** | `-o -` writes to stdout and exits |
+| **`cdxgen cbom` hangs on a Maven Java repository** — its BOM is written in seconds, then atom's "reachables" slice (always built for crypto: `lib/evinser/evinser.js`, `options.withReachables \|\| options.includeCrypto`) sits at 0% CPU until the wall clock kills it. `--no-deep`, plain `cdxgen --include-crypto` and `--exclude-type java` hang the same way (probed on 1MansiS/JavaCrypto, 2026-09-11) | The adapter does not start cdxgen-cbom when the tree has no JS/TS (it reads nothing else), and its wall clock is 300 s, not 900, so a JS + Java-build tree that still hangs costs five minutes and is reported `timeout` |
+| **theia's Secret Detection Plugin types a gitleaks hit `key` whenever the rule id contains "key"** (`secrets.go`, `getGenericSecretComponent`) — `generic-api-key` in a README became a CERT-In key; tokens and passwords were dropped as "no usable assetType" | Recognised by the component that function builds (no `bom-ref`, material properties with only a `type`), kept out of the crypto inventory, and reported as `CBOM_SECRET_IN_SOURCE` with rule ids and locations. A private key stays in the inventory, flagged |
+| **`cdxgen cbom` types every `.pem`, private keys included, as a certificate**, with absolute `/src` paths | Its file findings are dropped (`NORMALIZE_CRYPTO_FILE_FINDING_DEFERRED`); `cbomkit-theia` reads those files and classifies them |
+| **`cbomkit-action` states a key's algorithm only as a `dependencies` edge** — never `algorithmRef` — and names the key `key` | The edge is read when it names exactly one algorithm (03 §1.6). Unread, a generated RSA key was reported not quantum-vulnerable |
+| **`cbomkit-theia image` with the default `TMPDIR`** | Exits 0 with an empty CBOM under a read-only rootfs. `TMPDIR` and `HOME` point at the workspace tmpfs |
 | **A vulnerability engine with no database reports a clean project, exit 0** | Refused before the container starts — see §2a. This is the only failure here that makes a customer *less* safe than having no scanner |
 | **`osv-scanner` exits 1 when it finds vulnerabilities** | `acceptable_exit_codes()` per engine. Otherwise the only "successful" scans are the ones that found nothing |
 | **A quiet flag hides the reason a run failed** | grype's `-q` suppressed the stderr naming a missing database, making it indistinguishable from a crash. Never suppress engine diagnostics to tidy output |

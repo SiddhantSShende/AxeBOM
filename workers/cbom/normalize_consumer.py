@@ -6,17 +6,20 @@
 `build_canonical_cbom` has produced a writable document for just as long —
 but nothing consumed the trigger, so `normalize.crypto_assets` stayed empty while the
 scan reported `completed` and the Engine Coverage panel showed a green engine.
-docs/STATE.md recorded it empirically: `scan.normalize_triggers` held zero
-cbom rows against any real scan, ever.
+
+⚠ EVERY REGISTERED ENGINE, EVERY ARTIFACT. This read `{"cbomkit-theia"}` and only
+the first native artifact of it, so a second crypto engine's output would have
+been stored, triggered, and never normalized. The engines read are exactly those
+in `normalize.extractors.EXTRACTORS`, and each asset is stamped with the engine,
+version and artifact it came from — the only point in the pipeline that still
+knows which artifact a finding came out of, and what per-engine provenance is
+built from.
 
 ⚠ THE CREDENTIAL EXCEPTION APPLIES HERE TOO. This process holds a Postgres role
 that no other worker does. `axebom_normalize_writer` is scoped to the
 `normalize` schema and to SELECT/INSERT only — no UPDATE, no DELETE — so it
 structurally cannot overwrite normalized data in place (invariant 10), even by
 application bug. RLS applies to it exactly as to any other role.
-
-The consume loop is `axebom_shared.normalize.consumer_runtime`; the credential
-loading deliberately is not — see ConsumerConfigEnv.
 """
 
 from __future__ import annotations
@@ -28,20 +31,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from workers.cbom.adapters.cbomkit_theia import extract_crypto_assets
+from workers.cbom.normalize.extractors import CBOM_ENGINES, EXTRACTORS
 from workers.cbom.normalize.pipeline import build_canonical_cbom
 
 from axebom_shared.logging import get_logger
 from axebom_shared.normalize import writer
 from axebom_shared.normalize.consumer_runtime import Retry, run_consumer
 
-#: Engines whose native output this consumer knows how to read.
-#:
-#: ⚠ cbomkit AND sonar-cryptography ARE ABSENT ON PURPOSE. Both are
-#: `enabled: false` in the manifest with a stated reason (a managed
-#: service and a SonarQube plugin, neither a CLI this worker can
-#: invoke), so neither ever produces an artifact to read.
-CBOM_ENGINES = {"cbomkit-theia"}
+__all__ = ["CBOM_ENGINES", "ArtifactSource", "handle_trigger", "main"]
 
 log = get_logger("cbom-normalize-consumer")
 
@@ -54,17 +51,9 @@ DURABLE = "normalize-consumer-cbom"
 class ConsumerConfigEnv:
     """Configuration for this process only.
 
-    ⚠ DELIBERATELY NOT `axebom_shared.config.WorkerConfig`, and duplicated from
-    `workers/sbom/normalize_consumer.py` on purpose.
-
-    WorkerConfig is constructed by five other processes that hold NO database
-    credential at all; adding a Postgres password field to it to serve this
-    exception would put that field on every one of them. Keeping a small local
-    loader per consumer keeps the exception visibly contained to the processes
-    that actually need it — which is the entire argument for why the exception
-    is acceptable. The shared consume loop lives in
-    `axebom_shared.normalize.consumer_runtime`; the credential loading
-    deliberately does not.
+    ⚠ DELIBERATELY NOT `axebom_shared.config.WorkerConfig`: that is constructed by
+    processes that hold NO database credential, and a Postgres password field on
+    it would put the credential on every one of them.
     """
 
     nats_url: str
@@ -99,6 +88,15 @@ class ConsumerConfigEnv:
         )
 
 
+@dataclass(frozen=True)
+class ArtifactSource:
+    """Which engine run and which stored artifact a payload came from."""
+
+    engine_id: str
+    engine_version: str
+    artifact_sha256: str
+
+
 async def handle_trigger(
     conn: writer.Connection, trigger: dict[str, Any], artifacts_root: Path
 ) -> None:
@@ -119,28 +117,25 @@ async def handle_trigger(
         return
 
     payloads, diagnostics = _native_payloads(trigger, artifacts_root, CBOM_ENGINES)
-
-    assets: list[dict[str, Any]] = []
-    for payload in payloads:
-        found, extraction_diagnostics = extract_crypto_assets(payload)
-        assets.extend(found)
-        diagnostics.extend(extraction_diagnostics)
+    assets = collect_assets(payloads, diagnostics)
 
     if not assets:
         # ⚠ NOT AN ERROR, AND NOT A SILENT RETURN EITHER. A project with no
         # cryptography in it is a normal thing to scan, so writing no document is
         # correct. Saying nothing about it is not: "no CBOM exists for this scan"
-        # and "the consumer never ran" look identical from the outside, and the
-        # second is the failure this module was written to end.
+        # and "the consumer never ran" look identical from the outside.
         log.warning(
             "no crypto assets in any artifact; nothing to normalize",
             extra={"scan_id": scan_id, "diagnostics": [d.get("code") for d in diagnostics]},
         )
         return
 
+    written: dict[str, int] = {}
+
     def _do_write() -> writer.WriteResult:
         canonical = build_canonical_cbom(assets)
         canonical["diagnostics"] = [*canonical.get("diagnostics", []), *diagnostics]
+        written["crypto_assets"] = len(canonical["crypto_assets"])
         return writer.write_bom_document(
             conn,
             tenant_id=tenant_id,
@@ -167,9 +162,28 @@ async def handle_trigger(
         extra={
             "scan_id": scan_id,
             "bom_document_id": result.bom_document_id,
-            "crypto_assets": len(assets),
+            # ⚠ WHAT WAS WRITTEN (after the cross-engine merge), not what the
+            # engines reported between them.
+            "found": len(assets),
+            **written,
         },
     )
+
+
+def collect_assets(
+    payloads: list[tuple[ArtifactSource, dict[str, Any]]], diagnostics: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Every engine's assets, parsed by that engine's extractor and stamped with it."""
+    assets: list[dict[str, Any]] = []
+    for source, payload in payloads:
+        found, extraction_diagnostics = EXTRACTORS[source.engine_id](payload)
+        for asset in found:
+            asset["engine_id"] = source.engine_id
+            asset["engine_version"] = source.engine_version
+            asset["artifact_sha256"] = source.artifact_sha256
+        assets.extend(found)
+        diagnostics.extend(extraction_diagnostics)
+    return assets
 
 
 def _resolve(uri: str, artifacts_root: Path) -> Path:
@@ -182,27 +196,49 @@ def _resolve(uri: str, artifacts_root: Path) -> Path:
     return path if path.is_absolute() else artifacts_root / uri
 
 
-def _native_payloads(
-    trigger: dict[str, Any], artifacts_root: Path, engine_ids: set[str]
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Read every named engine's stored native output.
+#: Terminal statuses that leave no result behind. `partial` is a result.
+_NO_RESULT_STATUSES = frozenset({"failed", "timeout", "unavailable", "skipped"})
 
-    ⚠ ABSENT OR UNREADABLE IS A DIAGNOSTIC, NEVER AN EXCEPTION. A missing
-    artifact must reach the report's Engine Coverage section (invariant 12), not
-    crash the consumer — an engine that produced nothing is a stated gap, and a
-    crashed consumer is a scan that never normalizes at all.
+
+def _native_payloads(
+    trigger: dict[str, Any], artifacts_root: Path, engine_ids: frozenset[str]
+) -> tuple[list[tuple[ArtifactSource, dict[str, Any]]], list[dict[str, Any]]]:
+    """Read EVERY stored native output of every named engine.
+
+    ⚠ ABSENT OR UNREADABLE IS A DIAGNOSTIC, NEVER AN EXCEPTION: an engine that
+    produced nothing is a stated gap (invariant 12), and a crashed consumer is a
+    scan that never normalizes at all.
+
+    Sorted by (engine, sha256, uri) so the same trigger always yields the same
+    order — the pipeline is order-independent, but a stable order makes a
+    divergence between two runs something a diff can show.
     """
-    payloads: list[dict[str, Any]] = []
+    payloads: list[tuple[ArtifactSource, dict[str, Any]]] = []
     diagnostics: list[dict[str, Any]] = []
 
     for engine in trigger.get("engines", []):
         engine_id = str(engine.get("engine_id", ""))
         if engine_id not in engine_ids:
             continue
-        native = next(
-            (a for a in engine.get("artifacts", []) if a.get("role") == "native_output"), None
+        status = str(engine.get("status") or "")
+        if status in _NO_RESULT_STATUSES:
+            # ⚠ A RUN THAT DID NOT FINISH LEFT NO RESULT, NOT A MALFORMED ONE. A
+            # cdxgen-cbom killed at its deadline stored an empty stdout, which was
+            # reported as "not valid JSON" — as if the engine had emitted garbage.
+            # Its status already says what happened; Engine Coverage reports it.
+            diagnostics.append(
+                {
+                    "severity": "info",
+                    "code": "NORMALIZE_ENGINE_NO_RESULT",
+                    "message": f"{engine_id} ended {status}; it produced no result to normalize",
+                }
+            )
+            continue
+        natives = sorted(
+            (a for a in engine.get("artifacts", []) if a.get("role") == "native_output"),
+            key=lambda a: (str(a.get("sha256") or ""), str(a.get("uri") or "")),
         )
-        if native is None:
+        if not natives:
             diagnostics.append(
                 {
                     "severity": "info",
@@ -212,29 +248,42 @@ def _native_payloads(
                 }
             )
             continue
-        try:
-            payload = json.loads(_resolve(str(native.get("uri", "")), artifacts_root).read_bytes())
-        except OSError as exc:
-            diagnostics.append(
-                {
-                    "severity": "warn",
-                    "code": "NORMALIZE_ARTIFACT_UNREADABLE",
-                    "message": f"{engine_id}'s artifact could not be read: {exc}",
-                }
-            )
-            continue
-        except (json.JSONDecodeError, ValueError) as exc:
-            diagnostics.append(
-                {
-                    "severity": "warn",
-                    "code": "NORMALIZE_ARTIFACT_UNPARSEABLE",
-                    "message": f"{engine_id}'s artifact is not valid JSON: {exc}",
-                }
-            )
-            continue
-        if isinstance(payload, dict):
-            payloads.append(payload)
+        for native in natives:
+            try:
+                payload = json.loads(
+                    _resolve(str(native.get("uri", "")), artifacts_root).read_bytes()
+                )
+            except OSError as exc:
+                diagnostics.append(
+                    {
+                        "severity": "warn",
+                        "code": "NORMALIZE_ARTIFACT_UNREADABLE",
+                        "message": f"{engine_id}'s artifact could not be read: {exc}",
+                    }
+                )
+                continue
+            except (json.JSONDecodeError, ValueError) as exc:
+                diagnostics.append(
+                    {
+                        "severity": "warn",
+                        "code": "NORMALIZE_ARTIFACT_UNPARSEABLE",
+                        "message": f"{engine_id}'s artifact is not valid JSON: {exc}",
+                    }
+                )
+                continue
+            if isinstance(payload, dict):
+                payloads.append(
+                    (
+                        ArtifactSource(
+                            engine_id=engine_id,
+                            engine_version=str(engine.get("engine_version") or ""),
+                            artifact_sha256=str(native.get("sha256") or ""),
+                        ),
+                        payload,
+                    )
+                )
 
+    payloads.sort(key=lambda item: (item[0].engine_id, item[0].artifact_sha256))
     return payloads, diagnostics
 
 
@@ -244,8 +293,7 @@ def _already_written(
     """⚠ INSIDE A REAL TRANSACTION. `set_config(..., true)` is transaction-local,
     and under autocommit a bare statement is its own transaction that reverts the
     setting the instant it completes — the next statement would then fail RLS's
-    `current_setting(...)::uuid` cast on an empty string. The same trap
-    write_bom_document documents for the write path, here on the read path."""
+    `current_setting(...)::uuid` cast on an empty string."""
     with conn.transaction():
         cur = conn.cursor()
         cur.execute("SELECT set_config('app.current_tenant_id', %s, true)", (tenant_id,))

@@ -193,7 +193,11 @@ class SBOMWorker:
                             "severity": "warn",
                             "code": "ENGINE_NOT_IMPLEMENTED",
                             "message": f"this worker does not implement {ctx.engine!r}",
-                            "hint": f"implemented: {', '.join(sorted(ADAPTERS))}",
+                            # ⚠ THIS WORKER'S MAP, NOT THE MODULE-LEVEL SBOM ONE.
+                            # Every family runs this class; reading `ADAPTERS`
+                            # told a CBOM user that syft and grype were the
+                            # engines "implemented" by the CBOM worker.
+                            "hint": f"implemented: {', '.join(sorted(self._adapters))}",
                         }
                     ],
                 ),
@@ -481,6 +485,14 @@ class SBOMWorker:
             },
             "artifacts": artifacts,
             "ecosystems_covered": generated.ecosystems_covered,
+            # What it saw and could not read: invariant 12's gap, reported by
+            # the engine that saw it. Omitted when empty, like the other
+            # optional fields.
+            **(
+                {"ecosystems_uncovered": generated.ecosystems_uncovered}
+                if generated.ecosystems_uncovered
+                else {}
+            ),
             # ⚠ null IS NOT 0 HERE. This was four hardcoded zeros on every
             # job, so syft inventoried 21 components in expressjs/express and
             # `scan.engine_runs.summary` recorded nothing — for every scan ever

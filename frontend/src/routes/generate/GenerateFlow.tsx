@@ -206,10 +206,12 @@ export function GenerateFlow() {
       }
 
       // allSettled, not sequential awaits: these are independent resources,
-      // and one rejection must not stop the rest from being queued. CBOM is a
-      // real, LABELLED gap today ("CBOM reports are not yet renderable" —
-      // CERT-In Table 9 is type-discriminated) — every other combination
-      // still has to go through.
+      // and one rejection must not stop the rest from being queued.
+      //
+      // ⚠ THIS USED TO EXCUSE CBOM AS "a known gap" ("CBOM reports are not
+      // yet renderable"). It stopped being true when services/report learned
+      // CBOM's type-discriminated sections; left in, it told a user whose
+      // CBOM report failed to queue that the failure was expected.
       const settled = await Promise.allSettled(
         combos.map((c) =>
           api.post('/v1/reports', {

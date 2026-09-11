@@ -2,7 +2,9 @@ package store_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/axebom/axebom/libs/go-shared/platform/db"
@@ -37,28 +39,57 @@ VALUES ($1, $2, 'CBOM', 1, 'test-1', NULL, '', now())
 			return err
 		}
 
-		if _, err := tx.Exec(ctx, `
+		// ⚠ SHAPED LIKE A MIGRATION-0020 ROW: an asset key, the rule that made
+		// it, evidence and attributes — and, for the key, two engines' worth of
+		// provenance, inserted out of order so the sort is what the test sees.
+		var certID, keyID string
+		if err := tx.QueryRow(ctx, `
 			INSERT INTO normalize.crypto_assets
 				(tenant_id, bom_document_id, component_key, asset_type, name,
+				 asset_key, identity_rule, identity_confidence,
 				 cert_subject, cert_issuer, signature_algo_ref,
 				 quantum_vulnerable, quantum_family, quantum_readiness_group,
-				 deprecation_status)
+				 deprecation_status, evidence, attributes)
 			VALUES ($1, $2, 'cert-ref-1', 'certificate', 'example.com',
+			        'cert:example.com;issuer=example.com', 'certificate-subject-issuer-validity', 'medium',
 			        'example.com', 'example.com', 'SHA256-RSA',
-			        true, 'rsa', 'vulnerable', 'current')`,
-			tenantID, docID); err != nil {
+			        true, 'rsa', 'vulnerable', 'current',
+			        '[{"path": "certs/example.pem", "line": null, "engine": "cbomkit-theia"}]',
+			        '{"signature_algorithm_key": "algorithm:rsa;digest=sha2-256", "surfaces": ["file"]}')
+			RETURNING id`,
+			tenantID, docID).Scan(&certID); err != nil {
 			return err
 		}
 
-		_, err := tx.Exec(ctx, `
+		if err := tx.QueryRow(ctx, `
 			INSERT INTO normalize.crypto_assets
 				(tenant_id, bom_document_id, component_key, asset_type, name,
-				 key_size, key_state, quantum_vulnerable, quantum_readiness_group)
+				 asset_key, identity_rule, identity_confidence,
+				 key_size, key_state, quantum_vulnerable, quantum_readiness_group,
+				 evidence, attributes, derivations)
 			VALUES ($1, $2, 'key-ref-1', 'key', 'RSA-2048',
-			        2048, 'active', true, 'vulnerable')`,
-			tenantID, docID)
-		if err != nil {
+			        'key:fp:sha256:00ff', 'key-fingerprint', 'high',
+			        2048, 'active', true, 'vulnerable',
+			        '[{"path": "keys/server.key", "line": null, "engine": "cbomkit-theia"},
+			          {"path": "src/Main.java", "line": 42, "engine": "cbomkit-action"}]',
+			        '{"material_type": "private-key", "private_key_in_source": true,
+			          "nist_quantum_security_level": 0}',
+			        '{"key_size": "test-reference"}')
+			RETURNING id`,
+			tenantID, docID).Scan(&keyID); err != nil {
 			return err
+		}
+
+		for _, p := range []struct{ assetID, engine string }{
+			{keyID, "cbomkit-theia"}, {keyID, "cbomkit-action"}, {certID, "cbomkit-theia"},
+		} {
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO normalize.crypto_asset_provenance
+					(tenant_id, crypto_asset_id, engine_id, engine_version, observed_name)
+				VALUES ($1, $2, $3, 'test', 'observed')`,
+				tenantID, p.assetID, p.engine); err != nil {
+				return err
+			}
 		}
 		seededScanID = scanID
 		return nil
@@ -113,6 +144,84 @@ func TestListCryptoAssetsIsTypeDiscriminated(t *testing.T) {
 	}
 	if key.CertSubject != "" {
 		t.Errorf("key CertSubject = %q, want empty (not this type's field)", key.CertSubject)
+	}
+}
+
+// TestListCryptoAssetsCarriesIdentityEvidenceAndEngines round-trips migration
+// 0020's columns from real rows: the asset key and its rule, evidence with a
+// null line kept null, attributes and derivations as objects, and the engines
+// read from normalize.crypto_asset_provenance — distinct and sorted.
+func TestListCryptoAssetsCarriesIdentityEvidenceAndEngines(t *testing.T) {
+	pool := openPool(t)
+	st := store.New(pool)
+	projectID := createTestProject(t, st, tenantA)
+	seedCryptoAssets(t, pool, tenantA, projectID)
+
+	assets, err := st.ListCryptoAssets(t.Context(), tenantA, projectID)
+	if err != nil {
+		t.Fatalf("ListCryptoAssets: %v", err)
+	}
+	byType := map[string]store.CryptoAsset{}
+	for _, a := range assets {
+		byType[a.AssetType] = a
+	}
+
+	key := byType["key"]
+	if key.AssetKey != "key:fp:sha256:00ff" || key.IdentityRule != "key-fingerprint" ||
+		key.IdentityConfidence != "high" {
+		t.Errorf("key identity = %q / %q / %q", key.AssetKey, key.IdentityRule, key.IdentityConfidence)
+	}
+	if got := strings.Join(key.Engines, ","); got != "cbomkit-action,cbomkit-theia" {
+		t.Errorf("key engines = %q, want the provenance rows' engines, sorted", got)
+	}
+	if len(key.Evidence) != 2 {
+		t.Fatalf("key evidence = %+v, want 2 entries", key.Evidence)
+	}
+	if e := key.Evidence[0]; e.Path != "keys/server.key" || e.Line != nil || e.Engine != "cbomkit-theia" {
+		t.Errorf("first evidence = %+v, want keys/server.key with a null line", e)
+	}
+	if e := key.Evidence[1]; e.Path != "src/Main.java" || e.Line == nil || *e.Line != 42 || e.Engine != "cbomkit-action" {
+		t.Errorf("second evidence = %+v", e)
+	}
+	if key.Attributes["material_type"] != "private-key" || key.Attributes["private_key_in_source"] != true {
+		t.Errorf("key attributes = %v", key.Attributes)
+	}
+	if key.Derivations["key_size"] != "test-reference" {
+		t.Errorf("key derivations = %v", key.Derivations)
+	}
+
+	cert := byType["certificate"]
+	if cert.AssetKey != "cert:example.com;issuer=example.com" {
+		t.Errorf("certificate asset key = %q", cert.AssetKey)
+	}
+	if got := strings.Join(cert.Engines, ","); got != "cbomkit-theia" {
+		t.Errorf("certificate engines = %q", got)
+	}
+	if cert.Attributes["signature_algorithm_key"] != "algorithm:rsa;digest=sha2-256" {
+		t.Errorf("certificate attributes = %v", cert.Attributes)
+	}
+
+	// ⚠ THE WIRE SHAPE, NOT JUST THE STRUCT: an empty derivations map and a
+	// null line must reach the client as `{}` and `null`, never omitted.
+	raw, err := json.Marshal(cert)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire map[string]any
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"asset_key", "identity_rule", "identity_confidence", "evidence", "attributes", "derivations", "engines"} {
+		if _, ok := wire[k]; !ok {
+			t.Errorf("the crypto asset JSON has no %q key: %s", k, raw)
+		}
+	}
+	if d, ok := wire["derivations"].(map[string]any); !ok || len(d) != 0 {
+		t.Errorf("derivations on the wire = %v, want {}", wire["derivations"])
+	}
+	evidence := wire["evidence"].([]any)[0].(map[string]any)
+	if line, ok := evidence["line"]; !ok || line != nil {
+		t.Errorf("a null evidence line reached the wire as %v (present=%v)", line, ok)
 	}
 }
 

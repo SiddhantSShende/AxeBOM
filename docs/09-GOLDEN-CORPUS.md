@@ -62,8 +62,8 @@ Every fixture additionally asserts:
 
 | Fixture | Phase | Proves |
 |---|---|---|
-| `crypto-mixed` | 11 | Real `cbomkit-theia` output (not hand-built) against an openssl-generated cert: type-aware coverage, AND a certificate correctly inherits its signer's quantum verdict via a resolved `bom-ref` rather than a raw UUID a hand-built fixture's readable fake refs had been hiding. `raw/`/`expected/` committed; no `TestGolden` Go harness wired to it yet — see the fixture's own README. |
-| `crypto-quantum` | 11 | RSA/ECC/DH/DSA flagged `quantum_vulnerable`; AES gets a Grover note, not a vulnerability flag. |
+| `crypto-mixed` | 11 | Real output of all three CBOM engines (`cbomkit-theia`, `cbomkit-action`, `cdxgen-cbom`) over one openssl certificate and one JCA source file: the source engine finds the five call sites no file scanner could, with lines; one hash seen by two engines is one asset with two locations; type-aware coverage publishing two different numbers; derived values counted and cited; a certificate inherits its signer's verdict; a key named `key` is judged as the algorithm its engine links it to. Pins `expected/crypto_assets.json`, `coverage.json`, `diagnostics.json`; replayed by `workers/cbom/test_golden.py` under `task test:golden`. |
+| `crypto-quantum` | 11 | Real output of all three CBOM engines over JCA, pyca/cryptography and node:crypto calls: each classical verdict against its cited source (AES-ECB, MD5, SHA-1 `broken`; 3DES, RSA-1024 `weak`; DSA `deprecated`; Ed25519, X25519, P-256 `current`); RSA/ECC/DSA flagged `quantum_vulnerable`, ML-KEM/ML-DSA `post_quantum` and not; symmetric and hash assets get a Grover note, never a migration; a signature scheme is sent to ML-DSA, not ML-KEM; a bare JCA `EC` is vulnerable and `unassessed`; one hash from three files and two engines is one asset. It also pins what the engines do not see: cdxgen's JS RSA has no size (`unassessed`, not `weak`), AES sizes and ML-KEM/ML-DSA parameter sets are engine defaults, and theia finds nothing without key files. |
 | `ai-langchain` | 12 | Agent frameworks, LLM providers, MCP servers, HF model metadata; valid CycloneDX ML-BOM. Not yet built as a pinned `raw/`/`expected/` fixture — the real `ai-bom` engine has been verified live against a LangChain+OpenAI test directory (real container, real detection) and `aibom-generator` against a real Hugging Face model (`workers/aibom/testdata/aibom-generator-distilbert-base-uncased.cdx.json`), but nobody has pinned that output into this corpus's shape yet. `workers/aibom/normalize/test_pipeline.py` covers the pipeline itself against synthetic fixtures in the meantime. |
 | `hbom-nested` | 15 | Recursive subcomponents to depth 4; both supplier relationships distinct; §10.4.1.4 fields present. |
 
@@ -92,6 +92,8 @@ go test ./... -run TestGolden -update   # regenerate — see §5 before using
 ```
 
 Failures print a structured diff of expected vs actual, keyed by `component_key` and cluster id — not a raw JSON dump, which is unreadable at 1400 components.
+
+CBOM fixtures have their own shape and harness. They pin `expected/crypto_assets.json`, `coverage.json` and `diagnostics.json` instead of the SBOM files, and `workers/cbom/test_golden.py` replays every fixture that has an `expected/crypto_assets.json` through the same extractors and pipeline the normalize consumer uses (`workers/cbom/normalize_runner.py`). To regenerate one, after reading §5: `python -m workers.cbom.normalize_runner fixtures/<name> --write-expected`.
 
 `task test:golden` runs in CI on **both** windows-latest and ubuntu-latest. `.gitattributes` marks `*.golden` and `fixtures/**/expected/**` as `-text -diff` so Git never rewrites line endings — a CRLF-corrupted golden fails for a reason unrelated to the code, and that failure mode wastes whole sessions.
 

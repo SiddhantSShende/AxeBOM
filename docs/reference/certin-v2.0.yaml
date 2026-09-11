@@ -659,7 +659,7 @@ crypto_asset:
   axebom_extensions:
     - {id: axebom.crypto.quantum_vulnerable,  canonical_path: crypto_asset.quantum_vulnerable,  type: boolean, scored: false, status: extension, description: "True for Shor-vulnerable primitives: RSA, ECC/ECDSA/ECDH, DH, DSA."}
     - {id: axebom.crypto.pqc_recommendation,  canonical_path: crypto_asset.pqc_recommendation,  type: text,    scored: false, status: extension, description: "NIST PQC migration guidance: lattice / code-based / hash-based / multivariate."}
-    - {id: axebom.crypto.deprecation_status,  canonical_path: crypto_asset.deprecation_status,  type: enum,    scored: false, status: extension, values: [current, deprecated, weak, broken]}
+    - {id: axebom.crypto.deprecation_status,  canonical_path: crypto_asset.deprecation_status,  type: enum,    scored: false, status: extension, values: [current, deprecated, weak, broken, unassessed], description: "`unassessed` means no verdict could be reached (no name, no rule recognises the algorithm, or the size the verdict depends on was not reported) — never reported as current."}
 
 # ============================================================================
 # SECTION D — AIBOM  (Table 10, PDF p.54-55)

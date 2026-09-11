@@ -16,6 +16,7 @@ from workers.qbom.metadata import DERIVED_FIELDS, form_fields, normalize_device
 
 from axebom_shared.model.generated_certin import CRYPTO_FIELDS_BY_ASSET_TYPE
 from axebom_shared.normalize.coverage import score_crypto
+from axebom_shared.normalize.crypto_status import scored_entity
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -174,7 +175,7 @@ def test_a_certificate_is_not_scored_against_key_size() -> None:
     """⚠ THE FALSE-30% BUG THIS PHASE EXISTS TO PREVENT."""
     raw, _ = extract_crypto_assets(cyclonedx([CERTIFICATE]))
     assets, _ = normalize_all(raw)
-    scored = [{f"crypto_asset.{k}": v for k, v in a.items()} for a in assets]
+    scored = [scored_entity(a) for a in assets]
 
     result = score_crypto(scored, FIELD_SETS)
     scored_ids = {f.field_id for f in result.fields}
@@ -183,24 +184,28 @@ def test_a_certificate_is_not_scored_against_key_size() -> None:
     assert "certin.crypto.cert.subject_name" in scored_ids
 
 
-@pytest.mark.parametrize(
-    ("asset_type", "expected_fields"),
-    [("algorithm", 8), ("key", 7), ("protocol", 5), ("certificate", 10)],
-)
-def test_each_type_has_its_own_denominator(asset_type: str, expected_fields: int) -> None:
-    """The four field sets are 8 / 7 / 5 / 10.
+@pytest.mark.parametrize("asset_type", sorted(CRYPTO_FIELDS_BY_ASSET_TYPE))
+def test_each_type_has_its_own_denominator(asset_type: str) -> None:
+    """Each type is scored against exactly its own profile field set.
 
-    The numbers are asserted against the PROFILE, not written here — this test
-    checks that the profile still says what CERT-In Table 9 says, and it is the
-    one place a count is legitimate because it is validating the source.
+    ⚠ NO COUNT IS WRITTEN HERE. This test used to parametrize the four set
+    sizes as literals, which is precisely what invariant 2 forbids in tests:
+    when the guideline is revised, a literal here is one more place that
+    silently keeps asserting the old number. The profile is validated against
+    the guideline by `task profile:lint`; this test checks that scoring uses
+    the profile's set for the asset's own type and nothing else.
     """
-    assert len(CRYPTO_FIELDS_BY_ASSET_TYPE[asset_type]) == expected_fields
+    expected = [f.id for f in CRYPTO_FIELDS_BY_ASSET_TYPE[asset_type]]
+    assert [f.id for f in FIELD_SETS[asset_type]] == expected
+
+    others = {f.id for t, fs in CRYPTO_FIELDS_BY_ASSET_TYPE.items() if t != asset_type for f in fs}
+    assert not set(expected) & others
 
 
 def test_coverage_of_a_mixed_document_uses_each_type_s_fields() -> None:
     raw, _ = extract_crypto_assets(cyclonedx([ALGORITHM, KEY, PROTOCOL, CERTIFICATE]))
     assets, _ = normalize_all(raw)
-    scored = [{f"crypto_asset.{k}": v for k, v in a.items()} for a in assets]
+    scored = [scored_entity(a) for a in assets]
 
     result = score_crypto(scored, FIELD_SETS)
 
@@ -405,11 +410,18 @@ def test_a_size_that_is_not_a_number_is_refused() -> None:
 def test_the_qbom_references_crypto_assets_rather_than_duplicating_them() -> None:
     """⚠ A QBOM THAT EMBEDDED THEM WOULD DRIFT FROM THE CBOM the moment either
     is re-normalized, and a reviewer comparing the two would get two answers."""
+    from workers.cbom.normalize.pipeline import build_canonical_cbom
+
     raw, _ = extract_crypto_assets(cyclonedx([ALGORITHM, CERTIFICATE]))
-    assets, _ = normalize_all(raw)
+    assets = build_canonical_cbom(raw)["crypto_assets"]
 
     refs = crypto_asset_refs(assets)
-    assert refs == ["crypto/algorithm/rsa-2048", "crypto/cert/server"]
+    # ⚠ ASSET KEYS, NOT ENGINE BOM-REFS AND NOT ROW IDS. A bom-ref is random per
+    # theia run and a row id changes with every re-normalization (a NEW document,
+    # invariant 10), so both left a saved QBOM pointing at nothing. The asset key
+    # names the same asset across runs and versions.
+    assert refs == [a["asset_key"] for a in assets]
+    assert {ref.split(":", 1)[0] for ref in refs} == {"algorithm", "cert"}
     # References, not records.
     assert all(isinstance(r, str) for r in refs)
 

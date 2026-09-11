@@ -412,6 +412,46 @@ func DefaultRegistry() *Registry {
 			DefaultWeight: 3,
 		},
 		{
+			// SOURCE-CODE crypto discovery: sonar-cryptography's rules run as a
+			// library (cbomkit-lib) over SonarSource's own AST parsers — no
+			// SonarQube server. Java and Python only, without a build; Go fails
+			// silently under the noexec tmpfs and C# is not production-ready
+			// upstream, so both are languages with no engine. See
+			// workers/cbom/adapters/cbomkit_action.py for what it cannot see.
+			ID:            "cbomkit-action",
+			Mode:          "container",
+			Families:      []events.Family{events.FamilyCBOM},
+			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload},
+			Ecosystems:    []string{"java-source", "python-source"},
+			Produces:      []string{"crypto_assets"},
+			NativeFormat:  "cyclonedx-json-1.6",
+			DefaultWeight: 4,
+		},
+		{
+			// cdxgen's `cbom` preset: JavaScript/TypeScript crypto call sites.
+			// Same digest-pinned image as `cdxgen` and `cdxgen-ai`. Narrow — it
+			// misses createCipheriv and WebCrypto — and said so in the adapter.
+			ID:            "cdxgen-cbom",
+			Mode:          "container",
+			Families:      []events.Family{events.FamilyCBOM},
+			SourceKinds:   []events.SourceKind{events.SourceGit, events.SourceUpload},
+			Ecosystems:    []string{"js-source"},
+			Produces:      []string{"crypto_assets"},
+			NativeFormat:  "cyclonedx-json-1.6",
+			DefaultWeight: 2,
+		},
+		{
+			// ⚠ REGISTERED, NEVER DISPATCHED — AND UNTIL 2026-09-11 IT WAS
+			// DISPATCHED ON EVERY GIT-SOURCED CBOM SCAN.
+			//
+			// It was neither Disabled nor Scaffold, so ForFamily put it in the
+			// default CBOM set for a git source. The CBOM worker has no adapter
+			// for it, so every run came back `skipped`/ENGINE_NOT_IMPLEMENTED and
+			// DeriveScanStatus turned every git CBOM scan `completed_with_errors`
+			// even when cbomkit-theia succeeded — the status that is supposed to
+			// mean "look at this" meant nothing. The manifest had said
+			// `enabled: false` all along; the registry never agreed.
+			// TestEveryDispatchableEngineHasAWorkerAdapter now fails on the class.
 			ID:            "cbomkit",
 			Mode:          "container",
 			Families:      []events.Family{events.FamilyCBOM},
@@ -420,6 +460,12 @@ func DefaultRegistry() *Registry {
 			Produces:      []string{"crypto_assets"},
 			NativeFormat:  "cyclonedx-json-1.6",
 			DefaultWeight: 2,
+			Disabled:      true,
+			DisabledReason: "cbomkit is a clone-and-scan service, not a sandboxed engine: it clones " +
+				"the repository itself and resolves package URLs through the GitHub API and " +
+				"deps.dev, so it needs network access and credentials that scan engines are not " +
+				"allowed to hold. AxeBOM scans the source its fetcher has already materialized " +
+				"instead.",
 		},
 		{
 			// ⚠ THIS ENGINE REPORTED `skipped` ON EVERY SCAN UNTIL M2, because it

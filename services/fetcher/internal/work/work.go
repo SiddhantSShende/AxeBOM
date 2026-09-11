@@ -34,7 +34,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -48,7 +47,6 @@ import (
 	"github.com/axebom/axebom/libs/go-shared/events"
 	"github.com/axebom/axebom/libs/go-shared/fetcher"
 	"github.com/axebom/axebom/libs/go-shared/platform/blob"
-	"github.com/axebom/axebom/libs/go-shared/platform/errs"
 	"github.com/axebom/axebom/libs/go-shared/projectsource"
 	"github.com/axebom/axebom/libs/go-shared/sandbox"
 	"github.com/axebom/axebom/libs/go-shared/vault"
@@ -79,6 +77,11 @@ type Worker struct {
 	// *http.Client rather than building one internally. Defaults to
 	// fetcher.SafeHTTPClient(nil) in New.
 	httpClient *http.Client
+
+	// extractLimits bounds what every upload of one scan may place on disk,
+	// together. The zero value means fetcher.DefaultExtractLimits (see
+	// newUploadBudget); only tests set it, to prove the ceiling is combined.
+	extractLimits fetcher.ExtractLimits
 
 	// workspaceRoot is where a clone lands before it is archived.
 	workspaceRoot string
@@ -389,81 +392,28 @@ type fetchFailure struct {
 
 func (f *fetchFailure) Error() string { return f.code + ": " + f.message }
 
-// materializeUpload downloads a stored upload and places it into dest —
-// extracting a source_archive, or writing a single manifest/lockfile/sbom/
-// hbom_csv file as-is. This is the upload analogue of fetcher.Clone: after it
-// returns, dest holds exactly the tree CreateArchive will tar, the only
-// difference being where the bytes came from.
+// materializeUpload places EVERY one of the project's uploads into dest — each
+// source_archive extracted, each manifest/lockfile/sbom/hbom_csv/image_tarball
+// written as-is — where planUploadLayout says (docs/02-CONTRACTS.md §3). This is
+// the upload analogue of fetcher.Clone: after it returns, dest holds exactly the
+// tree CreateArchive will tar, the only difference being where the bytes came
+// from.
+//
+// ⚠ ALL OR NOTHING. An upload that cannot be materialized fails the whole
+// fetch, with its own code and a message naming it. Skipping it would archive a
+// tree missing a file the user gave us, and the BOM built from it would omit
+// that file's components without saying so (CLAUDE.md invariant 12).
 func (w *Worker) materializeUpload(ctx context.Context, src projectsource.Source, dest string) error {
-	rc, err := w.store.Get(ctx, src.StorageRef)
-	if err != nil {
-		if errors.Is(err, blob.ErrNotFound) {
-			return &fetchFailure{code: "FETCH_NO_SOURCE",
-				message: "the uploaded file could not be found in storage"}
+	uploads := src.UploadList()
+	if len(uploads) == 0 {
+		return &fetchFailure{code: "FETCH_NO_SOURCE",
+			message: "the project has no uploaded file to fetch from"}
+	}
+	budget := newUploadBudget(w.extractLimits, len(uploads))
+	for _, p := range planUploadLayout(uploads) {
+		if err := w.placeUpload(ctx, p, dest, budget); err != nil {
+			return namedFailure(p.upload, err)
 		}
-		return fmt.Errorf("read upload: %w", err) // a storage blip; retryable
-	}
-	defer func() { _ = rc.Close() }()
-
-	if src.UploadKind != "source_archive" {
-		// A single file — manifest, lockfile, sbom or hbom_csv. No extraction:
-		// it is placed into the workspace under its own name, and one file is a
-		// perfectly valid (if tiny) source tree for CreateArchive to tar.
-		name := src.OriginalFilename
-		if name == "" {
-			name = "source"
-		}
-		// #nosec G304 -- dest is this job's own freshly created workspace
-		// directory (see handle), and name was already sanitized to a safe
-		// alphabet by the project service before it was ever stored.
-		f, err := os.OpenFile(filepath.Join(dest, name), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-		if err != nil {
-			return fmt.Errorf("create workspace file: %w", err)
-		}
-		defer func() { _ = f.Close() }()
-		if _, err := io.Copy(f, rc); err != nil {
-			return fmt.Errorf("write workspace file: %w", err)
-		}
-		return nil
-	}
-
-	// A source_archive needs extraction, and zip needs random access — so it is
-	// staged to a local temp file first rather than extracted straight from the
-	// object-store stream.
-	lim := fetcher.DefaultExtractLimits()
-	tmp, err := os.CreateTemp("", "axebom-upload-*")
-	if err != nil {
-		return fmt.Errorf("stage upload: %w", err)
-	}
-	tmpPath := tmp.Name()
-	defer func() {
-		_ = tmp.Close()
-		_ = os.Remove(tmpPath)
-	}()
-
-	// +1 byte, same trick DefaultMaxBytes uses elsewhere: reading exactly the
-	// limit cannot distinguish "exactly at the limit" from "truncated here."
-	// The project service already caps an upload at 256 MiB, well under this;
-	// the copy is bounded again here in depth, not because it is expected to
-	// bite.
-	written, err := io.Copy(tmp, io.LimitReader(rc, lim.MaxBytes+1))
-	if err != nil {
-		return fmt.Errorf("stage upload: %w", err)
-	}
-	if written > lim.MaxBytes {
-		return &fetchFailure{code: "FETCH_ARCHIVE_TOO_LARGE",
-			message: fmt.Sprintf("upload exceeds the %d MiB limit", lim.MaxBytes>>20)}
-	}
-	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
-		return fmt.Errorf("stage upload: %w", err)
-	}
-
-	if _, err := fetcher.ExtractArchive(src.OriginalFilename, tmp, written, dest, lim); err != nil {
-		var taxonomy *errs.Error
-		if errors.As(err, &taxonomy) {
-			return &fetchFailure{code: string(taxonomy.Code), message: taxonomy.Message}
-		}
-		return fmt.Errorf("extract upload: %w", err)
 	}
 	return nil
 }

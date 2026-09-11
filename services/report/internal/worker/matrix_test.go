@@ -172,12 +172,110 @@ func matrixSBOM() render.BOM {
 	return b
 }
 
+// matrixCBOM is shaped like real cbomkit-theia output, not a single tidy row.
+//
+// ⚠ TWO ALGORITHMS NAMED "RSA" ARE THE POINT. theia reports RSA twice from one
+// certificate (a signature and a pke), and the export keyed assets on
+// type+name: protobom kept one, CycloneDX got a duplicate `dependsOn` entry the
+// schema forbids, and SPDX two packages with one SPDXID. A one-asset fixture
+// could never show that, which is why this one stopped being one.
+//
+// ⚠ AND SHAPED LIKE A MIGRATION-0020 ROW: every asset has the normalizer's
+// asset key (so the bom-refs the golden pins are asset keys), evidence, the
+// engines that reported it, and the attributes CycloneDX 1.6 has fields for.
+// The algorithm is evidenced twice on one line by two engines — one place, so
+// one occurrence — and once more elsewhere.
 func matrixCBOM() render.BOM {
 	b := matrixBase(model.BOMTypeCBOM)
-	b.CryptoAssets = []render.CryptoAsset{{
-		AssetType: "algorithm", Name: "matrix-cbom-algorithm",
-		QuantumVulnerable: true, QuantumReadinessGroup: "vulnerable",
-	}}
+	level, size := 256, 2048
+	line12, line7, line3 := 12, 7, 3
+	const (
+		aesKey       = "algorithm:aes;mode=gcm;size=256;primitive=ae"
+		rsaSigKey    = "algorithm:rsa;digest=sha2-256;scheme=pkcs1v15;primitive=signature"
+		rsaPKEKey    = "algorithm:rsa;scheme=oaep;primitive=pke"
+		rsaMaterial  = "key:fp:sha256:5f1c0d9e7a2b"
+		tlsKey       = "protocol:tls;version=1.3"
+		certKey      = "cert:CN=matrix.example;issuer=CN=matrix.example;serial=01"
+		certFile     = "certs/matrix.pem"
+		theia        = "cbomkit-theia"
+		action, cdxg = "cbomkit-action", "cdxgen-cbom"
+	)
+	fromCert := []render.CryptoEvidence{{Path: certFile, Engine: theia}}
+	b.CryptoAssets = []render.CryptoAsset{
+		{
+			ID: "01900000-0000-7000-8000-00000000c001", AssetType: "algorithm",
+			AssetKey: aesKey, IdentityRule: "algorithm", IdentityConfidence: "high",
+			Name: "matrix-cbom-algorithm", Primitive: "ae", Mode: "gcm",
+			CryptoFunctions: []string{"encrypt", "decrypt"}, ClassicalSecurityLevel: &level,
+			OID: "2.16.840.1.101.3.4.1.46", QuantumFamily: "aes",
+			QuantumReadinessGroup: "grover_note", DeprecationStatus: "current",
+			// A value AxeBOM filled from a cited table, so every format has to
+			// carry the footnote (user decision 2026-09-11: derive, count, label).
+			Derivations: map[string]string{"classical_security_level": "nist-sp800-57p1r5-table2"},
+			Evidence: []render.CryptoEvidence{
+				{Path: "src/main/java/Matrix.java", Line: &line12, Engine: action},
+				{Path: "src/main/java/Matrix.java", Line: &line12, Engine: cdxg},
+				{Path: "web/matrix.ts", Line: &line7, Engine: cdxg},
+			},
+			Engines:    []string{action, cdxg},
+			Attributes: map[string]any{"parameter_set": "256", "nist_quantum_security_level": 5},
+		},
+		{
+			ID: "01900000-0000-7000-8000-00000000c002", AssetType: "algorithm", Name: "RSA",
+			AssetKey: rsaSigKey, IdentityRule: "algorithm", IdentityConfidence: "high",
+			Primitive: "signature", CryptoFunctions: []string{"sign"}, OID: "1.2.840.113549.1.1.1",
+			QuantumVulnerable: true, QuantumFamily: "rsa", QuantumReadinessGroup: "vulnerable",
+			DeprecationStatus: "unassessed",
+			Evidence:          fromCert, Engines: []string{theia},
+			Attributes: map[string]any{"padding": "pkcs1v15", "nist_quantum_security_level": 0},
+		},
+		{
+			ID: "01900000-0000-7000-8000-00000000c003", AssetType: "algorithm", Name: "RSA",
+			AssetKey: rsaPKEKey, IdentityRule: "algorithm", IdentityConfidence: "high",
+			Primitive: "pke", CryptoFunctions: []string{"encapsulate", "decapsulate"},
+			OID: "1.2.840.113549.1.1.1", QuantumVulnerable: true, QuantumFamily: "rsa",
+			QuantumReadinessGroup: "vulnerable", DeprecationStatus: "unassessed",
+			Evidence: fromCert, Engines: []string{theia},
+			Attributes: map[string]any{"padding": "oaep", "nist_quantum_security_level": 0},
+		},
+		{
+			ID: "01900000-0000-7000-8000-00000000c004", AssetType: "key", Name: "RSA-2048",
+			AssetKey: rsaMaterial, IdentityRule: "key-fingerprint", IdentityConfidence: "high",
+			KeySize: &size, KeyState: "active", QuantumVulnerable: true, QuantumFamily: "rsa",
+			QuantumReadinessGroup: "vulnerable", DeprecationStatus: "current",
+			Evidence: fromCert, Engines: []string{theia},
+			Attributes: map[string]any{
+				"material_type": "public-key", "material_format": "PEM", "algorithm_key": rsaPKEKey,
+			},
+		},
+		{
+			ID: "01900000-0000-7000-8000-00000000c005", AssetType: "protocol", Name: "TLS",
+			AssetKey: tlsKey, IdentityRule: "protocol", IdentityConfidence: "high",
+			ProtocolVersion: "1.3", CipherSuites: []string{"TLS_AES_256_GCM_SHA384"},
+			DeprecationStatus: "current", QuantumReadinessGroup: "unassessed",
+			Evidence: []render.CryptoEvidence{{Path: "config/tls.yaml", Line: &line3, Engine: theia}},
+			Engines:  []string{theia},
+		},
+		{
+			ID: "01900000-0000-7000-8000-00000000c006", AssetType: "certificate",
+			AssetKey: certKey, IdentityRule: "certificate-issuer-serial", IdentityConfidence: "high",
+			Name: "matrix.example", CertSubject: "CN=matrix.example", CertIssuer: "CN=matrix.example",
+			NotValidBefore: "2026-09-01T00:00:00Z", NotValidAfter: "2027-09-01T00:00:00Z",
+			// "RSA" names two algorithms, so by NAME it must not become a bom-ref;
+			// the normalizer's asset key names the signature algorithm exactly, so
+			// by KEY it must. The key's name is unique either way.
+			SignatureAlgoRef: "RSA", SubjectPublicKeyRef: "RSA-2048",
+			CertFormat: "X.509", CertExtension: "pem", QuantumVulnerable: true,
+			QuantumFamily: "rsa", QuantumReadinessGroup: "vulnerable", DeprecationStatus: "unassessed",
+			Evidence: fromCert, Engines: []string{theia},
+			Attributes: map[string]any{
+				"signature_algorithm_key": rsaSigKey, "subject_public_key_key": rsaMaterial,
+			},
+		},
+	}
+	b.Coverage.DerivationSources = map[string]string{
+		"nist-sp800-57p1r5-table2": "NIST SP 800-57 Part 1 Rev. 5, Table 2",
+	}
 	return b
 }
 

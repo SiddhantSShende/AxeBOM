@@ -13,7 +13,18 @@ const JSONMediaType = "application/json"
 // Bumped whenever a field changes meaning. A consumer that pinned the old
 // version can then refuse rather than silently misreading a renamed field —
 // which is the failure mode an unversioned envelope guarantees.
-const BundleSchema = "axebom.report.bundle/v1"
+//
+// v2: `canonical.crypto_assets` keys went from Go field names (`AssetType`) to
+// the snake_case column names the project API already used (`asset_type`), each
+// asset gained `id` and `derivations`, and coverage gained per-field `Derived`
+// and `DerivationSources`. A v1 consumer reading `AssetType` would otherwise
+// get nothing, silently — the exact failure this constant exists to prevent.
+//
+// Additive within v2, so no bump: each crypto asset gained `asset_key`,
+// `identity_rule`, `identity_confidence`, `evidence`, `attributes` and
+// `engines`, and the bundle gained `private_keys_in_source`. New keys only; no
+// existing key changed meaning.
+const BundleSchema = "axebom.report.bundle/v2"
 
 // Bundle is the JSON download: the canonical document plus both standard ones.
 //
@@ -54,6 +65,19 @@ type Bundle struct {
 	// consumer of the JSON bundle should be able to act on the code without
 	// parsing prose. See migrations/normalize/0017.
 	NormalizeDiagnostics []BundleDiagnostic `json:"normalize_diagnostics,omitempty"`
+
+	// PrivateKeysInSource is the private-key finding — absent when nothing was
+	// flagged. Beside the notes rather than inside `canonical`, because it is a
+	// finding and not inventory: a consumer must not need to know which crypto
+	// attribute to filter on to learn that a key was committed. See
+	// PrivateKeysInSource.
+	PrivateKeysInSource *BundlePrivateKeys `json:"private_keys_in_source,omitempty"`
+}
+
+// BundlePrivateKeys is the private-key finding in the JSON bundle.
+type BundlePrivateKeys struct {
+	Finding string               `json:"finding"`
+	Assets  []PrivateKeyInSource `json:"assets"`
 }
 
 // BundleDiagnostic is one normalization diagnostic in the JSON bundle.
@@ -203,6 +227,13 @@ func WriteJSON(b BOM, spdx, cyclonedx []byte) ([]byte, error) {
 		// and never this bundle — see render.TypeNotes.
 		Notes:                orEmpty(append(append([]string{}, b.Notes...), TypeNotes(b)...)),
 		NormalizeDiagnostics: bundleDiagnostics(b.NormalizeDiagnostics),
+	}
+
+	if keys := PrivateKeysInSource(b); len(keys) > 0 {
+		bundle.PrivateKeysInSource = &BundlePrivateKeys{
+			Finding: PrivateKeysInSourceFinding(b),
+			Assets:  keys,
+		}
 	}
 
 	if len(spdx) > 0 {

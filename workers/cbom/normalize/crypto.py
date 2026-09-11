@@ -4,7 +4,9 @@
 POINT OF THIS MODULE.
 
 CERT-In Table 9 is type-discriminated: Algorithms, Keys, Protocols and
-Certificates have DIFFERENT field sets — 8, 7, 5 and 10 fields respectively.
+Certificates have DIFFERENT field sets. The compliance profile owns them
+(docs/reference/certin-v2.0.yaml); their sizes are never restated here
+(invariant 2).
 Writing every value into every asset would look harmless and then be scored
 against the union, which reports every CBOM at roughly 30% coverage. Falsely,
 in a document shown to a regulator.
@@ -26,6 +28,8 @@ from __future__ import annotations
 from typing import Any
 
 from axebom_shared.crypto import assess_deprecation, assess_quantum, readiness_group, recommend_pqc
+from axebom_shared.crypto.identity import canonicalize
+from axebom_shared.crypto.reference import derive_reference_values
 
 #: Columns that belong to each asset type, mirroring CERT-In Table 9.
 #:
@@ -100,12 +104,17 @@ def normalize_crypto_asset(raw: dict[str, Any]) -> dict[str, Any]:
     # A key size can arrive in `parameterSetIdentifier` when the engine did not
     # populate `size`. Read as a fallback and only for a key.
     if asset_type == "key" and "key_size" not in out:
-        size = _size_from_parameter_set(raw.get("parameter_set"))
+        size = _size_from_parameter_set(raw.get("parameter_set"), str(raw.get("name") or ""))
         if size is not None:
             out["key_size"] = size
 
     out["component_key"] = raw.get("component_key") or ""
     out.update(analyse(out, raw))
+    # ⚠ AFTER analyse(), WHICH REPLACES `analysis_diagnostics` WHOLESALE. A
+    # reference conflict appended before it would be silently dropped. Fills
+    # only empty CERT-In columns from the cited table and records each one in
+    # `derivations` (user decision 2026-09-11: derive + count, labelled).
+    derive_reference_values(out, raw)
     return out
 
 
@@ -119,16 +128,40 @@ def analyse(asset: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
     COVERAGE model is not the same as forgetting it exists.
     """
     name = str(asset.get("name") or raw.get("name") or "")
-    primitive = str(raw.get("primitive") or "")
+    # A curve reported only in its own field (`ECDSA` + `curve: secp192r1`) has to
+    # reach the rules too, or a weak curve is judged on the bare family name.
+    primitive = " ".join(
+        p for p in (str(raw.get("primitive") or ""), str(raw.get("curve") or "")) if p
+    )
     functions = list(raw.get("crypto_functions") or [])
     key_size = asset.get("key_size") or raw.get("key_size")
     asset_type = str(asset.get("asset_type") or "algorithm")
+    if asset_type == "algorithm" and not isinstance(key_size, int):
+        # ⚠ THE PARAMETER SET, READ ONCE AND BY FAMILY. An algorithm has no size
+        # column; `AES-ECB` with `parameterSetIdentifier: 128` was keyed and
+        # levelled at 128 bits while the Grover note said no size was reported.
+        # The canonicalizer is the one reader (key bits for AES, never a modulus
+        # when a digest is present), so the rules see what the identity saw.
+        key_size = canonicalize(
+            name,
+            str(raw.get("primitive") or ""),
+            mode=str(raw.get("mode") or ""),
+            padding=str(raw.get("padding") or ""),
+            curve=str(raw.get("curve") or ""),
+            parameter_set=str(raw.get("parameter_set") or ""),
+        ).bits
 
     # For a certificate, the interesting primitive is what SIGNED it.
     if asset_type == "certificate":
         signature = str(raw.get("signature_algo_ref") or "")
         if signature:
             primitive = f"{primitive} {signature}".strip()
+    # For a key, the algorithm it belongs to — cbomkit-action names a generated
+    # RSA key just `key`, and judged on that word it was not quantum-vulnerable.
+    if asset_type == "key":
+        algorithm = str(raw.get("algorithm_name") or "")
+        if algorithm:
+            primitive = f"{primitive} {algorithm}".strip()
 
     quantum = assess_quantum(
         name=name,
@@ -143,12 +176,21 @@ def analyse(asset: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
         key_size=key_size if isinstance(key_size, int) else None,
         crypto_functions=functions,
         asset_type=asset_type,
+        # ⚠ THE ASSET'S OWN FIELDS DECIDE VERDICTS ITS NAME CANNOT. An asset named
+        # `AES` with `mode: ecb` was reported current because the mode never
+        # reached the rules; PKCS#1 v1.5 key transport is disallowed at any key
+        # size; and `TLS` is current or deprecated depending only on its version.
+        mode=str(asset.get("mode") or raw.get("mode") or ""),
+        padding=str(raw.get("padding") or ""),
+        protocol_version=str(asset.get("protocol_version") or raw.get("protocol_version") or ""),
     )
     pqc = recommend_pqc(
         family=quantum.family,
         quantum_vulnerable=quantum.quantum_vulnerable,
         crypto_functions=functions,
-        name=name,
+        # A key named `key` states its use only through its algorithm's name.
+        name=f"{name} {raw.get('algorithm_name') or ''}".strip(),
+        primitive=str(raw.get("primitive") or ""),
     )
 
     out: dict[str, Any] = {
@@ -217,15 +259,24 @@ def normalize_all(
     return out, diagnostics
 
 
-def _size_from_parameter_set(value: Any) -> int | None:
-    """Read a key size out of `RSA-2048` or `ML-KEM-768`.
+def _size_from_parameter_set(value: Any, name: str = "") -> int | None:
+    """Read a key size out of `RSA-2048`.
 
     ⚠ ONLY WHEN THE WHOLE TRAILING TOKEN IS DIGITS. `secp256r1` ends in `r1`
     and its 256 is a curve size, not a key size in the sense this column means;
     coercing it would put a number in a field a reviewer reads as an RSA modulus.
+
+    ⚠ AND NEVER FOR A POST-QUANTUM PARAMETER SET. `ML-KEM-768` names a parameter
+    set (a NIST security category), not a 768-bit key — its encapsulation key is
+    1184 bytes. Read as a bit length it put a number wrong by an order of
+    magnitude into `key_size`, the field a reviewer compares against RSA moduli.
+    The asset's name is checked too, because an engine can report the parameter
+    set as a bare `768` beside a name of `ML-KEM-768`.
     """
+    from axebom_shared.crypto.quantum_rules import pqc_family
+
     text = str(value or "").strip()
-    if not text:
+    if not text or pqc_family(text, name) is not None:
         return None
     tail = text.rsplit("-", 1)[-1]
     return int(tail) if tail.isdigit() and len(tail) >= 3 else None

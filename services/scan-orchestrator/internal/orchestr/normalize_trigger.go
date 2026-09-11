@@ -229,7 +229,16 @@ func (o *Orchestrator) buildNormalizeTrigger(
 		return events.NormalizeTriggerV1{}, fmt.Errorf("loading raw artifacts: %w", err)
 	}
 
-	gaps, err := o.store.CoverageGaps(ctx, scan.TenantID, scan.ID)
+	// ⚠ THIS FAMILY'S GAPS, NOT THE SCAN'S — see Store.CoverageGapsFor. Every
+	// registered engine in the family, run or skipped for this source kind,
+	// because a skipped engine's ecosystems are exactly what nobody read.
+	var familyEngines []string
+	for _, id := range o.registry.IDs() {
+		if e, ok := o.registry.Get(id); ok && e.InFamily(family) {
+			familyEngines = append(familyEngines, id)
+		}
+	}
+	gaps, err := o.store.CoverageGapsFor(ctx, scan.TenantID, scan.ID, familyEngines)
 	if err != nil {
 		return events.NormalizeTriggerV1{}, fmt.Errorf("loading coverage gaps: %w", err)
 	}

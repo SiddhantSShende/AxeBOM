@@ -250,6 +250,11 @@ type Coverage struct {
 	// Formula is rendered by the normalizer so the numbers are auditable.
 	Formula string
 	Fields  []FieldCoverage
+	// DerivationSources cites every reference table the normalizer derived a
+	// CERT-In value from in this document: {reference_id: citation}, read from
+	// coverage_breakdown.derivation_sources. Empty on documents written before
+	// derivation existed, and on any document where nothing was derived.
+	DerivationSources map[string]string
 }
 
 // SupplementaryCoverage is a SCORED field set that is NOT a compliance standard.
@@ -287,6 +292,11 @@ type FieldCoverage struct {
 	FieldID string
 	// Present counts entities holding a substantive value.
 	Present int
+	// Derived counts the entities whose substantive value AxeBOM filled from a
+	// cited reference table rather than an engine reporting it — a SUBSET of
+	// Present, never added to it. Zero on documents written before the
+	// normalizer recorded it.
+	Derived int
 	// Declared counts entities holding any value, `not-provided` included.
 	Declared int
 	Total    int
@@ -346,13 +356,19 @@ func NormalizeDiagnosticLines(b BOM) []string {
 func TypeNotes(b BOM) []string {
 	switch b.BOMType {
 	case model.BOMTypeCBOM:
-		return []string{CBOMTypeDiscriminationNote}
+		// ⚠ THE DERIVED-VALUE FOOTNOTE RIDES HERE SO IT REACHES EVERY FORMAT —
+		// the XLSX Notes sheet, the JSON bundle, the Word document and the PDF
+		// all render TypeNotes. A derived value labelled in one artifact and
+		// silently present in another would be AxeBOM's lookup passed off as an
+		// engine's claim to whoever held the second one.
+		return withDerivedNote([]string{CBOMTypeDiscriminationNote}, b)
 	case model.BOMTypeQBOM:
 		// ⚠ TWO NOTES, AND THE SECOND ONE IS LOAD-BEARING. The disclosure says
 		// the device metadata comes from a form; the source note says whose
 		// crypto inventory the readiness table is showing. A QBOM is the one
-		// report that renders another document's data as its own.
-		return []string{QBOMFormDisclosure, QBOMCryptoSourceNote(b)}
+		// report that renders another document's data as its own — including
+		// that document's derived values, so their footnote comes with them.
+		return withDerivedNote([]string{QBOMFormDisclosure, QBOMCryptoSourceNote(b)}, b)
 	case model.BOMTypeAIBOM:
 		return []string{AIBOMExtensionsNote}
 	case model.BOMTypeHBOM:
@@ -360,6 +376,15 @@ func TypeNotes(b BOM) []string {
 	default:
 		return nil
 	}
+}
+
+// withDerivedNote appends the derived-value footnote when this BOM carries
+// derived values, and returns the notes unchanged otherwise.
+func withDerivedNote(notes []string, b BOM) []string {
+	if note := DerivedFieldNote(b); note != "" {
+		return append(notes, note)
+	}
+	return notes
 }
 
 // weightsNote states whose judgement the weights are.
@@ -431,6 +456,11 @@ func Sheets(b BOM) ([]Sheet, error) {
 	sheets := []Sheet{
 		summarySheet(b),
 		engineCoverageSheet(b),
+	}
+	// A finding goes before the inventory it was drawn from, and is absent —
+	// not an empty sheet — when nothing was flagged. See PrivateKeysInSource.
+	if s, ok := privateKeysInSourceSheet(b); ok {
+		sheets = append(sheets, s)
 	}
 
 	// ⚠ THE TYPE-SPECIFIC HONESTY LABELS COME FROM TypeNotes, NOT FROM HERE.
@@ -536,6 +566,12 @@ func summarySheet(b BOM) Sheet {
 
 	if b.LevelNote != "" {
 		rows = append(rows, []string{"", ""}, []string{"BOM level note", b.LevelNote})
+	}
+
+	// ⚠ A COMMITTED PRIVATE KEY IS STATED ON THE FIRST SHEET, not only on its
+	// own — the Private Keys in Source sheet lists where.
+	if finding := PrivateKeysInSourceFinding(b); finding != "" {
+		rows = append(rows, []string{"", ""}, []string{PrivateKeysInSourceTitle, finding})
 	}
 
 	// ⚠ THE PRODUCT'S CENTRAL HONEST LABEL, IN EVERY WORKBOOK.

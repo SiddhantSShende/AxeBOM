@@ -141,12 +141,11 @@ def test_discovery_classifies_an_eagle_sch_and_not_a_geda_one(tmp_path: Path) ->
 
     assert kinds.get("board.sch") == "eagle-schematic"
     assert "legacy.sch" not in kinds, (
-        "a gEDA schematic was handed to the EAGLE parser; only the content "
-        "check separates them"
+        "a gEDA schematic was handed to the EAGLE parser; only the content check separates them"
     )
 
 
 def test_sch_is_in_the_searched_extensions_so_an_empty_result_names_it() -> None:
-    """"Found nothing" leaves a customer unable to tell a wrong subpath from an
+    """ "Found nothing" leaves a customer unable to tell a wrong subpath from an
     unsupported format, and they will assume the latter."""
     assert ".sch" in discovery.SEARCHED_EXTENSIONS

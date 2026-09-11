@@ -1,51 +1,210 @@
 [
   {
-    "asset_type": "algorithm",
-    "component_key": "5b256ad4-22cd-4ddf-a978-88c694f478b7",
-    "crypto_functions": [
-      "sign"
+    "_provenance": [
+      {
+        "artifact_sha256": "36f81b6cbcc37570e72615ee0544922355ff585f90743a64d0ee734807ae1aa5",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 23,
+            "path": "src/main/java/com/example/CryptoConfig.java"
+          }
+        ],
+        "native_ref": "30ecbfca-7d01-429c-a492-6bc7b56b6b71",
+        "observed_name": "AES-128-CBC-PKCS5"
+      }
     ],
-    "deprecation_rationale": "RSA key size was not reported, so its strength could not be assessed. Anything below 2048 bits is disallowed.",
-    "deprecation_reference": "NIST SP 800-131A Rev. 2",
+    "analysis_diagnostics": [
+      "NORMALIZE_CRYPTO_REFERENCE_CONFLICT: oid is '2.16.840.1.101.3.4.1' from the engine and '2.16.840.1.101.3.4.1.2' per nist-csor-aes; the engine value is kept"
+    ],
+    "asset_key": "algorithm:aes;bits=128;mode=cbc;padding=pkcs5;primitive=block-cipher",
+    "asset_type": "algorithm",
+    "attributes": {
+      "padding": "pkcs5",
+      "parameter_set": "128",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "classical_security_level": 128,
+    "component_key": "",
+    "deprecation_rationale": "No known weakness for its intended use.",
+    "deprecation_reference": "",
     "deprecation_status": "current",
+    "derivations": {
+      "classical_security_level": "nist-sp800-57p1r5-table2"
+    },
+    "effective_quantum_bits": 64,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 23,
+        "path": "src/main/java/com/example/CryptoConfig.java"
+      }
+    ],
+    "grover_note": "128-bit key gives roughly 64 bits of security against Grover's algorithm. Consider a 256-bit key (AES-256) where the protocol allows it. This is a sizing decision, not a break.",
+    "identity_confidence": "high",
+    "identity_rule": "algorithm",
+    "mode": "cbc",
+    "name": "AES-128-CBC-PKCS5",
+    "oid": "2.16.840.1.101.3.4.1",
+    "primitive": "block-cipher",
+    "quantum_family": "aes",
+    "quantum_rationale": "A symmetric primitive. Grover's algorithm halves effective key strength — a sizing concern, not a break, so this is NOT reported as quantum-vulnerable.",
+    "quantum_readiness_group": "grover_note",
+    "quantum_vulnerable": false
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "36f81b6cbcc37570e72615ee0544922355ff585f90743a64d0ee734807ae1aa5",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 21,
+            "path": "src/main/java/com/example/CryptoConfig.java"
+          }
+        ],
+        "native_ref": "493e00f6-1b7f-4804-884c-39a1cb97c4ee",
+        "observed_name": "AES-256"
+      }
+    ],
+    "asset_key": "algorithm:aes;bits=256;primitive=block-cipher",
+    "asset_type": "algorithm",
+    "attributes": {
+      "parameter_set": "256",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "classical_security_level": 256,
+    "component_key": "",
+    "crypto_functions": [
+      "keygen"
+    ],
+    "deprecation_rationale": "No known weakness for its intended use.",
+    "deprecation_reference": "",
+    "deprecation_status": "current",
+    "derivations": {
+      "classical_security_level": "nist-sp800-57p1r5-table2"
+    },
+    "effective_quantum_bits": 128,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 21,
+        "path": "src/main/java/com/example/CryptoConfig.java"
+      }
+    ],
+    "grover_note": "256-bit key gives roughly 128 bits of security against Grover's algorithm, which is comfortably beyond reach. No action.",
+    "identity_confidence": "high",
+    "identity_rule": "algorithm",
+    "name": "AES-256",
+    "oid": "2.16.840.1.101.3.4.1",
+    "primitive": "block-cipher",
+    "quantum_family": "aes",
+    "quantum_rationale": "A symmetric primitive. Grover's algorithm halves effective key strength — a sizing concern, not a break, so this is NOT reported as quantum-vulnerable.",
+    "quantum_readiness_group": "grover_note",
+    "quantum_vulnerable": false
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "36f81b6cbcc37570e72615ee0544922355ff585f90743a64d0ee734807ae1aa5",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 15,
+            "path": "src/main/java/com/example/CryptoConfig.java"
+          }
+        ],
+        "native_ref": "d61487db-c27a-4174-95bc-e87f499ec9d9",
+        "observed_name": "RSA-2048"
+      }
+    ],
+    "asset_key": "algorithm:rsa;bits=2048;primitive=pke",
+    "asset_type": "algorithm",
+    "attributes": {
+      "parameter_set": "2048",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "classical_security_level": 112,
+    "component_key": "",
+    "crypto_functions": [
+      "keygen"
+    ],
+    "deprecation_rationale": "No known weakness for its intended use.",
+    "deprecation_reference": "",
+    "deprecation_status": "current",
+    "derivations": {
+      "classical_security_level": "nist-sp800-57p1r5-table2"
+    },
     "effective_quantum_bits": 0,
-    "name": "RSA",
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 15,
+        "path": "src/main/java/com/example/CryptoConfig.java"
+      }
+    ],
+    "identity_confidence": "high",
+    "identity_rule": "algorithm",
+    "name": "RSA-2048",
     "oid": "1.2.840.113549.1.1.1",
-    "pqc_recommendation": "ML-DSA (FIPS 204, lattice): Replace signatures with ML-DSA. SLH-DSA (FIPS 205, hash-based) is the conservative alternative where a lattice assumption is unacceptable, at the cost of much larger signatures.",
-    "primitive": "signature",
+    "pqc_recommendation": "ML-KEM (FIPS 203, lattice): Replace key establishment with ML-KEM. NIST recommends a HYBRID deployment during transition — ML-KEM alongside the existing primitive — so a flaw in either does not break the handshake.",
+    "primitive": "pke",
     "quantum_family": "rsa",
     "quantum_rationale": "RSA rests on integer factorisation, which Shor's algorithm solves in polynomial time.",
     "quantum_readiness_group": "vulnerable",
     "quantum_vulnerable": true
   },
   {
-    "asset_type": "algorithm",
-    "component_key": "52d98851-258f-4552-99d0-8326ac840c14",
-    "crypto_functions": [
-      "digest"
+    "_provenance": [
+      {
+        "artifact_sha256": "153293d0bee18b9f0ba1dd3e010079ffb15ed43130b28b01c8757da08d8a381e",
+        "engine_id": "cbomkit-theia",
+        "engine_version": "edge",
+        "evidence": [
+          {
+            "line": null,
+            "path": "certs/server.pem"
+          }
+        ],
+        "native_ref": "b21f7408-6344-4ea2-a317-541fa2579d3e",
+        "observed_name": "SHA256-RSA"
+      }
     ],
-    "deprecation_rationale": "No known weakness for its intended use.",
-    "deprecation_reference": "",
-    "deprecation_status": "current",
-    "effective_quantum_bits": 128,
-    "grover_note": "256-bit key gives roughly 128 bits of security against Grover's algorithm, which is comfortably beyond reach. No action.",
-    "name": "SHA256",
-    "primitive": "hash",
-    "quantum_family": "sha2",
-    "quantum_rationale": "A symmetric primitive. Grover's algorithm halves effective key strength \u2014 a sizing concern, not a break, so this is NOT reported as quantum-vulnerable.",
-    "quantum_readiness_group": "grover_note",
-    "quantum_vulnerable": false
-  },
-  {
+    "asset_key": "algorithm:rsa;digest=sha2-256;scheme=pkcs1v15;primitive=signature",
     "asset_type": "algorithm",
-    "component_key": "b21f7408-6344-4ea2-a317-541fa2579d3e",
+    "attributes": {
+      "padding": "pkcs1v15",
+      "parameter_set": "256",
+      "surfaces": [
+        "certificates"
+      ]
+    },
+    "component_key": "",
     "crypto_functions": [
       "sign"
     ],
     "deprecation_rationale": "RSA key size was not reported, so its strength could not be assessed. Anything below 2048 bits is disallowed.",
     "deprecation_reference": "NIST SP 800-131A Rev. 2",
-    "deprecation_status": "current",
+    "deprecation_status": "unassessed",
     "effective_quantum_bits": 0,
+    "evidence": [
+      {
+        "engine": "cbomkit-theia",
+        "line": null,
+        "path": "certs/server.pem"
+      }
+    ],
+    "identity_confidence": "high",
+    "identity_rule": "algorithm",
     "name": "SHA256-RSA",
     "oid": "1.2.840.113549.1.1.11",
     "pqc_recommendation": "ML-DSA (FIPS 204, lattice): Replace signatures with ML-DSA. SLH-DSA (FIPS 205, hash-based) is the conservative alternative where a lattice assumption is unacceptable, at the cost of much larger signatures.",
@@ -56,17 +215,47 @@
     "quantum_vulnerable": true
   },
   {
+    "_provenance": [
+      {
+        "artifact_sha256": "153293d0bee18b9f0ba1dd3e010079ffb15ed43130b28b01c8757da08d8a381e",
+        "engine_id": "cbomkit-theia",
+        "engine_version": "edge",
+        "evidence": [
+          {
+            "line": null,
+            "path": "certs/server.pem"
+          }
+        ],
+        "native_ref": "dfffe25d-9fee-442e-8d7d-f4fc7a1642a2",
+        "observed_name": "RSA"
+      }
+    ],
+    "asset_key": "algorithm:rsa;primitive=pke",
     "asset_type": "algorithm",
-    "component_key": "dfffe25d-9fee-442e-8d7d-f4fc7a1642a2",
+    "attributes": {
+      "surfaces": [
+        "certificates"
+      ]
+    },
+    "component_key": "",
     "crypto_functions": [
-      "encapsulate",
       "decapsulate",
+      "encapsulate",
       "sign"
     ],
     "deprecation_rationale": "RSA key size was not reported, so its strength could not be assessed. Anything below 2048 bits is disallowed.",
     "deprecation_reference": "NIST SP 800-131A Rev. 2",
-    "deprecation_status": "current",
+    "deprecation_status": "unassessed",
     "effective_quantum_bits": 0,
+    "evidence": [
+      {
+        "engine": "cbomkit-theia",
+        "line": null,
+        "path": "certs/server.pem"
+      }
+    ],
+    "identity_confidence": "medium",
+    "identity_rule": "algorithm",
     "name": "RSA",
     "oid": "1.2.840.113549.1.1.1",
     "pqc_recommendation": "ML-KEM or ML-DSA (FIPS 203 / FIPS 204, lattice): This asset reports no crypto functions, so its use could not be determined. Key establishment migrates to ML-KEM (FIPS 203); signatures migrate to ML-DSA (FIPS 204). Check which this is.",
@@ -77,31 +266,166 @@
     "quantum_vulnerable": true
   },
   {
-    "asset_type": "key",
-    "component_key": "03290ac5-2814-4337-9df6-f7303e57655e",
-    "deprecation_rationale": "No known weakness for its intended use.",
-    "deprecation_reference": "",
-    "deprecation_status": "current",
+    "_provenance": [
+      {
+        "artifact_sha256": "153293d0bee18b9f0ba1dd3e010079ffb15ed43130b28b01c8757da08d8a381e",
+        "engine_id": "cbomkit-theia",
+        "engine_version": "edge",
+        "evidence": [
+          {
+            "line": null,
+            "path": "certs/server.pem"
+          }
+        ],
+        "native_ref": "5b256ad4-22cd-4ddf-a978-88c694f478b7",
+        "observed_name": "RSA"
+      }
+    ],
+    "asset_key": "algorithm:rsa;primitive=signature",
+    "asset_type": "algorithm",
+    "attributes": {
+      "surfaces": [
+        "certificates"
+      ]
+    },
+    "component_key": "",
+    "crypto_functions": [
+      "sign"
+    ],
+    "deprecation_rationale": "RSA key size was not reported, so its strength could not be assessed. Anything below 2048 bits is disallowed.",
+    "deprecation_reference": "NIST SP 800-131A Rev. 2",
+    "deprecation_status": "unassessed",
     "effective_quantum_bits": 0,
-    "key_size": 2048,
-    "name": "RSA-2048",
-    "pqc_recommendation": "ML-KEM or ML-DSA (FIPS 203 / FIPS 204, lattice): This asset reports no crypto functions, so its use could not be determined. Key establishment migrates to ML-KEM (FIPS 203); signatures migrate to ML-DSA (FIPS 204). Check which this is.",
+    "evidence": [
+      {
+        "engine": "cbomkit-theia",
+        "line": null,
+        "path": "certs/server.pem"
+      }
+    ],
+    "identity_confidence": "medium",
+    "identity_rule": "algorithm",
+    "name": "RSA",
+    "oid": "1.2.840.113549.1.1.1",
+    "pqc_recommendation": "ML-DSA (FIPS 204, lattice): Replace signatures with ML-DSA. SLH-DSA (FIPS 205, hash-based) is the conservative alternative where a lattice assumption is unacceptable, at the cost of much larger signatures.",
+    "primitive": "signature",
     "quantum_family": "rsa",
     "quantum_rationale": "RSA rests on integer factorisation, which Shor's algorithm solves in polynomial time.",
     "quantum_readiness_group": "vulnerable",
     "quantum_vulnerable": true
   },
   {
+    "_provenance": [
+      {
+        "artifact_sha256": "36f81b6cbcc37570e72615ee0544922355ff585f90743a64d0ee734807ae1aa5",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 27,
+            "path": "src/main/java/com/example/CryptoConfig.java"
+          }
+        ],
+        "native_ref": "aa938410-eef5-4e72-9b33-e1823b98aec5",
+        "observed_name": "SHA-256"
+      },
+      {
+        "artifact_sha256": "153293d0bee18b9f0ba1dd3e010079ffb15ed43130b28b01c8757da08d8a381e",
+        "engine_id": "cbomkit-theia",
+        "engine_version": "edge",
+        "evidence": [
+          {
+            "line": null,
+            "path": "certs/server.pem"
+          }
+        ],
+        "native_ref": "52d98851-258f-4552-99d0-8326ac840c14",
+        "observed_name": "SHA256"
+      }
+    ],
+    "asset_key": "algorithm:sha2;digest=sha2-256;primitive=hash",
+    "asset_type": "algorithm",
+    "attributes": {
+      "parameter_set": "256",
+      "surfaces": [
+        "certificates",
+        "source"
+      ]
+    },
+    "component_key": "",
+    "crypto_functions": [
+      "digest"
+    ],
+    "deprecation_rationale": "No known weakness for its intended use.",
+    "deprecation_reference": "",
+    "deprecation_status": "current",
+    "effective_quantum_bits": 128,
+    "evidence": [
+      {
+        "engine": "cbomkit-theia",
+        "line": null,
+        "path": "certs/server.pem"
+      },
+      {
+        "engine": "cbomkit-action",
+        "line": 27,
+        "path": "src/main/java/com/example/CryptoConfig.java"
+      }
+    ],
+    "grover_note": "256-bit digest gives roughly 128 bits of preimage resistance against Grover's algorithm, which is comfortably beyond reach. No action.",
+    "identity_confidence": "high",
+    "identity_rule": "algorithm",
+    "name": "SHA-256",
+    "oid": "2.16.840.1.101.3.4.2.1",
+    "primitive": "hash",
+    "quantum_family": "sha2",
+    "quantum_rationale": "A symmetric primitive. Grover's algorithm halves effective key strength — a sizing concern, not a break, so this is NOT reported as quantum-vulnerable.",
+    "quantum_readiness_group": "grover_note",
+    "quantum_vulnerable": false
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "153293d0bee18b9f0ba1dd3e010079ffb15ed43130b28b01c8757da08d8a381e",
+        "engine_id": "cbomkit-theia",
+        "engine_version": "edge",
+        "evidence": [
+          {
+            "line": null,
+            "path": "certs/server.pem"
+          }
+        ],
+        "native_ref": "f6197706-e284-4626-8708-f41670fed079",
+        "observed_name": "example.com"
+      }
+    ],
+    "asset_key": "cert:example.com;issuer=example.com;from=2026-08-24t20:02:22z;to=2027-08-24t20:02:22z",
     "asset_type": "certificate",
+    "attributes": {
+      "signature_algorithm_key": "algorithm:rsa;digest=sha2-256;scheme=pkcs1v15;primitive=signature",
+      "subject_public_key_key": "key:fp:sha256:8f3a7d5e14c7a5b5909e08bf20ed1282dbca45ba026306a75d4ddb70fc3a6520",
+      "surfaces": [
+        "certificates"
+      ]
+    },
     "cert_extension": "pem",
     "cert_format": "X.509",
     "cert_issuer": "example.com",
     "cert_subject": "example.com",
-    "component_key": "f6197706-e284-4626-8708-f41670fed079",
+    "component_key": "",
     "deprecation_rationale": "RSA key size was not reported, so its strength could not be assessed. Anything below 2048 bits is disallowed.",
     "deprecation_reference": "NIST SP 800-131A Rev. 2",
-    "deprecation_status": "current",
+    "deprecation_status": "unassessed",
     "effective_quantum_bits": 0,
+    "evidence": [
+      {
+        "engine": "cbomkit-theia",
+        "line": null,
+        "path": "certs/server.pem"
+      }
+    ],
+    "identity_confidence": "medium",
+    "identity_rule": "certificate-subject-issuer-validity",
     "name": "example.com",
     "not_valid_after": "2027-08-24T20:02:22Z",
     "not_valid_before": "2026-08-24T20:02:22Z",
@@ -112,5 +436,195 @@
     "quantum_vulnerable": true,
     "signature_algo_ref": "SHA256-RSA",
     "subject_public_key_ref": "RSA-2048"
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "153293d0bee18b9f0ba1dd3e010079ffb15ed43130b28b01c8757da08d8a381e",
+        "engine_id": "cbomkit-theia",
+        "engine_version": "edge",
+        "evidence": [
+          {
+            "line": null,
+            "path": "certs/server.pem"
+          }
+        ],
+        "native_ref": "03290ac5-2814-4337-9df6-f7303e57655e",
+        "observed_name": "RSA-2048"
+      }
+    ],
+    "asset_key": "key:fp:sha256:8f3a7d5e14c7a5b5909e08bf20ed1282dbca45ba026306a75d4ddb70fc3a6520",
+    "asset_type": "key",
+    "attributes": {
+      "algorithm_key": "algorithm:rsa;primitive=pke",
+      "material_format": "PEM",
+      "material_type": "public-key",
+      "public_key_fingerprint": "sha256:8f3a7d5e14c7a5b5909e08bf20ed1282dbca45ba026306a75d4ddb70fc3a6520",
+      "surfaces": [
+        "certificates"
+      ]
+    },
+    "component_key": "",
+    "deprecation_rationale": "No known weakness for its intended use.",
+    "deprecation_reference": "",
+    "deprecation_status": "current",
+    "effective_quantum_bits": 0,
+    "evidence": [
+      {
+        "engine": "cbomkit-theia",
+        "line": null,
+        "path": "certs/server.pem"
+      }
+    ],
+    "identity_confidence": "high",
+    "identity_rule": "key-fingerprint",
+    "key_size": 2048,
+    "name": "RSA-2048",
+    "pqc_recommendation": "ML-KEM or ML-DSA (FIPS 203 / FIPS 204, lattice): This asset reports no crypto functions, so its use could not be determined. Key establishment migrates to ML-KEM (FIPS 203); signatures migrate to ML-DSA (FIPS 204). Check which this is.",
+    "quantum_family": "rsa",
+    "quantum_rationale": "RSA rests on integer factorisation, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "36f81b6cbcc37570e72615ee0544922355ff585f90743a64d0ee734807ae1aa5",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 21,
+            "path": "src/main/java/com/example/CryptoConfig.java"
+          }
+        ],
+        "native_ref": "df59b848-abc0-4647-97ae-7df3773fe633",
+        "observed_name": "secret-key@df59b848-abc0-4647-97ae-7df3773fe633"
+      }
+    ],
+    "asset_key": "key:secret-key;alg=aes;size=256;path=src/main/java/com/example/CryptoConfig.java:21",
+    "asset_type": "key",
+    "attributes": {
+      "algorithm_key": "algorithm:aes;bits=256;primitive=block-cipher",
+      "material_type": "secret-key",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "deprecation_rationale": "No known weakness for its intended use.",
+    "deprecation_reference": "",
+    "deprecation_status": "current",
+    "effective_quantum_bits": 128,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 21,
+        "path": "src/main/java/com/example/CryptoConfig.java"
+      }
+    ],
+    "grover_note": "256-bit key gives roughly 128 bits of security against Grover's algorithm, which is comfortably beyond reach. No action.",
+    "identity_confidence": "medium",
+    "identity_rule": "key-location",
+    "key_size": 256,
+    "name": "secret-key",
+    "quantum_family": "aes",
+    "quantum_rationale": "A symmetric primitive. Grover's algorithm halves effective key strength — a sizing concern, not a break, so this is NOT reported as quantum-vulnerable.",
+    "quantum_readiness_group": "grover_note",
+    "quantum_vulnerable": false
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "36f81b6cbcc37570e72615ee0544922355ff585f90743a64d0ee734807ae1aa5",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 15,
+            "path": "src/main/java/com/example/CryptoConfig.java"
+          }
+        ],
+        "native_ref": "f756f6f7-569f-4866-a38a-41dc8d966ef5",
+        "observed_name": "key@f756f6f7-569f-4866-a38a-41dc8d966ef5"
+      }
+    ],
+    "asset_key": "key:secret-key;alg=rsa;size=2048;path=src/main/java/com/example/CryptoConfig.java:15",
+    "asset_type": "key",
+    "attributes": {
+      "algorithm_key": "algorithm:rsa;bits=2048;primitive=pke",
+      "material_type": "secret-key",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "deprecation_rationale": "No known weakness for its intended use.",
+    "deprecation_reference": "",
+    "deprecation_status": "current",
+    "effective_quantum_bits": 0,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 15,
+        "path": "src/main/java/com/example/CryptoConfig.java"
+      }
+    ],
+    "identity_confidence": "medium",
+    "identity_rule": "key-location",
+    "key_size": 2048,
+    "name": "key",
+    "pqc_recommendation": "ML-KEM or ML-DSA (FIPS 203 / FIPS 204, lattice): This asset reports no crypto functions, so its use could not be determined. Key establishment migrates to ML-KEM (FIPS 203); signatures migrate to ML-DSA (FIPS 204). Check which this is.",
+    "quantum_family": "rsa",
+    "quantum_rationale": "RSA rests on integer factorisation, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "36f81b6cbcc37570e72615ee0544922355ff585f90743a64d0ee734807ae1aa5",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 11,
+            "path": "src/main/java/com/example/CryptoConfig.java"
+          }
+        ],
+        "native_ref": "c37ca8c1-fcdb-4cfd-930e-2eff51316405",
+        "observed_name": "TLSv1.2"
+      }
+    ],
+    "analysis_diagnostics": [
+      "no quantum rule matches protocol 'TLSv1.2 TL Sv1.2'; not assessed rather than assumed safe"
+    ],
+    "asset_key": "protocol:tls;version=1.2",
+    "asset_type": "protocol",
+    "attributes": {
+      "protocol_type": "tls",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "deprecation_rationale": "No known weakness for its intended use.",
+    "deprecation_reference": "",
+    "deprecation_status": "current",
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 11,
+        "path": "src/main/java/com/example/CryptoConfig.java"
+      }
+    ],
+    "identity_confidence": "high",
+    "identity_rule": "protocol",
+    "name": "TLSv1.2",
+    "protocol_version": "1.2",
+    "quantum_family": "unknown",
+    "quantum_rationale": "",
+    "quantum_readiness_group": "unassessed",
+    "quantum_vulnerable": false
   }
 ]

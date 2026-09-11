@@ -68,10 +68,13 @@ VALUES ($1, $2, 'CBOM', 1, 'test-1', NULL, 'test-1', now())
 		}
 
 		for _, name := range assetNames {
+			// asset_key is NOT NULL since migrations/normalize/0020; the `name:`
+			// tier is the ladder's own last resort for an asset known by name only.
 			if _, err := tx.Exec(ctx, `
 				INSERT INTO normalize.crypto_assets
-					(tenant_id, bom_document_id, asset_type, name, primitive)
-				VALUES ($1, $2, 'algorithm', $3, 'RSA')`,
+					(tenant_id, bom_document_id, asset_type, name, primitive,
+					 asset_key, identity_rule, identity_confidence)
+				VALUES ($1, $2, 'algorithm', $3::text, 'RSA', 'name:' || $3::text, 'name', 'low')`,
 				tenantID, f.docID, name); err != nil {
 				return err
 			}
@@ -188,6 +191,16 @@ func TestSaveQuantumDeviceResolvesCryptoAssetRefsFromCurrentCBOM(t *testing.T) {
 	}
 	if len(device.CryptoAssetRefs) != 2 {
 		t.Fatalf("crypto asset refs = %v, want 2 (one per seeded crypto asset)", device.CryptoAssetRefs)
+	}
+	// ⚠ THE ASSET KEY, NOT THE ROW ID: a re-normalized CBOM gets new row ids,
+	// and a QBOM referencing them would stop resolving (workers/qbom/derive.py
+	// resolves in the same order). Ordered by asset key.
+	wantRefs := []string{"name:AES-256-GCM session cipher", "name:RSA-2048 signing key"}
+	for i, want := range wantRefs {
+		if device.CryptoAssetRefs[i] != want {
+			t.Errorf("crypto asset refs = %v, want %v", device.CryptoAssetRefs, wantRefs)
+			break
+		}
 	}
 	if device.FieldStatus[model.FieldCertinQbom05CryptographicAsset] != "provided" {
 		t.Errorf("crypto asset field status = %q, want provided",

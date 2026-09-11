@@ -57,9 +57,9 @@ class QuantumVerdict:
 
 #: Asymmetric families Shor breaks outright.
 #:
-#: ⚠ NO TRAILING  ON THE ALGORITHM TOKENS, AND THAT IS NOT AN OVERSIGHT.
+#: ⚠ NO TRAILING \b ON THE ALGORITHM TOKENS, AND THAT IS NOT AN OVERSIGHT.
 #:
-#: `rsa` does NOT match `rsaEncryption` — the boundary requires a non-word
+#: `rsa` does NOT match `rsaEncryption` — the boundary requires a non-word
 #: character after `rsa`, and `E` is a word character. The same failure hides
 #: `modp2048`, `Kyber1024` and `Dilithium3`, which is to say most of the names
 #: these actually appear under in tool output. Six rules were written this way
@@ -69,6 +69,9 @@ class QuantumVerdict:
 #: Matched on the primitive name AND the algorithm name, because tools disagree
 #: about which field carries it — cbomkit-theia puts `signature` in `primitive`
 #: and `RSA-2048` in `name`, so keying on either alone misses half the assets.
+#:
+#: ⚠ ECC IS CHECKED BEFORE DSA. `EdDSA` tokenizes to `Ed DSA`, and with `dsa`
+#: first Ed25519's family was reported as `dsa`.
 _SHOR_FAMILIES: tuple[tuple[str, re.Pattern[str], str], ...] = (
     (
         "rsa",
@@ -78,8 +81,9 @@ _SHOR_FAMILIES: tuple[tuple[str, re.Pattern[str], str], ...] = (
     (
         "ecc",
         re.compile(
-            r"\becdsa\b|\becdh\b|\becies\b|\bed25519\b|\bed448\b|\bx25519\b|\bx448\b"
-            r"|\bsecp\d|\bprime\d{3}v\d|\bbrainpool|\bnistp\d|\bcurve25519\b|\becc\b",
+            r"\becdsa\b|\becdh\b|\becies\b|\beddsa\b|\bed25519\b|\bed448\b|\bx25519\b|\bx448\b"
+            r"|\bsecp\d|\bprime\d{3}v\d|\bbrainpool|\bnistp\d|\bcurve25519\b|\bcurve448\b"
+            r"|\bp-?(?:192|224|256|384|521)\b|\becc\b",
             re.I,
         ),
         "Elliptic-curve cryptography rests on the discrete logarithm problem, "
@@ -87,7 +91,7 @@ _SHOR_FAMILIES: tuple[tuple[str, re.Pattern[str], str], ...] = (
     ),
     (
         "dh",
-        re.compile(r"\bdiffie[- ]?hellman\b|\bdhe?\b(?!\w)|\bmodp", re.I),
+        re.compile(r"\bdiffie[- ]?hellman\b|\bdhe?\b(?!\w)|\bmodp|\bffdhe", re.I),
         "Diffie-Hellman rests on the discrete logarithm problem, which Shor's "
         "algorithm solves in polynomial time.",
     ),
@@ -99,13 +103,21 @@ _SHOR_FAMILIES: tuple[tuple[str, re.Pattern[str], str], ...] = (
     ),
 )
 
+_ECC_RATIONALE = next(r for f, _, r in _SHOR_FAMILIES if f == "ecc")
+
 #: Symmetric and hash primitives Grover speeds up without breaking.
+#:
+#: ⚠ `3des` BEFORE `des`, and `3des` knows Java's `DESede` and NIST's `TDEA` —
+#: the tokenizer splits `DESede` into `DE Sede`, which matched nothing.
 _GROVER_FAMILIES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("aes", re.compile(r"\baes\b", re.I)),
     ("chacha", re.compile(r"\bchacha20?\b|\bsalsa20\b", re.I)),
-    ("3des", re.compile(r"\b3des\b|\btriple[- ]?des\b|\bdes-ede\b", re.I)),
+    ("3des", re.compile(r"\b3des\b|\btriple[- ]?des\b|\bdes-?ede3?\b|\bdesede\b|\btdea\b", re.I)),
     ("des", re.compile(r"\bdes\b(?!-ede)", re.I)),
     ("camellia", re.compile(r"\bcamellia\b", re.I)),
+    ("rc4", re.compile(r"\brc4\b|\barcfour\b", re.I)),
+    ("rc2", re.compile(r"\brc2\b", re.I)),
+    ("blowfish", re.compile(r"\bblowfish\b", re.I)),
     ("sha2", re.compile(r"\bsha-?(224|256|384|512)\b|\bsha2\b", re.I)),
     ("sha3", re.compile(r"\bsha-?3\b|\bshake\d*\b", re.I)),
     ("sha1", re.compile(r"\bsha-?1\b", re.I)),
@@ -115,19 +127,60 @@ _GROVER_FAMILIES: tuple[tuple[str, re.Pattern[str]], ...] = (
 
 #: Post-quantum families. Already quantum-resistant; flagging them would tell a
 #: customer to migrate away from the thing they migrated to.
-_PQC_FAMILIES: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("ml-kem", re.compile(r"\bml-?kem|\bkyber", re.I)),
-    ("ml-dsa", re.compile(r"\bml-?dsa|\bdilithium", re.I)),
-    ("slh-dsa", re.compile(r"\bslh-?dsa|\bsphincs", re.I)),
-    ("falcon", re.compile(r"\bfalcon\b|\bfn-?dsa", re.I)),
-    ("lms", re.compile(r"\blms\b|\bxmss\b|\bhss\b", re.I)),
-    ("mceliece", re.compile(r"\bmceliece\b|\bbike\b|\bhqc\b", re.I)),
+#:
+#: ⚠ HQC IS ITS OWN FAMILY. It was folded into `mceliece`, which misnamed the
+#: one code-based KEM NIST actually selected (March 2025) as a scheme it did not.
+_PQC_FAMILIES: tuple[tuple[str, re.Pattern[str], str], ...] = (
+    ("ml-kem", re.compile(r"\bml-?kem|\bkyber", re.I), "ML-KEM (FIPS 203, final)"),
+    ("ml-dsa", re.compile(r"\bml-?dsa|\bdilithium", re.I), "ML-DSA (FIPS 204, final)"),
+    ("slh-dsa", re.compile(r"\bslh-?dsa|\bsphincs", re.I), "SLH-DSA (FIPS 205, final)"),
+    (
+        "falcon",
+        re.compile(r"\bfalcon\b|\bfn-?dsa", re.I),
+        "FN-DSA / Falcon (NIST-selected; not a final standard in this ruleset)",
+    ),
+    ("lms", re.compile(r"\blms\b|\bxmss|\bhss\b", re.I), "LMS / XMSS (NIST SP 800-208)"),
+    (
+        "hqc",
+        re.compile(r"\bhqc\b", re.I),
+        "HQC (NIST-selected March 2025; no final standard yet)",
+    ),
+    (
+        "mceliece",
+        re.compile(r"\bmceliece\b|\bbike\b", re.I),
+        "a code-based scheme NIST has not standardised",
+    ),
 )
 
 #: The family names from _PQC_FAMILIES, public. workers/qbom/derive.py used to
-#: hand-copy these six strings into its own PQC_FAMILIES constant — derived
-#: here instead, so the two can no longer drift apart.
-PQC_FAMILIES: frozenset[str] = frozenset(family for family, _ in _PQC_FAMILIES)
+#: hand-copy these strings into its own PQC_FAMILIES constant — derived here
+#: instead, so the two can no longer drift apart.
+PQC_FAMILIES: frozenset[str] = frozenset(family for family, _, _ in _PQC_FAMILIES)
+
+
+def is_bare_ec(*parts: str) -> bool:
+    """True when a name or primitive IS `EC` — JCA's and OpenSSL's name for an
+    elliptic-curve key (`KeyPairGenerator.getInstance("EC")`), curve unstated.
+
+    ⚠ A WHOLE FIELD, NEVER A WORD IN THE HAYSTACK. `ec` is two hex digits: as a
+    word it matched nothing real and risked an unresolved bom-ref UUID. Unmatched
+    at all, an elliptic-curve key was reported NOT quantum-vulnerable
+    (fixtures/crypto-quantum, 2026-09-11).
+    """
+    return any(isinstance(p, str) and p.strip().lower() == "ec" for p in parts)
+
+
+def pqc_family(*parts: str) -> str | None:
+    """The post-quantum family these names belong to, or None.
+
+    Public so the deprecation rules can check post-quantum BEFORE their legacy
+    DSA rule — the ordering bug that reported ML-DSA as deprecated DSA.
+    """
+    haystack = search_text(*parts)
+    for family, pattern, _ in _PQC_FAMILIES:
+        if pattern.search(haystack):
+            return family
+    return None
 
 
 def assess_quantum(
@@ -160,14 +213,14 @@ def assess_quantum(
             diagnostics=["crypto asset has no name or primitive; not assessed"],
         )
 
-    for family, pattern in _PQC_FAMILIES:
+    for family, pattern, standing in _PQC_FAMILIES:
         if pattern.search(haystack):
             return QuantumVerdict(
                 quantum_vulnerable=False,
                 family=family,
                 rationale=(
-                    "A NIST post-quantum algorithm. Designed to resist both "
-                    "Shor and Grover; no migration needed."
+                    f"A post-quantum algorithm — {standing}. Designed to resist both "
+                    f"Shor and Grover; no migration needed."
                 ),
             )
 
@@ -182,6 +235,13 @@ def assess_quantum(
                 # key is a mitigation, which for RSA and ECC it is not.
                 effective_quantum_bits=0,
             )
+    if is_bare_ec(name, primitive):
+        return QuantumVerdict(
+            quantum_vulnerable=True,
+            family="ecc",
+            rationale=_ECC_RATIONALE,
+            effective_quantum_bits=0,
+        )
 
     for family, pattern in _GROVER_FAMILIES:
         if pattern.search(haystack):
@@ -198,6 +258,23 @@ def assess_quantum(
     )
 
 
+#: Hashes: Grover bounds PREIMAGE resistance by half the digest length. The
+#: advice is about the digest, never about "a key".
+_HASH_FAMILIES = frozenset({"sha2", "sha3"})
+
+#: Families whose classical verdict already says "migrate". A resizing hint on
+#: them would be advice nobody should follow.
+_LEGACY_FAMILIES: dict[str, str] = {
+    "3des": "3DES",
+    "des": "DES",
+    "rc4": "RC4",
+    "rc2": "RC2",
+    "blowfish": "Blowfish",
+    "sha1": "SHA-1",
+    "md5": "MD5",
+}
+
+
 def _grover_verdict(
     family: str,
     haystack: str,
@@ -209,6 +286,28 @@ def _grover_verdict(
     ⚠ NO FLAG IS SET HERE, EVER. That is the whole point of the split.
     """
     bits = key_size or classical_level or _bits_from_name(haystack)
+    rationale = (
+        "A symmetric primitive. Grover's algorithm halves effective key "
+        "strength — a sizing concern, not a break, so this is NOT reported "
+        "as quantum-vulnerable."
+    )
+
+    if family in _LEGACY_FAMILIES:
+        # ⚠ THE OLD NOTE TOLD A 3DES USER TO "CONSIDER A 224-BIT KEY" — a size
+        # 3DES does not have, on a cipher NIST already disallows. The classical
+        # verdict is the one that matters, and the note says so.
+        label = _LEGACY_FAMILIES[family]
+        return QuantumVerdict(
+            quantum_vulnerable=False,
+            family=family,
+            rationale=rationale,
+            effective_quantum_bits=bits // 2 if bits else None,
+            grover_note=(
+                f"{label} is already deprecated or broken classically (see its "
+                f"deprecation status); Grover's algorithm is not the concern. "
+                f"Migrate rather than resize."
+            ),
+        )
 
     if bits is None:
         return QuantumVerdict(
@@ -226,30 +325,35 @@ def _grover_verdict(
         )
 
     effective = bits // 2
+    unit = "digest" if family in _HASH_FAMILIES else "key"
+    resistance = "preimage resistance" if family in _HASH_FAMILIES else "security"
 
     # ⚠ THE THRESHOLD IS 128 BITS OF *QUANTUM* SECURITY, which is 256 classical.
     # AES-128 lands at 64 and is worth resizing; AES-256 lands at 128 and is
     # not. Getting this backwards is how AES-256 ends up on a migration list.
     if effective >= 128:
         note = (
-            f"{bits}-bit key gives roughly {effective} bits of security against "
+            f"{bits}-bit {unit} gives roughly {effective} bits of {resistance} against "
             f"Grover's algorithm, which is comfortably beyond reach. No action."
         )
     else:
+        # ⚠ THE ADVICE NAMES A SIZE THE PRIMITIVE HAS. "Consider a 384-bit key"
+        # for AES-192 was double the size, on a cipher whose largest key is 256.
+        if family in _HASH_FAMILIES:
+            advice = "Consider SHA-384 or SHA-512 where the protocol allows it."
+        elif family in {"aes", "camellia"}:
+            advice = "Consider a 256-bit key (AES-256) where the protocol allows it."
+        else:
+            advice = "Consider a 256-bit key where the protocol allows it."
         note = (
-            f"{bits}-bit key gives roughly {effective} bits of security against "
-            f"Grover's algorithm. Consider a {bits * 2}-bit key where the "
-            f"protocol allows it. This is a sizing decision, not a break."
+            f"{bits}-bit {unit} gives roughly {effective} bits of {resistance} against "
+            f"Grover's algorithm. {advice} This is a sizing decision, not a break."
         )
 
     return QuantumVerdict(
         quantum_vulnerable=False,
         family=family,
-        rationale=(
-            "A symmetric primitive. Grover's algorithm halves effective key "
-            "strength — a sizing concern, not a break, so this is NOT reported "
-            "as quantum-vulnerable."
-        ),
+        rationale=rationale,
         effective_quantum_bits=effective,
         grover_note=note,
     )
@@ -273,7 +377,7 @@ def _bits_from_name(name: str) -> int | None:
         # 20. Named explicitly rather than pattern-matched.
         if re.search(r"\bchacha20\b|\bsalsa20\b", name, re.I):
             return 256
-        if re.search(r"\b3des\b|\btriple[- ]?des\b", name, re.I):
+        if re.search(r"\b3des\b|\btriple[- ]?des\b|\bdesede\b|\btdea\b|\bdes-?ede3?\b", name, re.I):
             # 3DES has a 168-bit key with roughly 112 bits of effective
             # classical security (meet-in-the-middle). The lower figure is the
             # honest one to halve.

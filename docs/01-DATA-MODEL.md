@@ -459,18 +459,28 @@ Unrecognized license text becomes `LicenseRef-AxeBOM-<slug>` with the raw text p
 
 > **Type-discriminated.** Four asset types with **different** field sets. Storage is one wide table; **coverage must be scored against the field set for the row's `asset_type`.** Scoring a certificate against `key_size` would report every CBOM at ~30% coverage — falsely, in a compliance document. The coverage checker branches on `asset_type`.
 
-`(id, tenant_id, bom_document_id, component_id NULL, asset_type, name, …)`
+`(id, tenant_id, bom_document_id, component_key, asset_key, identity_rule, identity_confidence, asset_type, name, …)` — UNIQUE `(bom_document_id, asset_key)`.
 `asset_type` CHECK in (`algorithm`,`key`,`protocol`,`certificate`).
 
 | Applies to | Columns |
 |---|---|
+| **identity** (0020) | `asset_key` — the merge key, `03-NORMALIZER-SPEC.md` §1.6; `identity_rule` (CHECK, the §1.6 closed set); `identity_confidence` (`high`/`medium`/`low`). The row id is uuid5(document, `asset_key`), so a replay mints the same id. |
 | **algorithm** | `primitive`, `mode`, `crypto_functions TEXT[]`, `classical_security_level INT`, `oid`, `algorithm_list TEXT[]` |
 | **key** | `key_id`, `key_state` (`active`/`revoked`/`expired`/`unknown`), `key_size INT`, `creation_date`, `activation_date` |
 | **protocol** | `protocol_version`, `cipher_suites TEXT[]`, `oid` |
 | **certificate** | `cert_subject`, `cert_issuer`, `not_valid_before`, `not_valid_after`, `signature_algo_ref`, `subject_public_key_ref`, `cert_format`, `cert_extension` |
-| **AxeBOM analysis** (not CERT-In fields — excluded from coverage) | `quantum_vulnerable BOOLEAN`, `pqc_recommendation TEXT`, `deprecation_status` (`current`/`deprecated`/`weak`/`broken`) |
+| **evidence and facts** (0020) — never scored | `evidence JSONB` `[{path, line, engine}]`, repository-relative, per engine; `attributes JSONB` — padding, curve, parameter set, NIST quantum category (0–6), key-material type, `private_key_in_source`, and the asset keys a certificate's or key's references resolved to |
+| **derivations** (0019) | `derivations JSONB` `{column: reference_id}` — CERT-In values filled from the cited reference table (§1.6); their `field_status` is `derived` |
+| **AxeBOM analysis** (not CERT-In fields — excluded from coverage) | `quantum_vulnerable BOOLEAN`, `pqc_recommendation TEXT`, `deprecation_status` (`current`/`deprecated`/`weak`/`broken`/`unassessed` — `unassessed` is never reported as current) |
 
-`quantum_vulnerable` is true for Shor-vulnerable primitives: RSA, ECC/ECDSA/ECDH, DH, DSA.
+`quantum_vulnerable` is true for Shor-vulnerable primitives: RSA, ECC/ECDSA/ECDH/EdDSA, DH, DSA.
+
+`component_key` is a link to an SBOM component — `text`, not a foreign key, the same situation as `ai_model_dependencies.component_key`. It is empty for every current engine; until 0020 it held the engine's own random per-run `bom-ref`.
+
+### `normalize.crypto_asset_provenance`
+`(id, tenant_id, crypto_asset_id, engine_id, engine_version, native_ref, observed_name, artifact_sha256, evidence JSONB)` — UNIQUE `(crypto_asset_id, engine_id)`.
+
+> Which engines saw each crypto asset — the crypto counterpart of `normalize.ai_model_provenance`. An algorithm `cbomkit-theia` read from a certificate and `cbomkit-action` read from `Sign.java` is ONE asset (§1.6) with two finders, and "found by one engine, missed by the other" is the fact a reviewer weighs a row by. `native_ref` is the engine's own bom-ref, for tracing back into the stored raw artifact — never identity. `observed_name` is what that engine called it, verbatim (`SHA256-RSA`, `SHA256withRSA`, `sha256WithRSAEncryption`).
 
 ### `normalize.quantum_components`  ← Table 8 (p.44–45)
 `(id, tenant_id, bom_document_id, model_name, version, vendor_origin, license_info, communication_protocol, hardware, software_dependencies, environmental_impact, attestation_signature, field_status JSONB)` + `crypto_assets` via `bom_document_id`, findings via `normalize.findings`.

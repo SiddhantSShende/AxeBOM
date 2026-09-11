@@ -37,7 +37,9 @@ def test_each_format_is_recognised_by_its_content() -> None:
         "lshw": json.dumps({"id": "host", "class": "system", "product": "X1"}),
         "fwupd": json.dumps({"Devices": [{"Name": "System Firmware", "Version": "1.0"}]}),
         "redfish": json.dumps({"@odata.type": "#ComputerSystem.v1_5_0", "Model": "R640"}),
-        "wmi": json.dumps([{"CimClass": {"CimClassName": "Win32_ComputerSystem"}, "Model": "L7420"}]),
+        "wmi": json.dumps(
+            [{"CimClass": {"CimClassName": "Win32_ComputerSystem"}, "Model": "L7420"}]
+        ),
         "dmidecode": "Handle 0x0001, DMI type 1, 27 bytes\nSystem Information\n\tProduct Name: T14\n",
     }
     for want, raw in cases.items():

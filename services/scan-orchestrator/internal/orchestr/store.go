@@ -96,6 +96,12 @@ type EngineRun struct {
 	ExitCode     *int
 	DurationMS   *int
 	Summary      events.Summary
+	// ImageDigest is which image bytes actually ran, as the worker read it back
+	// from the daemon. ⚠ IT WAS NEVER STORED: every worker has sent
+	// invocation.image_digest since it was added, HandleResult dropped it, and
+	// scan.engine_runs.image_digest was NULL on every run ever recorded — so no
+	// report could say which build of an engine produced its evidence.
+	ImageDigest string
 }
 
 // ---------------------------------------------------------------------------
@@ -286,7 +292,8 @@ const engineRunColumns = `
 	       started_at, finished_at, deadline_at,
 	       COALESCE(error_code,''), COALESCE(error_message,''),
 	       COALESCE(diagnostics, '[]'::jsonb),
-	       COALESCE(summary, '{}'::jsonb)
+	       COALESCE(summary, '{}'::jsonb),
+	       COALESCE(image_digest, '')
 	  FROM scan.engine_runs`
 
 func scanEngineRunRow(row pgx.Row) (EngineRun, error) {
@@ -297,7 +304,7 @@ func scanEngineRunRow(row pgx.Row) (EngineRun, error) {
 		&r.Attempt, &status, &r.Weight, &r.EcosystemsCovered,
 		&r.EngineVersion, &r.EngineDBVersion,
 		&r.StartedAt, &r.FinishedAt, &r.DeadlineAt,
-		&r.ErrorCode, &r.ErrorMessage, &diagnostics, &summary)
+		&r.ErrorCode, &r.ErrorMessage, &diagnostics, &summary, &r.ImageDigest)
 	if err != nil {
 		return EngineRun{}, err
 	}
@@ -382,7 +389,8 @@ func (s *Store) LatestEngineRunsForProject(ctx context.Context, tenantID, projec
 			       er.started_at, er.finished_at, er.deadline_at,
 			       COALESCE(er.error_code,''), COALESCE(er.error_message,''),
 			       COALESCE(er.diagnostics, '[]'::jsonb),
-			       COALESCE(er.summary, '{}'::jsonb)
+			       COALESCE(er.summary, '{}'::jsonb),
+			       COALESCE(er.image_digest, '')
 			  FROM scan.engine_runs er
 			  JOIN scan.scans sc ON sc.id = er.scan_id
 			 WHERE sc.project_id = $1
@@ -501,9 +509,10 @@ func (s *Store) UpsertEngineRun(ctx context.Context, r EngineRun) (string, error
 				(scan_id, tenant_id, job_id, engine_id, attempt, status,
 				 weight, ecosystems_covered, engine_version, engine_db_version,
 				 started_at, finished_at, error_code, error_message, diagnostics,
-				 argv_redacted, exit_code, duration_ms, summary)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+				 argv_redacted, exit_code, duration_ms, summary, image_digest)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
 			ON CONFLICT (job_id) DO UPDATE SET
+				image_digest       = COALESCE(EXCLUDED.image_digest, scan.engine_runs.image_digest),
 				status             = EXCLUDED.status,
 				ecosystems_covered = EXCLUDED.ecosystems_covered,
 				engine_version     = EXCLUDED.engine_version,
@@ -523,7 +532,7 @@ func (s *Store) UpsertEngineRun(ctx context.Context, r EngineRun) (string, error
 			nullIfEmpty(r.EngineVersion), nullIfEmpty(r.EngineDBVersion),
 			r.StartedAt, r.FinishedAt,
 			nullIfEmpty(r.ErrorCode), nullIfEmpty(r.ErrorMessage), diagnostics,
-			argv, r.ExitCode, r.DurationMS, summary)
+			argv, r.ExitCode, r.DurationMS, summary, nullIfEmpty(r.ImageDigest))
 		if err := row.Scan(&id); err != nil {
 			return fmt.Errorf("upsert engine run: %w", err)
 		}
@@ -632,18 +641,40 @@ func (s *Store) RecordEcosystem(ctx context.Context, tenantID, scanID, ecosystem
 // inverse of what this table exists to prevent. The gap is real only when
 // EVERY row recorded for that ecosystem in this scan is false.
 func (s *Store) CoverageGaps(ctx context.Context, tenantID, scanID string) ([]string, error) {
+	return s.coverageGaps(ctx, tenantID, scanID, nil)
+}
+
+// CoverageGapsFor is CoverageGaps as one BOM family sees it: only the gaps
+// recorded by an engine in detectedBy.
+//
+// ⚠ scan.ecosystems_detected IS SCAN-WIDE; ecosystems_without_engine IS A
+// STATEMENT ABOUT ONE DOCUMENT. When one scan ran SBOM and CBOM, `go-source`
+// recorded by the CBOM engines ("Go code nobody read for cryptography") landed
+// in the SBOM document, whose Engine Coverage note says that ecosystem's
+// components are not in the report — false for an SBOM in which syft catalogued
+// every Go module. It is still no gap when ANY engine covered the ecosystem.
+func (s *Store) CoverageGapsFor(ctx context.Context, tenantID, scanID string, detectedBy []string) ([]string, error) {
+	if len(detectedBy) == 0 {
+		return nil, nil
+	}
+	return s.coverageGaps(ctx, tenantID, scanID, detectedBy)
+}
+
+// coverageGaps: a nil detectedBy means every recording engine.
+func (s *Store) coverageGaps(ctx context.Context, tenantID, scanID string, detectedBy []string) ([]string, error) {
 	var out []string
 	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.Tx) error {
 		rows, err := tx.Query(ctx, `
 			SELECT DISTINCT ecosystem FROM scan.ecosystems_detected e1
 			 WHERE scan_id = $1 AND engine_available = false
+			   AND ($2::text[] IS NULL OR detected_by = ANY($2::text[]))
 			   AND NOT EXISTS (
 			       SELECT 1 FROM scan.ecosystems_detected e2
 			        WHERE e2.scan_id = e1.scan_id
 			          AND e2.ecosystem = e1.ecosystem
 			          AND e2.engine_available = true
 			   )
-			 ORDER BY ecosystem`, scanID)
+			 ORDER BY ecosystem`, scanID, detectedBy)
 		if err != nil {
 			return err
 		}

@@ -206,7 +206,31 @@ def canonical_model(tenant_suffix: str = "") -> dict:
             # A real scan never mixes SBOM components and crypto assets in
             # one document; this fixture does, deliberately, exactly the way
             # it already exercises every OTHER table in one small model.
-            crypto_assets=[crypto_asset("algorithm", primitive="pke")],
+            # ⚠ WITH ITS IDENTITY, EVIDENCE AND ONE ENGINE SIGHTING (0020), so the
+            # `crypto_asset_provenance` batch has a row and its columns are
+            # checked against the live schema like every other table's.
+            crypto_assets=[
+                {
+                    **crypto_asset("algorithm", primitive="pke"),
+                    "asset_key": f"algorithm:rsa;primitive=pke{tenant_suffix}",
+                    "identity_rule": "algorithm",
+                    "identity_confidence": "medium",
+                    "evidence": [
+                        {"path": "certs/server.pem", "line": None, "engine": "cbomkit-theia"}
+                    ],
+                    "attributes": {"surfaces": ["certificates"]},
+                    "_provenance": [
+                        {
+                            "engine_id": "cbomkit-theia",
+                            "engine_version": "1.1.2",
+                            "native_ref": "b21f7408-6344-4ea2-a317-541fa2579d3e",
+                            "observed_name": "RSA",
+                            "artifact_sha256": "a" * 64,
+                            "evidence": [{"path": "certs/server.pem", "line": None}],
+                        }
+                    ],
+                }
+            ],
             # ⚠ SAME REASONING AS crypto_assets ABOVE, extended to every
             # AI table at once: one model with one dataset, one dependency and
             # one engine sighting is what gives the schema-agreement test below

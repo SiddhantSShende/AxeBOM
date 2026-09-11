@@ -704,9 +704,14 @@ func mediaType(format string) string {
 		return "application/pdf"
 	case "xlsx":
 		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	// ⚠ A DOCX WAS SERVED AS application/json. The format had no case here, so
+	// a Word document fell through to the default (found live, 2026-09-11).
+	case "docx":
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 	case "spdx":
 		return "application/spdx+json"
-	case "cyclonedx":
+	// An ML-BOM is a CycloneDX document too.
+	case "cyclonedx", "mlbom":
 		return "application/vnd.cyclonedx+json; version=1.6"
 	default:
 		return "application/json"

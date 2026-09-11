@@ -162,6 +162,22 @@ def test_an_image_with_no_registry_digest_is_reported_separately(tmp_path: Path)
     assert "ENGINE_IMAGE_NOT_PINNED" not in codes(result)
 
 
+def test_the_pinning_hint_claims_a_recorded_digest_only_when_there_is_one(
+    tmp_path: Path,
+) -> None:
+    """⚠ It said "the digest it resolved to is recorded on this result"
+    unconditionally, and live CBOM runs carried that sentence with
+    image_digest NULL — a provenance field stating something untrue."""
+
+    def pin_hint(result: Any) -> str:
+        return next(
+            d["hint"] for d in result.diagnostics if d.get("code") == "ENGINE_IMAGE_NOT_PINNED"
+        )
+
+    assert "recorded on this result" in pin_hint(classify(tmp_path, pinned=False, resolved=DIGEST))
+    assert "recorded on this result" not in pin_hint(classify(tmp_path, pinned=False, resolved=""))
+
+
 # ---------------------------------------------------------------------------
 # The manifest's current state, stated rather than assumed
 # ---------------------------------------------------------------------------
@@ -204,7 +220,11 @@ def test_the_manifest_pinning_state_is_visible() -> None:
     # `-t ai` — one image pinned once, two engine ids (the `syft-spdx` precedent).
     # It is named here rather than filtered out, because a reader of this list is
     # asking which ENGINES run against a pinned image, and both of them do.
-    assert pinned == ["cdxgen", "cdxgen-ai"], (
+    # `cbomkit-action` (2026-09-11) was pinned by digest from the registry the
+    # day it was added — its `2.3.0` and `v2.3.0` tags are DIFFERENT images, so a
+    # tag alone would not even say which one ran. `cdxgen-cbom` is the cdxgen
+    # image and digest again, with the `cbom` entrypoint.
+    assert pinned == ["cbomkit-action", "cdxgen", "cdxgen-ai", "cdxgen-cbom"], (
         f"the digest-pinned engine set changed to {pinned}: update this test "
         f"and docs/STATE.md — partial pinning is the state that quietly misleads"
     )

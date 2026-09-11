@@ -113,6 +113,26 @@ def test_every_status_produces_a_valid_envelope(
     assert envelope["status"] == status.value
 
 
+def test_what_an_engine_could_not_read_reaches_the_envelope(
+    tmp_path: Path, validator: Draft202012Validator
+) -> None:
+    """Invariant 12's gap travels as `ecosystems_uncovered`, omitted when empty."""
+    w = worker(tmp_path)
+    ctx = JobContext.from_job(job("syft"), tmp_path / "ws", tmp_path / "out")
+
+    quiet = w._result(ctx, GenerateResult(status=ResultStatus.SUCCEEDED, engine_version="1"))
+    gap = w._result(
+        ctx,
+        GenerateResult(
+            status=ResultStatus.SUCCEEDED, engine_version="1", ecosystems_uncovered=["go-source"]
+        ),
+    )
+
+    assert "ecosystems_uncovered" not in quiet
+    assert gap["ecosystems_uncovered"] == ["go-source"]
+    assert not list(validator.iter_errors(gap))
+
+
 def test_failed_and_timeout_carry_a_machine_code(tmp_path: Path) -> None:
     """CLAUDE.md: every error carries a stable code, never a bare string."""
     w = worker(tmp_path)
@@ -226,6 +246,28 @@ def test_an_unimplemented_engine_is_skipped_not_failed(tmp_path: Path) -> None:
     result = w.handle(job("no-such-engine"))
     assert result["status"] == ResultStatus.SKIPPED.value
     assert any(d.get("code") == "ENGINE_NOT_IMPLEMENTED" for d in result["diagnostics"])
+
+
+def test_the_not_implemented_hint_names_this_worker_s_own_engines(tmp_path: Path) -> None:
+    """⚠ Every family runs SBOMWorker, and the hint read the module-level SBOM map.
+
+    A CBOM worker asked for `cbomkit` told its user that syft, grype and the
+    rest were the engines it implemented.
+    """
+    w = SBOMWorker(
+        adapters={"only-this-engine": ADAPTERS["syft"]},
+        workspace_root=tmp_path / "ws",
+        output_root=tmp_path / "out",
+        sandbox=FakeSandbox(),
+    )
+    (tmp_path / "ws" / "scan-1").mkdir(parents=True)
+
+    result = w.handle(job("cbomkit"))
+    hint = next(
+        d["hint"] for d in result["diagnostics"] if d.get("code") == "ENGINE_NOT_IMPLEMENTED"
+    )
+    assert "only-this-engine" in hint
+    assert "grype" not in hint
 
 
 # -- the worker never dies ------------------------------------------------

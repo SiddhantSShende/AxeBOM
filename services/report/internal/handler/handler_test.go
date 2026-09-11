@@ -225,10 +225,13 @@ func TestAViewerCannotDownloadAPrivateReport(t *testing.T) {
 // is one a customer's validator will refuse to look at.
 func TestMediaTypesMatchTheFormats(t *testing.T) {
 	for format, want := range map[string]string{
-		"pdf":       "application/pdf",
-		"xlsx":      "spreadsheetml",
+		"pdf":  "application/pdf",
+		"xlsx": "spreadsheetml",
+		// ⚠ Served as application/json until 2026-09-11: docx had no case.
+		"docx":      "wordprocessingml.document",
 		"spdx":      "application/spdx+json",
 		"cyclonedx": "vnd.cyclonedx+json",
+		"mlbom":     "vnd.cyclonedx+json",
 		"json":      "application/json",
 	} {
 		if got := mediaType(format); !strings.Contains(got, want) {

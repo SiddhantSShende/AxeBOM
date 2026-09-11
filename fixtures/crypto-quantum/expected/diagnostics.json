@@ -1,0 +1,8 @@
+[
+  {
+    "code": "NORMALIZE_CRYPTO_FIELD_CONFLICT",
+    "hint": "the engine ranked first for this asset type wins, and the disagreement is reported rather than resolved silently",
+    "message": "algorithm:sha1;digest=sha1-160;primitive=hash: oid is '1.3.14.3.2.26' from cbomkit-action and '2.16.840.1.113719.1.2.8.82' from cdxgen-cbom; cbomkit-action's value is kept",
+    "severity": "warn"
+  }
+]

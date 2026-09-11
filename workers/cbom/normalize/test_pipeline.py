@@ -43,15 +43,34 @@ def test_the_document_has_every_key_write_bom_document_reads() -> None:
     assert doc["provenance"]["alias_snapshot_id"] is None
 
 
-def test_the_assets_are_exactly_what_normalize_all_produces() -> None:
-    """No merge, no graph, no alias closure (see the module docstring) — the
-    assembly step must not silently transform what crypto.py already decided."""
+def test_assembly_keeps_what_crypto_py_decided_for_every_cert_in_column() -> None:
+    """With nothing to merge (four distinct assets), every CERT-In column on the
+    document is exactly what crypto.py produced for that asset. The identity and
+    merge stages add identity, evidence and provenance; they change nothing else.
+    (This test used to assert the WHOLE asset was unchanged, which stopped being
+    true the moment assets gained an identity.)"""
+    from workers.cbom.normalize.crypto import TYPE_COLUMNS
+
     raw, _ = extract_crypto_assets(cyclonedx([ALGORITHM, KEY, PROTOCOL, CERTIFICATE]))
-    expected, _ = normalize_all(raw)
+    expected = {a["name"]: a for a in normalize_all(raw)[0]}
 
     doc = build_canonical_cbom(raw)
 
-    assert doc["crypto_assets"] == expected
+    assert len(doc["crypto_assets"]) == 4
+    for asset in doc["crypto_assets"]:
+        want = expected[asset["name"]]
+        for column in TYPE_COLUMNS[asset["asset_type"]]:
+            if column in {"signature_algo_ref", "subject_public_key_ref"}:
+                # Resolved to a name, or diagnosed, by certificate resolution.
+                continue
+            got, expected_value = asset.get(column), want.get(column)
+            if isinstance(expected_value, list):
+                # The merge unions list fields in sorted order, so two engines'
+                # lists combine deterministically; the membership is what matters.
+                got, expected_value = sorted(got or []), sorted(expected_value)
+            assert got == expected_value, (asset["name"], column)
+        assert asset["asset_key"]
+        assert asset["identity_rule"]
 
 
 def test_a_certificate_inherits_its_signers_quantum_verdict() -> None:
@@ -144,15 +163,94 @@ def test_coverage_matches_calling_score_crypto_directly() -> None:
     implementations of the same formula are exactly how a report and its own
     coverage badge disagree the first time either one changes.
     """
+    from axebom_shared.crypto.reference import derivation_sources
+    from axebom_shared.normalize.crypto_status import derived_counts, scored_entity
+
     raw, _ = extract_crypto_assets(cyclonedx([ALGORITHM, KEY, PROTOCOL, CERTIFICATE]))
     assets, _ = normalize_all(raw)
-    expected = score_crypto(
-        [{f"crypto_asset.{k}": v for k, v in a.items()} for a in assets], FIELD_SETS
-    )
+    expected = score_crypto([scored_entity(a) for a in assets], FIELD_SETS).as_dict()
+    # The derived tally and its citations ride on the same breakdown, from the
+    # same shared helpers — still one scoring implementation, never two.
+    counts = derived_counts(assets)
+    for field in expected["fields"]:
+        field["derived"] = counts.get(field["field_id"], 0)
+    expected["derivation_sources"] = derivation_sources(assets)
 
     doc = build_canonical_cbom(raw)
 
-    assert doc["coverage"] == expected.as_dict()
+    assert doc["coverage"] == expected
+
+
+def test_derived_values_are_counted_and_cited_in_the_breakdown() -> None:
+    """User decision 2026-09-11: derive + count, labelled. An exactly identified
+    algorithm gets its Table 9 level and OID from the cited table, and the
+    breakdown says how many values were derived and from which source."""
+    aes = {
+        "type": "cryptographic-asset",
+        "name": "AES-256-GCM",
+        "bom-ref": "a1",
+        "cryptoProperties": {
+            "assetType": "algorithm",
+            "algorithmProperties": {"primitive": "ae", "mode": "gcm"},
+        },
+    }
+    raw, _ = extract_crypto_assets(cyclonedx([aes]))
+    doc = build_canonical_cbom(raw)
+
+    (asset,) = doc["crypto_assets"]
+    assert asset["classical_security_level"] == 256
+    assert asset["oid"] == "2.16.840.1.101.3.4.1.46"
+
+    by_id = {f["field_id"]: f for f in doc["coverage"]["fields"]}
+    assert by_id["certin.crypto.algo.security_level"]["derived"] == 1
+    assert by_id["certin.crypto.algo.oid"]["derived"] == 1
+    assert set(doc["coverage"]["derivation_sources"]) == {
+        "nist-sp800-57p1r5-table2",
+        "nist-csor-aes",
+    }
+
+
+def test_the_reference_table_is_pinned_to_the_ruleset_version() -> None:
+    """⚠ Editing the reference table changes output for unchanged input. Bump
+    RULESET_VERSION and update REFERENCE_DIGEST together (invariant 10)."""
+    from workers.cbom.normalize.pipeline import REFERENCE_DIGEST, RULESET_VERSION
+
+    from axebom_shared.crypto.reference import table_digest
+
+    assert table_digest() == REFERENCE_DIGEST, (
+        f"the reference table changed; bump RULESET_VERSION (now {RULESET_VERSION}) "
+        f"and set REFERENCE_DIGEST = {table_digest()!r}"
+    )
+
+
+def test_a_list_valued_field_the_engine_reported_is_scored_present() -> None:
+    """⚠ CRYPTO FUNCTIONS SCORED ZERO ON EVERY CBOM, THROUGH THIS FUNCTION.
+
+    `profile_fields` passed the profile's `crypto_asset.crypto_functions[]`
+    through verbatim, so the scorer looked the value up under a key no asset
+    carries — while the stored field_status said `provided`.
+    """
+    raw, _ = extract_crypto_assets(cyclonedx([ALGORITHM, PROTOCOL]))
+    doc = build_canonical_cbom(raw)
+
+    by_id = {f["field_id"]: f for f in doc["coverage"]["fields"]}
+    for field_id in ("certin.crypto.algo.crypto_functions", "certin.crypto.proto.cipher_suites"):
+        assert by_id[field_id]["present"] == 1, field_id
+
+
+def test_both_numbers_differ_when_the_engine_left_a_field_unknown() -> None:
+    """⚠ declaration_pct WAS ALWAYS EQUAL TO completeness_pct (live: 60.14 / 60.14).
+
+    Every field of an identified asset's type is declared — a value, or the
+    explicit `not-provided` its stored field_status records — so the two numbers
+    must differ whenever the engine left something unknown (invariant 3). The
+    ALGORITHM fixture reports no mode.
+    """
+    raw, _ = extract_crypto_assets(cyclonedx([ALGORITHM]))
+    doc = build_canonical_cbom(raw)
+
+    assert doc["coverage"]["declaration_pct"] == 100.0
+    assert doc["coverage"]["completeness_pct"] < doc["coverage"]["declaration_pct"]
 
 
 def test_a_certificate_only_document_is_not_scored_against_key_size() -> None:

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -624,6 +625,124 @@ func TestEcosystemsWithNoEngineAreRecorded(t *testing.T) {
 	}
 	if len(gaps) != 1 || gaps[0] != "cocoapods" {
 		t.Errorf("gaps = %v, want [cocoapods] (npm has a successful engine and must not appear)", gaps)
+	}
+}
+
+// ⚠ WHICH IMAGE RAN WAS SENT BY EVERY WORKER AND STORED BY NOTHING.
+// scan.engine_runs.image_digest was NULL on every run ever recorded (live,
+// 2026-09-11: 0 of ~400 runs, every family), while each worker's own manifest
+// held the daemon's digest. A redelivered result without one must not erase it.
+func TestTheImageDigestAnEngineRanIsStored(t *testing.T) {
+	f := newFixture(t)
+	scan := createScan(t, f, tenantA, "syft")
+
+	_, runs, err := f.store.GetScan(t.Context(), tenantA, scan.ID)
+	if err != nil {
+		t.Fatalf("get scan: %v", err)
+	}
+	const digest = "sha256:47c2505267dc5f055152616ffa0d0076b7d0824fe9e0de670b572d1ebad2fc4b"
+	result := events.ScanResultV1{
+		SchemaVersion: events.SchemaScanResultV1,
+		JobID:         runs[0].JobID, ScanID: scan.ID, TenantID: tenantA,
+		Engine: "syft", EngineVersion: "1.51.0",
+		Status: events.StatusSucceeded,
+		Invocation: events.Invocation{
+			ArgvRedacted: []string{"syft"}, ImageDigest: digest,
+			StartedAt: time.Now().UTC(), FinishedAt: time.Now().UTC(),
+		},
+	}
+	if err := f.orch.HandleResult(t.Context(), result); err != nil {
+		t.Fatalf("handle result: %v", err)
+	}
+	result.Invocation.ImageDigest = ""
+	if err := f.orch.HandleResult(t.Context(), result); err != nil {
+		t.Fatalf("redelivered result: %v", err)
+	}
+
+	_, after, err := f.store.GetScan(t.Context(), tenantA, scan.ID)
+	if err != nil {
+		t.Fatalf("get scan: %v", err)
+	}
+	if after[0].ImageDigest != digest {
+		t.Errorf("image_digest = %q, want %q", after[0].ImageDigest, digest)
+	}
+}
+
+// ⚠ AN ECOSYSTEM AN ENGINE SAW AND COULD NOT READ IS A GAP. A Go repository
+// scanned for cryptography by engines that read Java is not a repository with
+// no cryptography — unless another engine in the scan covered it.
+func TestAnEcosystemAnEngineCouldNotReadIsAGap(t *testing.T) {
+	f := newFixture(t)
+	scan := createScan(t, f, tenantA, "syft")
+
+	_, runs, err := f.store.GetScan(t.Context(), tenantA, scan.ID)
+	if err != nil {
+		t.Fatalf("get scan: %v", err)
+	}
+	result := events.ScanResultV1{
+		SchemaVersion: events.SchemaScanResultV1,
+		JobID:         runs[0].JobID, ScanID: scan.ID, TenantID: tenantA,
+		Engine: "syft", EngineVersion: "1.51.0",
+		Status:            events.StatusSucceeded,
+		EcosystemsCovered: []string{"npm"},
+		// npm named both ways must not overwrite the engine's own coverage row.
+		EcosystemsUncovered: []string{"go-source", "npm"},
+		Invocation: events.Invocation{
+			ArgvRedacted: []string{"syft"},
+			StartedAt:    time.Now().UTC(), FinishedAt: time.Now().UTC(),
+		},
+	}
+	if err := f.orch.HandleResult(t.Context(), result); err != nil {
+		t.Fatalf("handle result: %v", err)
+	}
+
+	gaps, err := f.store.CoverageGaps(t.Context(), tenantA, scan.ID)
+	if err != nil {
+		t.Fatalf("gaps: %v", err)
+	}
+	if len(gaps) != 1 || gaps[0] != "go-source" {
+		t.Errorf("gaps = %v, want [go-source]", gaps)
+	}
+}
+
+// ⚠ A GAP IS A STATEMENT ABOUT ONE DOCUMENT. The CBOM engines' `go-source`
+// must not reach an SBOM document's ecosystems_without_engine, whose note says
+// that ecosystem's components are missing.
+func TestCoverageGapsForOneFamilyOnly(t *testing.T) {
+	f := newFixture(t)
+	scan := createScan(t, f, tenantA, "syft")
+
+	for _, row := range []struct {
+		eco, by   string
+		available bool
+	}{
+		{"go-source", "cbomkit-action", false},
+		{"cargo", "syft", false},
+		// Covered by anyone means covered, whichever family is asking.
+		{"java-source", "cdxgen-cbom", false},
+		{"java-source", "cbomkit-action", true},
+	} {
+		if err := f.store.RecordEcosystem(t.Context(), tenantA, scan.ID, row.eco, row.by, row.available); err != nil {
+			t.Fatalf("record: %v", err)
+		}
+	}
+
+	for _, tc := range []struct {
+		name    string
+		engines []string
+		want    []string
+	}{
+		{"sbom", []string{"syft", "trivy-fs"}, []string{"cargo"}},
+		{"cbom", []string{"cbomkit-action", "cbomkit-theia", "cdxgen-cbom"}, []string{"go-source"}},
+		{"no engines", nil, nil},
+	} {
+		got, err := f.store.CoverageGapsFor(t.Context(), tenantA, scan.ID, tc.engines)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+			t.Errorf("%s: gaps = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }
 

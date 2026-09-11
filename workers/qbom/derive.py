@@ -134,7 +134,17 @@ def crypto_asset_refs(crypto_assets: list[dict[str, Any]]) -> list[str]:
     """
     refs: list[str] = []
     for asset in crypto_assets:
-        ref = asset.get("id") or asset.get("component_key") or asset.get("name")
+        # ⚠ `asset_key` FIRST (migrations/normalize/0020). A row id changes every
+        # time a CBOM is re-normalized (invariant 10 writes a NEW document), so a
+        # QBOM that referenced ids stopped resolving after every corrected pass;
+        # the asset key is the same asset's name across versions.
+        # services/project/internal/store/qbom.go resolves in the same order.
+        ref = (
+            asset.get("asset_key")
+            or asset.get("id")
+            or asset.get("component_key")
+            or asset.get("name")
+        )
         if ref:
             refs.append(str(ref))
     return refs

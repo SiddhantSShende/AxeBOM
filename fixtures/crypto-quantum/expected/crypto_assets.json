@@ -1,0 +1,1301 @@
+[
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 14,
+            "path": "src/main/java/com/example/LegacyAndPqc.java"
+          }
+        ],
+        "native_ref": "5be6583c-6910-4eea-b8b3-ceb267da20df",
+        "observed_name": "3DES-CBC"
+      }
+    ],
+    "asset_key": "algorithm:3des;mode=cbc;padding=pkcs5;primitive=block-cipher",
+    "asset_type": "algorithm",
+    "attributes": {
+      "padding": "pkcs5",
+      "parameter_set": "64",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "deprecation_rationale": "3DES has a 64-bit block, which makes Sweet32 birthday attacks practical on long-lived connections. Disallowed by NIST after 2023.",
+    "deprecation_reference": "NIST SP 800-131A Rev. 2",
+    "deprecation_status": "weak",
+    "effective_quantum_bits": 56,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 14,
+        "path": "src/main/java/com/example/LegacyAndPqc.java"
+      }
+    ],
+    "grover_note": "3DES is already deprecated or broken classically (see its deprecation status); Grover's algorithm is not the concern. Migrate rather than resize.",
+    "identity_confidence": "medium",
+    "identity_rule": "algorithm",
+    "mode": "cbc",
+    "name": "3DES-CBC",
+    "primitive": "block-cipher",
+    "quantum_family": "3des",
+    "quantum_rationale": "A symmetric primitive. Grover's algorithm halves effective key strength — a sizing concern, not a break, so this is NOT reported as quantum-vulnerable.",
+    "quantum_readiness_group": "grover_note",
+    "quantum_vulnerable": false
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 12,
+            "path": "app/legacy_and_pqc.py"
+          }
+        ],
+        "native_ref": "c99eb4e3-52c2-4974-93de-6a152ac50ca1",
+        "observed_name": "3DES-CBC"
+      }
+    ],
+    "asset_key": "algorithm:3des;mode=cbc;primitive=block-cipher",
+    "asset_type": "algorithm",
+    "attributes": {
+      "parameter_set": "64",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "deprecation_rationale": "3DES has a 64-bit block, which makes Sweet32 birthday attacks practical on long-lived connections. Disallowed by NIST after 2023.",
+    "deprecation_reference": "NIST SP 800-131A Rev. 2",
+    "deprecation_status": "weak",
+    "effective_quantum_bits": 56,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 12,
+        "path": "app/legacy_and_pqc.py"
+      }
+    ],
+    "grover_note": "3DES is already deprecated or broken classically (see its deprecation status); Grover's algorithm is not the concern. Migrate rather than resize.",
+    "identity_confidence": "medium",
+    "identity_rule": "algorithm",
+    "mode": "cbc",
+    "name": "3DES-CBC",
+    "primitive": "block-cipher",
+    "quantum_family": "3des",
+    "quantum_rationale": "A symmetric primitive. Grover's algorithm halves effective key strength — a sizing concern, not a break, so this is NOT reported as quantum-vulnerable.",
+    "quantum_readiness_group": "grover_note",
+    "quantum_vulnerable": false
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 11,
+            "path": "src/main/java/com/example/LegacyAndPqc.java"
+          }
+        ],
+        "native_ref": "20b18888-6c19-4a3f-aac7-ff60296ee2a0",
+        "observed_name": "AES-128-ECB-PKCS5"
+      }
+    ],
+    "analysis_diagnostics": [
+      "NORMALIZE_CRYPTO_REFERENCE_CONFLICT: oid is '2.16.840.1.101.3.4.1' from the engine and '2.16.840.1.101.3.4.1.1' per nist-csor-aes; the engine value is kept"
+    ],
+    "asset_key": "algorithm:aes;bits=128;mode=ecb;padding=pkcs5;primitive=block-cipher",
+    "asset_type": "algorithm",
+    "attributes": {
+      "padding": "pkcs5",
+      "parameter_set": "128",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "classical_security_level": 128,
+    "component_key": "",
+    "deprecation_rationale": "ECB mode leaks plaintext structure: identical blocks encrypt to identical ciphertext. The underlying cipher is irrelevant.",
+    "deprecation_reference": "NIST SP 800-38A",
+    "deprecation_status": "broken",
+    "derivations": {
+      "classical_security_level": "nist-sp800-57p1r5-table2"
+    },
+    "effective_quantum_bits": 64,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 11,
+        "path": "src/main/java/com/example/LegacyAndPqc.java"
+      }
+    ],
+    "grover_note": "128-bit key gives roughly 64 bits of security against Grover's algorithm. Consider a 256-bit key (AES-256) where the protocol allows it. This is a sizing decision, not a break.",
+    "identity_confidence": "high",
+    "identity_rule": "algorithm",
+    "mode": "ecb",
+    "name": "AES-128-ECB-PKCS5",
+    "oid": "2.16.840.1.101.3.4.1",
+    "primitive": "block-cipher",
+    "quantum_family": "aes",
+    "quantum_rationale": "A symmetric primitive. Grover's algorithm halves effective key strength — a sizing concern, not a break, so this is NOT reported as quantum-vulnerable.",
+    "quantum_readiness_group": "grover_note",
+    "quantum_vulnerable": false
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 9,
+            "path": "app/legacy_and_pqc.py"
+          }
+        ],
+        "native_ref": "ae2a3abc-e2c0-446c-a3bb-01b327576554",
+        "observed_name": "AES-ECB"
+      }
+    ],
+    "analysis_diagnostics": [
+      "NORMALIZE_CRYPTO_REFERENCE_CONFLICT: oid is '2.16.840.1.101.3.4.1' from the engine and '2.16.840.1.101.3.4.1.1' per nist-csor-aes; the engine value is kept"
+    ],
+    "asset_key": "algorithm:aes;bits=128;mode=ecb;primitive=block-cipher",
+    "asset_type": "algorithm",
+    "attributes": {
+      "parameter_set": "128",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "classical_security_level": 128,
+    "component_key": "",
+    "deprecation_rationale": "ECB mode leaks plaintext structure: identical blocks encrypt to identical ciphertext. The underlying cipher is irrelevant.",
+    "deprecation_reference": "NIST SP 800-38A",
+    "deprecation_status": "broken",
+    "derivations": {
+      "classical_security_level": "nist-sp800-57p1r5-table2"
+    },
+    "effective_quantum_bits": 64,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 9,
+        "path": "app/legacy_and_pqc.py"
+      }
+    ],
+    "grover_note": "128-bit key gives roughly 64 bits of security against Grover's algorithm. Consider a 256-bit key (AES-256) where the protocol allows it. This is a sizing decision, not a break.",
+    "identity_confidence": "high",
+    "identity_rule": "algorithm",
+    "mode": "ecb",
+    "name": "AES-ECB",
+    "oid": "2.16.840.1.101.3.4.1",
+    "primitive": "block-cipher",
+    "quantum_family": "aes",
+    "quantum_rationale": "A symmetric primitive. Grover's algorithm halves effective key strength — a sizing concern, not a break, so this is NOT reported as quantum-vulnerable.",
+    "quantum_readiness_group": "grover_note",
+    "quantum_vulnerable": false
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 27,
+            "path": "src/main/java/com/example/LegacyAndPqc.java"
+          }
+        ],
+        "native_ref": "14e9708f-767e-4113-b4a9-da2627801b82",
+        "observed_name": "DSA-2048"
+      }
+    ],
+    "asset_key": "algorithm:dsa;bits=2048;primitive=signature",
+    "asset_type": "algorithm",
+    "attributes": {
+      "parameter_set": "2048",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "classical_security_level": 112,
+    "component_key": "",
+    "crypto_functions": [
+      "keygen"
+    ],
+    "deprecation_rationale": "DSA is withdrawn for new signatures; NIST allows verification only.",
+    "deprecation_reference": "FIPS 186-5",
+    "deprecation_status": "deprecated",
+    "derivations": {
+      "classical_security_level": "nist-sp800-57p1r5-table2"
+    },
+    "effective_quantum_bits": 0,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 27,
+        "path": "src/main/java/com/example/LegacyAndPqc.java"
+      }
+    ],
+    "identity_confidence": "high",
+    "identity_rule": "algorithm",
+    "name": "DSA-2048",
+    "oid": "1.2.840.10040.4.1",
+    "pqc_recommendation": "ML-DSA (FIPS 204, lattice): Replace signatures with ML-DSA. SLH-DSA (FIPS 205, hash-based) is the conservative alternative where a lattice assumption is unacceptable, at the cost of much larger signatures.",
+    "primitive": "signature",
+    "quantum_family": "dsa",
+    "quantum_rationale": "DSA rests on the discrete logarithm problem, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 24,
+            "path": "src/main/java/com/example/LegacyAndPqc.java"
+          }
+        ],
+        "native_ref": "bc55d8b2-0b80-4c68-a42b-4702ddb2bf93",
+        "observed_name": "EC-secp256r1"
+      }
+    ],
+    "asset_key": "algorithm:ec;curve=p-256;primitive=pke",
+    "asset_type": "algorithm",
+    "attributes": {
+      "curve": "secp256r1",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "classical_security_level": 128,
+    "component_key": "",
+    "crypto_functions": [
+      "keygen"
+    ],
+    "deprecation_rationale": "An elliptic-curve primitive with no known classical weakness on curves of 224 bits or more. Quantum exposure is reported separately.",
+    "deprecation_reference": "",
+    "deprecation_status": "current",
+    "derivations": {
+      "classical_security_level": "nist-sp800-57p1r5-table2"
+    },
+    "effective_quantum_bits": 0,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 24,
+        "path": "src/main/java/com/example/LegacyAndPqc.java"
+      }
+    ],
+    "identity_confidence": "high",
+    "identity_rule": "algorithm",
+    "name": "EC-secp256r1",
+    "oid": "1.2.840.10045.2.1",
+    "pqc_recommendation": "ML-KEM (FIPS 203, lattice): Replace key establishment with ML-KEM. NIST recommends a HYBRID deployment during transition — ML-KEM alongside the existing primitive — so a flaw in either does not break the handshake.",
+    "primitive": "pke",
+    "quantum_family": "ecc",
+    "quantum_rationale": "Elliptic-curve cryptography rests on the discrete logarithm problem, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 14,
+            "path": "app/legacy_and_pqc.py"
+          },
+          {
+            "line": 20,
+            "path": "src/main/java/com/example/LegacyAndPqc.java"
+          }
+        ],
+        "native_ref": "c01a99f4-b28a-4a75-b808-3aa7be3a2dd9",
+        "observed_name": "Ed25519"
+      }
+    ],
+    "asset_key": "algorithm:eddsa;curve=ed25519;primitive=signature",
+    "asset_type": "algorithm",
+    "attributes": {
+      "curve": "Edwards25519",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "classical_security_level": 128,
+    "component_key": "",
+    "crypto_functions": [
+      "keygen"
+    ],
+    "deprecation_rationale": "An Edwards or Montgomery curve at roughly 128-bit classical security or better; no known classical weakness. Quantum exposure is reported separately.",
+    "deprecation_reference": "RFC 8032 / RFC 7748",
+    "deprecation_status": "current",
+    "derivations": {
+      "classical_security_level": "rfc8032-s8.5"
+    },
+    "effective_quantum_bits": 0,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 14,
+        "path": "app/legacy_and_pqc.py"
+      },
+      {
+        "engine": "cbomkit-action",
+        "line": 20,
+        "path": "src/main/java/com/example/LegacyAndPqc.java"
+      }
+    ],
+    "identity_confidence": "high",
+    "identity_rule": "algorithm",
+    "name": "Ed25519",
+    "oid": "1.3.101.112",
+    "pqc_recommendation": "ML-DSA (FIPS 204, lattice): Replace signatures with ML-DSA. SLH-DSA (FIPS 205, hash-based) is the conservative alternative where a lattice assumption is unacceptable, at the cost of much larger signatures.",
+    "primitive": "signature",
+    "quantum_family": "ecc",
+    "quantum_rationale": "Elliptic-curve cryptography rests on the discrete logarithm problem, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 10,
+            "path": "app/legacy_and_pqc.py"
+          },
+          {
+            "line": 12,
+            "path": "src/main/java/com/example/LegacyAndPqc.java"
+          }
+        ],
+        "native_ref": "b5a335cd-a36c-4756-8ec4-b87f6a8a6d2f",
+        "observed_name": "MD5"
+      },
+      {
+        "artifact_sha256": "a9c5b158b0a21f75413dbea063da476447b8aed3659d2d0d36849b2325fb5a6d",
+        "engine_id": "cdxgen-cbom",
+        "engine_version": "13.0.1",
+        "evidence": [
+          {
+            "line": 4,
+            "path": "web/legacy.js"
+          }
+        ],
+        "native_ref": "crypto/algorithm/md5@1.2.840.113549.2.5",
+        "observed_name": "md5"
+      }
+    ],
+    "asset_key": "algorithm:md5;digest=md5-128;primitive=hash",
+    "asset_type": "algorithm",
+    "attributes": {
+      "parameter_set": "128",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "crypto_functions": [
+      "digest"
+    ],
+    "deprecation_rationale": "MD5 collisions are trivial to produce and have been used in real attacks. Unusable for signatures, certificates or integrity.",
+    "deprecation_reference": "RFC 6151",
+    "deprecation_status": "broken",
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 10,
+        "path": "app/legacy_and_pqc.py"
+      },
+      {
+        "engine": "cbomkit-action",
+        "line": 12,
+        "path": "src/main/java/com/example/LegacyAndPqc.java"
+      },
+      {
+        "engine": "cdxgen-cbom",
+        "line": 4,
+        "path": "web/legacy.js"
+      }
+    ],
+    "grover_note": "MD5 is already deprecated or broken classically (see its deprecation status); Grover's algorithm is not the concern. Migrate rather than resize.",
+    "identity_confidence": "high",
+    "identity_rule": "algorithm",
+    "name": "MD5",
+    "oid": "1.2.840.113549.2.5",
+    "primitive": "hash",
+    "quantum_family": "md5",
+    "quantum_rationale": "A symmetric primitive. Grover's algorithm halves effective key strength — a sizing concern, not a break, so this is NOT reported as quantum-vulnerable.",
+    "quantum_readiness_group": "grover_note",
+    "quantum_vulnerable": false
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 34,
+            "path": "src/main/java/com/example/LegacyAndPqc.java"
+          }
+        ],
+        "native_ref": "1fd8042f-842a-4274-95aa-4a817eb34926",
+        "observed_name": "ML-DSA-65"
+      }
+    ],
+    "asset_key": "algorithm:ml-dsa;param=65;primitive=signature",
+    "asset_type": "algorithm",
+    "attributes": {
+      "parameter_set": "65",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "crypto_functions": [
+      "keygen"
+    ],
+    "deprecation_rationale": "ML-DSA is a final NIST post-quantum standard (FIPS 204).",
+    "deprecation_reference": "FIPS 204",
+    "deprecation_status": "current",
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 34,
+        "path": "src/main/java/com/example/LegacyAndPqc.java"
+      }
+    ],
+    "identity_confidence": "high",
+    "identity_rule": "algorithm",
+    "name": "ML-DSA-65",
+    "oid": "2.16.840.1.101.3.4.3.18",
+    "primitive": "signature",
+    "quantum_family": "ml-dsa",
+    "quantum_rationale": "A post-quantum algorithm — ML-DSA (FIPS 204, final). Designed to resist both Shor and Grover; no migration needed.",
+    "quantum_readiness_group": "post_quantum",
+    "quantum_vulnerable": false
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 32,
+            "path": "src/main/java/com/example/LegacyAndPqc.java"
+          }
+        ],
+        "native_ref": "aa346f23-7395-4e29-b0a2-485d9a89a536",
+        "observed_name": "ML-KEM-768"
+      }
+    ],
+    "asset_key": "algorithm:ml-kem;param=768;primitive=kem",
+    "asset_type": "algorithm",
+    "attributes": {
+      "parameter_set": "768",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "crypto_functions": [
+      "keygen"
+    ],
+    "deprecation_rationale": "ML-KEM is a final NIST post-quantum standard (FIPS 203).",
+    "deprecation_reference": "FIPS 203",
+    "deprecation_status": "current",
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 32,
+        "path": "src/main/java/com/example/LegacyAndPqc.java"
+      }
+    ],
+    "identity_confidence": "high",
+    "identity_rule": "algorithm",
+    "name": "ML-KEM-768",
+    "oid": "2.16.840.1.101.3.4.4.2",
+    "primitive": "kem",
+    "quantum_family": "ml-kem",
+    "quantum_rationale": "A post-quantum algorithm — ML-KEM (FIPS 203, final). Designed to resist both Shor and Grover; no migration needed.",
+    "quantum_readiness_group": "post_quantum",
+    "quantum_vulnerable": false
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "a9c5b158b0a21f75413dbea063da476447b8aed3659d2d0d36849b2325fb5a6d",
+        "engine_id": "cdxgen-cbom",
+        "engine_version": "13.0.1",
+        "evidence": [
+          {
+            "line": 6,
+            "path": "web/legacy.js"
+          }
+        ],
+        "native_ref": "crypto/algorithm/rsa@2.5.8.1.1",
+        "observed_name": "rsa"
+      }
+    ],
+    "asset_key": "algorithm:rsa",
+    "asset_type": "algorithm",
+    "attributes": {
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "deprecation_rationale": "RSA key size was not reported, so its strength could not be assessed. Anything below 2048 bits is disallowed.",
+    "deprecation_reference": "NIST SP 800-131A Rev. 2",
+    "deprecation_status": "unassessed",
+    "effective_quantum_bits": 0,
+    "evidence": [
+      {
+        "engine": "cdxgen-cbom",
+        "line": 6,
+        "path": "web/legacy.js"
+      }
+    ],
+    "identity_confidence": "medium",
+    "identity_rule": "algorithm",
+    "name": "rsa",
+    "oid": "2.5.8.1.1",
+    "pqc_recommendation": "ML-KEM or ML-DSA (FIPS 203 / FIPS 204, lattice): This asset reports no crypto functions, so its use could not be determined. Key establishment migrates to ML-KEM (FIPS 203); signatures migrate to ML-DSA (FIPS 204). Check which this is.",
+    "quantum_family": "rsa",
+    "quantum_rationale": "RSA rests on integer factorisation, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 13,
+            "path": "app/legacy_and_pqc.py"
+          },
+          {
+            "line": 16,
+            "path": "src/main/java/com/example/LegacyAndPqc.java"
+          }
+        ],
+        "native_ref": "8e472305-8bab-41c7-bc08-0c70aa4e408a",
+        "observed_name": "RSA-1024"
+      }
+    ],
+    "asset_key": "algorithm:rsa;bits=1024;primitive=pke",
+    "asset_type": "algorithm",
+    "attributes": {
+      "parameter_set": "1024",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "crypto_functions": [
+      "keygen"
+    ],
+    "deprecation_rationale": "1024-bit RSA is below the 112-bit security floor and disallowed by NIST. Within reach of a well-funded adversary.",
+    "deprecation_reference": "NIST SP 800-131A Rev. 2",
+    "deprecation_status": "weak",
+    "effective_quantum_bits": 0,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 13,
+        "path": "app/legacy_and_pqc.py"
+      },
+      {
+        "engine": "cbomkit-action",
+        "line": 16,
+        "path": "src/main/java/com/example/LegacyAndPqc.java"
+      }
+    ],
+    "identity_confidence": "high",
+    "identity_rule": "algorithm",
+    "name": "RSA-1024",
+    "oid": "1.2.840.113549.1.1.1",
+    "pqc_recommendation": "ML-KEM (FIPS 203, lattice): Replace key establishment with ML-KEM. NIST recommends a HYBRID deployment during transition — ML-KEM alongside the existing primitive — so a flaw in either does not break the handshake.",
+    "primitive": "pke",
+    "quantum_family": "rsa",
+    "quantum_rationale": "RSA rests on integer factorisation, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 11,
+            "path": "app/legacy_and_pqc.py"
+          },
+          {
+            "line": 13,
+            "path": "src/main/java/com/example/LegacyAndPqc.java"
+          }
+        ],
+        "native_ref": "4a6732bf-8d1e-4bf1-804d-9ebb77d02480",
+        "observed_name": "SHA-1"
+      },
+      {
+        "artifact_sha256": "a9c5b158b0a21f75413dbea063da476447b8aed3659d2d0d36849b2325fb5a6d",
+        "engine_id": "cdxgen-cbom",
+        "engine_version": "13.0.1",
+        "evidence": [
+          {
+            "line": 5,
+            "path": "web/legacy.js"
+          }
+        ],
+        "native_ref": "crypto/algorithm/sha-1@2.16.840.1.113719.1.2.8.82",
+        "observed_name": "sha-1"
+      }
+    ],
+    "asset_key": "algorithm:sha1;digest=sha1-160;primitive=hash",
+    "asset_type": "algorithm",
+    "attributes": {
+      "parameter_set": "160",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "crypto_functions": [
+      "digest"
+    ],
+    "deprecation_rationale": "SHA-1 collisions are demonstrated and affordable (SHAttered, 2017). Unusable for signatures and certificates.",
+    "deprecation_reference": "NIST SP 800-131A Rev. 2",
+    "deprecation_status": "broken",
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 11,
+        "path": "app/legacy_and_pqc.py"
+      },
+      {
+        "engine": "cbomkit-action",
+        "line": 13,
+        "path": "src/main/java/com/example/LegacyAndPqc.java"
+      },
+      {
+        "engine": "cdxgen-cbom",
+        "line": 5,
+        "path": "web/legacy.js"
+      }
+    ],
+    "grover_note": "SHA-1 is already deprecated or broken classically (see its deprecation status); Grover's algorithm is not the concern. Migrate rather than resize.",
+    "identity_confidence": "high",
+    "identity_rule": "algorithm",
+    "name": "SHA-1",
+    "oid": "1.3.14.3.2.26",
+    "primitive": "hash",
+    "quantum_family": "sha1",
+    "quantum_rationale": "A symmetric primitive. Grover's algorithm halves effective key strength — a sizing concern, not a break, so this is NOT reported as quantum-vulnerable.",
+    "quantum_readiness_group": "grover_note",
+    "quantum_vulnerable": false
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 14,
+            "path": "app/legacy_and_pqc.py"
+          },
+          {
+            "line": 20,
+            "path": "src/main/java/com/example/LegacyAndPqc.java"
+          }
+        ],
+        "native_ref": "73038fda-de12-4014-ad14-c01356637a13",
+        "observed_name": "SHA-512"
+      }
+    ],
+    "asset_key": "algorithm:sha2;digest=sha2-512;primitive=hash",
+    "asset_type": "algorithm",
+    "attributes": {
+      "parameter_set": "512",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "crypto_functions": [
+      "digest"
+    ],
+    "deprecation_rationale": "No known weakness for its intended use.",
+    "deprecation_reference": "",
+    "deprecation_status": "current",
+    "effective_quantum_bits": 256,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 14,
+        "path": "app/legacy_and_pqc.py"
+      },
+      {
+        "engine": "cbomkit-action",
+        "line": 20,
+        "path": "src/main/java/com/example/LegacyAndPqc.java"
+      }
+    ],
+    "grover_note": "512-bit digest gives roughly 256 bits of preimage resistance against Grover's algorithm, which is comfortably beyond reach. No action.",
+    "identity_confidence": "high",
+    "identity_rule": "algorithm",
+    "name": "SHA-512",
+    "oid": "2.16.840.1.101.3.4.2.3",
+    "primitive": "hash",
+    "quantum_family": "sha2",
+    "quantum_rationale": "A symmetric primitive. Grover's algorithm halves effective key strength — a sizing concern, not a break, so this is NOT reported as quantum-vulnerable.",
+    "quantum_readiness_group": "grover_note",
+    "quantum_vulnerable": false
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 15,
+            "path": "app/legacy_and_pqc.py"
+          }
+        ],
+        "native_ref": "b52d942e-897c-428f-97b2-707e8b531554",
+        "observed_name": "x25519"
+      }
+    ],
+    "asset_key": "algorithm:xdh;curve=x25519;primitive=key-agree",
+    "asset_type": "algorithm",
+    "attributes": {
+      "curve": "Curve25519",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "crypto_functions": [
+      "keygen"
+    ],
+    "deprecation_rationale": "An Edwards or Montgomery curve at roughly 128-bit classical security or better; no known classical weakness. Quantum exposure is reported separately.",
+    "deprecation_reference": "RFC 8032 / RFC 7748",
+    "deprecation_status": "current",
+    "effective_quantum_bits": 0,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 15,
+        "path": "app/legacy_and_pqc.py"
+      }
+    ],
+    "identity_confidence": "high",
+    "identity_rule": "algorithm",
+    "name": "x25519",
+    "oid": "1.3.101.110",
+    "pqc_recommendation": "ML-KEM (FIPS 203, lattice): Replace key establishment with ML-KEM. NIST recommends a HYBRID deployment during transition — ML-KEM alongside the existing primitive — so a flaw in either does not break the handshake.",
+    "primitive": "key-agree",
+    "quantum_family": "ecc",
+    "quantum_rationale": "Elliptic-curve cryptography rests on the discrete logarithm problem, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 23,
+            "path": "src/main/java/com/example/LegacyAndPqc.java"
+          }
+        ],
+        "native_ref": "38ef06d9-d834-49c4-bc1b-72cec7f4fcb5",
+        "observed_name": "EC"
+      }
+    ],
+    "asset_key": "name:algorithm/ec;primitive=pke",
+    "asset_type": "algorithm",
+    "attributes": {
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "crypto_functions": [
+      "keygen"
+    ],
+    "deprecation_rationale": "An elliptic-curve key or algorithm whose curve was not reported, so its strength could not be assessed. Curves below 224 bits are disallowed.",
+    "deprecation_reference": "NIST SP 800-131A Rev. 2",
+    "deprecation_status": "unassessed",
+    "effective_quantum_bits": 0,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 23,
+        "path": "src/main/java/com/example/LegacyAndPqc.java"
+      }
+    ],
+    "identity_confidence": "low",
+    "identity_rule": "algorithm-name",
+    "name": "EC",
+    "pqc_recommendation": "ML-KEM (FIPS 203, lattice): Replace key establishment with ML-KEM. NIST recommends a HYBRID deployment during transition — ML-KEM alongside the existing primitive — so a flaw in either does not break the handshake.",
+    "primitive": "pke",
+    "quantum_family": "ecc",
+    "quantum_rationale": "Elliptic-curve cryptography rests on the discrete logarithm problem, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 14,
+            "path": "app/legacy_and_pqc.py"
+          }
+        ],
+        "native_ref": "1a68590a-0e12-4b57-a186-8d0ffc539fb0",
+        "observed_name": "private-key@1a68590a-0e12-4b57-a186-8d0ffc539fb0"
+      }
+    ],
+    "asset_key": "key:private-key;alg=eddsa;path=app/legacy_and_pqc.py:14",
+    "asset_type": "key",
+    "attributes": {
+      "algorithm_key": "algorithm:eddsa;curve=ed25519;primitive=signature",
+      "material_type": "private-key",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "deprecation_rationale": "An Edwards or Montgomery curve at roughly 128-bit classical security or better; no known classical weakness. Quantum exposure is reported separately.",
+    "deprecation_reference": "RFC 8032 / RFC 7748",
+    "deprecation_status": "current",
+    "effective_quantum_bits": 0,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 14,
+        "path": "app/legacy_and_pqc.py"
+      }
+    ],
+    "identity_confidence": "medium",
+    "identity_rule": "key-location",
+    "name": "private-key",
+    "pqc_recommendation": "ML-DSA (FIPS 204, lattice): Replace signatures with ML-DSA. SLH-DSA (FIPS 205, hash-based) is the conservative alternative where a lattice assumption is unacceptable, at the cost of much larger signatures.",
+    "quantum_family": "ecc",
+    "quantum_rationale": "Elliptic-curve cryptography rests on the discrete logarithm problem, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 13,
+            "path": "app/legacy_and_pqc.py"
+          }
+        ],
+        "native_ref": "d7644598-7e5a-44ec-a583-70628ebb6fa7",
+        "observed_name": "private-key@d7644598-7e5a-44ec-a583-70628ebb6fa7"
+      }
+    ],
+    "asset_key": "key:private-key;alg=rsa;size=1024;path=app/legacy_and_pqc.py:13",
+    "asset_type": "key",
+    "attributes": {
+      "algorithm_key": "algorithm:rsa;bits=1024;primitive=pke",
+      "material_type": "private-key",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "deprecation_rationale": "1024-bit RSA is below the 112-bit security floor and disallowed by NIST. Within reach of a well-funded adversary.",
+    "deprecation_reference": "NIST SP 800-131A Rev. 2",
+    "deprecation_status": "weak",
+    "effective_quantum_bits": 0,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 13,
+        "path": "app/legacy_and_pqc.py"
+      }
+    ],
+    "identity_confidence": "medium",
+    "identity_rule": "key-location",
+    "key_size": 1024,
+    "name": "private-key",
+    "pqc_recommendation": "ML-KEM or ML-DSA (FIPS 203 / FIPS 204, lattice): This asset reports no crypto functions, so its use could not be determined. Key establishment migrates to ML-KEM (FIPS 203); signatures migrate to ML-DSA (FIPS 204). Check which this is.",
+    "quantum_family": "rsa",
+    "quantum_rationale": "RSA rests on integer factorisation, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 27,
+            "path": "src/main/java/com/example/LegacyAndPqc.java"
+          }
+        ],
+        "native_ref": "23493db7-6134-4ef0-a893-bc54686d7428",
+        "observed_name": "key@23493db7-6134-4ef0-a893-bc54686d7428"
+      }
+    ],
+    "asset_key": "key:secret-key;alg=dsa;size=2048;path=src/main/java/com/example/LegacyAndPqc.java:27",
+    "asset_type": "key",
+    "attributes": {
+      "algorithm_key": "algorithm:dsa;bits=2048;primitive=signature",
+      "material_type": "secret-key",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "deprecation_rationale": "DSA is withdrawn for new signatures; NIST allows verification only.",
+    "deprecation_reference": "FIPS 186-5",
+    "deprecation_status": "deprecated",
+    "effective_quantum_bits": 0,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 27,
+        "path": "src/main/java/com/example/LegacyAndPqc.java"
+      }
+    ],
+    "identity_confidence": "medium",
+    "identity_rule": "key-location",
+    "key_size": 2048,
+    "name": "key",
+    "pqc_recommendation": "ML-DSA (FIPS 204, lattice): Replace signatures with ML-DSA. SLH-DSA (FIPS 205, hash-based) is the conservative alternative where a lattice assumption is unacceptable, at the cost of much larger signatures.",
+    "quantum_family": "dsa",
+    "quantum_rationale": "DSA rests on the discrete logarithm problem, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 23,
+            "path": "src/main/java/com/example/LegacyAndPqc.java"
+          }
+        ],
+        "native_ref": "a8514a1a-c79d-4bdd-b44e-d136eea2cd80",
+        "observed_name": "key@a8514a1a-c79d-4bdd-b44e-d136eea2cd80"
+      }
+    ],
+    "asset_key": "key:secret-key;alg=ec;path=src/main/java/com/example/LegacyAndPqc.java:23",
+    "asset_type": "key",
+    "attributes": {
+      "algorithm_key": "algorithm:ec;curve=p-256;primitive=pke",
+      "material_type": "secret-key",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "deprecation_rationale": "An elliptic-curve primitive with no known classical weakness on curves of 224 bits or more. Quantum exposure is reported separately.",
+    "deprecation_reference": "",
+    "deprecation_status": "current",
+    "effective_quantum_bits": 0,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 23,
+        "path": "src/main/java/com/example/LegacyAndPqc.java"
+      }
+    ],
+    "identity_confidence": "medium",
+    "identity_rule": "key-location",
+    "name": "key",
+    "pqc_recommendation": "ML-KEM or ML-DSA (FIPS 203 / FIPS 204, lattice): This asset reports no crypto functions, so its use could not be determined. Key establishment migrates to ML-KEM (FIPS 203); signatures migrate to ML-DSA (FIPS 204). Check which this is.",
+    "quantum_family": "ecc",
+    "quantum_rationale": "Elliptic-curve cryptography rests on the discrete logarithm problem, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 20,
+            "path": "src/main/java/com/example/LegacyAndPqc.java"
+          }
+        ],
+        "native_ref": "5942bbfc-a019-4b25-8ccd-b8c0afe00a77",
+        "observed_name": "key@5942bbfc-a019-4b25-8ccd-b8c0afe00a77"
+      }
+    ],
+    "asset_key": "key:secret-key;alg=eddsa;path=src/main/java/com/example/LegacyAndPqc.java:20",
+    "asset_type": "key",
+    "attributes": {
+      "algorithm_key": "algorithm:eddsa;curve=ed25519;primitive=signature",
+      "material_type": "secret-key",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "deprecation_rationale": "An Edwards or Montgomery curve at roughly 128-bit classical security or better; no known classical weakness. Quantum exposure is reported separately.",
+    "deprecation_reference": "RFC 8032 / RFC 7748",
+    "deprecation_status": "current",
+    "effective_quantum_bits": 0,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 20,
+        "path": "src/main/java/com/example/LegacyAndPqc.java"
+      }
+    ],
+    "identity_confidence": "medium",
+    "identity_rule": "key-location",
+    "name": "key",
+    "pqc_recommendation": "ML-DSA (FIPS 204, lattice): Replace signatures with ML-DSA. SLH-DSA (FIPS 205, hash-based) is the conservative alternative where a lattice assumption is unacceptable, at the cost of much larger signatures.",
+    "quantum_family": "ecc",
+    "quantum_rationale": "Elliptic-curve cryptography rests on the discrete logarithm problem, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 34,
+            "path": "src/main/java/com/example/LegacyAndPqc.java"
+          }
+        ],
+        "native_ref": "551afa3a-599f-49e4-977e-b2d539e1a10c",
+        "observed_name": "key@551afa3a-599f-49e4-977e-b2d539e1a10c"
+      }
+    ],
+    "asset_key": "key:secret-key;alg=ml-dsa;path=src/main/java/com/example/LegacyAndPqc.java:34",
+    "asset_type": "key",
+    "attributes": {
+      "algorithm_key": "algorithm:ml-dsa;param=65;primitive=signature",
+      "material_type": "secret-key",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "deprecation_rationale": "ML-DSA is a final NIST post-quantum standard (FIPS 204).",
+    "deprecation_reference": "FIPS 204",
+    "deprecation_status": "current",
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 34,
+        "path": "src/main/java/com/example/LegacyAndPqc.java"
+      }
+    ],
+    "identity_confidence": "medium",
+    "identity_rule": "key-location",
+    "name": "key",
+    "quantum_family": "ml-dsa",
+    "quantum_rationale": "A post-quantum algorithm — ML-DSA (FIPS 204, final). Designed to resist both Shor and Grover; no migration needed.",
+    "quantum_readiness_group": "post_quantum",
+    "quantum_vulnerable": false
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 32,
+            "path": "src/main/java/com/example/LegacyAndPqc.java"
+          }
+        ],
+        "native_ref": "7f0a2f5c-088a-437b-bed9-d439ef39a4e9",
+        "observed_name": "key@7f0a2f5c-088a-437b-bed9-d439ef39a4e9"
+      }
+    ],
+    "asset_key": "key:secret-key;alg=ml-kem;path=src/main/java/com/example/LegacyAndPqc.java:32",
+    "asset_type": "key",
+    "attributes": {
+      "algorithm_key": "algorithm:ml-kem;param=768;primitive=kem",
+      "material_type": "secret-key",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "deprecation_rationale": "ML-KEM is a final NIST post-quantum standard (FIPS 203).",
+    "deprecation_reference": "FIPS 203",
+    "deprecation_status": "current",
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 32,
+        "path": "src/main/java/com/example/LegacyAndPqc.java"
+      }
+    ],
+    "identity_confidence": "medium",
+    "identity_rule": "key-location",
+    "name": "key",
+    "quantum_family": "ml-kem",
+    "quantum_rationale": "A post-quantum algorithm — ML-KEM (FIPS 203, final). Designed to resist both Shor and Grover; no migration needed.",
+    "quantum_readiness_group": "post_quantum",
+    "quantum_vulnerable": false
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 16,
+            "path": "src/main/java/com/example/LegacyAndPqc.java"
+          }
+        ],
+        "native_ref": "b2eb4703-e2dd-4641-8e8b-fd68b5450368",
+        "observed_name": "key@b2eb4703-e2dd-4641-8e8b-fd68b5450368"
+      }
+    ],
+    "asset_key": "key:secret-key;alg=rsa;size=1024;path=src/main/java/com/example/LegacyAndPqc.java:16",
+    "asset_type": "key",
+    "attributes": {
+      "algorithm_key": "algorithm:rsa;bits=1024;primitive=pke",
+      "material_type": "secret-key",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "deprecation_rationale": "1024-bit RSA is below the 112-bit security floor and disallowed by NIST. Within reach of a well-funded adversary.",
+    "deprecation_reference": "NIST SP 800-131A Rev. 2",
+    "deprecation_status": "weak",
+    "effective_quantum_bits": 0,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 16,
+        "path": "src/main/java/com/example/LegacyAndPqc.java"
+      }
+    ],
+    "identity_confidence": "medium",
+    "identity_rule": "key-location",
+    "key_size": 1024,
+    "name": "key",
+    "pqc_recommendation": "ML-KEM or ML-DSA (FIPS 203 / FIPS 204, lattice): This asset reports no crypto functions, so its use could not be determined. Key establishment migrates to ML-KEM (FIPS 203); signatures migrate to ML-DSA (FIPS 204). Check which this is.",
+    "quantum_family": "rsa",
+    "quantum_rationale": "RSA rests on integer factorisation, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  },
+  {
+    "_provenance": [
+      {
+        "artifact_sha256": "f1b624e1c2a19bd24d30be85bf6a3d77fc475a1248a372a702bff76c39a11bd3",
+        "engine_id": "cbomkit-action",
+        "engine_version": "",
+        "evidence": [
+          {
+            "line": 23,
+            "path": "src/main/java/com/example/LegacyAndPqc.java"
+          }
+        ],
+        "native_ref": "aaad4c6a-4803-478f-96f2-209d0424f906",
+        "observed_name": "key@aaad4c6a-4803-478f-96f2-209d0424f906"
+      }
+    ],
+    "asset_key": "key:secret-key;path=src/main/java/com/example/LegacyAndPqc.java:23",
+    "asset_type": "key",
+    "attributes": {
+      "algorithm_key": "name:algorithm/ec;primitive=pke",
+      "material_type": "secret-key",
+      "surfaces": [
+        "source"
+      ]
+    },
+    "component_key": "",
+    "deprecation_rationale": "An elliptic-curve key or algorithm whose curve was not reported, so its strength could not be assessed. Curves below 224 bits are disallowed.",
+    "deprecation_reference": "NIST SP 800-131A Rev. 2",
+    "deprecation_status": "unassessed",
+    "effective_quantum_bits": 0,
+    "evidence": [
+      {
+        "engine": "cbomkit-action",
+        "line": 23,
+        "path": "src/main/java/com/example/LegacyAndPqc.java"
+      }
+    ],
+    "identity_confidence": "medium",
+    "identity_rule": "key-location",
+    "name": "key",
+    "pqc_recommendation": "ML-KEM or ML-DSA (FIPS 203 / FIPS 204, lattice): This asset reports no crypto functions, so its use could not be determined. Key establishment migrates to ML-KEM (FIPS 203); signatures migrate to ML-DSA (FIPS 204). Check which this is.",
+    "quantum_family": "ecc",
+    "quantum_rationale": "Elliptic-curve cryptography rests on the discrete logarithm problem, which Shor's algorithm solves in polynomial time.",
+    "quantum_readiness_group": "vulnerable",
+    "quantum_vulnerable": true
+  }
+]

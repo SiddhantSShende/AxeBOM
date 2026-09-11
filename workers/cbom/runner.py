@@ -24,18 +24,24 @@ from axebom_shared.logging import get_logger
 from axebom_shared.worker_runtime import run_worker
 
 from ..sbom.runner import SBOMWorker
-from .adapters import CBOMkitTheiaAdapter
+from .adapters import CBOMkitActionAdapter, CBOMkitTheiaAdapter, CdxgenCBOMAdapter
 
 log = get_logger("cbom-worker")
 
-#: cbomkit-theia is the only wired CBOM engine.
+#: The CBOM engines this worker runs, and what each one reads:
 #:
-#: `cbomkit` is a managed clone-and-scan SERVICE with its own viewer, not a CLI
-#: this worker can invoke, and `sonar-cryptography` is a SonarQube PLUGIN
-#: needing a ~4 GB server. Both are `enabled: false` in the manifest with a
-#: stated reason; neither is a gap this worker can close.
+#:   cbomkit-theia   key, certificate, secret and crypto-config FILES
+#:   cbomkit-action  crypto API use in Java and Python SOURCE (sonar-cryptography
+#:                   rules, embedded — no SonarQube server)
+#:   cdxgen-cbom     crypto API use in JavaScript/TypeScript source
+#:
+#: `cbomkit` is a clone-and-scan SERVICE that needs network and credentials, and
+#: stays registered-but-Disabled with that reason; the orchestrator's
+#: adapter_parity_test fails if a dispatchable engine is missing from this map.
 ADAPTERS: dict[str, type] = {
     "cbomkit-theia": CBOMkitTheiaAdapter,
+    "cbomkit-action": CBOMkitActionAdapter,
+    "cdxgen-cbom": CdxgenCBOMAdapter,
 }
 
 #: No engine here depends on another's output.

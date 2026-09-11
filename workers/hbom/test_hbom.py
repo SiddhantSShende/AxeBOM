@@ -1008,9 +1008,7 @@ def test_criticality_comes_from_the_compliance_profile() -> None:
     """
     from axebom_shared.model.generated_certin import HBOM_FIELDS
 
-    declared = next(
-        f.values for f in HBOM_FIELDS if f.id == "certin.hbom.23.criticality"
-    )
+    declared = next(f.values for f in HBOM_FIELDS if f.id == "certin.hbom.23.criticality")
     assert declared, "the profile declares no criticality values"
     assert CRITICALITY_VALUES == declared
 
